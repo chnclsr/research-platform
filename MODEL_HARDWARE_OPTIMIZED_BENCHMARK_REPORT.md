@@ -2,11 +2,15 @@
 
 Platform sürümü: `v0.2.2`
 
-Belge sürümü: `1.0`
+Belge sürümü: `1.1`
 
 Benchmark sürümü: `1.2.0-hardware-optimized-holdout`
 
 Tarih: `2026-07-15`
+
+> Bu belge artık kullanılmayan Qwen 3.5 9B adayının tarihsel değerlendirmesidir. Güncel
+> model seçimi için `QWEN_4B_GENERATION_BENCHMARK_REPORT.md` esas alınmalıdır. Qwen 3.5
+> 9B yerel kurulumdan ve aktif benchmark profillerinden çıkarılmıştır.
 
 ## Sonuç
 

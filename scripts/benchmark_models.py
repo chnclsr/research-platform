@@ -23,7 +23,7 @@ from research_platform.schemas import AcquiredDocument, ConnectorCandidate, Sour
 
 DEFAULT_MODELS = [
     "qwen3:4b-instruct-2507-q4_K_M",
-    "qwen3.5:9b",
+    "qwen3.5:4b",
 ]
 
 

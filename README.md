@@ -1,14 +1,16 @@
 # Research Platform V1
 
-Platform sürümü: `v0.2.2`
+Platform sürümü: `v0.2.3`
 
-Belge sürümü: `1.3`
+Belge sürümü: `1.4`
 
 Son güncelleme: `2026-07-15`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 
-RTX 4060'a göre optimize edilmiş model karşılaştırması: `MODEL_HARDWARE_OPTIMIZED_BENCHMARK_REPORT.md`.
+Güncel Qwen 4B nesil karşılaştırması: `QWEN_4B_GENERATION_BENCHMARK_REPORT.md`.
+
+Tarihsel 4B–9B donanım karşılaştırması: `MODEL_HARDWARE_OPTIMIZED_BENCHMARK_REPORT.md`.
 
 İlk sabit-ayar karşılaştırması: `MODEL_HARD_BENCHMARK_REPORT.md`.
 

@@ -1,10 +1,17 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.2`
+Platform sürümü: `v0.2.3`
 
-Belge sürümü: `1.2`
+Belge sürümü: `1.3`
 
 Son güncelleme: `2026-07-15`
+
+## v0.2.3 — 2026-07-15
+
+- Qwen 3.5 9B benchmark adaylarından ve yerel Ollama kurulumundan çıkarıldı.
+- Qwen 3 4B ile Qwen 3.5 4B için model başına tam-GPU profil taraması yapıldı.
+- Qwen 3.5 4B'nin 73.728 token tam-GPU context sınırı doğrulandı.
+- Bağımsız holdout üzerinde üç tekrarlı Qwen 4B nesil karşılaştırması eklendi.
 
 ## v0.2.2 — 2026-07-15
 
