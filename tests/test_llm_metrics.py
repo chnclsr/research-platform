@@ -24,7 +24,13 @@ async def test_ollama_metrics_capture_tokens_and_durations():
         })
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        provider = OllamaProvider(Settings(_env_file=None), client)
+        provider = OllamaProvider(Settings(
+            _env_file=None,
+            llm_temperature=0.5,
+            llm_top_p=0.95,
+            llm_top_k=20,
+            llm_presence_penalty=1.5,
+        ), client)
         assert await provider.complete_json("system", "user") == {"ok": True}
         metrics = provider.drain_metrics()
 
@@ -35,4 +41,8 @@ async def test_ollama_metrics_capture_tokens_and_durations():
     assert captured["think"] is False
     assert captured["options"]["num_ctx"] == 8192
     assert captured["options"]["num_predict"] == 2048
+    assert captured["options"]["temperature"] == 0.5
+    assert captured["options"]["top_p"] == 0.95
+    assert captured["options"]["top_k"] == 20
+    assert captured["options"]["presence_penalty"] == 1.5
     assert provider.drain_metrics() == []

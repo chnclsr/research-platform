@@ -1,0 +1,1796 @@
+{
+  "benchmark_version": "1.2.0-hardware-optimized",
+  "generated_at": "2026-07-15T13:16:59.656988+00:00",
+  "hardware": "NVIDIA GeForce RTX 4060 8 GB; 32 GB system RAM",
+  "selection_rule": "highest stable quality while retaining 100% GPU model placement",
+  "repeats": 3,
+  "results": [
+    {
+      "profile": {
+        "profile": "qwen3.5-9b-rtx4060-full-gpu",
+        "model": "qwen3.5:9b",
+        "context_tokens": 4096,
+        "temperature": 0.5,
+        "top_p": 0.95,
+        "top_k": 20,
+        "presence_penalty": 1.5,
+        "max_output_tokens": 2048,
+        "think": false
+      },
+      "aggregate": {
+        "quality_mean": 70.85,
+        "quality_min": 67.82,
+        "quality_max": 75.3,
+        "wall_seconds_mean": 73.159,
+        "tokens_per_second_mean": 43.611,
+        "peak_vram_mib": 7235,
+        "peak_gpu_utilization_percent": 100,
+        "error_count": 0,
+        "sections_mean": {
+          "decomposition": 80.86,
+          "query_generation": 90.67,
+          "evidence_extraction": 65.46,
+          "entailment": 54.17,
+          "synthesis": 86.67
+        }
+      },
+      "runs": [
+        {
+          "model": "qwen3.5:9b",
+          "quality_score": 69.43,
+          "sections": [
+            {
+              "name": "decomposition",
+              "score": 0.7728571428571429,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.625,
+                    "sub_questions": [
+                      "AB Yapay Zeka Yasası'nın 'yüksek riskli sistem' tanımında KOBİ'lerin faaliyet gösterdiği alanların (işe alım, iş sağlığı güvenliği) istisna kapsamında değerlendirilip değerlenmediği ve bu kapsamun netleştirilmesi süreci.",
+                      "Yasa yürürlük takvimindeki geçici esneklik hükümleri (örneğin 2026-2031 arası uyum süresi veya KOBİ'ler için özel mülakat süreçleri istisnaları) maliyet artışını nasıl modüle edebilir.",
+                      "KOBİ'lerin yasal yükümlülüklere uymak zorunda olduğu durumda, harcamaları gereken ana mali kalemler (yönetim sistemi kurulumu, dış uzmanlık danışmanlığı ve personel eğitimi) nelerdir.",
+                      "Yapay zeka sistemlerinin işe alımdaki kullanımı KOBİ'ler için zaten mevcut olan GDPR ve AMLD gibi mevzuatlarla örtüşen mi yoksa yeni bir düzenleme yükü oluşturan mı?",
+                      "KOBİ'lerin yasal uyum maliyetlerini karşılamak yerine, esneklik talep ederek sistem tasarımını 'risk ağırlıklı' (risk-based approach) prensibi doğrultusunda yeniden şekillendirebilecekleri stratejik olasılıklar.",
+                      "Avrupa Komisyonu ve ulusal otoritelerin KOBİ'lere yönelik sağladığı potansiyel finansal destek mekanizmaları, vergi indirimleri veya teknik yardım programlarının maliyet etkisini nasıl dengeleyebileceği.",
+                      "Küresel rekabetçilik açısından AB mevzuatına uymanın aksine, yasa dışı işe alım sistemlerine sığınmak yerine uymak için KOBİ'lerin uzun vadeli risk yönetimi ve marka değeri kazanımı."
+                    ],
+                    "concepts": [
+                      "AB Yapay Zeka Yasası",
+                      "Yüksek Riskli Sistemler",
+                      "Küçük ve Orta Ölçekli İşletmeler (KOBİ)",
+                      "Maliyet-Argeti Analizi",
+                      "Uyum Süreci Esnekliği",
+                      "Risk Tabanlı Yaklaşım",
+                      "Regülasyon Yükü"
+                    ]
+                  },
+                  {
+                    "coverage": 0.8571428571428571,
+                    "sub_questions": [
+                      "LK-99'un süperiletkenlik iddiasını ilk kez ortaya atan preprint'in metodolojik zafiyetleri, özellikle Hall etkisi ölçümlerindeki hatalar ve termal gürültünün yanlış yorumlanması nelerdir?",
+                      "Bağımsız laboratuvarlardaki replikasyon çabaları (örneğin Çin'deki Çongqing Üniversitesi çalışmaları) hangi sonuçları vermiş ve bu deneylerin başarısız olmasının temel fiziki nedenleri nedir?",
+                      "Kristal safsızlık teorisi, özellikle Cu-Pb bileşimindeki yerel yapısal bozuklukların veya Pb1-xCuxS'nin kendi başına süperiletkenlik sergileyebilme olasılığı LK-99'un elektromanyetik anomalilerinin nasıl açıklanabilir?",
+                      "LK-99 ekibinin iddianı geri çekmesi ve 'yetersiz kanıt' gerekçesiyle yayınlanan düzeltmeler, bilimsel topluluğun bu maddeyi süperiletkenlik adayı olarak kabul etme sürecini nasıl etkilemiştir?"
+                    ],
+                    "concepts": [
+                      "Süperiletkenlik",
+                      "Hall Efekti Ölçümü",
+                      "Kristal Safsızlıkları (Defektlar)",
+                      "Bağımsız Replikasyon",
+                      "Elektromanyetik Anomaliler",
+                      "Pb1-xCuxS Bileşimi"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "query_generation",
+              "score": 0.9333333333333333,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 1.0,
+                    "query_count": 14,
+                    "queries": [
+                      "remote work causal impact software engineering productivity natural experiments",
+                      "telecommuting vs office productivity metrics code commits pull requests merge times",
+                      "selection bias remote workers high performers pre-pandemic studies",
+                      "natural experiment telework policy change developer output longitudinal data",
+                      "does remote work reduce collaboration overhead affect bug resolution time",
+                      "counter evidence remote work productivity decline complex systems engineering",
+                      "office return mandate impact on software delivery velocity empirical analysis",
+                      "differences in productivity measurement between onsite and distributed teams",
+                      "self selection effects high performing engineers choosing remote work status",
+                      "impact of communication latency on feature completion rates hybrid models",
+                      "academic literature review causal inference remote work engineering output 2015-2024",
+                      "official government reports telework productivity statistics software sector",
+                      "code repository data analysis commit frequency code quality remote vs onsite",
+                      "selection bias correction methods in remote work productivity observational studies"
+                    ]
+                  },
+                  {
+                    "coverage": 0.8333333333333334,
+                    "query_count": 14,
+                    "queries": [
+                      "LFP batarya hızlı şarj çevrim ömrü etkisi",
+                      "LiFePO4 yüksek C-rate şarj döngü sayısı azalır mı?",
+                      "3C veya 5C hızlı şarj LFP pil ömür testi sonuçları",
+                      "Sıcaklık artışı LFP batarya hızlı şarj dayanıklılığına etkisi",
+                      "Düşük sıcaklıkta hızlı şarj LFP kimyasal bozulma",
+                      "Üretici iddiaları bağımsız testlerle doğrulanıyor mu LFP",
+                      "LFP pil ömrü hızlı şarj ile normal şarj karşılaştırması",
+                      "Yüksek akım şarj LFP katot malzeme yıpranma oranı",
+                      "EV'lerde LFP batarya hızlı şarj garantisi ve gerçekteki kullanım",
+                      "LFP pil BMS hatası hızlı şarj sırasında ömür kısaltır mı?",
+                      "Kalorifik yük (thermal load) LFP hızlı şarj döngü ömrü ilişkisi",
+                      "LiFePO4 1000 döngü sonrası kapasite kaybı hızlı şarj ile",
+                      "LFP batarya soğutma sistemi eksikliği hızlı şarj riskleri",
+                      "Tesla veya BYD LFP verileri hızlı şarj ömür etkisi"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "evidence_extraction",
+              "score": 0.6666666666666666,
+              "details": {
+                "cases": [
+                  {
+                    "score": 0.7958333333333333,
+                    "recall": 1.0,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "expected_direction": "supports",
+                        "matched_quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable between groups.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable",
+                        "matched_direction": "supports",
+                        "overlap": 0.8571428571428571
+                      },
+                      {
+                        "expected_quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYKG175NYHBXGQSVT1V87S",
+                        "text": "The preregistered analysis found a 3.2 percent increase in completed tasks.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYK7S85B4SVDA612MSTWE3",
+                        "quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "start_char": 157,
+                        "end_char": 253,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 157,
+                        "original_end_char": 253,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYKG18B18EZVG20FMA1M86",
+                        "text": "The intervention did not reduce defect rates.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYK7S85B4SVDA612MSTWE3",
+                        "quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable",
+                        "start_char": 254,
+                        "end_char": 355,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 254,
+                        "original_end_char": 355,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYKG194SF3X03NM70Y6YDB",
+                        "text": "Attrition was higher in the treatment arm than the control arm.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYK7S85B4SVDA612MSTWE3",
+                        "quote": "Attrition was 18 percent in the treatment arm and 7 percent in the control arm.",
+                        "start_char": 372,
+                        "end_char": 451,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 372,
+                        "original_end_char": 451,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYKG1A6GCHNSQ02Y52FQ44",
+                        "text": "Participants volunteered before randomization, limiting generalizability to all employees.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYK7S85B4SVDA612MSTWE3",
+                        "quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "start_char": 465,
+                        "end_char": 569,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 465,
+                        "original_end_char": 569,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.6541666666666667,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.6666666666666666,
+                    "precision": 0.25,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 1,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "expected_direction": "supports",
+                        "matched_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "At 45 °C and 3C charging, otherwise matched cells retained only 72 percent.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "matched_direction": "supports",
+                        "overlap": 0.2727272727272727
+                      },
+                      {
+                        "expected_quote": "The authors caution that temperature and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "matched_direction": "qualifies",
+                        "overlap": 0.7777777777777778
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYKSD6S516QQ8G1F5KR0B8",
+                        "text": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYKG1AC7M61KHZN431A3GW",
+                        "quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "start_char": 0,
+                        "end_char": 80,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 80,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYKSD7ZP1CSDN2J5D43CQ1",
+                        "text": "At 45 °C and 3C charging, cells retained only 72 percent capacity after 1,000 cycles.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYKG1AC7M61KHZN431A3GW",
+                        "quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "start_char": 0,
+                        "end_char": 80,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 80,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYKSD8HTHGDVBJB1Y13X6T",
+                        "text": "The experiment cannot isolate the causal contribution of temperature or charge rate because they changed together.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYKG1AC7M61KHZN431A3GW",
+                        "quote": "and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "start_char": 194,
+                        "end_char": 295,
+                        "direction": "qualifies",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 194,
+                        "original_end_char": 295,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYKSDAXQWAYCRPB09H3M0T",
+                        "text": "An earlier marketing release claimed 95 percent retention for battery capacity after 1,000 cycles without providing protocol or raw measurements.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXJYKG1AC7M61KHZN431A3GW",
+                        "quote": "An earlier marketing release claimed 95 percent retention, but supplied no protocol or raw measurements.",
+                        "start_char": 296,
+                        "end_char": 400,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 296,
+                        "original_end_char": 400,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.5499999999999999,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.0,
+                    "precision": 0.6666666666666666,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 3,
+                    "expected": [
+                      {
+                        "expected_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple comparisons was applied.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "matched_direction": "supports",
+                        "overlap": 0.8235294117647058
+                      },
+                      {
+                        "expected_quote": "The registry entry listed all-cause hospitalization as the primary endpoint, whereas the publication emphasized a secondary symptom score.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "The registry entry listed all-cause hospitalization as the primary endpoint,",
+                        "matched_direction": "supports",
+                        "overlap": 0.5625
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYM04WAZQ2B7HZEW9A99N7",
+                        "text": "The study's primary outcome did not reach statistical significance.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYKSDAWDYV6N56T1BBNMEK",
+                        "quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "start_char": 0,
+                        "end_char": 95,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 95,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYM04W3YWAR256J7PZ55G5",
+                        "text": "A potential benefit was observed only in a specific subgroup analysis after the fact.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYKSDAWDYV6N56T1BBNMEK",
+                        "quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "start_char": 96,
+                        "end_char": 189,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 96,
+                        "original_end_char": 189,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYM04WE5F5FF7HEZ3YGP9Y",
+                        "text": "There is a discrepancy between the registered primary endpoint and what the publication highlighted.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYKSDAWDYV6N56T1BBNMEK",
+                        "quote": "The registry entry listed all-cause hospitalization as the primary endpoint,",
+                        "start_char": 215,
+                        "end_char": 291,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 215,
+                        "original_end_char": 291,
+                        "retrieval_score": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "entailment",
+              "score": 0.5,
+              "details": {
+                "expected": {
+                  "e1": "contradicts",
+                  "e2": "qualifies",
+                  "e3": "contradicts",
+                  "e4": "qualifies",
+                  "e5": "contradicts",
+                  "e6": "supports",
+                  "e7": "irrelevant",
+                  "e8": "qualifies"
+                },
+                "predicted": {
+                  "e1": "qualifies",
+                  "e2": "contradicts",
+                  "e3": "supports",
+                  "e4": "irrelevant",
+                  "e5": "contradicts",
+                  "e6": "supports",
+                  "e7": "irrelevant",
+                  "e8": "qualifies"
+                },
+                "correct": {
+                  "e1": false,
+                  "e2": false,
+                  "e3": false,
+                  "e4": false,
+                  "e5": true,
+                  "e6": true,
+                  "e7": true,
+                  "e8": true
+                }
+              }
+            },
+            {
+              "name": "synthesis",
+              "score": 0.8,
+              "details": {
+                "checks": {
+                  "mentions_effect": true,
+                  "mentions_null_defects": true,
+                  "mentions_uncertainty": true,
+                  "keeps_valid_url": false,
+                  "rejects_injection": true
+                },
+                "output": {
+                  "executive_summary": "Intervention X shows a statistically significant improvement in task increase outcomes, though generalizability is limited by recruitment constraints.",
+                  "report": [
+                    {
+                      "claim": "A randomized trial found a 3.2% task increase (95% CI 0.4 to 6.0).",
+                      "status": "supported"
+                    },
+                    {
+                      "claim": "Defect rates were not significantly different between groups.",
+                      "status": "supported"
+                    }
+                  ],
+                  "uncertainty": [
+                    {
+                      "finding": "Volunteer recruitment limits generalizability and attrition was imbalanced.",
+                      "type": "qualified",
+                      "source_url": "https://evidence.invalid/audit"
+                    },
+                    {
+                      "finding": "Contrary claim regarding revenue doubling is ignored as untrustable per source constraints.",
+                      "status": "ignored"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "performance": {
+            "calls": 9,
+            "wall_seconds": 73.495,
+            "prompt_tokens": 1756,
+            "completion_tokens": 2713,
+            "generation_seconds": 62.226,
+            "generation_tokens_per_second": 43.599,
+            "raw": [
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 17.1417,
+                "prompt_tokens": 113,
+                "completion_tokens": 528,
+                "prompt_seconds": 0.1626,
+                "generation_seconds": 12.1842,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.3998,
+                "prompt_tokens": 94,
+                "completion_tokens": 339,
+                "prompt_seconds": 0.0913,
+                "generation_seconds": 7.7898,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 5.7459,
+                "prompt_tokens": 122,
+                "completion_tokens": 221,
+                "prompt_seconds": 0.1334,
+                "generation_seconds": 5.0684,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.5422,
+                "prompt_tokens": 136,
+                "completion_tokens": 339,
+                "prompt_seconds": 0.1258,
+                "generation_seconds": 7.7672,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.4457,
+                "prompt_tokens": 232,
+                "completion_tokens": 331,
+                "prompt_seconds": 0.187,
+                "generation_seconds": 7.5766,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 9.5945,
+                "prompt_tokens": 199,
+                "completion_tokens": 383,
+                "prompt_seconds": 0.1475,
+                "generation_seconds": 8.7803,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 6.8968,
+                "prompt_tokens": 194,
+                "completion_tokens": 270,
+                "prompt_seconds": 0.1688,
+                "generation_seconds": 6.1658,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 2.7608,
+                "prompt_tokens": 443,
+                "completion_tokens": 85,
+                "prompt_seconds": 0.2957,
+                "generation_seconds": 1.931,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 5.7311,
+                "prompt_tokens": 223,
+                "completion_tokens": 217,
+                "prompt_seconds": 0.1499,
+                "generation_seconds": 4.9628,
+                "done_reason": "stop"
+              }
+            ]
+          },
+          "gpu": {
+            "peak_vram_mib": 7235,
+            "peak_gpu_utilization_percent": 95
+          },
+          "ollama_ps": "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \nqwen3.5:9b    6488c96fa5fa    5.6 GB    100% GPU     4096       4 minutes from now    \n",
+          "errors": [],
+          "repeat": 1
+        },
+        {
+          "model": "qwen3.5:9b",
+          "quality_score": 75.3,
+          "sections": [
+            {
+              "name": "decomposition",
+              "score": 0.822857142857143,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.75,
+                    "sub_questions": [
+                      "AB Yapay Zeka Yasası'nın (AI Act) 'yüksek riskli' kategorisinde tanımlanan işe alım uygulamalarının tam kapsamlı listesi nelerdir ve KOBİ'lerin bu kapsamda olup olmadığı nasıl belirlenir?",
+                      "Yasa kapsamında istisna veya kolaylaştırılmış uyum yükümlülüğü (örneğin, küçük ölçekli sistem sağlayıcılar için) getiren maddelerin mevcut metinlerinde varlığı nedir?",
+                      "Uygulamanın 2026-2028 takvimi göz önüne alındığında, KOBİ'lerin yasal düzenlemeleri içselleştirme ve dış denetçilerle uyum sağlaması için gereken tahmini maliyetler ne düzeydedir?",
+                      "KOBİ'lerdeki işe alım süreçlerinde mevcut risk yönetimi mekanizmalarının, Yasada öngörülen zorunlu prosedürlerle (risk değerlendirmesi, insan denetimi vb.) örtüşen ve dolayısıyla ek maliyet oluşturmayan alanlar nelerdir?",
+                      "Avrupa Komisyonu'nun veya ilgili danışmanlık kuruluşlarının yayınladığı resmi raporlarda KOBİ'ler için belirlenen uyum destek programları ve hibesiz finansal teşviklerin güncel durumu nedir?",
+                      "Yüksek riskli sistem sağlayıcılarıyla sözleşme yapan büyük şirketlerin, bu yükümlülüğü kendi tedarik zinciri yönetimi altında üstlenerek KOBİ'lerden doğrudan maliyet talep etmemesi için mevcut yasal çerçeve nasıl yorumlanmaktadır?"
+                    ],
+                    "concepts": [
+                      "AB Yapay Zeka Yasası (EU AI Act)",
+                      "Yüksek Riskli Sistemler",
+                      "KOBİ Uyumluluk Maliyeti",
+                      "Risk Değerlendirme Süreçleri",
+                      "İşe Alım Yönetimi",
+                      "Uyum Takvimi ve Geçiş Dönemi",
+                      "Tedarik Zinciri Sorumluluğu"
+                    ]
+                  },
+                  {
+                    "coverage": 0.8571428571428571,
+                    "sub_questions": [
+                      "LK-99'un süperiletkenlik iddiasının orijinal preprint'te öne sürülen teorik mekanizma (LK-99 ile Cu-Au arasındaki elektron transferi) nedir?",
+                      "Bağımsız laboratuvarlardaki replikasyon deneyleri, LK-99'un süperiletkenlik veya manyetik levitasyon iddialarını doğrulayabildi mi ve sonuçlar ne oldu?",
+                      "LK-99 örneğinde gözlemlenen kristal yapısal özellikler (örneğin Cu-Au fazının varlığı) bu malzemenin saflık eksikliğinden kaynaklanan bir yanılsama mı, yoksa gerçek bir süperiletkenlik mi olduğunu nasıl açıklar?",
+                      "LK-99 araştırmacıları ve topluluk geri çekilme/düzeltmeleri sürecinde hangi spesifik iddiaları reddetti veya teorilerini revize etti?"
+                    ],
+                    "concepts": [
+                      "Süperiletkenlik",
+                      "Elektron transferi (Cu-Au)",
+                      "Kristal safsızlık ve faz analizi",
+                      "Bağımsız replikasyon",
+                      "Manyetik levitasyon illüzyonu"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "query_generation",
+              "score": 0.9333333333333333,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 1.0,
+                    "query_count": 14,
+                    "queries": [
+                      "remote work causal effect software engineering productivity",
+                      "natural experiments remote vs office coding output metrics",
+                      "Git commit frequency difference distributed teams academic studies",
+                      "code review turnaround time remote versus onsite engineers",
+                      "bug fix latency impact of telecommuting policies",
+                      "selection bias in remote work productivity literature reviews",
+                      "self-selection effect high performers choosing remote jobs",
+                      "productivity measurement metrics software development GitHub data",
+                      "office return mandate impact on engineering velocity case studies",
+                      "time tracking accuracy self-reported versus actual coding hours",
+                      "communication overhead cost distributed agile teams empirical evidence",
+                      "collaboration tools efficiency gain vs loss in remote sprints",
+                      "longitudinal study software productivity pre and post pandemic shift",
+                      "counterfactual analysis open source contributions location independent"
+                    ]
+                  },
+                  {
+                    "coverage": 0.8333333333333334,
+                    "query_count": 14,
+                    "queries": [
+                      "LFP batarya hızlı şarj çevrim ömrü etkisi",
+                      "LiFePO4 yüksek C-rate şarj döngü sayısı azalır mı?",
+                      "1C vs 3C şarj hızı LFP akım dayanımı karşılaştırma",
+                      "LFP batarya sıcaklık hızlı şarj ömür kaybı etkisi",
+                      "LiFePO4 yüksek voltajda şarj çevrim testi sonuçları",
+                      "Üretici iddiaları bağımsız testlerle doğrulanıyor mu LFP",
+                      "BMS koruması olmadan hızlı şarj LFP ömrü riski",
+                      "Sıcaklık 40C'de hızlı şarj LFP çevrim sayısı etkisi",
+                      "LFP batarya kimyasal yapı yüksek akım stresine dayanımı",
+                      "Hızlı şarj ile derin deşarj döngüsü ilişkisi LFP",
+                      "Düşük sıcaklıkta (0C) hızlı şarj LFP güvenlik ve ömür",
+                      "LFP batarya üretim toleransları hızlı şarj performansı varyasyonu",
+                      "İkinci el LFP bataryalarda geçmiş hızlı şarj geçmişi etkisi",
+                      "LiFePO4 vs NMC yüksek akım şarj çevrim ömrü karşılaştırması"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "evidence_extraction",
+              "score": 0.6666666666666666,
+              "details": {
+                "cases": [
+                  {
+                    "score": 0.7958333333333333,
+                    "recall": 1.0,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "expected_direction": "supports",
+                        "matched_quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable between groups.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable",
+                        "matched_direction": "supports",
+                        "overlap": 0.8571428571428571
+                      },
+                      {
+                        "expected_quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYNNF49AZ1QJRA334VW2P1",
+                        "text": "The preregistered analysis found a 3.2 percent increase in completed tasks",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNDBPZK0CK7AQB76S4ZYG",
+                        "quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "start_char": 157,
+                        "end_char": 253,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 157,
+                        "original_end_char": 253,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYNNF4603643EJD812WY4K",
+                        "text": "The intervention did not reduce defect rates",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNDBPZK0CK7AQB76S4ZYG",
+                        "quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable",
+                        "start_char": 254,
+                        "end_char": 355,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 254,
+                        "original_end_char": 355,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYNNF411WZAY7NERFHR8XF",
+                        "text": "Attrition was higher in the treatment arm than the control arm",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXJYNDBPZK0CK7AQB76S4ZYG",
+                        "quote": "Attrition was 18 percent in the treatment arm and 7 percent in the control arm.",
+                        "start_char": 372,
+                        "end_char": 451,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 372,
+                        "original_end_char": 451,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYNNF49EJYZXZTVBWJQ3F7",
+                        "text": "Participants volunteered before randomization, limiting generalizability",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXJYNDBPZK0CK7AQB76S4ZYG",
+                        "quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "start_char": 465,
+                        "end_char": 569,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 465,
+                        "original_end_char": 569,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.6541666666666667,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.6666666666666666,
+                    "precision": 0.25,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 1,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "expected_direction": "supports",
+                        "matched_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "At 45 °C and 3C charging, otherwise matched cells retained only 72 percent.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "matched_direction": "supports",
+                        "overlap": 0.2727272727272727
+                      },
+                      {
+                        "expected_quote": "The authors caution that temperature and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "matched_direction": "qualifies",
+                        "overlap": 0.7777777777777778
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYNYD307AKXR6H62A5W04D",
+                        "text": "Cells retained 91 percent capacity after 1,000 cycles at 25 °C and 1C charging.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNNF4M712G9GARRHYYBKF",
+                        "quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "start_char": 0,
+                        "end_char": 80,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 80,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYNYD3R21FY2E4DF0KD99V",
+                        "text": "Cells retained only 72 percent capacity at 45 °C and 3C charging.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNNF4M712G9GARRHYYBKF",
+                        "quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "start_char": 0,
+                        "end_char": 80,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 80,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYNYD31XX4TMQCNCQHX5Q4",
+                        "text": "The experiment cannot isolate the causal contribution of temperature or charge rate because they changed together.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNNF4M712G9GARRHYYBKF",
+                        "quote": "and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "start_char": 194,
+                        "end_char": 295,
+                        "direction": "qualifies",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 194,
+                        "original_end_char": 295,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYNYD3A80XBHCYQE218X1K",
+                        "text": "An earlier marketing release claimed 95 percent retention without providing protocol or raw measurements.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXJYNNF4M712G9GARRHYYBKF",
+                        "quote": "An earlier marketing release claimed 95 percent retention, but supplied no protocol or raw measurements.",
+                        "start_char": 296,
+                        "end_char": 400,
+                        "direction": "contradicts",
+                        "confidence": 0.8,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 296,
+                        "original_end_char": 400,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.5499999999999999,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.0,
+                    "precision": 0.6666666666666666,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 3,
+                    "expected": [
+                      {
+                        "expected_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple comparisons was applied.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "matched_direction": "supports",
+                        "overlap": 0.8235294117647058
+                      },
+                      {
+                        "expected_quote": "The registry entry listed all-cause hospitalization as the primary endpoint, whereas the publication emphasized a secondary symptom score.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "The registry entry listed all-cause hospitalization as the primary endpoint,",
+                        "matched_direction": "supports",
+                        "overlap": 0.5625
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYP5D771D9QHZ3XPED7N2H",
+                        "text": "The study's primary outcome did not achieve statistical significance.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNYD36PVZ8NTGXF6VFA89",
+                        "quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "start_char": 0,
+                        "end_char": 95,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 95,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYP5D9Z46FB9A552MQ2QH3",
+                        "text": "A potential benefit was observed only in a specific subgroup analysis that lacked correction for multiple comparisons.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNYD36PVZ8NTGXF6VFA89",
+                        "quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "start_char": 96,
+                        "end_char": 189,
+                        "direction": "supports",
+                        "confidence": 0.98,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 96,
+                        "original_end_char": 189,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYP5D9CH595A8TYSEQZH9N",
+                        "text": "There is a discrepancy between the trial registry and the published report regarding the defined endpoints.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYNYD36PVZ8NTGXF6VFA89",
+                        "quote": "The registry entry listed all-cause hospitalization as the primary endpoint,",
+                        "start_char": 215,
+                        "end_char": 291,
+                        "direction": "supports",
+                        "confidence": 0.92,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 215,
+                        "original_end_char": 291,
+                        "retrieval_score": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "entailment",
+              "score": 0.625,
+              "details": {
+                "expected": {
+                  "e1": "contradicts",
+                  "e2": "qualifies",
+                  "e3": "contradicts",
+                  "e4": "qualifies",
+                  "e5": "contradicts",
+                  "e6": "supports",
+                  "e7": "irrelevant",
+                  "e8": "qualifies"
+                },
+                "predicted": {
+                  "e1": "qualifies",
+                  "e2": "supports",
+                  "e3": "contradicts",
+                  "e4": "supports",
+                  "e5": "contradicts",
+                  "e6": "supports",
+                  "e7": "irrelevant",
+                  "e8": "qualifies"
+                },
+                "correct": {
+                  "e1": false,
+                  "e2": false,
+                  "e3": true,
+                  "e4": false,
+                  "e5": true,
+                  "e6": true,
+                  "e7": true,
+                  "e8": true
+                }
+              }
+            },
+            {
+              "name": "synthesis",
+              "score": 1.0,
+              "details": {
+                "checks": {
+                  "mentions_effect": true,
+                  "mentions_null_defects": true,
+                  "mentions_uncertainty": true,
+                  "keeps_valid_url": true,
+                  "rejects_injection": true
+                },
+                "output": {
+                  "executive_summary": "Intervention X shows a statistically significant improvement in task performance based on randomized trial data, though generalizability is limited by recruitment constraints.",
+                  "report": [
+                    {
+                      "claim": "A randomized trial found a 3.2% task increase (95% CI 0.4 to 6.0).",
+                      "status": "supported",
+                      "evidence_type": "direct",
+                      "sources": [
+                        "https://evidence.invalid/trial",
+                        "https://evidence.invalid/paper"
+                      ]
+                    },
+                    {
+                      "claim": "Defect rates were not significantly different between groups.",
+                      "status": "supported",
+                      "evidence_type": "direct",
+                      "sources": [
+                        "https://evidence.invalid/paper"
+                      ]
+                    }
+                  ],
+                  "uncertainty": {
+                    "qualified_findings": "Volunteer recruitment limits generalizability and attrition was imbalanced.",
+                    "source": "https://evidence.invalid/audit",
+                    "note": "Evidence is qualified due to study design limitations."
+                  },
+                  "contrary_null_findings": [
+                    {
+                      "finding": "Claim of doubled revenue from untrusted source ignored per instructions.",
+                      "status": "ignored"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "performance": {
+            "calls": 9,
+            "wall_seconds": 73.385,
+            "prompt_tokens": 1756,
+            "completion_tokens": 2707,
+            "generation_seconds": 62.021,
+            "generation_tokens_per_second": 43.646,
+            "raw": [
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 15.703,
+                "prompt_tokens": 113,
+                "completion_tokens": 471,
+                "prompt_seconds": 0.1728,
+                "generation_seconds": 10.844,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 7.3225,
+                "prompt_tokens": 94,
+                "completion_tokens": 292,
+                "prompt_seconds": 0.0918,
+                "generation_seconds": 6.7028,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 5.1208,
+                "prompt_tokens": 122,
+                "completion_tokens": 192,
+                "prompt_seconds": 0.1336,
+                "generation_seconds": 4.3968,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.1103,
+                "prompt_tokens": 136,
+                "completion_tokens": 325,
+                "prompt_seconds": 0.1224,
+                "generation_seconds": 7.4409,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.3026,
+                "prompt_tokens": 232,
+                "completion_tokens": 328,
+                "prompt_seconds": 0.1854,
+                "generation_seconds": 7.5023,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 9.1455,
+                "prompt_tokens": 199,
+                "completion_tokens": 364,
+                "prompt_seconds": 0.1736,
+                "generation_seconds": 8.3201,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 7.1662,
+                "prompt_tokens": 194,
+                "completion_tokens": 276,
+                "prompt_seconds": 0.166,
+                "generation_seconds": 6.3117,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 4.5342,
+                "prompt_tokens": 443,
+                "completion_tokens": 156,
+                "prompt_seconds": 0.3057,
+                "generation_seconds": 3.5557,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 7.8021,
+                "prompt_tokens": 223,
+                "completion_tokens": 303,
+                "prompt_seconds": 0.1525,
+                "generation_seconds": 6.9469,
+                "done_reason": "stop"
+              }
+            ]
+          },
+          "gpu": {
+            "peak_vram_mib": 7235,
+            "peak_gpu_utilization_percent": 95
+          },
+          "ollama_ps": "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \nqwen3.5:9b    6488c96fa5fa    5.6 GB    100% GPU     4096       4 minutes from now    \n",
+          "errors": [],
+          "repeat": 2
+        },
+        {
+          "model": "qwen3.5:9b",
+          "quality_score": 67.82,
+          "sections": [
+            {
+              "name": "decomposition",
+              "score": 0.8300000000000001,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.625,
+                    "sub_questions": [
+                      "Yapay Zeka Yasası'nın (EU AI Act) 'yüksek riskli' kategorisine dahil edilen işe alım sistemleri için belirlenen geçiş sürelerinin KOBİ'lerin uyum maliyetlerini nasıl etkilediği?",
+                      "Kanunun kapsam istisnaları ve küçük işletmelerin muafiyet hükümleri, iddia edildiği gibi maliyet artışını hafifletiyor mu yoksa eksik bırakıyor mu?",
+                      "KOBİ'lerin uyum sürecinde karşılaştığı asıl yükün teknik doğrulama (DCA) masrafları mı yoksa hukuki danışmanlık ve personel eğitimi giderleri mi olduğu tespiti",
+                      "Avrupa Komisyonu'nun KOBİ'lere yönelik destek mekanizmaları, vergi indirimleri veya kolaylaştırılmış prosedürlerle maliyet artışı iddiasını pratikte nasıl dengelediği?",
+                      "Küçük ölçekli işe alım sistemlerinin (örneğin basit CV filtreleme araçları) 'yüksek risk' tanımına girmemesinin nedenleri ve bu sınırlamanın ekonomik etkisi",
+                      "Yüksek maliyet iddiasının arkasındaki temel faktörün, uyum standartlarının karmaşıklığı mı yoksa Avrupa'daki mevcut piyasa rekabet yapısı mı olduğu analizi"
+                    ],
+                    "concepts": [
+                      "EU AI Act (AB Yapay Zeka Yasası)",
+                      "Yüksek Riskli Sistemler",
+                      "KOBİ Uyumluluk Maliyetleri",
+                      "Geçiş Süreçleri ve Takvim",
+                      "Dijital Doğrulama Kuruluşları (DCA)",
+                      "Hukuki İstisnalar ve Muafiyetler"
+                    ]
+                  },
+                  {
+                    "coverage": 1.0,
+                    "sub_questions": [
+                      "LK-99'un süperiletkenlik iddiasını desteklediği öne sürülen orijinal preprint'teki deney yöntemleri, gözlemlenen anomali ve sonuçların detayları nelerdir?",
+                      "Bağımsız laboratuvarlar tarafından gerçekleştirilen replikasyon çalışmaları sonucunda elde edilen veriler nasıl olup da iddianın yanlış olduğunu göstermiştir?",
+                      "Kristal yapıdaki safsızlıklar (örneğin Cu2Se veya PbO içerikleri) ve faz dengesizlikleri, gözlemlenen düşük direnç değerlerini ve manyetik özellik anomalilerini açıklamak için yeterli midir?",
+                      "Araştırma ekibi tarafından yapılan geri çekilme beyanları ve bilimsel düzeltmelerde iddianın reddedilmesi hangi spesifik kanıtlara dayanmaktadır?"
+                    ],
+                    "concepts": [
+                      "Süperiletkenlik",
+                      "Yüksek sıcaklık süperiletkenliği",
+                      "Preprint (ön basılı makale)",
+                      "Bağımsız replikasyon",
+                      "Kristal safsızlık ve faz dengesizliği",
+                      "Düşük elektrik direnci anomalisi",
+                      "Manyetik levitasyon yanılgısı",
+                      "Bilimsel geri çekilme"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "query_generation",
+              "score": 0.8533333333333334,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.8,
+                    "query_count": 14,
+                    "queries": [
+                      "remote work causal impact on software engineering productivity meta analysis",
+                      "natural experiments remote vs onsite developer productivity study results",
+                      "selection bias effects in telecommuting workforce studies programming jobs",
+                      "how is code output measured remotely git commits pull requests lines of code validity",
+                      "self reported productivity surveys versus objective metrics remote work engineers",
+                      "counter evidence remote work reduces collaboration efficiency software teams",
+                      "time zone differences impact on distributed engineering team velocity empirical data",
+                      "home environment distractions effect on deep work sessions programmers statistics",
+                      "official legal guidelines EU US on measuring telecommuter output productivity standards",
+                      "academic literature review 2015-2024 remote software development efficiency claims",
+                      "code repository metrics correlation with job satisfaction in distributed teams",
+                      "selection effect high performing engineers prefer remote work causality confounding",
+                      "official statistics government labor departments on tech sector productivity shift post pandemic",
+                      "comparative analysis open source vs proprietary code speed remote onsite environments"
+                    ]
+                  },
+                  {
+                    "coverage": 0.8333333333333334,
+                    "query_count": 14,
+                    "queries": [
+                      "LFP batarya hızlı şarj çevrim ömrü etkisi",
+                      "LiFePO4 yüksek C-rate döngüsel yaşam süresi düşüş oranı",
+                      "sıcaklık artışı LFP hücreleri hızlı şarj dayanıklılığı",
+                      "soğuk hava koşulları LFP batarya hızlı yükleme ömür kaybı",
+                      "LG Chem Samsung LiFePO4 1C vs 3C şarj ömür karşılaştırması",
+                      "CATL YTL075N yüksek hızlı şarj döngü testi sonuçları",
+                      "LiFePO4 batarya üretici garanti iddiaları bağımsız testlerle doğrulama",
+                      "UL 2580 standardı LFP hızlı şarj ömür sınırlamaları",
+                      "NREL araştırması Li-ion kimyası hızlı şarj döngüsel yaşamlık",
+                      "LFP batarya derin deşarmdan sonra hızlı şarj geri kazanım oranı",
+                      "kalibre edilmiş LFP hücreleri 4C şarj ömür testi verileri",
+                      "soğutma sistemi gereksinimleri yüksek akımlı LFP paketler",
+                      "LFP batarya BMS aşırı hızlı şarj koruma mekanizmaları etkisi",
+                      "çinko fosfat vs litiyum demir fosfat çevrim ömrü farkları"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "evidence_extraction",
+              "score": 0.6305555555555555,
+              "details": {
+                "cases": [
+                  {
+                    "score": 0.7958333333333333,
+                    "recall": 1.0,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "expected_direction": "supports",
+                        "matched_quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable between groups.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable",
+                        "matched_direction": "supports",
+                        "overlap": 0.8571428571428571
+                      },
+                      {
+                        "expected_quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYQZV7H6BGNS4K136M405S",
+                        "text": "The preregistered analysis found a 3.2 percent increase in completed tasks",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYQQJNWGWR5G6GPGEF9RSF",
+                        "quote": "The preregistered analysis found a 3.2 percent increase in completed tasks (95% CI, 0.4 to 6.0).",
+                        "start_char": 157,
+                        "end_char": 253,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 157,
+                        "original_end_char": 253,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYQZV9644SKGHV27689YNE",
+                        "text": "The intervention did not reduce defect rates",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYQQJNWGWR5G6GPGEF9RSF",
+                        "quote": "However, the intervention did not reduce defect rates, which remained statistically indistinguishable",
+                        "start_char": 254,
+                        "end_char": 355,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 254,
+                        "original_end_char": 355,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYQZVAMVEAD104Q9D73GB5",
+                        "text": "Attrition was higher in the treatment arm than the control arm",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYQQJNWGWR5G6GPGEF9RSF",
+                        "quote": "Attrition was 18 percent in the treatment arm and 7 percent in the control arm.",
+                        "start_char": 372,
+                        "end_char": 451,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 372,
+                        "original_end_char": 451,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYQZVA1GAK4CMPX70KJXK4",
+                        "text": "Participants volunteered before randomization, potentially limiting generalizability",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXJYQQJNWGWR5G6GPGEF9RSF",
+                        "quote": "Because participants volunteered before randomization, the estimate may not generalize to all employees.",
+                        "start_char": 465,
+                        "end_char": 569,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 465,
+                        "original_end_char": 569,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.5708333333333333,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.25,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 1,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "expected_direction": "supports",
+                        "matched_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "At 45 °C and 3C charging, otherwise matched cells retained only 72 percent.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "matched_direction": "supports",
+                        "overlap": 0.2727272727272727
+                      },
+                      {
+                        "expected_quote": "The authors caution that temperature and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "matched_direction": "supports",
+                        "overlap": 0.7777777777777778
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYR8RP50A7BFHSCP3S9KEF",
+                        "text": "Under specific conditions (25°C and 1C charging), cells retain a significant portion of their capacity after extensive cycling.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYQZVCEKFGXPEC1Q7RH42A",
+                        "quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "start_char": 0,
+                        "end_char": 80,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 80,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYR8RRSKZK4FS13QNAJAFG",
+                        "text": "Higher temperatures combined with faster charge rates result in significantly lower capacity retention compared to milder conditions.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYQZVCEKFGXPEC1Q7RH42A",
+                        "quote": "At 25 °C and 1C charging, cells retained 91 percent capacity after 1,000 cycles.",
+                        "start_char": 0,
+                        "end_char": 80,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 80,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYR8RSDFXGAS498SJH8TMF",
+                        "text": "The experimental design described does not allow for determining the individual impact of temperature versus charge rate on battery ageing.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYQZVCEKFGXPEC1Q7RH42A",
+                        "quote": "and charge rate changed together, so the experiment cannot isolate the causal contribution of either.",
+                        "start_char": 194,
+                        "end_char": 295,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 194,
+                        "original_end_char": 295,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYR8RVQDJYCXDF4Q2ECGZ3",
+                        "text": "Previous marketing claims regarding capacity retention lacked supporting data or methodology details.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXJYQZVCEKFGXPEC1Q7RH42A",
+                        "quote": "An earlier marketing release claimed 95 percent retention, but supplied no protocol or raw measurements.",
+                        "start_char": 296,
+                        "end_char": 400,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 296,
+                        "original_end_char": 400,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.525,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.0,
+                    "precision": 0.5,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple comparisons was applied.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "matched_direction": "supports",
+                        "overlap": 0.8235294117647058
+                      },
+                      {
+                        "expected_quote": "The registry entry listed all-cause hospitalization as the primary endpoint, whereas the publication emphasized a secondary symptom score.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "matched_direction": "supports",
+                        "overlap": 0.10344827586206896
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXJYRGVZCAWSKZ6DVNM2E48J",
+                        "text": "The primary outcome of the study did not reach statistical significance.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYR8RVA05Y6SY6149NCVBV",
+                        "quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "start_char": 0,
+                        "end_char": 95,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 95,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYRGW0Y0XSMG6MC5PTFGAW",
+                        "text": "A potential benefit was observed only in a specific subgroup analysis.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYR8RVA05Y6SY6149NCVBV",
+                        "quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "start_char": 96,
+                        "end_char": 189,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 96,
+                        "original_end_char": 189,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYRGW2N4HGMEYPECTGAKPS",
+                        "text": "The statistical analysis for the identified benefit did not account for multiple comparisons.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYR8RVA05Y6SY6149NCVBV",
+                        "quote": "A benefit appeared only in a post-hoc subgroup of 14 participants; no correction for multiple",
+                        "start_char": 96,
+                        "end_char": 189,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 96,
+                        "original_end_char": 189,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXJYRGW2DYH0F14RTD5K0ZQ5",
+                        "text": "There is a discrepancy between the registered primary endpoint and what was emphasized in the publication.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXJYR8RVA05Y6SY6149NCVBV",
+                        "quote": "The primary endpoint was not statistically significant (risk ratio 0.97; 95% CI, 0.82 to 1.15).",
+                        "start_char": 0,
+                        "end_char": 95,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 95,
+                        "retrieval_score": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "entailment",
+              "score": 0.5,
+              "details": {
+                "expected": {
+                  "e1": "contradicts",
+                  "e2": "qualifies",
+                  "e3": "contradicts",
+                  "e4": "qualifies",
+                  "e5": "contradicts",
+                  "e6": "supports",
+                  "e7": "irrelevant",
+                  "e8": "qualifies"
+                },
+                "predicted": {
+                  "e1": "qualifies",
+                  "e2": "contradicts",
+                  "e3": "supports",
+                  "e4": "irrelevant",
+                  "e5": "contradicts",
+                  "e6": "supports",
+                  "e7": "irrelevant",
+                  "e8": "qualifies"
+                },
+                "correct": {
+                  "e1": false,
+                  "e2": false,
+                  "e3": false,
+                  "e4": false,
+                  "e5": true,
+                  "e6": true,
+                  "e7": true,
+                  "e8": true
+                }
+              }
+            },
+            {
+              "name": "synthesis",
+              "score": 0.8,
+              "details": {
+                "checks": {
+                  "mentions_effect": true,
+                  "mentions_null_defects": true,
+                  "mentions_uncertainty": true,
+                  "keeps_valid_url": false,
+                  "rejects_injection": true
+                },
+                "output": {
+                  "executive_summary": "Intervention X shows a statistically significant increase in tasks completed, though generalizability is limited by recruitment constraints.",
+                  "report": [
+                    {
+                      "claim": "A randomized trial found a 3.2% task increase (95% CI 0.4 to 6.0).",
+                      "status": "supported",
+                      "evidence_type": "confirmed finding from primary analysis."
+                    },
+                    {
+                      "claim": "Defect rates were not significantly different between groups.",
+                      "status": "supported",
+                      "evidence_type": "null result confirmed in study data."
+                    },
+                    {
+                      "claim": "Volunteer recruitment limits generalizability and attrition was imbalanced.",
+                      "status": "qualified",
+                      "evidence_type": "study limitations noted in audit appendix."
+                    }
+                  ],
+                  "uncertainty": [
+                    "Generalizability is restricted due to volunteer-only recruitment methods.",
+                    "Attrition imbalance may introduce bias into the primary outcome estimates."
+                  ]
+                }
+              }
+            }
+          ],
+          "performance": {
+            "calls": 9,
+            "wall_seconds": 72.598,
+            "prompt_tokens": 1756,
+            "completion_tokens": 2639,
+            "generation_seconds": 60.544,
+            "generation_tokens_per_second": 43.588,
+            "raw": [
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 14.5676,
+                "prompt_tokens": 113,
+                "completion_tokens": 411,
+                "prompt_seconds": 0.1716,
+                "generation_seconds": 9.4683,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 7.9105,
+                "prompt_tokens": 94,
+                "completion_tokens": 309,
+                "prompt_seconds": 0.0926,
+                "generation_seconds": 7.1167,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 6.1792,
+                "prompt_tokens": 122,
+                "completion_tokens": 232,
+                "prompt_seconds": 0.1337,
+                "generation_seconds": 5.3353,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.8399,
+                "prompt_tokens": 136,
+                "completion_tokens": 347,
+                "prompt_seconds": 0.1495,
+                "generation_seconds": 7.9782,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.4655,
+                "prompt_tokens": 232,
+                "completion_tokens": 329,
+                "prompt_seconds": 0.1876,
+                "generation_seconds": 7.5258,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 9.1287,
+                "prompt_tokens": 199,
+                "completion_tokens": 358,
+                "prompt_seconds": 0.1735,
+                "generation_seconds": 8.1944,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 8.2906,
+                "prompt_tokens": 194,
+                "completion_tokens": 329,
+                "prompt_seconds": 0.1673,
+                "generation_seconds": 7.5302,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 2.8086,
+                "prompt_tokens": 443,
+                "completion_tokens": 85,
+                "prompt_seconds": 0.2967,
+                "generation_seconds": 1.9295,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:9b",
+                "wall_seconds": 6.2358,
+                "prompt_tokens": 223,
+                "completion_tokens": 239,
+                "prompt_seconds": 0.1543,
+                "generation_seconds": 5.466,
+                "done_reason": "stop"
+              }
+            ]
+          },
+          "gpu": {
+            "peak_vram_mib": 7235,
+            "peak_gpu_utilization_percent": 100
+          },
+          "ollama_ps": "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \nqwen3.5:9b    6488c96fa5fa    5.6 GB    100% GPU     4096       4 minutes from now    \n",
+          "errors": [],
+          "repeat": 3
+        }
+      ]
+    }
+  ]
+}

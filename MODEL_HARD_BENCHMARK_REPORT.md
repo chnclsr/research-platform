@@ -2,11 +2,15 @@
 
 Platform sürümü: `v0.2.1`
 
-Belge sürümü: `1.0`
+Belge sürümü: `1.1`
 
 Benchmark sürümü: `1.1.0-hard`
 
 Tarih: `2026-07-15`
+
+> Bu belge iki modele aynı 4K/deterministik ayarların verildiği ilk karşılaştırmadır.
+> Donanıma göre ayrı optimize edilmiş ve bağımsız holdout kullanılan güncel sonuç için
+> `MODEL_HARDWARE_OPTIMIZED_BENCHMARK_REPORT.md` esas alınmalıdır.
 
 ## Sonuç
 

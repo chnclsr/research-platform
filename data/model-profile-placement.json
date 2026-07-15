@@ -1,0 +1,72 @@
+﻿[
+    {
+        "model":  "qwen3:4b-instruct-2507-q4_K_M",
+        "context":  4096,
+        "seconds":  2.78,
+        "ollama_ps":  "qwen3:4b-instruct-2507-q4_K_M    0edcdef34593    3.2 GB    100% GPU     4096       About a minute from now    ",
+        "gpu":  "3871, 18"
+    },
+    {
+        "model":  "qwen3:4b-instruct-2507-q4_K_M",
+        "context":  8192,
+        "seconds":  2.57,
+        "ollama_ps":  "qwen3:4b-instruct-2507-q4_K_M    0edcdef34593    3.9 GB    100% GPU     8192       About a minute from now    ",
+        "gpu":  "4509, 14"
+    },
+    {
+        "model":  "qwen3:4b-instruct-2507-q4_K_M",
+        "context":  16384,
+        "seconds":  2.58,
+        "ollama_ps":  "qwen3:4b-instruct-2507-q4_K_M    0edcdef34593    5.1 GB    100% GPU     16384      About a minute from now    ",
+        "gpu":  "5668, 2"
+    },
+    {
+        "model":  "qwen3:4b-instruct-2507-q4_K_M",
+        "context":  32768,
+        "seconds":  4.13,
+        "ollama_ps":  "qwen3:4b-instruct-2507-q4_K_M    0edcdef34593    8.0 GB    22%/78% CPU/GPU    32768      About a minute from now    ",
+        "gpu":  "6841, 0"
+    },
+    {
+        "model":  "qwen3:4b-instruct-2507-q4_K_M",
+        "context":  65536,
+        "seconds":  6.71,
+        "ollama_ps":  "qwen3:4b-instruct-2507-q4_K_M    0edcdef34593    13 GB    53%/47% CPU/GPU    65536      About a minute from now    ",
+        "gpu":  "6620, 17"
+    },
+    {
+        "model":  "qwen3.5:9b",
+        "context":  4096,
+        "seconds":  6.37,
+        "ollama_ps":  "qwen3.5:9b    6488c96fa5fa    5.6 GB    100% GPU     4096       About a minute from now    ",
+        "gpu":  "7196, 69"
+    },
+    {
+        "model":  "qwen3.5:9b",
+        "context":  8192,
+        "seconds":  6.69,
+        "ollama_ps":  "qwen3.5:9b    6488c96fa5fa    6.4 GB    14%/86% CPU/GPU    8192       About a minute from now    ",
+        "gpu":  "7191, 36"
+    },
+    {
+        "model":  "qwen3.5:9b",
+        "context":  16384,
+        "seconds":  6.97,
+        "ollama_ps":  "qwen3.5:9b    6488c96fa5fa    6.7 GB    19%/81% CPU/GPU    16384      About a minute from now    ",
+        "gpu":  "7256, 0"
+    },
+    {
+        "model":  "qwen3.5:9b",
+        "context":  32768,
+        "seconds":  7.81,
+        "ollama_ps":  "qwen3.5:9b    6488c96fa5fa    7.4 GB    27%/73% CPU/GPU    32768      About a minute from now    ",
+        "gpu":  "7193, 0"
+    },
+    {
+        "model":  "qwen3.5:9b",
+        "context":  65536,
+        "seconds":  8.19,
+        "ollama_ps":  "qwen3.5:9b    6488c96fa5fa    8.7 GB    35%/65% CPU/GPU    65536      About a minute from now    ",
+        "gpu":  "7172, 2"
+    }
+]

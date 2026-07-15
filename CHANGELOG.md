@@ -1,10 +1,17 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.1`
+Platform sürümü: `v0.2.2`
 
-Belge sürümü: `1.1`
+Belge sürümü: `1.2`
 
 Son güncelleme: `2026-07-15`
+
+## v0.2.2 — 2026-07-15
+
+- RTX 4060 üzerinde model başına tam-GPU context ve sampling profil taraması eklendi.
+- Ayrı geliştirme ve bağımsız holdout setleriyle üç tekrarlı model benchmarkı eklendi.
+- Ollama sağlayıcısına temperature, top-p, top-k ve presence-penalty ayarları eklendi.
+- Qwen 3 4B için 24K, Qwen 3.5 9B için 4K tam-GPU profilleri doğrulandı.
 
 ## v0.2.1 — 2026-07-15
 

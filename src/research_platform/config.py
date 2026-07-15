@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     llm_think: bool = False
     llm_context_tokens: int = Field(8192, ge=2048, le=262144)
     llm_max_output_tokens: int = Field(2048, ge=128, le=32768)
+    llm_temperature: float = Field(0.0, ge=0.0, le=2.0)
+    llm_top_p: float | None = Field(None, gt=0.0, le=1.0)
+    llm_top_k: int | None = Field(None, ge=1, le=1000)
+    llm_presence_penalty: float | None = Field(None, ge=-2.0, le=2.0)
     embedding_model: str = "embeddinggemma:300m-qat-q4_0"
     passage_target_tokens: int = Field(700, ge=200, le=1800)
     passage_overlap_tokens: int = Field(100, ge=0, le=400)

@@ -1,14 +1,16 @@
 # Research Platform V1
 
-Platform sürümü: `v0.2.1`
+Platform sürümü: `v0.2.2`
 
-Belge sürümü: `1.2`
+Belge sürümü: `1.3`
 
 Son güncelleme: `2026-07-15`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 
-Zor model karşılaştırması: `MODEL_HARD_BENCHMARK_REPORT.md`.
+RTX 4060'a göre optimize edilmiş model karşılaştırması: `MODEL_HARDWARE_OPTIMIZED_BENCHMARK_REPORT.md`.
+
+İlk sabit-ayar karşılaştırması: `MODEL_HARD_BENCHMARK_REPORT.md`.
 
 Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu. LangGraph araştırma döngüsünü; AgentSearch keşfi; Crawl4AI ise zor sayfalarda içerik edinmeyi yürütür. PostgreSQL araştırma durumu ve kanıt ilişkilerini, MinIO ham/üretilmiş dosyaları, Redis iş kuyruğunu saklar.
 

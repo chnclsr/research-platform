@@ -49,6 +49,18 @@ class OllamaProvider(LLMProvider):
 
     async def complete_json(self, system: str, user: str) -> Any:
         started = time.perf_counter()
+        options: dict[str, Any] = {
+            "temperature": self.settings.llm_temperature,
+            "num_ctx": self.settings.llm_context_tokens,
+            "num_predict": self.settings.llm_max_output_tokens,
+        }
+        for name, value in (
+            ("top_p", self.settings.llm_top_p),
+            ("top_k", self.settings.llm_top_k),
+            ("presence_penalty", self.settings.llm_presence_penalty),
+        ):
+            if value is not None:
+                options[name] = value
         response = await self.client.post(
             f"{self.settings.ollama_url}/api/chat",
             json={
@@ -57,11 +69,7 @@ class OllamaProvider(LLMProvider):
                 "format": "json",
                 "think": self.settings.llm_think,
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                "options": {
-                    "temperature": 0,
-                    "num_ctx": self.settings.llm_context_tokens,
-                    "num_predict": self.settings.llm_max_output_tokens,
-                },
+                "options": options,
             },
             timeout=180,
         )
