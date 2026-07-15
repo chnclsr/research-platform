@@ -22,17 +22,21 @@ PROFILES = [
         "presence_penalty": None,
         "max_output_tokens": 2048,
         "think": False,
+        "reason_then_format": False,
+        "reasoning_output_tokens": 20480,
     },
     {
         "profile": "qwen3.5-4b-rtx4060-full-gpu",
         "model": "qwen3.5:4b",
-        "context_tokens": 73728,
-        "temperature": 0.0,
-        "top_p": None,
-        "top_k": None,
-        "presence_penalty": None,
+        "context_tokens": 24576,
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "presence_penalty": 1.5,
         "max_output_tokens": 2048,
-        "think": False,
+        "think": True,
+        "reason_then_format": True,
+        "reasoning_output_tokens": 20480,
     },
 ]
 
@@ -106,6 +110,8 @@ async def main() -> None:
                 presence_penalty=profile["presence_penalty"],
                 max_output_tokens=profile["max_output_tokens"],
                 think=profile["think"],
+                reason_then_format=profile["reason_then_format"],
+                reasoning_output_tokens=profile["reasoning_output_tokens"],
             )
             run["repeat"] = repeat
             runs.append(run)

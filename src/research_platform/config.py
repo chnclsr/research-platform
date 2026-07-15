@@ -24,8 +24,11 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_model: str = "qwen3:4b-instruct-2507-q4_K_M"
     llm_think: bool = False
+    llm_reason_then_format: bool = False
     llm_context_tokens: int = Field(8192, ge=2048, le=262144)
     llm_max_output_tokens: int = Field(2048, ge=128, le=32768)
+    llm_reasoning_output_tokens: int = Field(20480, ge=512, le=131072)
+    llm_timeout_s: float = Field(180.0, ge=10.0, le=3600.0)
     llm_temperature: float = Field(0.0, ge=0.0, le=2.0)
     llm_top_p: float | None = Field(None, gt=0.0, le=1.0)
     llm_top_k: int | None = Field(None, ge=1, le=1000)

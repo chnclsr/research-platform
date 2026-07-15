@@ -1,8 +1,8 @@
 # Research Platform V1
 
-Platform sürümü: `v0.2.3`
+Platform sürümü: `v0.2.4`
 
-Belge sürümü: `1.4`
+Belge sürümü: `1.5`
 
 Son güncelleme: `2026-07-15`
 

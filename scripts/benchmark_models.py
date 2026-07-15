@@ -438,6 +438,8 @@ async def run_model(
     presence_penalty: float | None = None,
     max_output_tokens: int = 2048,
     think: bool = False,
+    reason_then_format: bool = False,
+    reasoning_output_tokens: int = 20480,
     selected_sections: set[str] | None = None,
 ) -> dict[str, Any]:
     stop_loaded_models()
@@ -452,6 +454,9 @@ async def run_model(
         llm_top_k=top_k,
         llm_presence_penalty=presence_penalty,
         llm_think=think,
+        llm_reason_then_format=reason_then_format,
+        llm_reasoning_output_tokens=reasoning_output_tokens,
+        llm_timeout_s=900,
         testing=False,
     )
     started = time.perf_counter()
@@ -515,6 +520,8 @@ async def main() -> None:
     parser.add_argument("--presence-penalty", type=float)
     parser.add_argument("--max-output", type=int, default=2048)
     parser.add_argument("--think", action="store_true")
+    parser.add_argument("--reason-then-format", action="store_true")
+    parser.add_argument("--reasoning-output", type=int, default=20480)
     parser.add_argument(
         "--sections",
         nargs="+",
@@ -535,6 +542,8 @@ async def main() -> None:
             presence_penalty=args.presence_penalty,
             max_output_tokens=args.max_output,
             think=args.think,
+            reason_then_format=args.reason_then_format,
+            reasoning_output_tokens=args.reasoning_output,
             selected_sections=set(args.sections) if args.sections else None,
         )
         results.append(result)
@@ -548,6 +557,8 @@ async def main() -> None:
         "generated_at": datetime.now(UTC).isoformat(),
         "context_tokens": args.context,
         "thinking": args.think,
+        "reason_then_format": args.reason_then_format,
+        "reasoning_output_tokens": args.reasoning_output,
         "sampling": {
             "temperature": args.temperature,
             "top_p": args.top_p,

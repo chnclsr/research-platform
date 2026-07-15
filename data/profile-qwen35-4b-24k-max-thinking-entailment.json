@@ -1,0 +1,97 @@
+{
+  "benchmark_version": "1.1.0-hard",
+  "generated_at": "2026-07-15T14:07:52.638359+00:00",
+  "context_tokens": 24576,
+  "thinking": true,
+  "sampling": {
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 20,
+    "presence_penalty": 1.5,
+    "max_output_tokens": 2048
+  },
+  "models": [
+    {
+      "model": "qwen3.5:4b",
+      "quality_score": 87.5,
+      "sections": [
+        {
+          "name": "entailment",
+          "score": 0.875,
+          "details": {
+            "expected": {
+              "e1": "contradicts",
+              "e2": "qualifies",
+              "e3": "contradicts",
+              "e4": "qualifies",
+              "e5": "contradicts",
+              "e6": "supports",
+              "e7": "irrelevant",
+              "e8": "qualifies"
+            },
+            "predicted": {
+              "e1": "supports",
+              "e2": "qualifies",
+              "e3": "contradicts",
+              "e4": "qualifies",
+              "e5": "contradicts",
+              "e6": "supports",
+              "e7": "irrelevant",
+              "e8": "qualifies"
+            },
+            "correct": {
+              "e1": false,
+              "e2": true,
+              "e3": true,
+              "e4": true,
+              "e5": true,
+              "e6": true,
+              "e7": true,
+              "e8": true
+            }
+          }
+        }
+      ],
+      "performance": {
+        "calls": 2,
+        "wall_seconds": 254.953,
+        "prompt_tokens": 1136,
+        "completion_tokens": 15400,
+        "generation_seconds": 249.475,
+        "generation_tokens_per_second": 61.73,
+        "raw": [
+          {
+            "provider": "ollama",
+            "model": "qwen3.5:4b",
+            "phase": "reasoning",
+            "wall_seconds": 251.6765,
+            "prompt_tokens": 464,
+            "completion_tokens": 15259,
+            "prompt_seconds": 0.2412,
+            "generation_seconds": 247.3608,
+            "thinking_chars": 65884,
+            "content_chars": 501,
+            "done_reason": "stop"
+          },
+          {
+            "provider": "ollama",
+            "model": "qwen3.5:4b",
+            "phase": "formatting",
+            "wall_seconds": 3.0598,
+            "prompt_tokens": 672,
+            "completion_tokens": 141,
+            "prompt_seconds": 0.2925,
+            "generation_seconds": 2.1142,
+            "done_reason": "stop"
+          }
+        ]
+      },
+      "gpu": {
+        "peak_vram_mib": 5487,
+        "peak_gpu_utilization_percent": 100
+      },
+      "ollama_ps": "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \nqwen3.5:4b    2a654d98e6fb    4.0 GB    100% GPU     24576      4 minutes from now    \n",
+      "errors": []
+    }
+  ]
+}

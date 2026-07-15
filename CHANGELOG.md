@@ -1,10 +1,18 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.3`
+Platform sürümü: `v0.2.4`
 
-Belge sürümü: `1.3`
+Belge sürümü: `1.4`
 
 Son güncelleme: `2026-07-15`
+
+## v0.2.4 — 2026-07-15
+
+- Qwen 3.5 4B için 24K context ve 20.480-token reasoning tavanlı profil eklendi.
+- Serbest thinking çağrısını ayrı deterministic JSON formatter çağrısına bağlayan iki
+  aşamalı Ollama structured-output desteği eklendi.
+- Maksimum-thinking profili bağımsız holdout üzerinde üç kez doğrulandı.
+- Reasoning ve formatting süre/token metrikleri ayrı kaydedilmeye başlandı.
 
 ## v0.2.3 — 2026-07-15
 

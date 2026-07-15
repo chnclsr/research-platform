@@ -48,6 +48,8 @@ class OllamaProvider(LLMProvider):
         self.settings, self.client = settings, client
 
     async def complete_json(self, system: str, user: str) -> Any:
+        if self.settings.llm_think and self.settings.llm_reason_then_format:
+            return await self._reason_then_format(system, user)
         started = time.perf_counter()
         options: dict[str, Any] = {
             "temperature": self.settings.llm_temperature,
@@ -71,7 +73,7 @@ class OllamaProvider(LLMProvider):
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
                 "options": options,
             },
-            timeout=180,
+            timeout=self.settings.llm_timeout_s,
         )
         response.raise_for_status()
         payload = response.json()
@@ -85,6 +87,96 @@ class OllamaProvider(LLMProvider):
             "done_reason": payload.get("done_reason"),
         })
         return _json_from_text(payload["message"]["content"])
+
+    async def _reason_then_format(self, system: str, user: str) -> Any:
+        reasoning_started = time.perf_counter()
+        response = await self.client.post(
+            f"{self.settings.ollama_url}/api/chat",
+            json={
+                "model": self.settings.llm_model,
+                "stream": False,
+                "think": True,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            f"{system}\nThink as deeply as needed. Check every item and relation. "
+                            "Put only the requested JSON in the final answer."
+                        ),
+                    },
+                    {"role": "user", "content": user},
+                ],
+                "options": {
+                    "temperature": self.settings.llm_temperature,
+                    "top_p": self.settings.llm_top_p if self.settings.llm_top_p is not None else 0.95,
+                    "top_k": self.settings.llm_top_k if self.settings.llm_top_k is not None else 20,
+                    "presence_penalty": (
+                        self.settings.llm_presence_penalty
+                        if self.settings.llm_presence_penalty is not None else 1.5
+                    ),
+                    "num_ctx": self.settings.llm_context_tokens,
+                    "num_predict": self.settings.llm_reasoning_output_tokens,
+                },
+            },
+            timeout=self.settings.llm_timeout_s,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        message = payload.get("message", {})
+        thinking = str(message.get("thinking", ""))
+        candidate = str(message.get("content", ""))
+        self.record_metric({
+            "provider": "ollama", "model": self.settings.llm_model, "phase": "reasoning",
+            "wall_seconds": round(time.perf_counter() - reasoning_started, 4),
+            "prompt_tokens": payload.get("prompt_eval_count", 0),
+            "completion_tokens": payload.get("eval_count", 0),
+            "prompt_seconds": round(payload.get("prompt_eval_duration", 0) / 1e9, 4),
+            "generation_seconds": round(payload.get("eval_duration", 0) / 1e9, 4),
+            "thinking_chars": len(thinking), "content_chars": len(candidate),
+            "done_reason": payload.get("done_reason"),
+        })
+        with_reasoning_tail = candidate or thinking[-12000:]
+        formatting_started = time.perf_counter()
+        format_response = await self.client.post(
+            f"{self.settings.ollama_url}/api/chat",
+            json={
+                "model": self.settings.llm_model,
+                "stream": False,
+                "format": "json",
+                "think": False,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return one valid JSON value only. Preserve the candidate's conclusions "
+                            "and required schema; do not add new facts."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"ORIGINAL REQUEST:\n{system}\n{user}\n\nCANDIDATE:\n{with_reasoning_tail}",
+                    },
+                ],
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": self.settings.llm_context_tokens,
+                    "num_predict": self.settings.llm_max_output_tokens,
+                },
+            },
+            timeout=self.settings.llm_timeout_s,
+        )
+        format_response.raise_for_status()
+        format_payload = format_response.json()
+        self.record_metric({
+            "provider": "ollama", "model": self.settings.llm_model, "phase": "formatting",
+            "wall_seconds": round(time.perf_counter() - formatting_started, 4),
+            "prompt_tokens": format_payload.get("prompt_eval_count", 0),
+            "completion_tokens": format_payload.get("eval_count", 0),
+            "prompt_seconds": round(format_payload.get("prompt_eval_duration", 0) / 1e9, 4),
+            "generation_seconds": round(format_payload.get("eval_duration", 0) / 1e9, 4),
+            "done_reason": format_payload.get("done_reason"),
+        })
+        return _json_from_text(format_payload["message"]["content"])
 
 
 class OpenAICompatibleProvider(LLMProvider):

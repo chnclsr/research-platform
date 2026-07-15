@@ -1,0 +1,1451 @@
+{
+  "benchmark_version": "1.2.0-hardware-optimized-holdout",
+  "suite": "holdout",
+  "generated_at": "2026-07-15T14:56:11.251341+00:00",
+  "hardware": "NVIDIA GeForce RTX 4060 8 GB; 32 GB system RAM",
+  "selection_rule": "highest stable quality while retaining 100% GPU model placement",
+  "repeats": 2,
+  "results": [
+    {
+      "profile": {
+        "profile": "qwen3.5-4b-rtx4060-full-gpu",
+        "model": "qwen3.5:4b",
+        "context_tokens": 24576,
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "presence_penalty": 1.5,
+        "max_output_tokens": 2048,
+        "think": true,
+        "reason_then_format": true,
+        "reasoning_output_tokens": 20480
+      },
+      "aggregate": {
+        "quality_mean": 72.0,
+        "quality_min": 69.26,
+        "quality_max": 74.74,
+        "wall_seconds_mean": 910.933,
+        "tokens_per_second_mean": 66.589,
+        "peak_vram_mib": 5464,
+        "peak_gpu_utilization_percent": 100,
+        "error_count": 0,
+        "sections_mean": {
+          "decomposition": 92.5,
+          "query_generation": 80.0,
+          "evidence_extraction": 67.5,
+          "entailment": 50.0,
+          "synthesis": 100.0
+        }
+      },
+      "runs": [
+        {
+          "model": "qwen3.5:4b",
+          "quality_score": 69.26,
+          "sections": [
+            {
+              "name": "decomposition",
+              "score": 0.9,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.75,
+                    "sub_questions": [
+                      "Do existing DAC facility operational reports confirm actual power consumption aligns with theoretical minimum energy requirements for net-negative status?",
+                      "How do lifecycle emissions from material manufacturing and transport offset or amplify the carbon capture benefits relative to vendor projections?",
+                      "Is there verified evidence that geological storage sites can maintain CO2 permanence over century timescales at scale without significant leakage risks?",
+                      "What is the projected deviation between actual Levelized Cost of Carbon Capture learning rates versus published scaling curves by 2035?",
+                      "How does reliance on intermittent renewable energy sources impact long-term operational stability and carbon intensity accounting compared to stable baseload power?"
+                    ],
+                    "concepts": [
+                      "Operational Performance Validation vs Vendor Claims",
+                      "Lifecycle Carbon Footprint Including Embodied Energy",
+                      "Geological Sequestration Permanence Verification Standards",
+                      "Cost Scaling Curves from Deployed Capacity Data"
+                    ]
+                  },
+                  {
+                    "coverage": 1.0,
+                    "sub_questions": [
+                      "What is the correlation between surrogate endpoint efficacy during accelerated pathways and actual patient survival rates in subsequent independent studies?",
+                      "How do confirmatory trial completion statistics for approved drugs vary compared to those from standard review processes using regulator records?",
+                      "Do post-market withdrawal frequencies correlate with the failure of validated long-term outcomes or initial efficacy expectations?",
+                      "Are there significant differences in indication-level survival outcomes between accelerated and conventional drug approvals based on regulatory data analysis?",
+                      "To what extent do selection effects within trial cohorts introduce bias into observed patient survival comparisons across approval pathways using independent datasets?"
+                    ],
+                    "concepts": [
+                      "Accelerated Drug Approval",
+                      "Patient Survival Metrics",
+                      "Surrogate Endpoint Validity",
+                      "Confirmatory Trial Completion Rates",
+                      "Post-Market Withdrawals",
+                      "Indication-Level Outcomes",
+                      "Trial Selection Bias",
+                      "Regulator Records Analysis"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "query_generation",
+              "score": 0.7333333333333334,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.5,
+                    "query_count": 10,
+                    "queries": [
+                      "\"adolescent social media use causal effect mental health systematic review\"",
+                      "longitudinal study youth smartphone anxiety correlation confounding variables meta-analysis en",
+                      "\"genç sosyal medya kullanımı psikolojik sağlığa etkisi\" tr",
+                      "\"WHO report children digital platforms psychological well-being assessment policy\"",
+                      "counter evidence adolescent depression causation social media sleep hygiene study",
+                      "\"natural experiment instrumental variables mobile gaming teen psychology research\"",
+                      "\"EU Digital Services Act impact report children online safety\"",
+                      "Add Health dataset python analysis teen internet usage mental health longitudinal",
+                      "\"gençlik sağlığı sosyal medya kullanımı neden sonuç ilişkisi\" tr en",
+                      "Mendelian randomization instrumental variables social media exposure depression genetic study"
+                    ]
+                  },
+                  {
+                    "coverage": 0.8333333333333334,
+                    "query_count": 11,
+                    "queries": [
+                      "\"sodium-ion battery\" lifecycle cost stationary storage LCOE vs LiFePO4 academic research pdf",
+                      "\"thermal runaway\" safety comparison Na-ion grid system incident report site:.edu or site:.gov",
+                      "commercial deployment sodium-ion utility scale projects global market share database code_data",
+                      "IRENA clean energy report electrolyte technology cost competitiveness study 2023-24 .pdf download\"",
+                      "\"federal register\" sodium ion battery subsidies tax credit policy US DOE official_legal site:.gov",
+                      "Na-ion vs LiFePO4 thermal stability analysis limitations low cycle life trade-off academic paper .edu\",",
+                      "\"sodium battery\" drawbacks heat management energy density disadvantages research site:.pdf or site:.academia.edu",
+                      "Utility-scale sodium-ion storage cost analysis IRENA IEA grid integration report official_legal data.gov\",",
+                      "\"LCOE\" Levelized Cost of Energy stationary application sodium-ion lithium competitive threshold 2035 forecast site:.gov",
+                      "\"grid scale energy storage\" commercial viability safety incidents thermal runaway Na-Ion site:news or social media counter_evidence\"",
+                      "Dünya Enerji Pazarı sodyum pil yatırımları kurumsal kaynaklar vergilendirme resmi veriler .tr.gov\""
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "evidence_extraction",
+              "score": 0.6361111111111111,
+              "details": {
+                "cases": [
+                  {
+                    "score": 0.7958333333333333,
+                    "recall": 1.0,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "expected_direction": "supports",
+                        "matched_quote": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXK331HYJVNPY5ZPYYQJKXBQ",
+                        "text": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK2Z7F1BTBAR8Q9JJT84Y58",
+                        "quote": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "start_char": 133,
+                        "end_char": 203,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 133,
+                        "original_end_char": 203,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK331HZA1KR9AFT7VMQJ8FP",
+                        "text": "Matched control cities reduced emissions during the same interval.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK2Z7F1BTBAR8Q9JJT84Y58",
+                        "quote": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "start_char": 204,
+                        "end_char": 285,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 204,
+                        "original_end_char": 285,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK331J1WB5DPXP4C5AJ44ZD",
+                        "text": "The adjusted difference-in-differences estimate was +1.2 percentage points with a confidence interval.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK2Z7F1BTBAR8Q9JJT84Y58",
+                        "quote": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "start_char": 286,
+                        "end_char": 383,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 286,
+                        "original_end_char": 383,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK331J22SXH0RF09KY9SS0A",
+                        "text": "The study data do not establish an additional policy effect.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK2Z7F1BTBAR8Q9JJT84Y58",
+                        "quote": "The authors conclude that the data do not establish an additional policy effect.",
+                        "start_char": 384,
+                        "end_char": 464,
+                        "direction": "qualifies",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 384,
+                        "original_end_char": 464,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.9625,
+                    "recall": 1.0,
+                    "direction_accuracy": 1.0,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "expected_direction": "supports",
+                        "matched_quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "In an external hospital, AUROC fell to 0.68 and calibration intercept was -0.42.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "In an external hospital, AUROC fell to 0.68 and calibration intercept was -0.42.",
+                        "matched_direction": "contradicts",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "Sensitivity was reported only at a threshold chosen after examining the external labels.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "Sensitivity was reported only at a threshold chosen after examining the external labels.",
+                        "matched_direction": "qualifies",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXK35ER1EWK5468MH8E86867",
+                        "text": "The model performed well on internal validation data.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXK331J3K9JC7DQP9T2KW59A",
+                        "quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "start_char": 0,
+                        "end_char": 52,
+                        "direction": "supports",
+                        "confidence": 0.85,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 52,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK35ER2X55MVJWHH7MTSJTW",
+                        "text": "Performance was poor in external generalizability with miscalibration issues.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK331J3K9JC7DQP9T2KW59A",
+                        "quote": "In an external hospital, AUROC fell to 0.68 and calibration intercept was -0.42.",
+                        "start_char": 53,
+                        "end_char": 133,
+                        "direction": "contradicts",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 53,
+                        "original_end_char": 133,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK35ER3MM1ZXT0JQZ9TSJ06",
+                        "text": "Sensitivity reporting methodological limitations existed due to post-hoc threshold selection.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXK331J3K9JC7DQP9T2KW59A",
+                        "quote": "Sensitivity was reported only at a threshold chosen after examining the external labels.",
+                        "start_char": 134,
+                        "end_char": 222,
+                        "direction": "qualifies",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 134,
+                        "original_end_char": 222,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK35ER38KHHGXNS7XYARD6A",
+                        "text": "No clinical impact utility validation data is available from prospective trials.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK331J3K9JC7DQP9T2KW59A",
+                        "quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "start_char": 0,
+                        "end_char": 52,
+                        "direction": "contradicts",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 52,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.15,
+                    "recall": 0.0,
+                    "direction_accuracy": 0.0,
+                    "precision": 0.0,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 2,
+                    "expected": [
+                      {
+                        "expected_quote": "Hospitalizations declined from 124 to 93 per month after the campaign.",
+                        "expected_direction": "supports",
+                        "matched_quote": "A coding change occurred in the intervention month, and no unaffected comparison series was available.",
+                        "matched_direction": "supports",
+                        "overlap": 0.08333333333333333
+                      },
+                      {
+                        "expected_quote": "The pre-campaign series had already been declining by 2.1 cases per month.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "A coding change occurred in the intervention month, and no unaffected comparison series was available.",
+                        "matched_direction": "supports",
+                        "overlap": 0.08
+                      },
+                      {
+                        "expected_quote": "Consequently, the before-after contrast cannot identify the campaign's causal effect.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "A coding change occurred in the intervention month, and no unaffected comparison series was available.",
+                        "matched_direction": "supports",
+                        "overlap": 0.041666666666666664
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXK38HV3J6RDZB5G32F1MS3R",
+                        "text": "A coding change occurred in the intervention month.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK35ER45ZK8V1PYPPCEWFS5",
+                        "quote": "A coding change occurred in the intervention month, and no unaffected comparison series was available.",
+                        "start_char": 146,
+                        "end_char": 248,
+                        "direction": "supports",
+                        "confidence": 1.0,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 146,
+                        "original_end_char": 248,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK38HV3YJVM0G4RTB3BVME7",
+                        "text": "No unaffected comparison series was available.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXK35ER45ZK8V1PYPPCEWFS5",
+                        "quote": "A coding change occurred in the intervention month, and no unaffected comparison series was available.",
+                        "start_char": 146,
+                        "end_char": 248,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 146,
+                        "original_end_char": 248,
+                        "retrieval_score": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "entailment",
+              "score": 0.5,
+              "details": {
+                "expected": {
+                  "h1": "qualifies",
+                  "h2": "contradicts",
+                  "h3": "contradicts",
+                  "h4": "qualifies",
+                  "h5": "supports",
+                  "h6": "qualifies",
+                  "h7": "irrelevant",
+                  "h8": "contradicts",
+                  "h9": "contradicts",
+                  "h10": "supports",
+                  "h11": "contradicts",
+                  "h12": "qualifies"
+                },
+                "predicted": {
+                  "h1": "supports",
+                  "h2": "irrelevant",
+                  "h3": "contradicts",
+                  "h4": "irrelevant",
+                  "h5": "qualifies",
+                  "h6": "irrelevant",
+                  "h7": "irrelevant",
+                  "h8": "supports",
+                  "h9": "contradicts",
+                  "h10": "supports",
+                  "h11": "contradicts",
+                  "h12": "qualifies"
+                },
+                "correct": {
+                  "h1": false,
+                  "h2": false,
+                  "h3": true,
+                  "h4": false,
+                  "h5": false,
+                  "h6": false,
+                  "h7": true,
+                  "h8": false,
+                  "h9": true,
+                  "h10": true,
+                  "h11": true,
+                  "h12": true
+                }
+              }
+            },
+            {
+              "name": "synthesis",
+              "score": 1.0,
+              "details": {
+                "checks": {
+                  "fact_1": true,
+                  "fact_2": true,
+                  "fact_3": true,
+                  "keeps_valid_url": true,
+                  "rejects_injection": true
+                },
+                "output": {
+                  "executive_summary": "Diagnostik sistem Y'nin gerçek dünya karar alımını iyileştirdiği iddiası, yüksek iç geçerlilik skorları tarafından desteklenmekle birlikte, düşük kalibrasyonla raporlanmış dış geçerlik verileri ve prospektif çalışma eksikliğini karşılamaktadır.",
+                  "report": [
+                    {
+                      "claim_id_1": true,
+                      "detailed_summary": "İç geçercilik analizlerinde sistemin AUROC değeri 0.91 olarak belirlendi.",
+                      "evidence_quality": [
+                        "destek"
+                      ],
+                      "urls": [
+                        "https://holdout.invalid/development"
+                      ]
+                    },
+                    {
+                      "claim_id_2": false,
+                      "detailed_summary": "Sistem Y'nin dış geçerlik performansının 0.68 AUROC ve kötü kalibrasyonla gerçekleştiği iddiası zıt kanıtlanmıştır.",
+                      "evidence_quality": [
+                        "ziddi"
+                      ],
+                      "urls": [
+                        "https://holdout.invalid/external"
+                      ]
+                    },
+                    {
+                      "claim_id_3": null,
+                      "detailed_summary": "Sistem Y ile ilgili gerçek dünya klinik etkisinin değerlendirilmesi amacıyla yapılmış bir prospektif çalışma bulunmamaktadır.",
+                      "evidence_quality": [
+                        "belirsiz"
+                      ],
+                      "urls": [
+                        "https://holdout.invalid/audit"
+                      ]
+                    }
+                  ],
+                  "uncertainty": "Tüm sonuçların güvenliliği iç geçerlilikle sınırlıdır. Dış geçercilik verileri düşük kalibrasyon ve zıt bulgularla karşılanmıştır. Prospektif klinik etkisi çalışması eksikliğinden dolayı sistemin gerçek dünya performansının kesin bir şekilde değerlendirilmesi yapılamamıştır."
+                }
+              }
+            }
+          ],
+          "performance": {
+            "calls": 18,
+            "wall_seconds": 823.028,
+            "prompt_tokens": 6223,
+            "completion_tokens": 53700,
+            "generation_seconds": 803.182,
+            "generation_tokens_per_second": 66.859,
+            "raw": [
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 51.6164,
+                "prompt_tokens": 105,
+                "completion_tokens": 3230,
+                "prompt_seconds": 0.132,
+                "generation_seconds": 47.2873,
+                "thinking_chars": 13772,
+                "content_chars": 1078,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 4.0216,
+                "prompt_tokens": 322,
+                "completion_tokens": 205,
+                "prompt_seconds": 0.1375,
+                "generation_seconds": 2.9695,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 33.7081,
+                "prompt_tokens": 95,
+                "completion_tokens": 2250,
+                "prompt_seconds": 0.067,
+                "generation_seconds": 32.7946,
+                "thinking_chars": 9827,
+                "content_chars": 1112,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 3.9421,
+                "prompt_tokens": 318,
+                "completion_tokens": 211,
+                "prompt_seconds": 0.1372,
+                "generation_seconds": 3.0579,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 117.117,
+                "prompt_tokens": 137,
+                "completion_tokens": 7732,
+                "prompt_seconds": 0.0839,
+                "generation_seconds": 116.4301,
+                "thinking_chars": 35132,
+                "content_chars": 897,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 3.6813,
+                "prompt_tokens": 326,
+                "completion_tokens": 175,
+                "prompt_seconds": 0.1419,
+                "generation_seconds": 2.6829,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 57.0654,
+                "prompt_tokens": 131,
+                "completion_tokens": 3814,
+                "prompt_seconds": 0.0766,
+                "generation_seconds": 56.3236,
+                "thinking_chars": 14801,
+                "content_chars": 1614,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 5.4382,
+                "prompt_tokens": 522,
+                "completion_tokens": 288,
+                "prompt_seconds": 0.2156,
+                "generation_seconds": 4.4558,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 119.6653,
+                "prompt_tokens": 231,
+                "completion_tokens": 7925,
+                "prompt_seconds": 0.1083,
+                "generation_seconds": 118.946,
+                "thinking_chars": 36068,
+                "content_chars": 1025,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 5.3549,
+                "prompt_tokens": 540,
+                "completion_tokens": 297,
+                "prompt_seconds": 0.2169,
+                "generation_seconds": 4.2773,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 73.4178,
+                "prompt_tokens": 190,
+                "completion_tokens": 4914,
+                "prompt_seconds": 0.0943,
+                "generation_seconds": 72.7519,
+                "thinking_chars": 22340,
+                "content_chars": 987,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 5.6202,
+                "prompt_tokens": 438,
+                "completion_tokens": 307,
+                "prompt_seconds": 0.206,
+                "generation_seconds": 4.4507,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 99.0747,
+                "prompt_tokens": 196,
+                "completion_tokens": 6578,
+                "prompt_seconds": 0.096,
+                "generation_seconds": 98.3779,
+                "thinking_chars": 29608,
+                "content_chars": 411,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 2.3955,
+                "prompt_tokens": 307,
+                "completion_tokens": 99,
+                "prompt_seconds": 0.1388,
+                "generation_seconds": 1.4141,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 172.188,
+                "prompt_tokens": 604,
+                "completion_tokens": 11212,
+                "prompt_seconds": 0.235,
+                "generation_seconds": 171.2812,
+                "thinking_chars": 46815,
+                "content_chars": 628,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 3.1216,
+                "prompt_tokens": 920,
+                "completion_tokens": 128,
+                "prompt_seconds": 0.3834,
+                "generation_seconds": 1.8411,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 58.8702,
+                "prompt_tokens": 220,
+                "completion_tokens": 3946,
+                "prompt_seconds": 0.1038,
+                "generation_seconds": 58.1538,
+                "thinking_chars": 15604,
+                "content_chars": 1376,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 6.5023,
+                "prompt_tokens": 621,
+                "completion_tokens": 389,
+                "prompt_seconds": 0.2376,
+                "generation_seconds": 5.6859,
+                "done_reason": "stop"
+              }
+            ]
+          },
+          "gpu": {
+            "peak_vram_mib": 5399,
+            "peak_gpu_utilization_percent": 100
+          },
+          "ollama_ps": "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \nqwen3.5:4b    2a654d98e6fb    4.0 GB    100% GPU     24576      4 minutes from now    \n",
+          "errors": [],
+          "repeat": 1
+        },
+        {
+          "model": "qwen3.5:4b",
+          "quality_score": 74.74,
+          "sections": [
+            {
+              "name": "decomposition",
+              "score": 0.9500000000000001,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.875,
+                    "sub_questions": [
+                      "Does current renewable energy infrastructure provide sufficient power density and reliability for scaled DAC deployment by 2035?",
+                      "What is the comparative lifecycle assessment data between operational direct-air-capture facilities regarding embodied carbon versus vendor projections?",
+                      "Are long-term geological storage permanence rates for CO2 demonstrably verified in active pilot sites rather than relying on theoretical modeling?",
+                      "Have observed cost learning curves from existing operating plants validated economic feasibility against $10 per ton thresholds required by 2035 targets",
+                      "How does reliance on electricity grid decarbonization timelines impact the net-negative status attribution of current DAC system claims versus projections.",
+                      "Can verified third-party audit data distinguish actual carbon removal volumes and emission offsets from vendor marketing claims in operating facilities."
+                    ],
+                    "concepts": [
+                      "Direct-air-capture-dac",
+                      "net-negative-emissions-target-2035",
+                      "lifecycle-assessment-lca-data",
+                      "energy-source-renewables-grid-decarbonization",
+                      "geological-storage-permanence-validation",
+                      "operating-plants-evidence-vs-projections"
+                    ]
+                  },
+                  {
+                    "coverage": 1.0,
+                    "sub_questions": [
+                      "What is the correlation between surrogate endpoint validity in accelerated trials and long-term patient survival rates found in regulator records?",
+                      "How do confirmatory-trial completion frequencies for expedited drugs compare to standard protocols regarding demonstrated mortality benefit evidence?",
+                      "Do higher withdrawal rates during initial phases of independent studies predict subsequent failure to show clinically significant survival improvement?",
+                      "Are indication-level outcome metrics statistically different between accelerated and conventional approval pathways when analyzed via large-scale patient registries?",
+                      "What is the magnitude of selection effects on observed survival advantages when comparing expedited trial cohorts against general populations studied through independent research?"
+                    ],
+                    "concepts": [
+                      "Accelerated Drug Approval",
+                      "Patient Survival Rates",
+                      "Surrogate Endpoint Validity",
+                      "Confirmatory Trial Completion",
+                      "Clinical Withdrawal Analysis",
+                      "Indication-Level Outcomes",
+                      "Selection Effect Bias"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "query_generation",
+              "score": 0.8666666666666667,
+              "details": {
+                "cases": [
+                  {
+                    "coverage": 0.6666666666666666,
+                    "query_count": 9,
+                    "queries": [
+                      "adolescent social media mental health causal meta analysis systematic review PubMed Lancet",
+                      "natural experiment policy discontinuity adolescent well-being panel data difference-in-differences RCT instrumental variables OpenAlex Web Science DBPedia",
+                      "gençlerde sosyal medya zihinsel sağlık etkileri nedensellik çalışması tr akademik Türkçe kaynaklar",
+                      "site:gov.tr site:sosyalmedya.gov gençlik digital safety official legal reports youth mental health TR regulations policy assessment public admin",
+                      "effect size heterogeneity depression anxiety Instagram TikTok usage longitudinal data code_data python R repository analysis variable extraction Web DBPedia Science",
+                      "counter evidence social media harm psychological distress correlation not causation conflicting studies rebuttal EN tr debate multilingual meta review negative findings",
+                      "Türkiye sağlık Bakanlığı gençler sosyal medya rapor resmi yasal veriler devlet kurumu TR legal policy assessment public health official data stats",
+                      "WHO youth mental health guidelines screen time risk assessment global organization official_legal report statistics English translation portal",
+                      "discontinuity regression difference in differences DID policy shock adolescent behavior mental health causal inference academic tr_en multilingual datasets code_data open research repository"
+                    ]
+                  },
+                  {
+                    "coverage": 1.0,
+                    "query_count": 13,
+                    "queries": [
+                      "sodium ion batteries stationary energy storage lifecycle cost comparison analysis",
+                      "commercial deployments utility scale battery systems data repositories statistics",
+                      "thermal runaway risks na+ grid deployment safety research academic paper study",
+                      "sodyum iyon batarya enerji depolama döngüsel ömür maliyet karşılaştırma akademik inceleme",
+                      "battery incentive subsidies energy storage regulation legal policy tr en mix official_legal law",
+                      "sodium vs lithium iron phosphate competitive advantages fixed cost analysis review code_data dataset",
+                      "counter evidence limitations energy density stationary grid applications research rebuttal",
+                      "sodyum iyon batarya yangın tehlikesi güvenlik ölçümleri laboratuvar raporu tr safety report",
+                      "lifecycle cost calculation methods ESS asset valuation financial models open source api access code_data",
+                      "sodium-ion fire suppression systems safety record operational incidents industry report web search",
+                      "commercial viability comparison lithium vs na stationary storage economics study case law legal official_legal",
+                      "Na+ battery degradation metrics cycle life data repository github research dataset code_data",
+                      "tıyonlu pil enerji depolama rekabetlilik yasa mevzuat destek programları tr government policy"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "evidence_extraction",
+              "score": 0.7138888888888889,
+              "details": {
+                "cases": [
+                  {
+                    "score": 0.7958333333333333,
+                    "recall": 1.0,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "expected_direction": "supports",
+                        "matched_quote": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "matched_direction": "qualifies",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "matched_direction": "qualifies",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "matched_direction": "qualifies",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXK3WCPPFQF7YSTPYPXW6ADD",
+                        "text": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3R2MY9XB6KB1D598D0PGH",
+                        "quote": "After implementation, treated cities reduced emissions by 8.1 percent.",
+                        "start_char": 133,
+                        "end_char": 203,
+                        "direction": "qualifies",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 133,
+                        "original_end_char": 203,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK3WCPRRWTCJHRETBWYQ6AX",
+                        "text": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3R2MY9XB6KB1D598D0PGH",
+                        "quote": "Matched control cities reduced emissions by 9.4 percent during the same interval.",
+                        "start_char": 204,
+                        "end_char": 285,
+                        "direction": "qualifies",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 204,
+                        "original_end_char": 285,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK3WCPTRJJ7A3SREYCH1QF5",
+                        "text": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3R2MY9XB6KB1D598D0PGH",
+                        "quote": "The adjusted difference-in-differences estimate was +1.2 percentage points (95% CI, -0.8 to 3.1).",
+                        "start_char": 286,
+                        "end_char": 383,
+                        "direction": "qualifies",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 286,
+                        "original_end_char": 383,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK3WCPWEA546W2KWFE34SXG",
+                        "text": "The authors conclude that the data do not establish an additional policy effect.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3R2MY9XB6KB1D598D0PGH",
+                        "quote": "The authors conclude that the data do not establish an additional policy effect.",
+                        "start_char": 384,
+                        "end_char": 464,
+                        "direction": "qualifies",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 384,
+                        "original_end_char": 464,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.7958333333333333,
+                    "recall": 1.0,
+                    "direction_accuracy": 0.3333333333333333,
+                    "precision": 0.75,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 4,
+                    "expected": [
+                      {
+                        "expected_quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "expected_direction": "supports",
+                        "matched_quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "In an external hospital, AUROC fell to 0.68 and calibration intercept was -0.42.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "In an external hospital, AUROC fell to 0.68 and calibration intercept was -0.42.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "Sensitivity was reported only at a threshold chosen after examining the external labels.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "Sensitivity was reported only at a threshold chosen after examining the external labels.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXK411GRQCR0JT1AGNGME812",
+                        "text": "The model achieved high accuracy during internal validation but significant drops in external settings.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3WCPX38CBZXS35JV1YN6C",
+                        "quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "start_char": 0,
+                        "end_char": 52,
+                        "direction": "supports",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 52,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK411GRSFGX8JWJP2KWRKVJ",
+                        "text": "External performance was significantly lower than internal validation metrics, indicating a lack of generalization.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3WCPX38CBZXS35JV1YN6C",
+                        "quote": "Internal cross-validation produced an AUROC of 0.91.",
+                        "start_char": 0,
+                        "end_char": 52,
+                        "direction": "contradicts",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 52,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK411GRGEVNXRG8386RE4DJ",
+                        "text": "Sensitivity evaluation lacked independence due to threshold selection bias.",
+                        "importance": "minor",
+                        "source_candidate_id": "01KXK3WCPX38CBZXS35JV1YN6C",
+                        "quote": "Sensitivity was reported only at a threshold chosen after examining the external labels.",
+                        "start_char": 134,
+                        "end_char": 222,
+                        "direction": "supports",
+                        "confidence": 0.85,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 134,
+                        "original_end_char": 222,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK411GRRJWFF1KX6DK50Z7K",
+                        "text": "Clinical utility of the model could not be established due to missing prospective data.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK3WCPX38CBZXS35JV1YN6C",
+                        "quote": "In an external hospital, AUROC fell to 0.68 and calibration intercept was -0.42.",
+                        "start_char": 53,
+                        "end_char": 133,
+                        "direction": "supports",
+                        "confidence": 0.92,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 53,
+                        "original_end_char": 133,
+                        "retrieval_score": null
+                      }
+                    ]
+                  },
+                  {
+                    "score": 0.5499999999999999,
+                    "recall": 0.6666666666666666,
+                    "direction_accuracy": 0.0,
+                    "precision": 0.6666666666666666,
+                    "exact_quote_validity": 1.0,
+                    "forbidden_hits": 0,
+                    "claim_count": 3,
+                    "expected": [
+                      {
+                        "expected_quote": "Hospitalizations declined from 124 to 93 per month after the campaign.",
+                        "expected_direction": "supports",
+                        "matched_quote": "Hospitalizations declined from 124 to 93 per month after the campaign.",
+                        "matched_direction": "qualifies",
+                        "overlap": 1.0
+                      },
+                      {
+                        "expected_quote": "The pre-campaign series had already been declining by 2.1 cases per month.",
+                        "expected_direction": "qualifies",
+                        "matched_quote": "Hospitalizations declined from 124 to 93 per month after the campaign.",
+                        "matched_direction": "qualifies",
+                        "overlap": 0.09523809523809523
+                      },
+                      {
+                        "expected_quote": "Consequently, the before-after contrast cannot identify the campaign's causal effect.",
+                        "expected_direction": "contradicts",
+                        "matched_quote": "Consequently, the before-after contrast cannot identify the campaign's causal effect.",
+                        "matched_direction": "supports",
+                        "overlap": 1.0
+                      }
+                    ],
+                    "claims": [
+                      {
+                        "id": "01KXK438BEY1NDAQRYYTWS3DW8",
+                        "text": "The decline in hospitalizations is likely influenced by pre-existing trends.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK411GR5D7DCSM6KJCJ2ZBY",
+                        "quote": "Hospitalizations declined from 124 to 93 per month after the campaign.",
+                        "start_char": 0,
+                        "end_char": 70,
+                        "direction": "qualifies",
+                        "confidence": 0.85,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 0,
+                        "original_end_char": 70,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK438BF2B4ZHPFT1N7WG7BH",
+                        "text": "There is a confounding factor affecting the data in the intervention period.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK411GR5D7DCSM6KJCJ2ZBY",
+                        "quote": "A coding change occurred in the intervention month, and no unaffected comparison series was available.",
+                        "start_char": 146,
+                        "end_char": 248,
+                        "direction": "qualifies",
+                        "confidence": 0.95,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 146,
+                        "original_end_char": 248,
+                        "retrieval_score": null
+                      },
+                      {
+                        "id": "01KXK438BG9XMHKMNZ0AXNHAGF",
+                        "text": "The before-after analysis is methodologically invalid for causal attribution.",
+                        "importance": "major",
+                        "source_candidate_id": "01KXK411GR5D7DCSM6KJCJ2ZBY",
+                        "quote": "Consequently, the before-after contrast cannot identify the campaign's causal effect.",
+                        "start_char": 249,
+                        "end_char": 334,
+                        "direction": "supports",
+                        "confidence": 0.92,
+                        "passage_id": null,
+                        "section_path": null,
+                        "page_number": null,
+                        "original_start_char": 249,
+                        "original_end_char": 334,
+                        "retrieval_score": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "entailment",
+              "score": 0.5,
+              "details": {
+                "expected": {
+                  "h1": "qualifies",
+                  "h2": "contradicts",
+                  "h3": "contradicts",
+                  "h4": "qualifies",
+                  "h5": "supports",
+                  "h6": "qualifies",
+                  "h7": "irrelevant",
+                  "h8": "contradicts",
+                  "h9": "contradicts",
+                  "h10": "supports",
+                  "h11": "contradicts",
+                  "h12": "qualifies"
+                },
+                "predicted": {
+                  "h1": "qualifies",
+                  "h2": "irrelevant",
+                  "h3": "supports",
+                  "h4": "contradicts",
+                  "h5": "contradicts",
+                  "h6": "irrelevant",
+                  "h7": "irrelevant",
+                  "h8": "qualifies",
+                  "h9": "contradicts",
+                  "h10": "supports",
+                  "h11": "contradicts",
+                  "h12": "qualifies"
+                },
+                "correct": {
+                  "h1": true,
+                  "h2": false,
+                  "h3": false,
+                  "h4": false,
+                  "h5": false,
+                  "h6": false,
+                  "h7": true,
+                  "h8": false,
+                  "h9": true,
+                  "h10": true,
+                  "h11": true,
+                  "h12": true
+                }
+              }
+            },
+            {
+              "name": "synthesis",
+              "score": 1.0,
+              "details": {
+                "checks": {
+                  "fact_1": true,
+                  "fact_2": true,
+                  "fact_3": true,
+                  "keeps_valid_url": true,
+                  "rejects_injection": true
+                },
+                "output": {
+                  "executive_summary": "Sistem Y'nin gerçek dünya kararlarını iyileştirdiği iddiası desteklenememiştir; içsel validasyon yüksek olsa da dışsal uyumun düşük olması ve klinik etki çalışmasının olmamasından kaynaklı belirsizlik bulunmaktadır.",
+                  "report": [
+                    {
+                      "claim": "İçsel doğrulama AUROC değeri 0.91'dir.",
+                      "status": "desteklenmiş",
+                      "source_url": "https://holdout.invalid/development"
+                    },
+                    {
+                      "claim": "Dışsal doğrulama AUROC değeri 0.68'dir ve kalibrasyonu kötüdür.",
+                      "status": "çelişkin",
+                      "source_url": "https://holdout.invalid/external"
+                    },
+                    {
+                      "claim": "Önemsiz klinik-etki çalışması yapılmamıştır.",
+                      "status": "belirsiz",
+                      "source_url": "https://holdout.invalid/audit"
+                    }
+                  ],
+                  "uncertainty": "Sistem Y'nin gerçek dünya kararlarını iyileştirdiğini kanıtlamak için eksik klinik etkisi çalışması bulunmuştur. Dışsal uyum ve içsel başarı arası çelişki, sistem performansının genel geçerliliği konusunda büyük belirsizlik yaratmaktadır."
+                }
+              }
+            }
+          ],
+          "performance": {
+            "calls": 18,
+            "wall_seconds": 998.837,
+            "prompt_tokens": 6326,
+            "completion_tokens": 64796,
+            "generation_seconds": 977.04,
+            "generation_tokens_per_second": 66.319,
+            "raw": [
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 60.8314,
+                "prompt_tokens": 105,
+                "completion_tokens": 3814,
+                "prompt_seconds": 0.1365,
+                "generation_seconds": 56.3169,
+                "thinking_chars": 16022,
+                "content_chars": 1238,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 4.4457,
+                "prompt_tokens": 372,
+                "completion_tokens": 255,
+                "prompt_seconds": 0.1521,
+                "generation_seconds": 3.715,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 56.9848,
+                "prompt_tokens": 95,
+                "completion_tokens": 3824,
+                "prompt_seconds": 0.0669,
+                "generation_seconds": 56.3673,
+                "thinking_chars": 18391,
+                "content_chars": 1110,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 4.0284,
+                "prompt_tokens": 313,
+                "completion_tokens": 206,
+                "prompt_seconds": 0.1357,
+                "generation_seconds": 3.0018,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 68.6182,
+                "prompt_tokens": 137,
+                "completion_tokens": 4575,
+                "prompt_seconds": 0.0848,
+                "generation_seconds": 67.7068,
+                "thinking_chars": 20294,
+                "content_chars": 1396,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 4.9113,
+                "prompt_tokens": 408,
+                "completion_tokens": 259,
+                "prompt_seconds": 0.1738,
+                "generation_seconds": 3.7736,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 61.8354,
+                "prompt_tokens": 131,
+                "completion_tokens": 4134,
+                "prompt_seconds": 0.0749,
+                "generation_seconds": 61.0121,
+                "thinking_chars": 16720,
+                "content_chars": 1434,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 4.7607,
+                "prompt_tokens": 431,
+                "completion_tokens": 271,
+                "prompt_seconds": 0.181,
+                "generation_seconds": 3.9318,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 135.0397,
+                "prompt_tokens": 231,
+                "completion_tokens": 8869,
+                "prompt_seconds": 0.1086,
+                "generation_seconds": 134.0357,
+                "thinking_chars": 41342,
+                "content_chars": 1182,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 6.3256,
+                "prompt_tokens": 593,
+                "completion_tokens": 352,
+                "prompt_seconds": 0.2394,
+                "generation_seconds": 5.0996,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 146.663,
+                "prompt_tokens": 190,
+                "completion_tokens": 9591,
+                "prompt_seconds": 0.0952,
+                "generation_seconds": 145.6652,
+                "thinking_chars": 45040,
+                "content_chars": 1145,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 5.716,
+                "prompt_tokens": 493,
+                "completion_tokens": 315,
+                "prompt_seconds": 0.2001,
+                "generation_seconds": 4.5596,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 67.7475,
+                "prompt_tokens": 196,
+                "completion_tokens": 4516,
+                "prompt_seconds": 0.0958,
+                "generation_seconds": 66.8698,
+                "thinking_chars": 20533,
+                "content_chars": 1006,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 4.7822,
+                "prompt_tokens": 465,
+                "completion_tokens": 257,
+                "prompt_seconds": 0.1928,
+                "generation_seconds": 3.6996,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 250.2629,
+                "prompt_tokens": 604,
+                "completion_tokens": 15962,
+                "prompt_seconds": 0.2341,
+                "generation_seconds": 249.1275,
+                "thinking_chars": 68925,
+                "content_chars": 446,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 3.273,
+                "prompt_tokens": 794,
+                "completion_tokens": 130,
+                "prompt_seconds": 0.3405,
+                "generation_seconds": 1.8476,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "reasoning",
+                "wall_seconds": 106.7869,
+                "prompt_tokens": 220,
+                "completion_tokens": 7150,
+                "prompt_seconds": 0.1047,
+                "generation_seconds": 105.8252,
+                "thinking_chars": 29818,
+                "content_chars": 1015,
+                "done_reason": "stop"
+              },
+              {
+                "provider": "ollama",
+                "model": "qwen3.5:4b",
+                "phase": "formatting",
+                "wall_seconds": 5.6505,
+                "prompt_tokens": 548,
+                "completion_tokens": 316,
+                "prompt_seconds": 0.2129,
+                "generation_seconds": 4.4846,
+                "done_reason": "stop"
+              }
+            ]
+          },
+          "gpu": {
+            "peak_vram_mib": 5464,
+            "peak_gpu_utilization_percent": 100
+          },
+          "ollama_ps": "NAME          ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \nqwen3.5:4b    2a654d98e6fb    4.0 GB    100% GPU     24576      4 minutes from now    \n",
+          "errors": [],
+          "repeat": 2
+        }
+      ]
+    }
+  ]
+}
