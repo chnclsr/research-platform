@@ -1,0 +1,71 @@
+# Bilgi Toplama Mimarisi — Kısa Rapor
+
+Platform sürümü: `v0.2.0`  
+Belge sürümü: `1.0`  
+Son güncelleme: `2026-07-15`
+
+## Amaç
+
+Mevcut connector, AgentSearch, Crawl4AI, güvenlik, yapısal chunking ve kanıt hattı korunarak bilgi toplama katmanı kalıcı corpus ve çok aşamalı retrieval yapısına genişletildi.
+
+## Akış
+
+```text
+QUERY → decomposition / expansion
+  ├─ connector + AgentSearch web discovery
+  └─ kalıcı yerel corpus (BM25 + embedding)
+        ↓
+candidate fusion + protokol relevance filtresi
+        ↓
+persistent-id + canonical URL + content hash dedup
+        ↓
+SSRF / redirect / boyut / MIME politikası
+        ↓
+direct HTTP/API → AgentSearch /read → Crawl4AI → Scrapling fallback
+        ↓
+raw snapshot (MinIO) + provenance + outgoing-link frontier
+        ↓
+HTML/PDF/JSON/XML normalizasyonu + dil tespiti
+        ↓
+yapısal ve örtüşmeli passage üretimi
+        ↓
+BM25 rank + vector rank → RRF → relevance/kalite/çeşitlilik reranker
+        ↓
+evidence-ready passage ve /v1/corpus/search API
+```
+
+## Eklenenler
+
+- Run'lar arası kalıcı corpus araması; web discovery ile paralel çalışır.
+- `POST /v1/corpus/search`: metin, kaynak, bölüm, sayfa, karakter aralığı ve skor döndürür.
+- Tracking parametrelerini ve fragment'i temizleyen canonical URL normalizasyonu.
+- Kalıcı kimlik, canonical URL, içerik hash'i ve sıkı başlık eşleşmesine dayalı dedup.
+- Ham snapshot'ın MinIO'ya; raw içerik, final URL, redirect zinciri, MIME, dil ve stratejilerin provenance'a yazılması.
+- HTML link çıkarma ve domain öncelikli, bütçeli kalıcı crawl frontier.
+- PDF metin çıkarma ve sayfa başlığı/numarası; HTML/JSON/XML/text tür ayrımı.
+- Türkçe/İngilizce hafif dil tespiti ve passage metadata'sı.
+- BM25 ve embedding listeleri için Reciprocal Rank Fusion (RRF).
+- Query coverage, prose kalitesi, bölüm ve doküman çeşitliliği reranking'i.
+- Aynı içerik hash'ine sahip passage'ların retrieval sırasında tekilleştirilmesi.
+- Crawl4AI başarısızlığından sonra opsiyonel Scrapling HTTP fallback'i.
+- API/worker başlamadan çalışan, transaction güvenli Alembic `migrate` servisi.
+
+## Güvenlik sınırları
+
+Scrapling yalnız normal HTTP fetch fallback'i olarak kullanılır; stealth/anti-bot veya paywall aşma etkin değildir. Tüm uzak URL'ler mevcut SSRF, public-IP, redirect, port, dosya boyutu ve domain rate-limit kontrollerinden geçer. Frontier yalnız daha sonraki kontrollü acquisition turuna aday üretir; sayfadaki talimatlar yürütülmez.
+
+## Doğrulama
+
+- 36 test geçti; Ruff temiz.
+- Migration: `0003_collection_pipeline (head)`.
+- Canlı corpus sorgusunda güvenlik sorusu için ilk sonuç `Limitations and security notes`, skor `0.8487`.
+- Canlı kabul run'ı: `01KXJBS4ABKD271DA9TC3425PP`; 252 eski passage tarandı, 90 passage indekslendi ve 71 claim üretildi.
+- Canlı testte bulunan alakasız GitHub repo yayılımı kapatıldı: açık bir GitHub hedefi varsa diğer repository'ler, trusted domain olsa bile reddedilir.
+- PostgreSQL, Redis, Ollama, AgentSearch, Crawl4AI ve MinIO sağlık kontrolleri başarılı.
+
+## Bilinen sınırlar
+
+- Dil tespiti hafif ve deterministiktir; çok dilli kısa metinlerde `und` dönebilir.
+- Reranker şu anda deterministik feature reranker'dır; ayrı bir cross-encoder modeli kullanılmıyor.
+- PDF tabloları ve görselleri metin olarak sınırlı çözülür; OCR/multimodal işlem sonraki katmandır.
+- Frontier derinliği tutulur, ancak kapsamlı host başına crawl-budget scheduler V2 işidir.

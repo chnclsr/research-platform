@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "research-platform"
+version = "0.2.0"
+description = "Local-first, multi-source evidence research platform"
+requires-python = ">=3.11"
+dependencies = [
+  "alembic>=1.14,<2",
+  "arq>=0.26,<1",
+  "asyncpg>=0.30,<1",
+  "fastapi>=0.115,<1",
+  "greenlet>=3.1,<4",
+  "httpx>=0.28,<1",
+  "langgraph>=1.0,<2",
+  "minio>=7.2,<8",
+  "pydantic>=2.10,<3",
+  "pydantic-settings>=2.7,<3",
+  "pypdf>=5.1,<7",
+  "python-multipart>=0.0.20,<1",
+  "pyyaml>=6.0,<7",
+  "sqlalchemy>=2.0,<3",
+  "sse-starlette>=2.2,<4",
+  "scrapling[fetchers]>=0.4.6,<0.5",
+  "ulid-py>=1.1,<2",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "aiosqlite>=0.20,<1",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.25,<1",
+  "pytest-cov>=6,<7",
+  "respx>=0.22,<1",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+research-api = "research_platform.api:run"
+research-worker = "research_platform.worker:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_platform"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

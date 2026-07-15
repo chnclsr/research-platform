@@ -1,0 +1,145 @@
+name: research-platform
+
+x-app: &app
+  build: .
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
+    REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+    AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://host.docker.internal:3939}
+    CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
+    OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  restart: unless-stopped
+  networks: [research]
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: research
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: research
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research -d research"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [research]
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [research]
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-research}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-change-me-now}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [research]
+
+  crawl4ai:
+    image: unclecode/crawl4ai:0.9.1
+    shm_size: 1gb
+    environment:
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN:-local-crawl-token}
+      SECRET_KEY: ${CRAWL4AI_SECRET_KEY:-change-me-crawl-secret-at-least-32-chars}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g
+      - /home/appuser/.crawl4ai:uid=999,gid=999,mode=0700,size=2g
+      - /home/appuser/.gunicorn:uid=999,gid=999,mode=0700,size=64m
+    ports:
+      - "127.0.0.1:11235:11235"
+    volumes:
+      - crawl4ai-browser-cache:/home/appuser/.cache/ms-playwright
+    networks: [research]
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["research-api"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *app
+    command: ["research-worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  langflow:
+    image: langflowai/langflow:1.5.1
+    environment:
+      LANGFLOW_HOST: 0.0.0.0
+      LANGFLOW_COMPONENTS_PATH: /app/custom_components
+      RESEARCH_API_URL: http://api:8000
+      RESEARCH_API_TOKEN: ${API_TOKEN:-change-me-local-token}
+    ports:
+      - "127.0.0.1:7860:7860"
+    volumes:
+      - ./langflow_components:/app/custom_components:ro
+      - langflow-data:/app/langflow
+    depends_on:
+      - api
+    networks: [research]
+    restart: unless-stopped
+
+networks:
+  research:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  langflow-data:
+  crawl4ai-browser-cache:

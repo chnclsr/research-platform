@@ -1,0 +1,38 @@
+# Research Platform v0.2.0
+# Örnek sürümü: 1.0 | Son güncelleme: 2026-07-15
+title: Yapay zekâ araştırma ajanlarında kaynak güvenilirliği
+primary_question: Çok kaynaklı araştırma ajanlarında kaynak güvenilirliği nasıl ölçülmelidir?
+sub_questions:
+  - Kaynak bağımsızlığı hangi göstergelerle ölçülür?
+  - Citation entailment nasıl doğrulanır?
+  - Coverage ve saturation için hangi ölçütler kullanılır?
+scope:
+  start_date: null
+  end_date: null
+  geography: []
+  domains: []
+languages: [tr, en]
+report_language: tr
+connectors:
+  profile: core
+  included_families: [web, academic, official_legal, code_data]
+  excluded_connectors: []
+  included_connectors: []
+  trusted_domains: []
+evidence_policy:
+  minimum_independent_sources: 2
+  primary_source_preference: true
+  counterevidence_required: true
+stopping_criteria:
+  minimum_source_coverage: 0.8
+  minimum_query_branch_coverage: 0.9
+  minimum_claim_audit_coverage: 0.95
+  maximum_new_source_rate: 0.05
+  unresolved_major_claim_limit: 5
+  saturation_rounds: 2
+budget:
+  max_rounds: 4
+  max_sources: 150
+  max_wall_minutes: 45
+  results_per_connector: 20
+  acquisition_concurrency: 4
