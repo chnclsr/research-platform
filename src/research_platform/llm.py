@@ -55,8 +55,13 @@ class OllamaProvider(LLMProvider):
                 "model": self.settings.llm_model,
                 "stream": False,
                 "format": "json",
+                "think": self.settings.llm_think,
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                "options": {"temperature": 0, "num_ctx": 8192},
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": self.settings.llm_context_tokens,
+                    "num_predict": self.settings.llm_max_output_tokens,
+                },
             },
             timeout=180,
         )
@@ -69,6 +74,7 @@ class OllamaProvider(LLMProvider):
             "completion_tokens": payload.get("eval_count", 0),
             "prompt_seconds": round(payload.get("prompt_eval_duration", 0) / 1e9, 4),
             "generation_seconds": round(payload.get("eval_duration", 0) / 1e9, 4),
+            "done_reason": payload.get("done_reason"),
         })
         return _json_from_text(payload["message"]["content"])
 

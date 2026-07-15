@@ -1,8 +1,16 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.0`  
-Belge sürümü: `1.0`  
+Platform sürümü: `v0.2.1`
+
+Belge sürümü: `1.1`
+
 Son güncelleme: `2026-07-15`
+
+## v0.2.1 — 2026-07-15
+
+- Qwen 3 4B ve Qwen 3.5 9B için araştırma-agentına özgü hard benchmark eklendi.
+- Ollama structured-output çağrılarına açık thinking, context ve output token sınırları eklendi.
+- RTX 4060 üzerinde 4K/8K context GPU yerleşimi ve kalite/hız karşılaştırması raporlandı.
 
 ## v0.2.0 — 2026-07-15
 

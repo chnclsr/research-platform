@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -9,7 +11,10 @@ from research_platform.llm import OllamaProvider
 
 @pytest.mark.asyncio
 async def test_ollama_metrics_capture_tokens_and_durations():
+    captured = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
         return httpx.Response(200, json={
             "message": {"content": '{"ok": true}'},
             "prompt_eval_count": 12,
@@ -27,4 +32,7 @@ async def test_ollama_metrics_capture_tokens_and_durations():
     assert metrics[0]["completion_tokens"] == 8
     assert metrics[0]["prompt_seconds"] == 0.5
     assert metrics[0]["generation_seconds"] == 1.0
+    assert captured["think"] is False
+    assert captured["options"]["num_ctx"] == 8192
+    assert captured["options"]["num_predict"] == 2048
     assert provider.drain_metrics() == []

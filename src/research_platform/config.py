@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     llm_provider: str = "ollama"
     llm_model: str = "qwen3:4b-instruct-2507-q4_K_M"
+    llm_think: bool = False
+    llm_context_tokens: int = Field(8192, ge=2048, le=262144)
+    llm_max_output_tokens: int = Field(2048, ge=128, le=32768)
     embedding_model: str = "embeddinggemma:300m-qat-q4_0"
     passage_target_tokens: int = Field(700, ge=200, le=1800)
     passage_overlap_tokens: int = Field(100, ge=0, le=400)
