@@ -1,8 +1,8 @@
 # Nitel Model Değerlendirme Metodolojisi
 
-Platform sürümü: `v0.2.6`
+Platform sürümü: `v0.2.7`
 
-Belge sürümü: `1.0`
+Belge sürümü: `1.1`
 
 Metodoloji durumu: `Önceden kilitlenmiş`
 
@@ -33,24 +33,78 @@ Her model yalnız gerçekten çalıştırıldığı profil ve ürettiği ham ç�
 değerlendirilir. Modelin context sınırı, quantization türü, thinking ayarı, sampling
 parametreleri, formatter kullanımı ve donanım yerleşimi değerlendirme kaydında belirtilir.
 
-Model kartları, resmî benchmark iddiaları ve önceki sayısal skorlar ham çıktı yorumu
-tamamlanana kadar karar sürecine dahil edilmez.
+Model kartları, resmî benchmark iddiaları ve önceki bileşik kalite skorları ham çıktı
+yorumu tamamlanana kadar karar sürecine dahil edilmez. Nesnel çalışma ve retrieval
+metrikleri, aşağıdaki ölçüm kurallarına uyduğu sürece ayrıca raporlanabilir.
 
-## 3. Açıkça kullanılmayacak yöntemler
+## 3. Sayısal ölçümlerin kullanım sınırı
+
+Sayısal ölçüm yasak değildir. Yasaklanan uygulama; öznel ve farklı nitelikteki kalite
+boyutlarını keyfî ağırlıklarla tek bir “model zekâsı” veya “genel kalite” puanına
+dönüştürmektir.
+
+### 3.1 Sayısal olarak raporlanabilecek ölçümler
+
+Aşağıdaki ölçümler, yöntem ve payda açıkça belirtilerek sayısal raporlanabilir:
+
+- Duvar saati süresi ve çağrı başına gecikme
+- Prompt, completion ve reasoning token sayısı
+- Prompt işleme ve üretim token/saniye hızı
+- Tepe ve ortalama VRAM kullanımı
+- GPU kullanımı ve modelin GPU/CPU yerleşim oranı
+- Doğrulanmış tam-GPU context sınırı
+- Maksimum context ve output-token sınırı
+- Timeout, eksik cevap, geçersiz JSON ve parser hata oranı
+- Formatter gerektiren çağrı oranı
+- Tool-call başarı, tekrar ve gereksiz çağrı sayısı
+- Kaynak edinme başarı oranı ve connector hata oranı
+- Etiketli corpus üzerinde retrieval precision, recall, hit-rate, MRR ve nDCG
+- İlgili kaynak, karşı-kanıt ve kaynak ailesi bulma oranı
+- Citation’ın gerçek passage konumuna çözülme oranı
+- Aynı claim veya kaynağın deduplication başarı oranı
+- İnsanlarca önceden etiketlenmiş, yoruma kapalı alanlarda exact-match veya hata oranı
+
+Retrieval ölçümlerinde ilgili/ilgisiz etiketleri model çıktıları görülmeden hazırlanmalı;
+hangi kaynakların zorunlu, kabul edilebilir veya karşı-kanıt olduğu açıkça kaydedilmelidir.
+Web sonuçları zamanla değişiyorsa snapshot, sorgu zamanı ve kullanılan arama indeksi
+saklanmalıdır.
+
+### 3.2 Sayısal olarak kullanılmayacak değerlendirmeler
 
 Bu değerlendirmede:
 
 - Toplam kalite puanı oluşturulmaz.
 - Bölümlere sayısal ağırlık verilmez.
-- Yüzde, ortalama veya sıralama tablosuyla model üstünlüğü ilan edilmez.
+- Planlama, muhakeme, sentez ve yazım kalitesi keyfî yüzde veya puana çevrilmez.
+- Birbirinden farklı kalite boyutlarının ortalamasıyla model üstünlüğü ilan edilmez.
 - Keyword sayımı araştırma kalitesi yerine kullanılmaz.
-- Önceki otomatik benchmark skorları model seçimi için kanıt kabul edilmez.
+- Önceki bileşik otomatik benchmark skorları model seçimi için kanıt kabul edilmez.
 - Format hatası doğrudan muhakeme hatası sayılmaz.
 - Resmî GPQA, AIME, deep-search veya benzeri skorlar yerel çıktı kalitesinin yerine
   geçirilmez.
 
-Süre, token kullanımı, VRAM ve parser başarısı operasyonel kayıt olarak korunabilir; ancak
-bunlar semantik kalite hükmüne dönüştürülmez.
+İzin verilen nesnel metrikler semantik kalite hükmüne dönüştürülmez. Örneğin daha yüksek
+token/saniye daha hızlı çalışmayı, daha yüksek retrieval recall daha fazla etiketli ilgili
+kaynağı bulmayı gösterir; tek başına daha iyi muhakeme veya daha güvenilir sentez anlamına
+gelmez.
+
+### 3.3 Sayısal raporlama kuralları
+
+Her sayısal sonuçla birlikte şunlar verilmelidir:
+
+- Ölçüm tanımı ve birimi
+- Pay ve payda
+- Vaka veya sorgu sayısı
+- Model profili, quantization, context ve sampling ayarları
+- Donanım ve runtime sürümü
+- Tekrar sayısı
+- Varsa minimum–maksimum veya dağılım
+- Hata ve eksik sonuçların paydaya nasıl dahil edildiği
+- Test setinin geliştirme, doğrulama veya kör holdout olup olmadığı
+
+Küçük örneklemlerde birkaç ondalık basamakla sahte kesinlik yaratılmaz. İki model arasındaki
+fark tek bir vaka veya etiket değişikliğiyle tersine dönebiliyorsa “sayısal olarak yakın”
+denir ve nitel çıktı incelemesi esas alınır.
 
 ## 4. Değerlendirme birimi
 
@@ -116,6 +170,19 @@ değildir. Bu sınırlama nihai raporda açıkça belirtilir.
 - Kaynak ailesine uygun sorgu dili oluşturması
 - Türkçe ve İngilizce sorguların doğal ve amaca uygun olması
 - Sonuç getirmesi muhtemel terminoloji ile gereksiz uzunluk arasında denge kurması
+
+Bu bölümde sorguların yazım kalitesi nitel değerlendirilir. Ayrı bir dondurulmuş corpus veya
+arama snapshot’ı varsa retrieval başarısı sayısal olarak da ölçülebilir:
+
+- En az bir ilgili kaynağı bulma
+- Zorunlu birincil kaynağı bulma
+- Karşı-kanıt bulma
+- İlk `k` sonuç içindeki precision ve recall
+- Kaynak ailesi çeşitliliği
+- Yinelenen sonuç oranı
+
+Bu retrieval metrikleri sorgu kalitesinin tamamını temsil etmez; nitel sorgu analiziyle
+birlikte sunulur.
 
 ### 6.3 Kanıt çıkarma
 
@@ -198,6 +265,9 @@ Bir model için gerekirse şu tür ayrı hüküm verilir:
 
 > Güçlü analiz, zayıf structured-output entegrasyonu.
 
+Bu bölümde süre, token/saniye, VRAM, context, hata oranı ve formatter oranı doğrudan
+sayısal raporlanabilir.
+
 ## 7. Formatter ve thinking çıktılarının ele alınması
 
 Native final cevap birincil değerlendirme nesnesidir. Formatter kullanılmışsa:
@@ -226,6 +296,10 @@ Sayısal derecelendirme yerine yalnız şu karar ifadeleri kullanılır:
 
 Her hüküm en az bir somut çıktı pasajı ve açıklanmış gerekçeyle desteklenir. Tek vaka,
 modelin bütün görevlerde üstün veya zayıf olduğuna kanıt sayılmaz.
+
+Bu hükümler nesnel operasyonel veya retrieval metriklerinin yerine geçmez. Örneğin
+“planlamada sınırlı üstünlük” nitel bir hüküm; “ilk 10 sonuçta ilgili kaynakların 8’ini
+buldu” ise ayrı bir sayısal retrieval gözlemidir.
 
 ## 9. Model ve rol kararı
 
@@ -271,7 +345,9 @@ Aşağıdaki durumlarda ilgili değerlendirme geçersiz sayılır:
 - Model kimliği bilinerek hüküm verilmesi ve körleştirme uygulanabilecek halde uygulanmaması
 - Değerlendirme sırasında ölçüt değiştirilmesi
 - Formatter çıktısının native çıktıymış gibi sunulması
-- Önceki sayısal skorun yorumu etkilemesi
+- Önceki bileşik kalite skorunun yorumu etkilemesi
+- Nesnel bir metriğin tanım, payda veya test seti açıklanmadan kullanılması
+- Retrieval etiketlerinin model çıktıları görüldükten sonra değiştirilmesi
 - Tartışmalı gold etiketinin kesin gerçek kabul edilmesi
 - Aynı test vakasının model veya parser optimizasyonunda kullanılıp bağımsız holdout diye
   sunulması

@@ -1,10 +1,20 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.6`
+Platform sürümü: `v0.2.7`
 
-Belge sürümü: `1.6`
+Belge sürümü: `1.7`
 
 Son güncelleme: `2026-07-16`
+
+## v0.2.7 — 2026-07-16
+
+- Nitel model değerlendirme metodolojisindeki sayısal ölçüm sınırı netleştirildi.
+- Hız, token, VRAM, context, hata oranı ve formatter oranı gibi nesnel metriklerin
+  sayısal raporlanmasına izin verildi.
+- Etiketleri önceden dondurulmuş corpus üzerinde retrieval precision, recall, hit-rate,
+  MRR ve nDCG ölçüm kuralları eklendi.
+- Yasak, nesnel ölçümlere değil; öznel kalite boyutlarını keyfî ağırlıklarla tek bileşik
+  model puanına dönüştürmeye sınırlandı.
 
 ## v0.2.6 — 2026-07-16
 
