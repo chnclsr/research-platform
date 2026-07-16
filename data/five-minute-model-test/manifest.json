@@ -1,0 +1,80 @@
+{
+  "suite_id": "qualitative-research-v1",
+  "suite_version": "1.0",
+  "generated_at": "2026-07-16T08:14:54.065518+00:00",
+  "protocol": "FIVE_MINUTE_MODEL_TEST_PROTOCOL.md",
+  "research_budget_seconds_per_model": 300.0,
+  "corpus_sha256": "6f043a3163957abdbc4f147ceaf607b3271d9cbec55baa2b9190df4290653166",
+  "profiles": [
+    {
+      "key": "qwen3_4b_2507",
+      "model": "qwen3:4b-instruct-2507-q4_K_M",
+      "context_tokens": 24576,
+      "think": false,
+      "plan_tokens": 2048,
+      "evidence_tokens": 4096,
+      "audit_tokens": 2048,
+      "synthesis_tokens": 4096,
+      "temperature": 0.2,
+      "top_p": 0.8,
+      "top_k": 20,
+      "min_p": null,
+      "repeat_penalty": 1.05,
+      "presence_penalty": null
+    },
+    {
+      "key": "qwen35_9b",
+      "model": "qwen3.5:9b",
+      "context_tokens": 4096,
+      "think": true,
+      "plan_tokens": 2048,
+      "evidence_tokens": 4096,
+      "audit_tokens": 2048,
+      "synthesis_tokens": 4096,
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20,
+      "min_p": null,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 1.5
+    },
+    {
+      "key": "qwen35_4b",
+      "model": "qwen3.5:4b",
+      "context_tokens": 73728,
+      "think": true,
+      "plan_tokens": 4096,
+      "evidence_tokens": 8192,
+      "audit_tokens": 4096,
+      "synthesis_tokens": 12288,
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 20,
+      "min_p": null,
+      "repeat_penalty": 1.0,
+      "presence_penalty": 1.5
+    },
+    {
+      "key": "nanbeige41_3b_q8",
+      "model": "tomng/nanbeige4.1:3b-q8_0",
+      "context_tokens": 36864,
+      "think": true,
+      "plan_tokens": 4096,
+      "evidence_tokens": 8192,
+      "audit_tokens": 4096,
+      "synthesis_tokens": 12288,
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 0,
+      "min_p": 0.01,
+      "repeat_penalty": 1.0,
+      "presence_penalty": null
+    }
+  ],
+  "blind_labels": [
+    "Model_A",
+    "Model_B",
+    "Model_C",
+    "Model_D"
+  ]
+}

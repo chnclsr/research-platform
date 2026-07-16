@@ -1,0 +1,14 @@
+{
+  "research_question": "Dört günlük çalışma haftası denemeleri, beyaz yaka çalışanlarında üretkenliği nedensel olarak artırırken çalışan refahını da iyileştiriyor mu? Seçilim, ölçüm, iş yoğunlaştırma, şirket öz-bildirimi ve uzun dönem sürdürülebilirlik sorunlarını ayırarak değerlendir.",
+  "queries": [
+    "Dört günlük çalışma haftası denemeleri, beyaz yaka çalışanlarında üretkenliği nedensel olarak artırırken çalışan refahını da iyileştiriyor mu? Seçilim, ölçüm, iş yoğunlaştırma, şirket öz-bildirimi ve uzun dönem sürdürülebilirlik sorunlarını ayırarak değerlendir."
+  ],
+  "retrieved_document_ids": [
+    "D11",
+    "D02"
+  ],
+  "planning_output": "{\n  \"research_plan\": [\n    \"Literatür taraması ile beyaz yaka çalışanları için dört günlük hafta çalışması denemelerindeki deneyimleri analiz et.\",\n    \"Kontrol grupları içeren veya eşleşen tasarım (matching) kullanan, nedensellik ilişkisini kanıtlayacak araştırmaları önceliklendir.\",\n    \"İş üretkenliğini ölçmek için kullanılan metriklerin güvenilirliğini (kendi kendini bildirme vs. objektif veri) karşılaştır ve hataları tespit et.\",\n    \"Deneme programından sonra çalışan çıkma oranlarını (attrition) inceleyerek seçilim yanlılığını (selection bias) ortaya çıkar.\",\n    \"Çalışanların öz-bildirim verilerinin uzun dönemli refah üzerindeki etkisini kontrol et.\",\n    \"İş yoğunlaştırması riskini belirlemek için çalışma yoğunluğu ve işi tamamlama stres faktörlerini değerlendir.\",\n    \"Kampanya sonuçlarının deneme süresinden sonra sürdürülebilirliği (uzun dönem takibi) raporunda doğrula.\",\n    \"Karşı kanıt olan (null/olumsuz) bulguları dahil eden meta-analizler hazırlayıp yayın yanlılığını dengele.\",\n    \"İş yükünün 4 günkü hafta ile değişen sürelerdeki etkisini, maaş ödemesi ve iş tatmin ilişkisi üzerinden incelemeye ekle.\"\n  ],\n  \"queries\": [\n    \"four day work week randomized controlled trial productivity\",\n    \"compressed work week study selection bias voluntary",
+  "evidence_output": "",
+  "audit_output": "",
+  "final_answer": ""
+}

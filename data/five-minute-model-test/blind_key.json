@@ -1,0 +1,6 @@
+{
+  "Model_A": "nanbeige41_3b_q8",
+  "Model_B": "qwen3_4b_2507",
+  "Model_C": "qwen35_9b",
+  "Model_D": "qwen35_4b"
+}
