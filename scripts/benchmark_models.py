@@ -435,6 +435,8 @@ async def run_model(
     temperature: float = 0.0,
     top_p: float | None = None,
     top_k: int | None = None,
+    min_p: float | None = None,
+    repeat_penalty: float | None = None,
     presence_penalty: float | None = None,
     max_output_tokens: int = 2048,
     think: bool = False,
@@ -452,6 +454,8 @@ async def run_model(
         llm_temperature=temperature,
         llm_top_p=top_p,
         llm_top_k=top_k,
+        llm_min_p=min_p,
+        llm_repeat_penalty=repeat_penalty,
         llm_presence_penalty=presence_penalty,
         llm_think=think,
         llm_reason_then_format=reason_then_format,
@@ -517,6 +521,8 @@ async def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--top-p", type=float)
     parser.add_argument("--top-k", type=int)
+    parser.add_argument("--min-p", type=float)
+    parser.add_argument("--repeat-penalty", type=float)
     parser.add_argument("--presence-penalty", type=float)
     parser.add_argument("--max-output", type=int, default=2048)
     parser.add_argument("--think", action="store_true")
@@ -539,6 +545,8 @@ async def main() -> None:
             temperature=args.temperature,
             top_p=args.top_p,
             top_k=args.top_k,
+            min_p=args.min_p,
+            repeat_penalty=args.repeat_penalty,
             presence_penalty=args.presence_penalty,
             max_output_tokens=args.max_output,
             think=args.think,
@@ -563,6 +571,8 @@ async def main() -> None:
             "temperature": args.temperature,
             "top_p": args.top_p,
             "top_k": args.top_k,
+            "min_p": args.min_p,
+            "repeat_penalty": args.repeat_penalty,
             "presence_penalty": args.presence_penalty,
             "max_output_tokens": args.max_output,
         },

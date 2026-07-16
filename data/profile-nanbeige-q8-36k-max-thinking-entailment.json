@@ -1,0 +1,90 @@
+{
+  "benchmark_version": "1.1.0-hard",
+  "generated_at": "2026-07-16T05:42:31.609480+00:00",
+  "context_tokens": 36864,
+  "thinking": true,
+  "reason_then_format": true,
+  "reasoning_output_tokens": 32768,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 0,
+    "min_p": 0.01,
+    "repeat_penalty": 1.0,
+    "presence_penalty": null,
+    "max_output_tokens": 2048
+  },
+  "models": [
+    {
+      "model": "tomng/nanbeige4.1:3b-q8_0",
+      "quality_score": 75.0,
+      "sections": [
+        {
+          "name": "entailment",
+          "score": 0.75,
+          "details": {
+            "expected": {
+              "e1": "contradicts",
+              "e2": "qualifies",
+              "e3": "contradicts",
+              "e4": "qualifies",
+              "e5": "contradicts",
+              "e6": "supports",
+              "e7": "irrelevant",
+              "e8": "qualifies"
+            },
+            "predicted": {
+              "e1": "supports",
+              "e2": "qualifies",
+              "e3": "contradicts",
+              "e4": "qualifies",
+              "e5": "contradicts",
+              "e6": "supports",
+              "e7": "irrelevant",
+              "e8": "contradicts"
+            },
+            "correct": {
+              "e1": false,
+              "e2": true,
+              "e3": true,
+              "e4": true,
+              "e5": true,
+              "e6": true,
+              "e7": true,
+              "e8": false
+            }
+          }
+        }
+      ],
+      "performance": {
+        "calls": 1,
+        "wall_seconds": 151.521,
+        "prompt_tokens": 472,
+        "completion_tokens": 7702,
+        "generation_seconds": 148.455,
+        "generation_tokens_per_second": 51.881,
+        "raw": [
+          {
+            "provider": "ollama",
+            "model": "tomng/nanbeige4.1:3b-q8_0",
+            "phase": "reasoning",
+            "wall_seconds": 151.3029,
+            "prompt_tokens": 472,
+            "completion_tokens": 7702,
+            "prompt_seconds": 0.1285,
+            "generation_seconds": 148.455,
+            "thinking_chars": 34713,
+            "content_chars": 311,
+            "done_reason": "stop"
+          }
+        ]
+      },
+      "gpu": {
+        "peak_vram_mib": 6890,
+        "peak_gpu_utilization_percent": 94
+      },
+      "ollama_ps": "NAME                         ID              SIZE      PROCESSOR    CONTEXT    UNTIL              \ntomng/nanbeige4.1:3b-q8_0    dd2a8ce0f368    6.3 GB    100% GPU     36864      4 minutes from now    \n",
+      "errors": []
+    }
+  ]
+}

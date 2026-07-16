@@ -59,6 +59,8 @@ class OllamaProvider(LLMProvider):
         for name, value in (
             ("top_p", self.settings.llm_top_p),
             ("top_k", self.settings.llm_top_k),
+            ("min_p", self.settings.llm_min_p),
+            ("repeat_penalty", self.settings.llm_repeat_penalty),
             ("presence_penalty", self.settings.llm_presence_penalty),
         ):
             if value is not None:
@@ -108,14 +110,19 @@ class OllamaProvider(LLMProvider):
                 ],
                 "options": {
                     "temperature": self.settings.llm_temperature,
-                    "top_p": self.settings.llm_top_p if self.settings.llm_top_p is not None else 0.95,
-                    "top_k": self.settings.llm_top_k if self.settings.llm_top_k is not None else 20,
-                    "presence_penalty": (
-                        self.settings.llm_presence_penalty
-                        if self.settings.llm_presence_penalty is not None else 1.5
-                    ),
                     "num_ctx": self.settings.llm_context_tokens,
                     "num_predict": self.settings.llm_reasoning_output_tokens,
+                    **{
+                        name: value
+                        for name, value in (
+                            ("top_p", self.settings.llm_top_p),
+                            ("top_k", self.settings.llm_top_k),
+                            ("min_p", self.settings.llm_min_p),
+                            ("repeat_penalty", self.settings.llm_repeat_penalty),
+                            ("presence_penalty", self.settings.llm_presence_penalty),
+                        )
+                        if value is not None
+                    },
                 },
             },
             timeout=self.settings.llm_timeout_s,
@@ -135,6 +142,11 @@ class OllamaProvider(LLMProvider):
             "thinking_chars": len(thinking), "content_chars": len(candidate),
             "done_reason": payload.get("done_reason"),
         })
+        if candidate:
+            try:
+                return _json_from_text(candidate)
+            except ValueError:
+                pass
         with_reasoning_tail = candidate or thinking[-12000:]
         formatting_started = time.perf_counter()
         format_response = await self.client.post(
@@ -270,7 +282,8 @@ async def extract_claims(
         f"NEIGHBOR_CONTEXT:\n{neighbor_context[:4000]}\nTARGET_CONTENT:\n{content}",
     )
     output = []
-    for row in data.get("claims", [])[:20]:
+    claim_rows = data if isinstance(data, list) else data.get("claims", [])
+    for row in claim_rows[:20]:
         quote = str(row.get("quote", ""))[:1000]
         start = content.find(quote) if quote else -1
         if start < 0:

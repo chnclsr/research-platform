@@ -1,10 +1,19 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.4`
+Platform sürümü: `v0.2.5`
 
-Belge sürümü: `1.4`
+Belge sürümü: `1.5`
 
-Son güncelleme: `2026-07-15`
+Son güncelleme: `2026-07-16`
+
+## v0.2.5 — 2026-07-16
+
+- Nanbeige4.1-3B Q8_0, Q6_K ve Q4_K_M quantization adayları RTX 4060 üzerinde incelendi.
+- Q8_0 için 36.864 token tam-GPU context ve 32.768-token reasoning profili doğrulandı.
+- Ollama sampling arayüzüne `min_p` ve `repeat_penalty` desteği eklendi.
+- Thinking finali geçerli JSON ise gereksiz formatter çağrısı atlanmaya başlandı.
+- Evidence extraction top-level JSON array ve `{claims: [...]}` biçimlerini kabul ediyor.
+- Nanbeige maksimum-quality profili bağımsız holdout üzerinde iki temiz koşuyla ölçüldü.
 
 ## v0.2.4 — 2026-07-15
 

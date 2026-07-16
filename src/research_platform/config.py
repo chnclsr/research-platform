@@ -31,7 +31,9 @@ class Settings(BaseSettings):
     llm_timeout_s: float = Field(180.0, ge=10.0, le=3600.0)
     llm_temperature: float = Field(0.0, ge=0.0, le=2.0)
     llm_top_p: float | None = Field(None, gt=0.0, le=1.0)
-    llm_top_k: int | None = Field(None, ge=1, le=1000)
+    llm_top_k: int | None = Field(None, ge=0, le=1000)
+    llm_min_p: float | None = Field(None, ge=0.0, le=1.0)
+    llm_repeat_penalty: float | None = Field(None, ge=0.0, le=2.0)
     llm_presence_penalty: float | None = Field(None, ge=-2.0, le=2.0)
     embedding_model: str = "embeddinggemma:300m-qat-q4_0"
     passage_target_tokens: int = Field(700, ge=200, le=1800)

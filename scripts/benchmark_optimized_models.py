@@ -38,6 +38,21 @@ PROFILES = [
         "reason_then_format": True,
         "reasoning_output_tokens": 20480,
     },
+    {
+        "profile": "nanbeige4.1-3b-q8-rtx4060-max-thinking",
+        "model": "tomng/nanbeige4.1:3b-q8_0",
+        "context_tokens": 36864,
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "top_k": 0,
+        "min_p": 0.01,
+        "repeat_penalty": 1.0,
+        "presence_penalty": None,
+        "max_output_tokens": 2048,
+        "think": True,
+        "reason_then_format": True,
+        "reasoning_output_tokens": 32768,
+    },
 ]
 
 
@@ -82,6 +97,11 @@ async def main() -> None:
     parser.add_argument("--suite", choices=["development", "holdout"], default="holdout")
     parser.add_argument("--profiles", nargs="+", help="Run only named optimized profiles")
     parser.add_argument(
+        "--sections",
+        nargs="+",
+        choices=["decomposition", "query_generation", "evidence_extraction", "entailment", "synthesis"],
+    )
+    parser.add_argument(
         "--output", type=Path, default=Path("data/model-optimized-benchmark.json")
     )
     args = parser.parse_args()
@@ -107,11 +127,14 @@ async def main() -> None:
                 temperature=profile["temperature"],
                 top_p=profile["top_p"],
                 top_k=profile["top_k"],
+                min_p=profile.get("min_p"),
+                repeat_penalty=profile.get("repeat_penalty"),
                 presence_penalty=profile["presence_penalty"],
                 max_output_tokens=profile["max_output_tokens"],
                 think=profile["think"],
                 reason_then_format=profile["reason_then_format"],
                 reasoning_output_tokens=profile["reasoning_output_tokens"],
+                selected_sections=set(args.sections) if args.sections else None,
             )
             run["repeat"] = repeat
             runs.append(run)
