@@ -1,12 +1,14 @@
-# Research Platform V1
+# Research Platform — Agent Gateway
 
-Platform sürümü: `v0.3.0`
+Platform sürümü: `v0.4.0-dev`
 
-Belge sürümü: `1.9`
+Belge sürümü: `2.0`
 
 Son güncelleme: `2026-07-16`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
+
+Codex, Claude ve Telegram erişim mimarisi: `AGENT_GATEWAY_ARCHITECTURE_REPORT.md`.
 
 Güncel Qwen 4B nesil karşılaştırması: `QWEN_4B_GENERATION_BENCHMARK_REPORT.md`.
 
@@ -37,7 +39,9 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 - Passage seviyesinde claim extraction ve claim–quote entailment doğrulaması.
 - Kaynak sürümü, SHA-256, acquisition zinciri ve provenance.
 - Claim/evidence ledger, coverage döngüsü, audit ve adversarial review.
-- 12 denetlenebilir çıktı ve tek ZIP paketi.
+- 14 denetlenebilir çıktı; ham veri, sonuç ve birleşik ZIP teslimatları.
+- Codex ve Claude için MCP araç katmanı.
+- Allowlist korumalı Telegram araştırma botu.
 - Ollama varsayılanı ve OpenAI-compatible alternatif.
 - Ollama JSON çağrılarında yapılandırılabilir thinking, context ve output sınırları.
 - Langflow için dört sabit kontrol bileşeni.
@@ -67,6 +71,36 @@ Docker Hub sertifika doğrulaması başarısız olursa kurulum otomatik olarak P
 - API/OpenAPI: `http://localhost:8000/docs`
 - Langflow: `http://localhost:7860`
 - MinIO Console: `http://localhost:9001`
+- MCP Gateway: `http://localhost:8010/mcp`
+
+## Agent Gateway
+
+Üç teslimat modu desteklenir:
+
+- `raw`: kaynak sürümleri, provenance ve passage verileri.
+- `result`: yerel sentez, claim ledger, evidence matrix ve audit raporları.
+- `both`: ham veri ve sonuçların birlikte bulunduğu denetlenebilir paket.
+
+Codex için örnek ayar `examples/codex_mcp_config.toml`, Claude için örnek ayar
+`examples/claude_mcp.json` dosyasındadır. MCP token'ı yapılandırma dosyasına açık metin olarak
+yazılmamalı, `RESEARCH_MCP_TOKEN` ortam değişkeninden okunmalıdır.
+
+Telegram botu yalnız allowlist yapılandırıldıktan sonra başlatılır:
+
+```powershell
+docker compose --profile telegram up -d telegram-bot
+```
+
+Bot komutları:
+
+```text
+/research [raw|result|both] <soru>
+/status <run_id>
+/get <run_id> [raw|result|both]
+/pause <run_id>
+/resume <run_id>
+/cancel <run_id>
+```
 
 ## API ile araştırma başlatma
 

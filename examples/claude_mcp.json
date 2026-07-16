@@ -1,0 +1,17 @@
+{
+  "_document": {
+    "version": "1.0",
+    "platform": "v0.4.0-dev",
+    "date": "2026-07-16",
+    "note": "RESEARCH_MCP_TOKEN ortam değişkeninden genişletilir."
+  },
+  "mcpServers": {
+    "research-platform": {
+      "type": "http",
+      "url": "http://RESEARCH_SERVER_IP:8010/mcp",
+      "headers": {
+        "Authorization": "Bearer ${RESEARCH_MCP_TOKEN}"
+      }
+    }
+  }
+}

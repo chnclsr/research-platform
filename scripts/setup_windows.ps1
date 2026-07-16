@@ -11,7 +11,11 @@ if (-not (Test-Path ".env")) {
 }
 if (-not (Test-Path ".env.native")) {
     Copy-Item ".env.native.example" ".env.native"
-    foreach ($key in @("API_TOKEN", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY", "CRAWL4AI_API_TOKEN", "CRAWL4AI_SECRET_KEY")) {
+    foreach ($key in @(
+        "API_TOKEN", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
+        "CRAWL4AI_API_TOKEN", "CRAWL4AI_SECRET_KEY", "MCP_BEARER_TOKEN",
+        "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USER_IDS", "TELEGRAM_ALLOWED_CHAT_IDS"
+    )) {
         $line = Get-Content ".env" | Where-Object { $_ -match "^$key=" } | Select-Object -First 1
         if ($line) {
             $value = $line.Split('=', 2)[1]
@@ -41,3 +45,4 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "API: http://localhost:8000/docs"
 Write-Host "Langflow: http://localhost:7860"
 Write-Host "MinIO: http://localhost:9001"
+Write-Host "MCP Gateway: http://localhost:8010/mcp"

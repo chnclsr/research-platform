@@ -1,10 +1,24 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.3.0`
+Platform sürümü: `v0.4.0-dev`
 
-Belge sürümü: `1.8`
+Belge sürümü: `1.9`
 
 Son güncelleme: `2026-07-16`
+
+## v0.4.0-dev — 2026-07-16
+
+- Platformun rolü, tek başına cevap veren yerel ajandan Codex ve Claude gibi genel amaçlı
+  ajanlara kanıt sağlayan yerel Research Gateway'e genişletildi.
+- `raw`, `result` ve `both` teslimat modları eklendi.
+- Ham kaynak sürümlerini ve normalize passage'ları taşıyan `13_raw_sources.jsonl` ve
+  `14_raw_passages.jsonl` artifact'leri eklendi.
+- `raw_bundle.zip`, `result_bundle.zip` ve birleşik `research_bundle.zip` üretimi eklendi.
+- Codex ve Claude istemcileri için MCP server ve yedi araştırma aracı eklendi.
+- Streamable HTTP MCP endpoint'ine bearer token ve Origin allowlist koruması eklendi.
+- Telegram long-polling botu; araştırma başlatma, durum, teslimat, pause/resume/cancel
+  komutları ve kullanıcı/chat allowlist'i ile eklendi.
+- Codex ve Claude örnek MCP yapılandırmaları ile Agent Gateway mimari raporu eklendi.
 
 ## v0.3.0 — 2026-07-16
 

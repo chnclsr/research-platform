@@ -20,7 +20,7 @@ from .passages import retrieve_passages
 from .repository import Repository
 from .paperqa_adapter import paperqa2_health
 from .schemas import (
-    ArtifactView, CorpusSearchRequest, ResearchRunCreate, RunStatus, RunView,
+    ArtifactView, CorpusSearchRequest, DeliveryMode, ResearchRunCreate, RunStatus, RunView,
     SourceFamily, ZoteroSyncRequest, ZoteroSyncResult,
 )
 from .storage import ObjectStore
@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.3.0",
+    title="Research Platform API", version="0.4.0",
     description="Local-first, multi-source evidence research platform", lifespan=lifespan,
 )
 
@@ -225,6 +225,21 @@ async def download_artifact(run_id: str, name: str, repo: Repository = Depends(r
         data, media_type=artifact.media_type,
         headers={"Content-Disposition": f'attachment; filename="{artifact.name}"'},
     )
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/delivery/{mode}",
+    dependencies=[Depends(authorize)],
+)
+async def download_delivery(
+    run_id: str, mode: DeliveryMode, repo: Repository = Depends(repository),
+) -> Response:
+    bundle_by_mode = {
+        DeliveryMode.RAW: "raw_bundle.zip",
+        DeliveryMode.RESULT: "result_bundle.zip",
+        DeliveryMode.BOTH: "research_bundle.zip",
+    }
+    return await download_artifact(run_id, bundle_by_mode[mode], repo)
 
 
 @app.get("/v1/connectors", dependencies=[Depends(authorize)])

@@ -32,8 +32,25 @@ $worker = Start-Process -FilePath "$root\.venv\Scripts\research-worker.exe" `
     -WorkingDirectory $root -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput "$root\logs\worker.stdout.log" `
     -RedirectStandardError "$root\logs\worker.stderr.log"
+$mcp = Start-Process -FilePath "$root\.venv\Scripts\research-mcp.exe" `
+    -WorkingDirectory $root -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput "$root\logs\mcp.stdout.log" `
+    -RedirectStandardError "$root\logs\mcp.stderr.log"
 
 Set-Content -Path "$root\logs\api.pid" -Value $api.Id
 Set-Content -Path "$root\logs\worker.pid" -Value $worker.Id
-Write-Host "Native API PID: $($api.Id), worker PID: $($worker.Id)"
+Set-Content -Path "$root\logs\mcp.pid" -Value $mcp.Id
 
+$telegram = $null
+if ($env:TELEGRAM_BOT_TOKEN -and (
+    $env:TELEGRAM_ALLOWED_USER_IDS -ne "[]" -or $env:TELEGRAM_ALLOWED_CHAT_IDS -ne "[]"
+)) {
+    $telegram = Start-Process -FilePath "$root\.venv\Scripts\research-telegram.exe" `
+        -WorkingDirectory $root -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput "$root\logs\telegram.stdout.log" `
+        -RedirectStandardError "$root\logs\telegram.stderr.log"
+    Set-Content -Path "$root\logs\telegram.pid" -Value $telegram.Id
+}
+
+Write-Host "Native API PID: $($api.Id), worker PID: $($worker.Id), MCP PID: $($mcp.Id)"
+if ($telegram) { Write-Host "Telegram PID: $($telegram.Id)" }

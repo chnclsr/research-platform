@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import zipfile
 
 import httpx
 import pytest
@@ -12,6 +14,7 @@ from research_platform.repository import Repository
 from research_platform.schemas import (
     AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SourceFamily,
 )
+from research_platform.storage import ObjectStore
 
 
 class DummyConnector:
@@ -81,8 +84,16 @@ async def test_pipeline_resumes_to_auditable_export():
         assert completed.sources_count == 1
         assert completed.claims_count >= 1
         artifacts = await repo.list_artifacts(row.id)
-        assert len(artifacts) == 13
+        assert len(artifacts) == 17
+        assert any(a.name == "raw_bundle.zip" for a in artifacts)
+        assert any(a.name == "result_bundle.zip" for a in artifacts)
         assert any(a.name == "research_bundle.zip" for a in artifacts)
+        raw_artifact = next(a for a in artifacts if a.name == "raw_bundle.zip")
+        raw_bundle = await ObjectStore(get_settings()).get(raw_artifact.object_key)
+        with zipfile.ZipFile(io.BytesIO(raw_bundle)) as archive:
+            assert "13_raw_sources.jsonl" in archive.namelist()
+            assert "14_raw_passages.jsonl" in archive.namelist()
+            assert "02_full_research_report.md" not in archive.namelist()
 
 
 @pytest.mark.asyncio

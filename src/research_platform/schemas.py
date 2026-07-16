@@ -109,6 +109,12 @@ class RunStatus(StrEnum):
     FAILED = "failed"
 
 
+class DeliveryMode(StrEnum):
+    RAW = "raw"
+    RESULT = "result"
+    BOTH = "both"
+
+
 class ResearchRunCreate(BaseModel):
     protocol: ResearchProtocol
 

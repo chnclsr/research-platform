@@ -242,6 +242,45 @@ async def build_exports(
     )
     files["12_uncertainty_report.md"] = ("text/markdown", uncertainty_md.encode("utf-8"))
 
+    versions = await repo.list_source_versions(run_id)
+    raw_source_lines = []
+    for source, version in versions:
+        raw_source_lines.append(json.dumps({
+            "source": {
+                "id": source.id,
+                "family": source.family,
+                "connector_id": source.connector_id,
+                "title": source.title,
+                "url": source.url,
+                "persistent_id": source.persistent_id,
+                "metadata": source.metadata_json,
+            },
+            "version": {
+                "id": version.id,
+                "content_hash": version.content_hash,
+                "acquisition_method": version.acquisition_method,
+                "access_status": version.access_status,
+                "retrieved_at": version.retrieved_at.isoformat(),
+                "provenance": version.provenance,
+                "content": version.content,
+                "raw_content": version.raw_content,
+            },
+        }, ensure_ascii=False))
+    files["13_raw_sources.jsonl"] = (
+        "application/x-ndjson",
+        ("\n".join(raw_source_lines) + ("\n" if raw_source_lines else "")).encode("utf-8"),
+    )
+
+    passages = await repo.list_passages(run_id)
+    raw_passage_lines = [
+        json.dumps(passage.model_dump(mode="json"), ensure_ascii=False)
+        for passage in passages
+    ]
+    files["14_raw_passages.jsonl"] = (
+        "application/x-ndjson",
+        ("\n".join(raw_passage_lines) + ("\n" if raw_passage_lines else "")).encode("utf-8"),
+    )
+
     saved = []
     for name, (media_type, data) in files.items():
         key = f"runs/{run_id}/{name}"
@@ -249,13 +288,30 @@ async def build_exports(
         await repo.save_artifact(run_id, name, media_type, key, len(data))
         saved.append(name)
 
-    archive_stream = io.BytesIO()
-    with zipfile.ZipFile(archive_stream, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name, (_, data) in files.items():
-            archive.writestr(name, data)
-    bundle = archive_stream.getvalue()
-    bundle_name = "research_bundle.zip"
-    bundle_key = f"runs/{run_id}/{bundle_name}"
-    await store.put(bundle_key, bundle, "application/zip")
-    await repo.save_artifact(run_id, bundle_name, "application/zip", bundle_key, len(bundle))
-    return [*saved, bundle_name]
+    raw_names = {
+        "05_source_catalog.csv",
+        "08_bibliography.bib",
+        "09_search_protocol.yaml",
+        "10_reproducibility_manifest.json",
+        "13_raw_sources.jsonl",
+        "14_raw_passages.jsonl",
+    }
+    result_names = set(files) - {"13_raw_sources.jsonl", "14_raw_passages.jsonl"}
+    bundle_specs = {
+        "raw_bundle.zip": raw_names,
+        "result_bundle.zip": result_names,
+        "research_bundle.zip": set(files),
+    }
+    bundle_names = []
+    for bundle_name, selected_names in bundle_specs.items():
+        archive_stream = io.BytesIO()
+        with zipfile.ZipFile(archive_stream, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name in sorted(selected_names):
+                _, data = files[name]
+                archive.writestr(name, data)
+        bundle = archive_stream.getvalue()
+        bundle_key = f"runs/{run_id}/{bundle_name}"
+        await store.put(bundle_key, bundle, "application/zip")
+        await repo.save_artifact(run_id, bundle_name, "application/zip", bundle_key, len(bundle))
+        bundle_names.append(bundle_name)
+    return [*saved, *bundle_names]
