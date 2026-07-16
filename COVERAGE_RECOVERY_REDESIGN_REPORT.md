@@ -1,9 +1,15 @@
 # Coverage Recovery ve Çok Turlu Bilgi Toplama Yeniden Tasarımı
 
-Belge sürümü: `1.0`  
-Platform sürümü: `v0.4.0-dev`  
-Tarih: `2026-07-16`  
+Belge sürümü: `1.1`
+
+Platform sürümü: `v0.4.1-dev`
+
+Tarih: `2026-07-16`
+
 Dayanak run: `01KXNDKV20RK81PGWSRWS33YR7`
+
+Uygulama ve canlı doğrulama sonucu:
+[`COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md`](COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md).
 
 ## 1. Yönetici kararı
 
@@ -358,7 +364,7 @@ Pipeline state şu kimlikleri taşımalıdır:
 - `processed_passage_ids`
 - `audited_claim_ids`
 
-`CHUNK_INDEX`, yalnız yeni source version'ları işler.  
+`CHUNK_INDEX`, yalnız yeni source version'ları işler.
 `EXTRACT_EVIDENCE`, yalnız daha önce işlenmemiş passage'ları işler.
 
 Yeni kaynak yoksa akış:

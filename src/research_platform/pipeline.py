@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import math
 import re
 import time
 from collections import defaultdict
@@ -25,12 +26,21 @@ from .passages import (
 )
 from .paperqa_adapter import PaperQA2EvidenceEngine
 from .normalization import canonicalize_url
-from .relevance import claim_relevance, filter_and_rank_candidates
+from .relevance import claim_relevance, domain_matches, filter_and_rank_candidates
+from .recovery import (
+    diagnose_gaps,
+    initial_missions,
+    mission_signature,
+    matches_target_entities,
+    recovery_missions,
+    resolve_official_entities,
+    select_mission_balanced_candidates,
+)
 from .repository import Repository
 from .scholarly import candidate_dedupe_key
 from .schemas import (
-    AcquiredDocument, ConnectorCandidate, CoverageMetrics, ExtractedClaim, Passage, ResearchProtocol,
-    RunStatus,
+    AcquiredDocument, AuthorityLevel, ConnectorCandidate, CoverageGap, CoverageMetrics,
+    ExtractedClaim, Passage, ResearchProtocol, RunStatus, SearchMission, SourceFamily,
 )
 from .storage import ObjectStore
 
@@ -41,6 +51,11 @@ class PipelineState(TypedDict, total=False):
     sub_questions: list[str]
     concepts: list[str]
     queries: list[str]
+    missions: list[dict[str, Any]]
+    gaps: list[dict[str, Any]]
+    attempted_missions: list[str]
+    required_branch_ids: list[str]
+    branch_queries: dict[str, str]
     round_number: int
     candidates: list[dict[str, Any]]
     documents: list[dict[str, Any]]
@@ -85,7 +100,7 @@ class ResearchPipeline:
         graph.add_node("EXTRACT_EVIDENCE", self.extract_evidence)
         graph.add_node("ANALYZE_CLAIMS", self.analyze_claims)
         graph.add_node("CHECK_COVERAGE", self.check_coverage)
-        graph.add_node("EXPAND_QUERIES", self.expand_queries)
+        graph.add_node("PLAN_RECOVERY", self.plan_recovery)
         graph.add_node("AUDIT", self.audit)
         graph.add_node("ADVERSARIAL_REVIEW", self.adversarial_review)
         graph.add_node("SYNTHESIZE_EXPORT", self.synthesize_export)
@@ -99,13 +114,13 @@ class ResearchPipeline:
         graph.add_edge("CHUNK_INDEX", "RETRIEVE_PASSAGES")
         graph.add_edge("RETRIEVE_PASSAGES", "EXTRACT_EVIDENCE")
         graph.add_edge("EXTRACT_EVIDENCE", "ANALYZE_CLAIMS")
-        graph.add_edge("ANALYZE_CLAIMS", "CHECK_COVERAGE")
+        graph.add_edge("ANALYZE_CLAIMS", "AUDIT")
+        graph.add_edge("AUDIT", "CHECK_COVERAGE")
         graph.add_conditional_edges(
             "CHECK_COVERAGE", self._coverage_route,
-            {"expand": "EXPAND_QUERIES", "audit": "AUDIT", "halt": END},
+            {"expand": "PLAN_RECOVERY", "finish": "ADVERSARIAL_REVIEW", "halt": END},
         )
-        graph.add_edge("EXPAND_QUERIES", "SEARCH")
-        graph.add_edge("AUDIT", "ADVERSARIAL_REVIEW")
+        graph.add_edge("PLAN_RECOVERY", "SEARCH")
         graph.add_edge("ADVERSARIAL_REVIEW", "SYNTHESIZE_EXPORT")
         graph.add_edge("SYNTHESIZE_EXPORT", END)
         return graph.compile()
@@ -189,22 +204,91 @@ class ResearchPipeline:
         queries = list(dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated]))
         for concept in state.get("concepts", [])[:3]:
             queries.append(f"{concept} criticism limitations")
-        return {"queries": queries[:8], "round_number": max(1, state.get("round_number", 0))}
+        queries = queries[:8]
+        missions = initial_missions(protocol, queries)
+        return {
+            "queries": queries,
+            "missions": [mission.model_dump(mode="json") for mission in missions],
+            "attempted_missions": [],
+            "required_branch_ids": [mission.branch_id for mission in missions],
+            "branch_queries": {
+                mission.branch_id: mission.query for mission in missions
+            },
+            "round_number": max(1, state.get("round_number", 0)),
+        }
 
     async def search(self, state: PipelineState) -> dict:
         await self._boundary(state, "SEARCH")
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        connectors = [c for c in self.registry.selected(protocol.connectors) if not c.missing_credentials()]
-        limit = protocol.budget.results_per_connector
+        configured_connectors = [
+            connector for connector in self.registry.selected(protocol.connectors)
+            if not connector.missing_credentials()
+        ]
+
+        async def connector_is_usable(connector) -> tuple[Any, Any | None]:
+            if not hasattr(connector, "health"):
+                return connector, None
+            try:
+                return connector, await connector.health()
+            except Exception:
+                return connector, None
+
+        health_rows = await asyncio.gather(*(
+            connector_is_usable(connector) for connector in configured_connectors
+        ))
+        selected_connectors = {
+            connector.id: connector
+            for connector, health in health_rows
+            if health is None or (health.enabled and health.healthy)
+        }
+        unavailable = [
+            {
+                "connector": connector.id,
+                "detail": health.detail if health is not None else "health check failed",
+            }
+            for connector, health in health_rows
+            if health is not None and (not health.enabled or not health.healthy)
+        ]
+        if unavailable:
+            await self.repo.event(
+                state["run_id"], "connectors_skipped", {"connectors": unavailable},
+            )
+        missions = [
+            SearchMission.model_validate(item) for item in state.get("missions", [])
+        ]
+        if not missions:
+            missions = initial_missions(protocol, state.get("queries", []))
         semaphore = asyncio.Semaphore(8)
         connector_errors: list[dict[str, str]] = []
         connector_metrics: list[dict[str, Any]] = []
 
-        async def one(connector, query):
+        async def one(connector, mission: SearchMission):
             async with semaphore:
                 started = time.perf_counter()
                 try:
-                    rows = await connector.search(query, limit)
+                    domain = mission.domain_allowlist[0] if mission.domain_allowlist else None
+                    if domain and hasattr(connector, "search_with_domain"):
+                        rows = await connector.search_with_domain(
+                            mission.query, mission.result_limit, domain,
+                        )
+                    else:
+                        rows = await connector.search(mission.query, mission.result_limit)
+                    if domain:
+                        rows = [
+                            row for row in rows
+                            if domain_matches(str(row.url), [domain])
+                        ]
+                    if (
+                        mission.target_entities
+                        and mission.required_family == SourceFamily.CODE_DATA
+                    ):
+                        rows = [
+                            row for row in rows
+                            if matches_target_entities(
+                                f"{row.title} {row.snippet} {row.url}",
+                                mission.target_entities,
+                            )
+                        ]
                     if (
                         protocol.connectors.citation_depth > 0
                         and "citations" in getattr(connector, "capabilities", ())
@@ -220,12 +304,18 @@ class ResearchPipeline:
                                     relation_rows
                                 )
                     for rank, row in enumerate(rows, 1):
-                        row.metadata["query_branch"] = query
-                        row.metadata["query_branches"] = [query]
+                        row.metadata["query_branch"] = mission.branch_id
+                        row.metadata["query_branches"] = [mission.branch_id]
+                        row.metadata["search_mission_id"] = mission.id
+                        row.metadata["coverage_gap_id"] = mission.gap_id
+                        row.metadata["required_authority"] = mission.required_authority.value
+                        if mission.required_authority == AuthorityLevel.OFFICIAL:
+                            row.metadata["authority"] = "official"
                         row.metadata["provider_rank"] = rank
                         row.metadata["federated_rrf_score"] = 1 / (60 + rank)
                     connector_metrics.append({
-                        "connector": connector.id, "query": query,
+                        "connector": connector.id, "query": mission.query,
+                        "mission_id": mission.id, "branch_id": mission.branch_id,
                         "latency_seconds": round(time.perf_counter() - started, 4),
                         "result_count": len(rows), "success": True,
                     })
@@ -233,13 +323,31 @@ class ResearchPipeline:
                 except Exception as exc:
                     connector_errors.append({"connector": connector.id, "error": str(exc)[:500]})
                     connector_metrics.append({
-                        "connector": connector.id, "query": query,
+                        "connector": connector.id, "query": mission.query,
+                        "mission_id": mission.id, "branch_id": mission.branch_id,
                         "latency_seconds": round(time.perf_counter() - started, 4),
                         "result_count": 0, "success": False,
                     })
                     return []
 
-        batches = await asyncio.gather(*(one(c, q) for q in state["queries"] for c in connectors))
+        calls = []
+        for mission in missions:
+            connector_ids = [
+                connector_id for connector_id in mission.connector_ids
+                if connector_id in selected_connectors
+            ]
+            if not connector_ids and mission.required_family is not None:
+                connector_ids = [
+                    connector_id for connector_id, connector in selected_connectors.items()
+                    if connector.family == mission.required_family
+                ]
+            if not connector_ids:
+                connector_ids = list(selected_connectors)
+            for connector_id in connector_ids:
+                connector = selected_connectors.get(connector_id)
+                if connector is not None:
+                    calls.append(one(connector, mission))
+        batches = await asyncio.gather(*calls)
         for error in connector_errors:
             await self.repo.event(state["run_id"], "connector_error", error)
         if connector_metrics:
@@ -247,6 +355,37 @@ class ResearchPipeline:
                 state["run_id"], "connector_metrics", {"calls": connector_metrics},
             )
         unique: dict[str, ConnectorCandidate] = {}
+        for mission in missions:
+            for seed_url in mission.seed_urls:
+                family = (
+                    mission.required_family
+                    or (
+                        SourceFamily.OFFICIAL_LEGAL
+                        if mission.required_authority == AuthorityLevel.OFFICIAL
+                        else SourceFamily.WEB
+                    )
+                )
+                candidate = ConnectorCandidate(
+                    connector_id=(
+                        "official_seed"
+                        if family == SourceFamily.OFFICIAL_LEGAL
+                        else "source_seed"
+                    ),
+                    family=family,
+                    title=mission.query,
+                    url=seed_url,
+                    metadata={
+                        "query_branch": mission.branch_id,
+                        "query_branches": [mission.branch_id],
+                        "search_mission_id": mission.id,
+                        "coverage_gap_id": mission.gap_id,
+                        "target_entities": mission.target_entities,
+                        "authority": mission.required_authority.value,
+                        "seeded": True,
+                        "relevance_score": 1.0,
+                    },
+                )
+                unique[candidate_dedupe_key(candidate)] = candidate
         for candidate in (item for batch in batches for item in batch):
             key = candidate_dedupe_key(candidate)
             if key in unique:
@@ -284,32 +423,47 @@ class ResearchPipeline:
                     unique[key] = candidate
             else:
                 unique[key] = candidate
-        if state.get("round_number", 1) > 1:
+        if state.get("round_number", 1) > 1 and not any(
+            mission.domain_allowlist for mission in missions
+        ):
             frontier = await self.repo.pop_frontier_candidates(
-                state["run_id"], min(limit, self.settings.frontier_max_links_per_document),
+                state["run_id"],
+                min(protocol.budget.results_per_connector, self.settings.frontier_max_links_per_document),
             )
             for item in frontier:
                 candidate = ConnectorCandidate(
                     connector_id="link_frontier", family="web", title=item["url"],
                     url=item["url"], snippet="Discovered from an acquired source",
-                    metadata={**item, "query_branches": state["queries"][:1]},
+                    metadata={**item, "query_branches": [missions[0].branch_id] if missions else []},
                 )
                 unique.setdefault(canonicalize_url(str(candidate.url)), candidate)
         existing = await self.repo.list_sources(state["run_id"])
-        available = max(0, protocol.budget.max_sources - len(existing))
+        novel, novelty_rejected = await self.repo.filter_novel_candidates(
+            state["run_id"], list(unique.values()),
+        )
+        if novelty_rejected:
+            await self.repo.event(state["run_id"], "novelty_filter", {
+                "rejected_count": len(novelty_rejected),
+                "sample": novelty_rejected[:20],
+            })
+        remaining = max(0, protocol.budget.max_sources - len(existing))
+        fraction = 0.40 if state.get("round_number", 1) == 1 else 0.30
+        round_cap = min(remaining, max(1, math.ceil(protocol.budget.max_sources * fraction)))
         if self.settings.testing:
-            candidates, rejected = list(unique.values())[:available], []
+            ranked, rejected = novel, []
         else:
-            candidates, rejected = filter_and_rank_candidates(list(unique.values()), protocol, available)
+            rank_pool_limit = min(len(novel), max(round_cap * 4, round_cap))
+            ranked, rejected = filter_and_rank_candidates(
+                novel, protocol, rank_pool_limit,
+            )
+        candidates = select_mission_balanced_candidates(
+            ranked, missions, round_cap,
+        )
         if rejected:
             await self.repo.event(
                 state["run_id"], "relevance_filter",
                 {"rejected_count": len(rejected), "sample": rejected[:20]},
             )
-        branch_counts: dict[str, int] = defaultdict(int)
-        for candidate in candidates:
-            for branch in candidate.metadata.get("query_branches", []):
-                branch_counts[branch] += 1
         corpus_documents: list[AcquiredDocument] = []
         if self.settings.local_corpus_results:
             corpus_passages = await self.repo.list_corpus_passages(state["run_id"])
@@ -346,11 +500,17 @@ class ResearchPipeline:
                     "candidate_passages": len(corpus_passages), "selected_passages": len(corpus_hits),
                     "selected_documents": len(corpus_documents),
                 })
+        corpus_slots = max(0, remaining - len(candidates))
+        corpus_documents = corpus_documents[:corpus_slots]
         return {
             "candidates": [c.model_dump(mode="json") for c in candidates],
             "corpus_documents": [doc.model_dump(mode="json") for doc in corpus_documents],
-            "branch_result_counts": dict(branch_counts),
+            "branch_result_counts": {},
             "source_count_before_round": len(existing),
+            "attempted_missions": list(dict.fromkeys([
+                *state.get("attempted_missions", []),
+                *(mission_signature(mission) for mission in missions),
+            ])),
         }
 
     async def acquire(self, state: PipelineState) -> dict:
@@ -384,7 +544,11 @@ class ResearchPipeline:
     async def normalize(self, state: PipelineState) -> dict:
         await self._boundary(state, "NORMALIZE")
         documents = [AcquiredDocument.model_validate(d) for d in state.get("documents", [])]
+        existing_version_ids = {
+            version.id for _, version in await self.repo.list_source_versions(state["run_id"])
+        }
         saved_docs = []
+        branch_counts: dict[str, int] = defaultdict(int)
         for document in documents:
             if not document.success:
                 continue
@@ -401,10 +565,20 @@ class ResearchPipeline:
                 await self.store.put(snapshot_key, snapshot_bytes, document.content_type)
                 document.candidate.metadata["raw_snapshot_key"] = snapshot_key
             source, version = await self.repo.save_document(state["run_id"], document)
+            if version.id in existing_version_ids:
+                await self.repo.event(state["run_id"], "duplicate_source_version", {
+                    "source_id": source.id,
+                    "source_version_id": version.id,
+                    "url": source.url,
+                })
+                continue
+            existing_version_ids.add(version.id)
             payload = document.model_dump(mode="json")
             payload["source_id"] = source.id
             payload["source_version_id"] = version.id
             saved_docs.append(payload)
+            for branch in document.candidate.metadata.get("query_branches", []):
+                branch_counts[branch] += 1
             if document.outgoing_links:
                 added = await self.repo.add_frontier_links(
                     state["run_id"], document.final_url or str(document.candidate.url),
@@ -417,7 +591,7 @@ class ResearchPipeline:
                     })
         sources = await self.repo.list_sources(state["run_id"])
         await self.repo.update_run(state["run_id"], sources_count=len(sources))
-        return {"documents": saved_docs}
+        return {"documents": saved_docs, "branch_result_counts": dict(branch_counts)}
 
     async def chunk_index(self, state: PipelineState) -> dict:
         await self._boundary(state, "CHUNK_INDEX")
@@ -438,7 +612,7 @@ class ResearchPipeline:
             embedding_inputs = [
                 f"{passage.section_path}\n{passage.text}" for passage in all_passages
             ]
-            vectors = await self.embeddings.embed(embedding_inputs)
+            vectors = await self.embeddings.embed(embedding_inputs) if embedding_inputs else []
             for passage, vector in zip(all_passages, vectors):
                 passage.embedding = vector
         except Exception as exc:
@@ -462,6 +636,12 @@ class ResearchPipeline:
         await self._boundary(state, "RETRIEVE_PASSAGES")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         version_ids = [payload["source_version_id"] for payload in state.get("documents", [])]
+        if not version_ids:
+            await self.repo.event(state["run_id"], "passage_retrieval", {
+                "question_count": 0, "candidate_count": 0, "selected_count": 0,
+                "reason": "no_new_source_versions",
+            })
+            return {"passages": []}
         passages = await self.repo.list_passages(state["run_id"], version_ids)
         questions = list(dict.fromkeys([
             protocol.primary_question, *state.get("sub_questions", []),
@@ -520,10 +700,17 @@ class ResearchPipeline:
 
     async def extract_evidence(self, state: PipelineState) -> dict:
         await self._boundary(state, "EXTRACT_EVIDENCE")
+        protocol = ResearchProtocol.model_validate(state["protocol"])
+        if protocol.output_mode == "raw":
+            await self.repo.event(
+                state["run_id"], "claim_extraction_skipped", {"reason": "raw_output_mode"},
+            )
+            return {"claims": []}
         documents = state.get("documents", [])
         passages = [Passage.model_validate(row) for row in state.get("passages", [])]
+        if not passages:
+            return {"claims": []}
         all_passages = await self.repo.list_passages(state["run_id"])
-        protocol = ResearchProtocol.model_validate(state["protocol"])
         evidence_questions = list(dict.fromkeys([
             protocol.primary_question, *state.get("sub_questions", []),
         ]))
@@ -541,16 +728,18 @@ class ResearchPipeline:
                     return []
                 try:
                     model_claims = await extract_claims(
-                        self.llm, doc, content_override=passage.text,
+                        self.llm, doc,
+                        research_question=protocol.primary_question,
+                        content_override=passage.text,
                         neighbor_context=neighbor_context(passage, all_passages),
                         passage_id=passage.id, section_path=passage.section_path,
                         page_number=passage.page_number, original_offset=passage.start_char,
                         retrieval_score=passage.retrieval_score,
                     )
                     deterministic_claims = relevant_sentence_claims(
-                        passage, evidence_questions, doc.candidate.id,
+                        passage, evidence_questions, doc.candidate.id, limit=2,
                     )
-                    return merge_passage_claims(model_claims, deterministic_claims)
+                    return merge_passage_claims(model_claims, deterministic_claims)[:4]
                 except Exception as exc:
                     extraction_errors.append({"url": str(doc.candidate.url), "error": str(exc)[:500]})
                     return []
@@ -578,6 +767,21 @@ class ResearchPipeline:
         for payload in raw:
             version_id = payload.pop("source_version_id")
             claim = ExtractedClaim.model_validate(payload)
+            relevance = claim_relevance(
+                claim.text,
+                " ".join([
+                    ResearchProtocol.model_validate(state["protocol"]).primary_question,
+                    *state.get("sub_questions", []),
+                ]),
+            )
+            promotional = bool(re.search(
+                r"\b(kurun|takip edin|kaydet|olmazsa olmaz|rakipsiz|süper güç|"
+                r"install it|follow me|must-have)\b",
+                claim.text,
+                flags=re.IGNORECASE,
+            ))
+            if relevance < 0.25 or promotional:
+                continue
             normalized = re.sub(r"\W+", " ", claim.text.lower()).strip()
             match = next(
                 ((other, claim_id) for other, claim_id in seen if SequenceMatcher(None, normalized, other).ratio() > 0.92),
@@ -598,39 +802,177 @@ class ResearchPipeline:
         protocol = ResearchProtocol.model_validate(state["protocol"])
         sources = await self.repo.list_sources(state["run_id"])
         claims = await self.repo.list_claims(state["run_id"])
+        evidence = await self.repo.list_evidence(state["run_id"])
         previous_count = state.get("source_count_before_round", 0)
         new_count = max(0, len(sources) - previous_count)
         rate = new_count / max(len(sources), 1)
         previous = CoverageMetrics.model_validate(state.get("coverage", {}))
-        major = [c for c in claims if c.importance == "major"]
+        major = sorted(
+            [
+                c for c in claims
+                if c.importance == "major"
+                and float((c.audit or {}).get("question_relevance", 0.0)) >= 0.25
+            ],
+            key=lambda claim: float(
+                (claim.audit or {}).get("question_relevance", 0.0),
+            ),
+            reverse=True,
+        )[:8]
         audited = [c for c in major if c.audit]
-        unresolved = [c for c in major if c.status == "unresolved"]
+        unresolved = [c for c in major if c.status != "supported"]
+        official_entities = resolve_official_entities(protocol.primary_question)
+        official_domains = [
+            domain
+            for entity in official_entities
+            for domain in entity["domains"]
+        ]
+        relevant_sources = [
+            source for source in sources
+            if (
+                (
+                    source.family in {
+                        SourceFamily.WEB.value,
+                        SourceFamily.ACADEMIC.value,
+                    }
+                    and float(
+                        (source.metadata_json or {}).get("relevance_score", 0.0)
+                    ) >= 0.45
+                )
+                or (
+                    source.family == SourceFamily.CODE_DATA.value
+                    and float(
+                        (source.metadata_json or {}).get("relevance_score", 0.0)
+                    ) >= 0.55
+                )
+                or (source.metadata_json or {}).get("authority") == "primary"
+                or (
+                    (source.metadata_json or {}).get("authority") == "official"
+                    and domain_matches(source.url, official_domains)
+                )
+            )
+        ]
+        branch_counts: dict[str, int] = defaultdict(int)
+        for branch_id in state.get("required_branch_ids", []):
+            branch_counts[branch_id] = 0
+        official_major_claim_ids: set[str] = set()
+        if protocol.output_mode == "raw":
+            for source in relevant_sources:
+                for branch in (source.metadata_json or {}).get("query_branches", []):
+                    if branch in branch_counts:
+                        branch_counts[branch] += 1
+        for claim, link, source in evidence:
+            if link.entailment_score < 0.5 or claim.status in {"irrelevant", "unresolved"}:
+                continue
+            for branch in (source.metadata_json or {}).get("query_branches", []):
+                if branch in branch_counts:
+                    branch_counts[branch] += 1
+            if (
+                claim.importance == "major"
+                and (source.metadata_json or {}).get("authority") == "official"
+            ):
+                official_major_claim_ids.add(claim.id)
+        if official_entities:
+            covered_entities = 0
+            evidence_source_ids = {
+                source.id for claim, link, source in evidence
+                if link.entailment_score >= 0.5
+                and claim.status not in {"irrelevant", "unresolved"}
+            }
+            for entity in official_entities:
+                if any(
+                    (source.metadata_json or {}).get("authority") == "official"
+                    and domain_matches(source.url, entity["domains"])
+                    and (
+                        protocol.output_mode == "raw"
+                        or source.id in evidence_source_ids
+                    )
+                    for source in relevant_sources
+                ):
+                    covered_entities += 1
+            authority_coverage = covered_entities / len(official_entities)
+        else:
+            authority_coverage = (
+                len(official_major_claim_ids) / len(major) if major
+                else (
+                    1.0
+                    if protocol.output_mode == "raw" and any(
+                        (source.metadata_json or {}).get("authority") == "official"
+                        for source in relevant_sources
+                    )
+                    else (
+                        1.0
+                        if not protocol.authority_policy.strict_for_major_claims
+                        else 0.0
+                    )
+                )
+            )
+        audited_count = len(audited)
+        if protocol.output_mode == "raw":
+            audited_count = len(major)
         coverage = calculate_coverage(
-            protocol, [s.family for s in sources], state.get("branch_result_counts", {}),
-            len(major), len(audited), len(unresolved), rate, previous.saturated_rounds,
+            protocol, [s.family for s in relevant_sources], dict(branch_counts),
+            len(major), audited_count, len(unresolved), rate, previous.saturated_rounds,
+            authority_coverage=authority_coverage,
         )
         round_number = state.get("round_number", 1)
         elapsed = (time.monotonic() - state.get("started_monotonic", time.monotonic())) / 60
         budget_hit = round_number >= protocol.budget.max_rounds or elapsed >= protocol.budget.max_wall_minutes or len(sources) >= protocol.budget.max_sources
-        stop_reason = "coverage_sufficient" if coverage.sufficient else ("budget_exhausted" if budget_hit else "expand")
+        gaps = diagnose_gaps(
+            protocol,
+            coverage,
+            [source.family for source in relevant_sources],
+            [{"id": claim.id, "text": claim.text} for claim in unresolved],
+            dict(branch_counts),
+            state.get("branch_queries", {}),
+        )
+        exhausted = not recovery_missions(
+            protocol, gaps, set(state.get("attempted_missions", [])),
+        )
+        stop_reason = (
+            "coverage_sufficient" if coverage.sufficient
+            else ("budget_exhausted" if budget_hit or exhausted else "expand")
+        )
         await self.repo.update_run(
             state["run_id"], coverage=coverage.model_dump(), round_number=round_number,
             sources_count=len(sources), claims_count=len(claims),
         )
-        return {"coverage": coverage.model_dump(), "stop_reason": stop_reason}
+        await self.repo.event(state["run_id"], "coverage_gaps", {
+            "gaps": [gap.model_dump(mode="json") for gap in gaps],
+            "stop_reason": stop_reason,
+        })
+        return {
+            "coverage": coverage.model_dump(),
+            "gaps": [gap.model_dump(mode="json") for gap in gaps],
+            "stop_reason": stop_reason,
+        }
 
     def _coverage_route(self, state: PipelineState) -> str:
         if state.get("halted"):
             return "halt"
-        return "expand" if state.get("stop_reason") == "expand" else "audit"
+        return "expand" if state.get("stop_reason") == "expand" else "finish"
 
-    async def expand_queries(self, state: PipelineState) -> dict:
-        await self._boundary(state, "EXPAND_QUERIES")
+    async def plan_recovery(self, state: PipelineState) -> dict:
+        await self._boundary(state, "PLAN_RECOVERY")
+        protocol = ResearchProtocol.model_validate(state["protocol"])
         round_number = state.get("round_number", 1) + 1
-        suffixes = ["counter evidence", "failure limitations", "independent replication", "primary source"]
-        base = state.get("sub_questions", []) or state.get("queries", [])[:5]
-        queries = [f"{question} {suffixes[(round_number + i) % len(suffixes)]}" for i, question in enumerate(base)]
-        return {"queries": queries[:20], "round_number": round_number}
+        attempted = set(state.get("attempted_missions", []))
+        gaps = [CoverageGap.model_validate(item) for item in state.get("gaps", [])]
+        missions = recovery_missions(protocol, gaps, attempted)
+        await self.repo.event(state["run_id"], "recovery_plan", {
+            "round": round_number,
+            "missions": [mission.model_dump(mode="json") for mission in missions],
+        })
+        branch_queries = dict(state.get("branch_queries", {}))
+        for mission in missions:
+            branch_queries.setdefault(mission.branch_id, mission.query)
+        return {
+            "queries": [mission.query for mission in missions],
+            "missions": [mission.model_dump(mode="json") for mission in missions],
+            "attempted_missions": sorted(attempted),
+            "required_branch_ids": state.get("required_branch_ids", []),
+            "branch_queries": branch_queries,
+            "round_number": round_number,
+        }
 
     async def audit(self, state: PipelineState) -> dict:
         await self._boundary(state, "AUDIT")

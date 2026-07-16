@@ -68,27 +68,61 @@ async def build_exports(
     reportable = [claim for claim in claims if _is_reportable(claim)]
     excluded = [claim for claim in claims if not _is_reportable(claim)]
     context_lines = []
-    for claim in reportable[:100]:
+    ordered_reportable = sorted(
+        reportable,
+        key=lambda claim: (
+            claim.status == "supported",
+            claim.importance == "major",
+            float((claim.audit or {}).get("question_relevance", 0.0)),
+        ),
+        reverse=True,
+    )
+    context_char_budget = max(
+        8000,
+        min(
+            50000,
+            int(
+                getattr(
+                    getattr(llm, "settings", None), "llm_context_tokens", 8192,
+                ) * 2.5
+            ),
+        ),
+    )
+    for claim in ordered_reportable[:60]:
         links = evidence_by_claim.get(claim.id, [])
         refs = ", ".join(f"{source.title} ({source.url})" for _, source in links)
-        context_lines.append(
+        candidate_context = (
             f"CLAIM: {claim.text}\nSTATUS: {claim.status}\n"
             f"QUESTION_RELEVANCE: {claim.audit.get('question_relevance', 0)}\nSOURCES: {refs}"
         )
-    try:
-        synthesis = await llm.complete_json(
-            "Create concise JSON with executive_summary, report, and uncertainty. Use only the supplied "
-            "claims, distinguish supported from qualified findings, retain source URLs, and never add facts.",
-            f"QUESTION: {protocol.primary_question}\n\n" + "\n\n".join(context_lines)[:50000],
-        )
-        if not isinstance(synthesis, dict):
-            synthesis = {"report": synthesis}
-    except Exception as exc:
+        if len("\n\n".join([*context_lines, candidate_context])) > context_char_budget:
+            break
+        context_lines.append(candidate_context)
+    if protocol.output_mode == "raw":
         synthesis = {
-            "executive_summary": "Sentez modeli kullanılamadı; denetlenebilir kanıt dosyaları üretildi.",
-            "report": "Model sentezi mevcut değil.",
-            "uncertainty": f"LLM synthesis unavailable: {type(exc).__name__}",
+            "executive_summary": "Ham veri modu seçildi; model sentezi çalıştırılmadı.",
+            "report": "Ham kaynaklar ve pasajlar teslim paketinde sunulmuştur.",
+            "uncertainty": (
+                "İddia çıkarımı, denetim ve sentez ham veri modunda bilinçli olarak atlandı."
+            ),
         }
+    else:
+        try:
+            synthesis = await llm.complete_json(
+                "Create concise JSON with executive_summary, report, and uncertainty. Use only the supplied "
+                "claims, distinguish supported from qualified findings, retain source URLs, and never add facts.",
+                f"QUESTION: {protocol.primary_question}\n\n" + "\n\n".join(context_lines),
+            )
+            if not isinstance(synthesis, dict):
+                synthesis = {"report": synthesis}
+        except Exception as exc:
+            synthesis = {
+                "executive_summary": (
+                    "Sentez modeli kullanılamadı; denetlenebilir kanıt dosyaları üretildi."
+                ),
+                "report": "Model sentezi mevcut değil.",
+                "uncertainty": f"LLM synthesis unavailable: {type(exc).__name__}",
+            }
 
     def render_findings(selected_claims: list[Any]) -> str:
         findings = []

@@ -4,6 +4,7 @@ import re
 from collections import defaultdict, deque
 from urllib.parse import urlparse
 
+from .recovery import matches_target_entities, resolve_official_entities
 from .schemas import ConnectorCandidate, ResearchProtocol, SourceFamily
 
 
@@ -13,6 +14,13 @@ STOPWORDS = {
     "olarak", "the", "their", "this", "use", "used", "uses", "what", "when", "where",
     "which", "who", "why", "with", "icin", "için", "ve", "veya",
 }
+
+UNTRUSTED_DISCOVERY_PATTERN = re.compile(
+    r"\b(ignore (all |the )?(previous|prior) instructions?|system prompt|"
+    r"jailbreak|developer message|occult override|is god|seen\s*=\s*activated|"
+    r"operational\s*[∴:]+|do not summarize|execute this command)\b",
+    flags=re.IGNORECASE,
+)
 
 
 def terms(value: str) -> set[str]:
@@ -72,6 +80,12 @@ def candidate_relevance(candidate: ConnectorCandidate, protocol: ResearchProtoco
     if trusted and domain_matches(str(candidate.url), trusted):
         score = min(1.0, score + 0.35)
         reasons.append("trusted_domain")
+    if candidate.metadata.get("authority") == "official":
+        score = min(1.0, score + 0.40)
+        reasons.append("official_authority")
+    if candidate.metadata.get("authority") == "primary":
+        score = min(1.0, score + 0.40)
+        reasons.append("primary_authority")
     if candidate.family == SourceFamily.ACADEMIC:
         metadata = candidate.metadata
         if metadata.get("is_retracted"):
@@ -104,7 +118,7 @@ def filter_and_rank_candidates(
     protocol: ResearchProtocol,
     limit: int,
     *,
-    minimum_score: float = 0.20,
+    minimum_score: float = 0.35,
 ) -> tuple[list[ConnectorCandidate], list[dict[str, str | float]]]:
     accepted: list[ConnectorCandidate] = []
     rejected: list[dict[str, str | float]] = []
@@ -114,6 +128,11 @@ def filter_and_rank_candidates(
             " ".join([protocol.primary_question, *protocol.sub_questions])
         )
     }
+    official_entities = resolve_official_entities(protocol.primary_question)
+    official_entity_names = [entity["entity"] for entity in official_entities]
+    official_entity_domains = [
+        domain for entity in official_entities for domain in entity["domains"]
+    ]
     for candidate in candidates:
         score, reasons = candidate_relevance(candidate, protocol)
         candidate.metadata["relevance_score"] = score
@@ -124,7 +143,28 @@ def filter_and_rank_candidates(
             bool(target_repositories) and hostname(str(candidate.url)) == "github.com"
             and candidate_repository not in target_repositories
         )
-        if repository_mismatch:
+        authority_entity_mismatch = (
+            candidate.family == SourceFamily.OFFICIAL_LEGAL
+            and bool(official_entity_names)
+            and not domain_matches(str(candidate.url), official_entity_domains)
+            and not matches_target_entities(
+                f"{candidate.title} {candidate.snippet} {candidate.url}",
+                official_entity_names,
+            )
+        )
+        if UNTRUSTED_DISCOVERY_PATTERN.search(
+            f"{candidate.title} {candidate.snippet}"
+        ):
+            rejected.append({
+                "url": str(candidate.url), "score": score,
+                "reason": "untrusted_instruction_pattern",
+            })
+        elif authority_entity_mismatch:
+            rejected.append({
+                "url": str(candidate.url), "score": score,
+                "reason": "official_entity_mismatch",
+            })
+        elif repository_mismatch:
             rejected.append({
                 "url": str(candidate.url), "score": score,
                 "reason": "github_repository_mismatch",

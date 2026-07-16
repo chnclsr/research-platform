@@ -36,6 +36,25 @@ CORE_FAMILIES = [
 ]
 
 
+class AuthorityLevel(StrEnum):
+    ANY = "any"
+    OFFICIAL = "official"
+    PRIMARY = "primary"
+    PEER_REVIEWED = "peer_reviewed"
+    INDEPENDENT = "independent"
+
+
+class FamilyTarget(BaseModel):
+    minimum_sources: int = Field(1, ge=0, le=100)
+    weight: float = Field(1.0, gt=0, le=10)
+
+
+class AuthorityPolicy(BaseModel):
+    minimum_authority: AuthorityLevel = AuthorityLevel.ANY
+    strict_for_major_claims: bool = False
+    discovery_sources_may_be_non_authoritative: bool = True
+
+
 class EvidencePolicy(BaseModel):
     minimum_independent_sources: int = Field(2, ge=1, le=10)
     primary_source_preference: bool = True
@@ -94,8 +113,38 @@ class ResearchProtocol(BaseModel):
     report_language: str = "tr"
     connectors: ConnectorSelection = Field(default_factory=ConnectorSelection)
     evidence_policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
+    authority_policy: AuthorityPolicy = Field(default_factory=AuthorityPolicy)
+    family_targets: dict[SourceFamily, FamilyTarget] = Field(default_factory=dict)
     stopping_criteria: StoppingCriteria = Field(default_factory=StoppingCriteria)
     budget: ResearchBudget = Field(default_factory=ResearchBudget)
+    output_mode: Literal["raw", "result", "both"] = "both"
+
+    @model_validator(mode="after")
+    def normalize_targets_and_validate_budget(self) -> "ResearchProtocol":
+        if not self.family_targets:
+            self.family_targets = {
+                family: FamilyTarget() for family in self.connectors.included_families
+            }
+        else:
+            self.family_targets = {
+                family: target
+                for family, target in self.family_targets.items()
+                if family in self.connectors.included_families
+            }
+        required = sum(target.minimum_sources for target in self.family_targets.values())
+        if required > self.budget.max_sources:
+            raise ValueError(
+                f"family_targets require at least {required} sources but max_sources is "
+                f"{self.budget.max_sources}"
+            )
+        normalized_question = self.primary_question.lower()
+        if (
+            self.authority_policy.minimum_authority == AuthorityLevel.ANY
+            and any(term in normalized_question for term in ("resmî", "resmi", "official documentation"))
+        ):
+            self.authority_policy.minimum_authority = AuthorityLevel.OFFICIAL
+            self.authority_policy.strict_for_major_claims = True
+        return self
 
 
 class RunStatus(StrEnum):
@@ -125,6 +174,7 @@ class CoverageMetrics(BaseModel):
     claim_audit_coverage: float = 0.0
     new_source_rate: float = 1.0
     unresolved_major_claims: int = 0
+    authority_coverage: float = 1.0
     saturated_rounds: int = 0
     sufficient: bool = False
     reasons: list[str] = Field(default_factory=list)
@@ -276,3 +326,42 @@ class ArtifactView(BaseModel):
 class CorpusSearchRequest(BaseModel):
     query: str = Field(min_length=3, max_length=5000)
     top_k: int = Field(10, ge=1, le=50)
+
+
+class CoverageGap(BaseModel):
+    id: str = Field(default_factory=new_id)
+    dimension: Literal[
+        "source_family", "authority", "query_branch",
+        "claim_support", "counterevidence", "version",
+    ]
+    topic: str
+    branch_id: str | None = None
+    claim_ids: list[str] = Field(default_factory=list)
+    missing_family: SourceFamily | None = None
+    required_authority: AuthorityLevel = AuthorityLevel.ANY
+    evidence_direction: Literal["supports", "contradicts", "either"] = "either"
+    target_entities: list[str] = Field(default_factory=list)
+    target_domains: list[str] = Field(default_factory=list)
+    preferred_connectors: list[str] = Field(default_factory=list)
+    minimum_novel_sources: int = Field(1, ge=1, le=20)
+    priority: float = Field(0.5, ge=0, le=1)
+    attempts: int = Field(0, ge=0)
+    status: Literal["open", "satisfied", "exhausted", "blocked"] = "open"
+    failure_reasons: list[str] = Field(default_factory=list)
+
+
+class SearchMission(BaseModel):
+    id: str = Field(default_factory=new_id)
+    gap_id: str | None = None
+    branch_id: str
+    query: str
+    connector_ids: list[str] = Field(default_factory=list)
+    seed_urls: list[HttpUrl] = Field(default_factory=list)
+    target_entities: list[str] = Field(default_factory=list)
+    domain_allowlist: list[str] = Field(default_factory=list)
+    domain_denylist: list[str] = Field(default_factory=list)
+    required_family: SourceFamily | None = None
+    required_authority: AuthorityLevel = AuthorityLevel.ANY
+    result_limit: int = Field(10, ge=1, le=100)
+    acquisition_slots: int = Field(1, ge=1, le=20)
+    novelty_required: bool = True

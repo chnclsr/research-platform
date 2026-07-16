@@ -14,11 +14,20 @@ def calculate_coverage(
     unresolved_major_claims: int,
     new_source_rate: float,
     prior_saturated_rounds: int,
+    *,
+    authority_coverage: float = 1.0,
 ) -> CoverageMetrics:
     counts = Counter(source_families)
-    enabled = protocol.connectors.included_families
-    family_scores = [min(1.0, counts.get(family.value, 0) / 5.0) for family in enabled]
-    family_coverage = sum(family_scores) / len(family_scores) if family_scores else 0.0
+    weighted_scores = []
+    total_weight = 0.0
+    for family, target in protocol.family_targets.items():
+        score = (
+            1.0 if target.minimum_sources == 0
+            else min(1.0, counts.get(family.value, 0) / target.minimum_sources)
+        )
+        weighted_scores.append(score * target.weight)
+        total_weight += target.weight
+    family_coverage = sum(weighted_scores) / total_weight if total_weight else 0.0
     branch_coverage = (
         sum(1 for count in branch_result_counts.values() if count >= 1) / len(branch_result_counts)
         if branch_result_counts else 0.0
@@ -37,12 +46,15 @@ def calculate_coverage(
         reasons.append("query_saturation")
     if unresolved_major_claims > stopping.unresolved_major_claim_limit:
         reasons.append("unresolved_major_claims")
+    if protocol.authority_policy.strict_for_major_claims and authority_coverage < 1.0:
+        reasons.append("authority_coverage")
     return CoverageMetrics(
         source_family_coverage=round(family_coverage, 4),
         query_branch_coverage=round(branch_coverage, 4),
         claim_audit_coverage=round(audit_coverage, 4),
         new_source_rate=round(new_source_rate, 4),
         unresolved_major_claims=unresolved_major_claims,
+        authority_coverage=round(authority_coverage, 4),
         saturated_rounds=saturated,
         sufficient=not reasons,
         reasons=reasons,

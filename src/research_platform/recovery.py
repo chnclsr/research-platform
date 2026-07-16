@@ -1,0 +1,384 @@
+from __future__ import annotations
+
+from collections import Counter
+from typing import Any
+
+from .schemas import (
+    AuthorityLevel,
+    ConnectorCandidate,
+    CoverageGap,
+    CoverageMetrics,
+    ResearchProtocol,
+    SearchMission,
+    SourceFamily,
+)
+
+
+OFFICIAL_ENTITY_REGISTRY: tuple[tuple[tuple[str, ...], str, tuple[str, ...]], ...] = (
+    (("model context protocol", " mcp ", "mcp taban"), "Model Context Protocol", ("modelcontextprotocol.io",)),
+    (
+        ("codex", "openai"),
+        "OpenAI Codex",
+        ("developers.openai.com", "learn.chatgpt.com", "openai.com"),
+    ),
+    (("claude code", "anthropic"), "Claude Code", ("code.claude.com", "docs.anthropic.com", "anthropic.com")),
+    (("telegram", "bot api"), "Telegram Bot API", ("core.telegram.org",)),
+)
+
+OFFICIAL_SEED_URLS: dict[str, list[str]] = {
+    "Model Context Protocol": [
+        "https://modelcontextprotocol.io/docs/tutorials/security/authorization",
+    ],
+    "OpenAI Codex": [
+        "https://developers.openai.com/codex/mcp/",
+        "https://developers.openai.com/codex/security/",
+    ],
+    "Claude Code": [
+        "https://code.claude.com/docs/en/mcp",
+        "https://code.claude.com/docs/en/security",
+    ],
+    "Telegram Bot API": [
+        "https://core.telegram.org/bots/api",
+        "https://core.telegram.org/bots/faq",
+    ],
+}
+
+CODE_SEED_URLS: dict[str, list[str]] = {
+    "Model Context Protocol": [
+        "https://github.com/modelcontextprotocol/modelcontextprotocol",
+    ],
+    "OpenAI Codex": ["https://github.com/openai/codex"],
+    "Claude Code": ["https://github.com/anthropics/claude-code"],
+}
+
+ENTITY_ALIASES: dict[str, tuple[str, ...]] = {
+    "Model Context Protocol": ("model context protocol", "mcp"),
+    "OpenAI Codex": ("openai codex", "codex"),
+    "Claude Code": ("claude code",),
+    "Telegram Bot API": ("telegram bot api", "telegram"),
+}
+
+
+FAMILY_CONNECTORS: dict[SourceFamily, list[str]] = {
+    SourceFamily.WEB: ["agentsearch_web"],
+    SourceFamily.ACADEMIC: [
+        "openalex", "semantic_scholar", "arxiv", "crossref", "europe_pmc",
+        "zotero_local", "zotero_web",
+    ],
+    SourceFamily.OFFICIAL_LEGAL: ["official_registry", "eur_lex", "federal_register"],
+    SourceFamily.CODE_DATA: ["github", "huggingface", "zenodo", "datacite"],
+    SourceFamily.BOOKS_THESES: ["open_library", "openalex_dissertations"],
+    SourceFamily.PATENTS_STANDARDS: ["ietf_datatracker", "standards_web", "epo_ops"],
+    SourceFamily.NEWS_ARCHIVES: ["agentsearch_news", "gdelt", "internet_archive_cdx"],
+    SourceFamily.COMPANY: ["sec_edgar", "company_domains"],
+    SourceFamily.GREY_LITERATURE: ["zenodo_grey", "institutional_grey"],
+}
+
+
+def resolve_official_entities(question: str) -> list[dict[str, Any]]:
+    normalized = f" {question.lower()} "
+    output = []
+    for triggers, entity, domains in OFFICIAL_ENTITY_REGISTRY:
+        if any(trigger in normalized for trigger in triggers):
+            output.append({"entity": entity, "domains": list(domains)})
+    return output
+
+
+def initial_missions(
+    protocol: ResearchProtocol,
+    queries: list[str],
+) -> list[SearchMission]:
+    missions: list[SearchMission] = []
+    entities = resolve_official_entities(protocol.primary_question)
+    if protocol.authority_policy.minimum_authority == AuthorityLevel.OFFICIAL:
+        for entity in entities:
+            for domain in entity["domains"][:1]:
+                seed_urls = [
+                    url for url in OFFICIAL_SEED_URLS.get(entity["entity"], [])
+                    if domain in url
+                ]
+                missions.append(SearchMission(
+                    branch_id=f"official:{entity['entity']}",
+                    query=f"{entity['entity']} {protocol.primary_question}",
+                    connector_ids=["official_registry"],
+                    seed_urls=seed_urls,
+                    target_entities=[entity["entity"]],
+                    domain_allowlist=[domain],
+                    required_family=SourceFamily.OFFICIAL_LEGAL,
+                    required_authority=AuthorityLevel.OFFICIAL,
+                    result_limit=min(10, protocol.budget.results_per_connector),
+                    acquisition_slots=1,
+                ))
+    if SourceFamily.CODE_DATA in protocol.connectors.included_families:
+        for entity in entities:
+            seed_urls = CODE_SEED_URLS.get(entity["entity"], [])
+            if not seed_urls:
+                continue
+            missions.append(SearchMission(
+                branch_id=f"code:{entity['entity']}",
+                query=f"{entity['entity']} official source repository security",
+                connector_ids=["github"],
+                seed_urls=seed_urls,
+                target_entities=[entity["entity"]],
+                required_family=SourceFamily.CODE_DATA,
+                required_authority=AuthorityLevel.PRIMARY,
+                result_limit=min(10, protocol.budget.results_per_connector),
+                acquisition_slots=1,
+            ))
+    connector_ids = list(dict.fromkeys(
+        connector
+        for family in protocol.connectors.included_families
+        for connector in FAMILY_CONNECTORS.get(family, [])
+    ))
+    for index, query in enumerate(queries[:5]):
+        missions.append(SearchMission(
+            branch_id=f"query:{index}",
+            query=query,
+            connector_ids=connector_ids,
+            result_limit=min(10, protocol.budget.results_per_connector),
+            acquisition_slots=2,
+        ))
+    return missions
+
+
+def diagnose_gaps(
+    protocol: ResearchProtocol,
+    coverage: CoverageMetrics,
+    source_families: list[str],
+    unresolved_claims: list[dict[str, str]],
+    branch_result_counts: dict[str, int] | None = None,
+    branch_queries: dict[str, str] | None = None,
+) -> list[CoverageGap]:
+    gaps: list[CoverageGap] = []
+    branch_result_counts = branch_result_counts or {}
+    branch_queries = branch_queries or {}
+    counts = Counter(source_families)
+    for family, target in protocol.family_targets.items():
+        missing = max(0, target.minimum_sources - counts.get(family.value, 0))
+        if missing:
+            gaps.append(CoverageGap(
+                dimension="source_family",
+                topic=f"{family.value} evidence for {protocol.primary_question}",
+                missing_family=family,
+                target_entities=(
+                    [
+                        entity["entity"]
+                        for entity in resolve_official_entities(protocol.primary_question)
+                    ]
+                    if family in {
+                        SourceFamily.CODE_DATA,
+                        SourceFamily.OFFICIAL_LEGAL,
+                    }
+                    else []
+                ),
+                preferred_connectors=FAMILY_CONNECTORS.get(family, []),
+                minimum_novel_sources=missing,
+                priority=0.85,
+            ))
+    if (
+        protocol.authority_policy.minimum_authority == AuthorityLevel.OFFICIAL
+        and coverage.authority_coverage < 1.0
+    ):
+        for entity in resolve_official_entities(protocol.primary_question):
+            gaps.append(CoverageGap(
+                dimension="authority",
+                topic=f"Official documentation for {entity['entity']}",
+                required_authority=AuthorityLevel.OFFICIAL,
+                target_entities=[entity["entity"]],
+                target_domains=entity["domains"],
+                preferred_connectors=["official_registry"],
+                priority=1.0,
+            ))
+    for claim in unresolved_claims[:3]:
+        gaps.append(CoverageGap(
+            dimension="claim_support",
+            topic=claim["text"],
+            claim_ids=[claim["id"]],
+            required_authority=protocol.authority_policy.minimum_authority,
+            preferred_connectors=list(dict.fromkeys(
+                connector
+                for family in protocol.connectors.included_families
+                for connector in FAMILY_CONNECTORS.get(family, [])
+            )),
+            priority=0.75,
+        ))
+    for branch_id, count in branch_result_counts.items():
+        if count > 0:
+            continue
+        query = branch_queries.get(branch_id)
+        if not query:
+            continue
+        target_entities: list[str] = []
+        missing_family = None
+        required_authority = AuthorityLevel.ANY
+        target_domains: list[str] = []
+        preferred_connectors = list(dict.fromkeys(
+            connector
+            for family in protocol.connectors.included_families
+            for connector in FAMILY_CONNECTORS.get(family, [])
+        ))
+        if branch_id.startswith("code:"):
+            target_entities = [branch_id.split(":", 1)[1]]
+            missing_family = SourceFamily.CODE_DATA
+            required_authority = AuthorityLevel.PRIMARY
+            preferred_connectors = FAMILY_CONNECTORS[SourceFamily.CODE_DATA]
+        elif branch_id.startswith("official:"):
+            target_entities = [branch_id.split(":", 1)[1]]
+            missing_family = SourceFamily.OFFICIAL_LEGAL
+            required_authority = AuthorityLevel.OFFICIAL
+            preferred_connectors = ["official_registry"]
+            target_domains = [
+                domain
+                for entity in resolve_official_entities(protocol.primary_question)
+                if entity["entity"] in target_entities
+                for domain in entity["domains"]
+            ]
+        gaps.append(CoverageGap(
+            dimension="query_branch",
+            topic=query,
+            branch_id=branch_id,
+            missing_family=missing_family,
+            required_authority=required_authority,
+            target_entities=target_entities,
+            target_domains=target_domains,
+            preferred_connectors=preferred_connectors,
+            minimum_novel_sources=1,
+            priority=0.70,
+        ))
+    if (
+        coverage.saturated_rounds < protocol.stopping_criteria.saturation_rounds
+        and (
+            coverage.query_branch_coverage
+            >= protocol.stopping_criteria.minimum_query_branch_coverage
+            or not any(gap.dimension == "query_branch" for gap in gaps)
+        )
+    ):
+        best_branch = next(iter(branch_result_counts), None)
+        gaps.append(CoverageGap(
+            dimension="query_branch",
+            topic=(
+                f"{protocol.primary_question} independent recent evidence "
+                f"saturation probe {coverage.saturated_rounds + 1}"
+            ),
+            branch_id=best_branch,
+            preferred_connectors=list(dict.fromkeys(
+                connector
+                for family in protocol.connectors.included_families
+                for connector in FAMILY_CONNECTORS.get(family, [])
+            )),
+            minimum_novel_sources=1,
+            priority=0.55,
+        ))
+    return gaps
+
+
+def recovery_missions(
+    protocol: ResearchProtocol,
+    gaps: list[CoverageGap],
+    attempted_signatures: set[str],
+) -> list[SearchMission]:
+    missions: list[SearchMission] = []
+    for gap in sorted(gaps, key=lambda item: item.priority, reverse=True):
+        domains = gap.target_domains or [""]
+        for domain in domains[:2]:
+            connector_ids = gap.preferred_connectors or ["agentsearch_web"]
+            seed_registry = (
+                CODE_SEED_URLS
+                if gap.missing_family == SourceFamily.CODE_DATA
+                else (
+                    OFFICIAL_SEED_URLS
+                    if gap.missing_family == SourceFamily.OFFICIAL_LEGAL
+                    or gap.dimension == "authority"
+                    else {}
+                )
+            )
+            seed_urls = [
+                url
+                for entity in gap.target_entities
+                for url in seed_registry.get(entity, [])
+                if not domain or domain in url
+            ]
+            query_suffix = {
+                "authority": "official documentation security authentication",
+                "source_family": "primary source evidence",
+                "claim_support": "independent evidence limitations",
+                "counterevidence": "counter evidence",
+                "query_branch": "evidence",
+                "version": "latest version",
+            }[gap.dimension]
+            query = f"{gap.topic} {query_suffix}"
+            mission = SearchMission(
+                gap_id=gap.id,
+                branch_id=gap.branch_id or f"gap:{gap.id}",
+                query=query,
+                connector_ids=connector_ids,
+                seed_urls=seed_urls,
+                target_entities=gap.target_entities,
+                domain_allowlist=[domain] if domain else [],
+                required_family=gap.missing_family,
+                required_authority=(
+                    AuthorityLevel.PRIMARY
+                    if gap.missing_family == SourceFamily.CODE_DATA
+                    and gap.required_authority == AuthorityLevel.ANY
+                    else gap.required_authority
+                ),
+                result_limit=min(10, protocol.budget.results_per_connector),
+                acquisition_slots=min(2, gap.minimum_novel_sources),
+            )
+            signature = mission_signature(mission)
+            if signature in attempted_signatures:
+                continue
+            missions.append(mission)
+            attempted_signatures.add(signature)
+    return missions[:10]
+
+
+def mission_signature(mission: SearchMission) -> str:
+    return (
+        f"{mission.query}|"
+        f"{','.join(mission.domain_allowlist)}|{','.join(mission.connector_ids)}|"
+        f"{','.join(str(url) for url in mission.seed_urls)}|"
+        f"{','.join(mission.target_entities)}"
+    )
+
+
+def matches_target_entities(value: str, target_entities: list[str]) -> bool:
+    normalized = " ".join(value.lower().replace("-", " ").replace("_", " ").split())
+    return any(
+        alias in normalized
+        for entity in target_entities
+        for alias in ENTITY_ALIASES.get(entity, (entity.lower(),))
+    )
+
+
+def select_mission_balanced_candidates(
+    candidates: list[ConnectorCandidate],
+    missions: list[SearchMission],
+    limit: int,
+) -> list[ConnectorCandidate]:
+    """Reserve acquisition capacity across missions before filling by global rank."""
+    if limit <= 0:
+        return []
+    selected: list[ConnectorCandidate] = []
+    selected_ids: set[str] = set()
+    for mission in missions:
+        taken = 0
+        for candidate in candidates:
+            if candidate.id in selected_ids:
+                continue
+            if mission.branch_id not in candidate.metadata.get("query_branches", []):
+                continue
+            selected.append(candidate)
+            selected_ids.add(candidate.id)
+            taken += 1
+            if len(selected) >= limit:
+                return selected
+            if taken >= mission.acquisition_slots:
+                break
+    for candidate in candidates:
+        if candidate.id in selected_ids:
+            continue
+        selected.append(candidate)
+        if len(selected) >= limit:
+            break
+    return selected

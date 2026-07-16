@@ -29,16 +29,25 @@ class AgentSearchConnector(SourceConnector):
         self.domain = domain
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
+        return await self.search_with_domain(query, limit, self.domain)
+
+    async def search_with_domain(
+        self, query: str, limit: int = 20, domain: str | None = None,
+    ) -> list[ConnectorCandidate]:
         params: dict[str, Any] = {"q": query, "count": min(limit, 50), "mode": self.mode}
-        if self.domain:
-            params["domain"] = self.domain
+        if domain:
+            params["domain"] = domain
         response = await self.client.get(f"{self.settings.agentsearch_url}/search", params=params)
         response.raise_for_status()
         output = []
         for row in response.json().get("results", []):
             item = self.candidate(
                 title=row.get("title", ""), url=row.get("url", ""),
-                snippet=row.get("snippet", ""), metadata={"engines": row.get("engines", [])},
+                snippet=row.get("snippet", ""), metadata={
+                    "engines": row.get("engines", []),
+                    "authority": "official" if domain else "unknown",
+                    "searched_domain": domain,
+                },
             )
             if item:
                 output.append(item)

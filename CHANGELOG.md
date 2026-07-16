@@ -1,10 +1,38 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.4.0-dev`
+Platform sürümü: `v0.4.1-dev`
 
-Belge sürümü: `1.9`
+Belge sürümü: `2.0`
 
 Son güncelleme: `2026-07-16`
+
+## v0.4.1-dev — 2026-07-16
+
+- Coverage eksikleri `CoverageGap` nesnelerine, sonraki tur aramaları bütçeli
+  `SearchMission` görevlerine dönüştürüldü.
+- Kaynak ailesi, otorite, claim desteği ve cevapsız sorgu dalı için ayrı recovery
+  stratejileri eklendi.
+- Acquisition öncesi kalıcı corpus novelty filtresi ve tekrar bulunan kaynağı yeniden
+  indirmeden metadata/query-branch ile zenginleştirme eklendi.
+- Resmî-domain görevlerinde sonuç URL'sinin gerçekten izinli domaine ait olduğu doğrulandı.
+- MCP, Codex, Claude Code ve Telegram için doğrulanmış resmî doküman ve kaynak depo seed
+  registry'si eklendi.
+- İlk tur ve sonraki turlar için ayrı kaynak bütçeleri ile mission-balanced aday seçimi
+  eklendi.
+- Coverage yalnız gerçek edinilmiş kaynak ve kanıtlardan hesaplanmaya başladı; recovery
+  görevlerinin paydada sahte sorgu dalı oluşturması engellendi.
+- Yeni kaynak yoksa eski source version'ların chunk, embedding ve claim extraction
+  işlemlerine yeniden girmesi engellendi.
+- Ulaşılamayan Zotero ve anahtarsız/degraded connector'lar her arama çağrısında hata
+  üretmek yerine health preflight ile atlanıyor.
+- Prompt-injection benzeri discovery başlıkları karantinaya alınıyor; named-product
+  araştırmalarında alakasız official/legal sonuçlar coverage'a giremiyor.
+- Akademik/web ve code/data aileleri için ayrı coverage eligibility eşikleri eklendi.
+- `raw` modu claim extraction ve model sentezini gerçekten atlıyor; MCP ve Telegram
+  output mode seçimi protokole taşınıyor.
+- Canlı doğrulama run'ı `01KXNFSF8B53543WY39NGJNNE4`, 14 kaynakla aile coverage `1.0`,
+  sorgu dalı coverage `0.9167`, otorite coverage `1.0` ve doygunluk `1` üreterek
+  `completed` durumunda bitti.
 
 ## v0.4.0-dev — 2026-07-16
 

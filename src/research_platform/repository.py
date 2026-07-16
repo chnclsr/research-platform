@@ -13,7 +13,7 @@ from .db import (
 )
 from .normalization import canonicalize_url
 from .schemas import (
-    AcquiredDocument, CoverageMetrics, ExtractedClaim, Passage, ResearchProtocol,
+    AcquiredDocument, ConnectorCandidate, CoverageMetrics, ExtractedClaim, Passage, ResearchProtocol,
     RunStatus, RunView, SourceFamily, new_id,
 )
 from .relevance import evidence_entailment
@@ -222,6 +222,51 @@ class Repository:
 
     async def list_sources(self, run_id: str) -> list[SourceRow]:
         return list(await self.session.scalars(select(SourceRow).where(SourceRow.run_id == run_id)))
+
+    async def filter_novel_candidates(
+        self, run_id: str, candidates: list[ConnectorCandidate],
+    ) -> tuple[list[ConnectorCandidate], list[dict[str, str]]]:
+        existing = await self.list_sources(run_id)
+        by_dedupe_key = {source.dedupe_key: source for source in existing}
+        by_url = {canonicalize_url(source.url): source for source in existing}
+        by_persistent_id = {
+            source.persistent_id.lower(): source
+            for source in existing if source.persistent_id
+        }
+        novel: list[ConnectorCandidate] = []
+        rejected: list[dict[str, str]] = []
+        enriched = False
+        for candidate in candidates:
+            key = candidate_dedupe_key(candidate)[:512]
+            canonical = canonicalize_url(str(candidate.url))
+            persistent = (candidate.persistent_id or "").lower()
+            source = (
+                by_dedupe_key.get(key)
+                or by_url.get(canonical)
+                or (by_persistent_id.get(persistent) if persistent else None)
+            )
+            if source is not None:
+                metadata = dict(source.metadata_json or {})
+                branches = list(metadata.get("query_branches") or [])
+                for branch in candidate.metadata.get("query_branches", []):
+                    if branch not in branches:
+                        branches.append(branch)
+                        enriched = True
+                metadata["query_branches"] = branches
+                if (
+                    candidate.metadata.get("authority") == "official"
+                    and metadata.get("authority") != "official"
+                ):
+                    metadata["authority"] = "official"
+                    enriched = True
+                if enriched:
+                    source.metadata_json = metadata
+                rejected.append({"url": str(candidate.url), "reason": "existing_source"})
+                continue
+            novel.append(candidate)
+        if enriched:
+            await self.session.commit()
+        return novel, rejected
 
     async def list_source_versions(self, run_id: str) -> list[tuple[SourceRow, SourceVersionRow]]:
         rows = await self.session.execute(

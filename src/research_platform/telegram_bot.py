@@ -89,6 +89,7 @@ class TelegramResearchBot:
                 run = await self.gateway.start(ResearchProtocol(
                     title=question[:120],
                     primary_question=question,
+                    output_mode=mode.value,
                 ))
                 await self._send_message(
                     client,

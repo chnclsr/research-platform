@@ -1,6 +1,8 @@
+import pytest
+
 from research_platform.coverage import calculate_coverage
 from research_platform.schemas import (
-    ConnectorSelection, ResearchProtocol, SourceFamily,
+    AuthorityLevel, ConnectorSelection, ResearchProtocol, SourceFamily,
 )
 
 
@@ -39,3 +41,28 @@ def test_invalid_protocol_rejects_unknown_fields():
     else:
         raise AssertionError("Unknown protocol field was accepted")
 
+
+def test_protocol_rejects_impossible_family_target_budget():
+    with pytest.raises(ValueError, match="require at least 4 sources"):
+        ResearchProtocol(
+            title="Impossible protocol",
+            primary_question="Can this impossible source budget be accepted?",
+            connectors={
+                "profile": "custom",
+                "included_families": ["web", "academic"],
+            },
+            family_targets={
+                "web": {"minimum_sources": 2},
+                "academic": {"minimum_sources": 2},
+            },
+            budget={"max_sources": 3},
+        )
+
+
+def test_official_documentation_question_infers_strict_authority():
+    protocol = ResearchProtocol(
+        title="Official source protocol",
+        primary_question="Codex için resmi dokümantasyon nasıl kullanılmalı?",
+    )
+    assert protocol.authority_policy.minimum_authority == AuthorityLevel.OFFICIAL
+    assert protocol.authority_policy.strict_for_major_claims is True

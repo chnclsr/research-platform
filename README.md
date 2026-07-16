@@ -1,14 +1,17 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.4.0-dev`
+Platform sürümü: `v0.4.1-dev`
 
-Belge sürümü: `2.0`
+Belge sürümü: `2.1`
 
 Son güncelleme: `2026-07-16`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 
 Codex, Claude ve Telegram erişim mimarisi: `AGENT_GATEWAY_ARCHITECTURE_REPORT.md`.
+
+Coverage recovery uygulaması ve canlı doğrulaması:
+`COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md`.
 
 Güncel Qwen 4B nesil karşılaştırması: `QWEN_4B_GENERATION_BENCHMARK_REPORT.md`.
 
@@ -38,7 +41,9 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 - `embeddinggemma:300m-qat-q4_0` ile yerel embedding; model yoksa lexical fallback.
 - Passage seviyesinde claim extraction ve claim–quote entailment doğrulaması.
 - Kaynak sürümü, SHA-256, acquisition zinciri ve provenance.
-- Claim/evidence ledger, coverage döngüsü, audit ve adversarial review.
+- Yapısal coverage gap teşhisi, görev-temelli recovery, acquisition öncesi novelty filtresi,
+  resmî-domain doğrulaması ve doygunluk kontrollü çok turlu toplama.
+- Claim/evidence ledger, audit ve adversarial review.
 - 14 denetlenebilir çıktı; ham veri, sonuç ve birleşik ZIP teslimatları.
 - Codex ve Claude için MCP araç katmanı.
 - Allowlist korumalı Telegram araştırma botu.

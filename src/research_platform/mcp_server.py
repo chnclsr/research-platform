@@ -42,13 +42,13 @@ async def start_research(
     protocol = ResearchProtocol(
         title=title,
         primary_question=question,
+        output_mode=output_mode,
         budget=ResearchBudget(
             max_wall_minutes=max_wall_minutes,
             max_sources=max_sources,
         ),
     )
     run = await _client().start(protocol)
-    run["requested_output_mode"] = output_mode
     return run
 
 
