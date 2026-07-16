@@ -65,6 +65,9 @@ class ConnectorSelection(BaseModel):
     excluded_connectors: list[str] = Field(default_factory=list)
     included_connectors: list[str] = Field(default_factory=list)
     trusted_domains: list[str] = Field(default_factory=list)
+    zotero_collections: list[str] = Field(default_factory=list)
+    zotero_tags: list[str] = Field(default_factory=list)
+    citation_depth: int = Field(1, ge=0, le=2)
 
     @model_validator(mode="after")
     def apply_profile(self) -> "ConnectorSelection":
@@ -146,6 +149,47 @@ class ConnectorCandidate(BaseModel):
     published_at: datetime | None = None
     authors: list[str] = Field(default_factory=list)
     publisher: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ScholarlyIdentity(BaseModel):
+    doi: str | None = None
+    openalex_id: str | None = None
+    semantic_scholar_id: str | None = None
+    corpus_id: str | None = None
+    arxiv_id: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    isbn: str | None = None
+    zotero_item_key: str | None = None
+
+
+class ZoteroSyncRequest(BaseModel):
+    mode: Literal["local", "web"] = "local"
+    query: str = ""
+    collections: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    limit: int = Field(100, ge=1, le=500)
+
+
+class ZoteroSyncResult(BaseModel):
+    run_id: str
+    connector_id: str
+    discovered: int
+    imported: int
+    skipped: int
+    library_version: int | None = None
+
+
+class CitationGraphEdge(BaseModel):
+    source_id: str
+    target_source_id: str | None = None
+    target_persistent_id: str | None = None
+    relation_type: Literal[
+        "cites", "cited_by", "is_version_of", "is_preprint_of",
+        "has_attachment", "supplements", "related_zotero_item",
+    ]
+    provider: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

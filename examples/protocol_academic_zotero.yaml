@@ -1,0 +1,27 @@
+# Research Platform v0.3.0 | Örnek sürümü: 1.0 | 2026-07-16
+title: Akademik ve yerel kütüphane araştırması
+primary_question: Araştırma sorusunu buraya yazın.
+languages:
+  - tr
+  - en
+report_language: tr
+connectors:
+  profile: custom
+  included_families:
+    - academic
+  included_connectors:
+    - openalex
+    - semantic_scholar
+    - crossref
+    - arxiv
+    - zotero_local
+  zotero_collections: []
+  zotero_tags:
+    - high-priority
+  citation_depth: 1
+budget:
+  max_rounds: 4
+  max_sources: 150
+  max_wall_minutes: 45
+  results_per_connector: 20
+  acquisition_concurrency: 4

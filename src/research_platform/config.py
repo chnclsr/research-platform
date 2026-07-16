@@ -49,6 +49,21 @@ class Settings(BaseSettings):
     github_token: str | None = None
     epo_ops_key: str | None = None
     epo_ops_secret: str | None = None
+    openalex_api_key: str | None = None
+    openalex_mailto: str | None = None
+    semantic_scholar_api_key: str | None = None
+    semantic_scholar_rps: float = Field(1.0, gt=0, le=100)
+    semantic_scholar_citation_limit: int = Field(20, ge=0, le=500)
+    zotero_local_url: str = "http://localhost:23119/api"
+    zotero_local_enabled: bool = True
+    zotero_api_key: str | None = None
+    zotero_user_id: str | None = None
+    zotero_group_id: str | None = None
+    zotero_include_notes: bool = True
+    zotero_include_attachments: bool = True
+    paperqa2_enabled: bool = False
+    paperqa2_shadow_mode: bool = True
+    paperqa2_max_documents: int = Field(20, ge=1, le=100)
     api_token: str = "change-me-local-token"
     user_agent: str = "ResearchPlatform/0.1 (local research; contact=local)"
 

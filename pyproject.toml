@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "research-platform"
-version = "0.2.7"
+version = "0.3.0"
 description = "Local-first, multi-source evidence research platform"
 requires-python = ">=3.11"
 dependencies = [
@@ -29,6 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+academic = [
+  "paper-qa>=5",
+]
 dev = [
   "aiosqlite>=0.20,<1",
   "pytest>=8.3,<9",

@@ -23,9 +23,11 @@ from .passages import (
     chunk_document, merge_passage_claims, neighbor_context, passage_payload, relevant_sentence_claims,
     retrieve_passages,
 )
+from .paperqa_adapter import PaperQA2EvidenceEngine
 from .normalization import canonicalize_url
 from .relevance import claim_relevance, filter_and_rank_candidates
 from .repository import Repository
+from .scholarly import candidate_dedupe_key
 from .schemas import (
     AcquiredDocument, ConnectorCandidate, CoverageMetrics, ExtractedClaim, Passage, ResearchProtocol,
     RunStatus,
@@ -203,9 +205,25 @@ class ResearchPipeline:
                 started = time.perf_counter()
                 try:
                     rows = await connector.search(query, limit)
-                    for row in rows:
+                    if (
+                        protocol.connectors.citation_depth > 0
+                        and "citations" in getattr(connector, "capabilities", ())
+                    ):
+                        for row in rows[: min(5, len(rows))]:
+                            relations = await connector.fetch_citations(row)
+                            relation_rows = [
+                                relation for relation in relations
+                                if relation.get("relation_type")
+                            ]
+                            if relation_rows:
+                                row.metadata.setdefault("citation_relations", []).extend(
+                                    relation_rows
+                                )
+                    for rank, row in enumerate(rows, 1):
                         row.metadata["query_branch"] = query
                         row.metadata["query_branches"] = [query]
+                        row.metadata["provider_rank"] = rank
+                        row.metadata["federated_rrf_score"] = 1 / (60 + rank)
                     connector_metrics.append({
                         "connector": connector.id, "query": query,
                         "latency_seconds": round(time.perf_counter() - started, 4),
@@ -230,18 +248,39 @@ class ResearchPipeline:
             )
         unique: dict[str, ConnectorCandidate] = {}
         for candidate in (item for batch in batches for item in batch):
-            key = canonicalize_url(str(candidate.url))
+            key = candidate_dedupe_key(candidate)
             if key in unique:
                 current = unique[key]
                 branches = current.metadata.setdefault("query_branches", [])
                 for branch in candidate.metadata.get("query_branches", []):
                     if branch not in branches:
                         branches.append(branch)
+                snapshots = current.metadata.setdefault("provider_snapshots", {})
+                snapshots.update(candidate.metadata.get("provider_snapshots", {}))
+                current.metadata["federated_rrf_score"] = (
+                    float(current.metadata.get("federated_rrf_score", 0.0))
+                    + float(candidate.metadata.get("federated_rrf_score", 0.0))
+                )
+                current.metadata.setdefault("alternate_locations", []).append(str(candidate.url))
+                for relation in candidate.metadata.get("citation_relations", []):
+                    if relation not in current.metadata.setdefault("citation_relations", []):
+                        current.metadata["citation_relations"].append(relation)
                 prefer_candidate = bool(candidate.metadata.get("exact_repository")) or (
                     candidate.connector_id == "github" and current.connector_id != "github"
                 )
+                prefer_candidate = prefer_candidate or (
+                    bool(candidate.metadata.get("inline_fulltext"))
+                    and not current.metadata.get("inline_fulltext")
+                )
                 if prefer_candidate:
+                    candidate.metadata["provider_snapshots"] = snapshots
                     candidate.metadata["query_branches"] = branches
+                    candidate.metadata["federated_rrf_score"] = current.metadata[
+                        "federated_rrf_score"
+                    ]
+                    candidate.metadata["alternate_locations"] = current.metadata[
+                        "alternate_locations"
+                    ]
                     unique[key] = candidate
             else:
                 unique[key] = candidate
@@ -453,6 +492,25 @@ class ResearchPipeline:
                 "score": passage.retrieval_score, "questions": passage.matched_questions,
             } for passage in selected],
         })
+        if self.settings.paperqa2_enabled and self.settings.paperqa2_shadow_mode:
+            shadow_documents = [
+                {
+                    "source_version_id": passage.source_version_id,
+                    "content": passage.text,
+                    "section_path": passage.section_path,
+                }
+                for passage in passages
+            ]
+            try:
+                shadow = await PaperQA2EvidenceEngine(self.settings).retrieve_evidence(
+                    protocol.primary_question, shadow_documents,
+                )
+            except Exception as exc:
+                shadow = {
+                    "engine": "paperqa2", "available": False,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+            await self.repo.event(state["run_id"], "paperqa2_shadow", shadow)
         selected_payloads = []
         for passage in selected:
             payload = passage_payload(passage)
@@ -479,6 +537,8 @@ class ResearchPipeline:
             async with semaphore:
                 payload = documents_by_version[passage.source_version_id]
                 doc = AcquiredDocument.model_validate(payload)
+                if doc.candidate.metadata.get("evidence_eligible") is False:
+                    return []
                 try:
                     model_claims = await extract_claims(
                         self.llm, doc, content_override=passage.text,

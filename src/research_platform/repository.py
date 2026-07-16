@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import (
-    ArtifactRow, CheckpointRow, ClaimRow, EventRow, EvidenceRow, FrontierRow, PassageRow,
-    ResearchRunRow, SourceRow, SourceVersionRow,
+    ArtifactRow, CheckpointRow, ClaimRow, ConnectorSyncCursorRow, EventRow, EvidenceRow,
+    FrontierRow, PassageRow, ResearchRunRow, SourceRelationRow, SourceRow, SourceVersionRow,
 )
 from .normalization import canonicalize_url
 from .schemas import (
@@ -17,6 +17,7 @@ from .schemas import (
     RunStatus, RunView, SourceFamily, new_id,
 )
 from .relevance import evidence_entailment
+from .scholarly import candidate_dedupe_key, scholarly_identity, title_fingerprint
 
 
 class Repository:
@@ -89,8 +90,10 @@ class Repository:
 
     async def save_document(self, run_id: str, document: AcquiredDocument) -> tuple[SourceRow, SourceVersionRow]:
         c = document.candidate
+        persisted_metadata = dict(c.metadata)
+        persisted_metadata.pop("inline_fulltext", None)
         canonical = document.canonical_url or canonicalize_url(str(c.url))
-        dedupe_key = (c.persistent_id or canonical or document.content_hash or str(c.url)).lower()[:512]
+        dedupe_key = candidate_dedupe_key(c)[:512]
         source = await self.session.scalar(
             select(SourceRow).where(SourceRow.run_id == run_id, SourceRow.dedupe_key == dedupe_key)
         )
@@ -99,19 +102,48 @@ class Repository:
                 select(SourceRow).where(SourceRow.run_id == run_id).limit(500)
             ))
             normalized_title = " ".join(c.title.lower().split())
+            identity = scholarly_identity(c.metadata, c.persistent_id)
+            publication_year = c.metadata.get("publication_year") or c.metadata.get("year")
+            fingerprint = title_fingerprint(c.title, c.authors, publication_year)
             source = next((
                 row for row in candidates
-                if SequenceMatcher(None, normalized_title, " ".join(row.title.lower().split())).ratio() >= 0.96
-                and canonicalize_url(row.url) == canonical
+                if (
+                    SequenceMatcher(
+                        None, normalized_title, " ".join(row.title.lower().split())
+                    ).ratio() >= 0.96
+                    and (
+                        canonicalize_url(row.url) == canonical
+                        or row.metadata_json.get("title_fingerprint") == fingerprint
+                    )
+                )
             ), None)
         if source is None:
+            identity = scholarly_identity(c.metadata, c.persistent_id)
+            publication_year = c.metadata.get("publication_year") or c.metadata.get("year")
             source = SourceRow(
                 id=new_id(), run_id=run_id, dedupe_key=dedupe_key, family=c.family.value,
                 connector_id=c.connector_id, title=c.title, url=canonical,
-                persistent_id=c.persistent_id, metadata_json=c.metadata,
+                persistent_id=identity.doi or c.persistent_id,
+                metadata_json={
+                    **persisted_metadata,
+                    "scholarly_identity": identity.model_dump(exclude_none=True),
+                    "title_fingerprint": title_fingerprint(
+                        c.title, c.authors, publication_year
+                    ),
+                },
             )
             self.session.add(source)
             await self.session.flush()
+        else:
+            updated_metadata = dict(source.metadata_json or {})
+            snapshots = dict(updated_metadata.get("provider_snapshots") or {})
+            snapshots.update(persisted_metadata.get("provider_snapshots", {}))
+            updated_metadata["provider_snapshots"] = snapshots
+            alternate_locations = list(updated_metadata.get("alternate_locations") or [])
+            if str(c.url) not in alternate_locations:
+                alternate_locations.append(str(c.url))
+            updated_metadata["alternate_locations"] = alternate_locations
+            source.metadata_json = updated_metadata
         version = await self.session.scalar(
             select(SourceVersionRow).where(
                 SourceVersionRow.source_id == source.id,
@@ -134,8 +166,59 @@ class Repository:
                 },
             )
             self.session.add(version)
+        await self.save_source_relations(run_id, source.id, c.metadata.get("citation_relations", []))
         await self.session.commit()
         return source, version
+
+    async def save_source_relations(
+        self, run_id: str, source_id: str, relations: list[dict[str, Any]],
+    ) -> None:
+        for relation in relations:
+            target = str(relation.get("target_persistent_id") or "").strip()
+            if not target:
+                continue
+            relation_type = str(relation.get("relation_type") or "").strip()
+            provider = str(relation.get("provider") or "unknown")
+            existing = await self.session.scalar(select(SourceRelationRow).where(
+                SourceRelationRow.source_id == source_id,
+                SourceRelationRow.target_persistent_id == target,
+                SourceRelationRow.relation_type == relation_type,
+                SourceRelationRow.provider == provider,
+            ))
+            if existing is None:
+                self.session.add(SourceRelationRow(
+                    id=new_id(), run_id=run_id, source_id=source_id,
+                    target_persistent_id=target, relation_type=relation_type,
+                    provider=provider, metadata_json=relation.get("metadata") or {},
+                ))
+
+    async def list_source_relations(self, run_id: str) -> list[SourceRelationRow]:
+        return list(await self.session.scalars(
+            select(SourceRelationRow).where(SourceRelationRow.run_id == run_id)
+        ))
+
+    async def get_sync_cursor(self, connector_id: str, scope_key: str) -> ConnectorSyncCursorRow | None:
+        return await self.session.scalar(select(ConnectorSyncCursorRow).where(
+            ConnectorSyncCursorRow.connector_id == connector_id,
+            ConnectorSyncCursorRow.scope_key == scope_key,
+        ))
+
+    async def set_sync_cursor(
+        self, connector_id: str, scope_key: str, cursor_value: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> ConnectorSyncCursorRow:
+        row = await self.get_sync_cursor(connector_id, scope_key)
+        if row is None:
+            row = ConnectorSyncCursorRow(
+                id=new_id(), connector_id=connector_id, scope_key=scope_key,
+                cursor_value=cursor_value, metadata_json=metadata or {},
+            )
+            self.session.add(row)
+        else:
+            row.cursor_value = cursor_value
+            row.metadata_json = metadata or row.metadata_json
+        await self.session.commit()
+        return row
 
     async def list_sources(self, run_id: str) -> list[SourceRow]:
         return list(await self.session.scalars(select(SourceRow).where(SourceRow.run_id == run_id)))

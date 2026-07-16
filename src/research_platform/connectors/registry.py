@@ -10,7 +10,9 @@ from .implementations import (
     DomainAgentSearchConnector, EpoOpsConnector, EuropePmcConnector, FederalRegisterConnector,
     GdeltConnector, GitHubConnector, HuggingFaceConnector, IetfConnector, OpenAlexConnector,
     OpenLibraryConnector, SecEdgarConnector, WaybackConnector, ZenodoConnector,
+    SemanticScholarConnector,
 )
+from .zotero import ZoteroConnector
 from ..config import Settings
 from ..schemas import ConnectorHealth, ConnectorSelection, SourceFamily
 
@@ -45,8 +47,10 @@ class ConnectorRegistry:
 def build_registry(settings: Settings, client: httpx.AsyncClient) -> ConnectorRegistry:
     common = {"settings": settings, "client": client}
     return ConnectorRegistry([
-        AgentSearchConnector(**common), OpenAlexConnector(**common), CrossrefConnector(**common),
+        AgentSearchConnector(**common), OpenAlexConnector(**common),
+        SemanticScholarConnector(**common), CrossrefConnector(**common),
         ArxivConnector(**common), EuropePmcConnector(**common),
+        ZoteroConnector(**common, mode="local"), ZoteroConnector(**common, mode="web"),
         OpenLibraryConnector(**common), OpenAlexConnector(**common, work_type="dissertation"),
         EpoOpsConnector(**common), IetfConnector(**common),
         DomainAgentSearchConnector(**common, connector_id="standards_web", family=SourceFamily.PATENTS_STANDARDS),
@@ -61,4 +65,3 @@ def build_registry(settings: Settings, client: httpx.AsyncClient) -> ConnectorRe
         ZenodoConnector(**common, connector_id="zenodo_grey", family=SourceFamily.GREY_LITERATURE),
         DomainAgentSearchConnector(**common, connector_id="institutional_grey", family=SourceFamily.GREY_LITERATURE),
     ])
-

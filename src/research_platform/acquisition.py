@@ -75,6 +75,30 @@ class AcquisitionService:
     async def acquire(self, candidate: ConnectorCandidate) -> AcquiredDocument:
         url = str(candidate.url)
         tried: list[str] = []
+        inline = candidate.metadata.get("inline_fulltext")
+        if isinstance(inline, str) and inline.strip() and candidate.connector_id.startswith("zotero_"):
+            tried.append("zotero_fulltext")
+            return self._document(
+                candidate, inline, "zotero_fulltext", tried,
+                candidate.metadata.get("inline_content_type", "text/plain"),
+                document_type="html"
+                if candidate.metadata.get("inline_content_type") == "text/html" else "text",
+                final_url=url,
+            )
+        if candidate.connector_id.startswith("zotero_"):
+            tried.append("zotero_metadata")
+            candidate.metadata["evidence_eligible"] = False
+            content = "\n".join(filter(None, [
+                f"# {candidate.title}",
+                candidate.snippet,
+                f"Authors: {', '.join(candidate.authors)}" if candidate.authors else "",
+                f"Publisher: {candidate.publisher}" if candidate.publisher else "",
+                f"Persistent ID: {candidate.persistent_id}" if candidate.persistent_id else "",
+            ]))
+            return self._document(
+                candidate, content, "zotero_metadata", tried, "text/plain",
+                document_type="text", final_url=url,
+            )
         try:
             await validate_public_url(url, self.settings.allow_private_networks)
         except Exception as exc:

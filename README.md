@@ -1,8 +1,8 @@
 # Research Platform V1
 
-Platform sürümü: `v0.2.7`
+Platform sürümü: `v0.3.0`
 
-Belge sürümü: `1.8`
+Belge sürümü: `1.9`
 
 Son güncelleme: `2026-07-16`
 
@@ -25,6 +25,10 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 
 - Protokol kontrollü ve bütçeli araştırma işleri.
 - Dokuz kaynak ailesi ve credential-aware connector registry.
+- OpenAlex + Semantic Scholar federated akademik keşfi ve DOI-temelli tekilleştirme.
+- Zotero Local/Web API üzerinden koleksiyon, attachment ve tam-metin corpus aktarımı.
+- PostgreSQL citation graph, provider snapshot ve incremental Zotero sync cursor kayıtları.
+- PaperQA2 için varsayılan kapalı, opsiyonel shadow evidence backend'i.
 - PostgreSQL düğüm checkpoint'leriyle pause/resume/cancel.
 - URL/redirect SSRF koruması ve ayrı Crawl4AI browser container'ı.
 - Uzun belgelerde yapı-duyarlı passage üretimi; bölüm ve özgün karakter konumu korunur.
@@ -94,6 +98,34 @@ Invoke-RestMethod http://localhost:8000/v1/connectors `
 ## Connector profilleri
 
 `core`: web, academic, official/legal ve code/data. `all`: bütün aileler. EPO OPS gibi credential isteyen connector'lar anahtar yoksa `/v1/connectors` sonucunda disabled görünür; araştırmayı durdurmaz.
+
+Akademik connector'lar:
+
+- `openalex`: Güncel API anahtarı gerektirir; DOI, abstract, OA location, version ve
+  reference metadata sağlar.
+- `semantic_scholar`: Anahtarsız çalışabilir; üretim için API key ve 1 RPS başlangıç
+  profili önerilir.
+- `zotero_local`: Zotero masaüstünün `localhost:23119/api` arayüzünü kullanır.
+- `zotero_web`: `ZOTERO_USER_ID` veya `ZOTERO_GROUP_ID`; özel kütüphane için API key ister.
+
+Zotero corpus aktarımı:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/v1/zotero/sync `
+  -Method Post `
+  -Headers @{ Authorization = "Bearer $token" } `
+  -ContentType "application/json" `
+  -Body '{"mode":"local","collections":[],"tags":["high-priority"],"limit":100}'
+```
+
+PaperQA2 kurulumu opsiyoneldir:
+
+```powershell
+.\.venv\Scripts\pip.exe install -e ".[academic]"
+```
+
+`PAPERQA2_ENABLED=true` ve `PAPERQA2_SHADOW_MODE=true` olduğunda sonuçları native
+pipeline'ın yerine geçmeden `paperqa2_shadow` audit event'i olarak kaydeder.
 
 ## Geliştirme
 

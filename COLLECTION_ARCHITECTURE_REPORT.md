@@ -1,8 +1,10 @@
 # Bilgi Toplama Mimarisi — Kısa Rapor
 
-Platform sürümü: `v0.2.0`  
-Belge sürümü: `1.0`  
-Son güncelleme: `2026-07-15`
+Platform sürümü: `v0.3.0`
+
+Belge sürümü: `1.1`
+
+Son güncelleme: `2026-07-16`
 
 ## Amaç
 
@@ -13,6 +15,8 @@ Mevcut connector, AgentSearch, Crawl4AI, güvenlik, yapısal chunking ve kanıt 
 ```text
 QUERY → decomposition / expansion
   ├─ connector + AgentSearch web discovery
+  ├─ OpenAlex + Semantic Scholar academic discovery
+  ├─ Zotero local/web library corpus
   └─ kalıcı yerel corpus (BM25 + embedding)
         ↓
 candidate fusion + protokol relevance filtresi
@@ -33,6 +37,19 @@ BM25 rank + vector rank → RRF → relevance/kalite/çeşitlilik reranker
         ↓
 evidence-ready passage ve /v1/corpus/search API
 ```
+
+## Akademik katman
+
+- OpenAlex DOI, abstract, OA location, version ve reference metadata sağlar.
+- Semantic Scholar DOI/S2/CorpusId eşleme, citation/reference traversal ve açık PDF
+  metadata sağlar.
+- Zotero yerel veya web kütüphanesindeki bibliographic item, attachment ve tam metni
+  corpus'a aktarır; kullanıcı notları evidence olarak kullanılmaz.
+- Aynı çalışma DOI/PMID/arXiv/OpenAlex/S2 kimlikleri üzerinden tek `Source` altında
+  birleştirilir; sağlayıcı cevapları ayrı provenance snapshot'ları olarak korunur.
+- Citation ve sürüm ilişkileri PostgreSQL `source_relations` tablosunda saklanır.
+- PaperQA2 yalnız opsiyonel shadow evidence backend'idir; native retrieval sonucunun
+  yerine geçmez.
 
 ## Eklenenler
 

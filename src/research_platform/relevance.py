@@ -4,7 +4,7 @@ import re
 from collections import defaultdict, deque
 from urllib.parse import urlparse
 
-from .schemas import ConnectorCandidate, ResearchProtocol
+from .schemas import ConnectorCandidate, ResearchProtocol, SourceFamily
 
 
 STOPWORDS = {
@@ -72,6 +72,30 @@ def candidate_relevance(candidate: ConnectorCandidate, protocol: ResearchProtoco
     if trusted and domain_matches(str(candidate.url), trusted):
         score = min(1.0, score + 0.35)
         reasons.append("trusted_domain")
+    if candidate.family == SourceFamily.ACADEMIC:
+        metadata = candidate.metadata
+        if metadata.get("is_retracted"):
+            score = max(0.0, score - 0.30)
+            reasons.append("retracted_demoted")
+        if metadata.get("open_access_location") or metadata.get("inline_fulltext"):
+            score = min(1.0, score + 0.05)
+            reasons.append("full_text_available")
+        publication_types = {
+            str(value).lower() for value in metadata.get("publicationTypes", [])
+        }
+        work_type = str(metadata.get("type") or "").lower()
+        if work_type in {"review", "systematic-review", "meta-analysis"} or (
+            publication_types & {"review", "meta-analysis"}
+        ):
+            score = min(1.0, score + 0.05)
+            reasons.append("evidence_synthesis_type")
+        if set(protocol.connectors.zotero_tags).intersection(metadata.get("tags", [])):
+            score = min(1.0, score + 0.10)
+            reasons.append("zotero_priority_tag")
+        rrf_score = float(metadata.get("federated_rrf_score", 0.0))
+        if rrf_score:
+            score = min(1.0, score + min(0.10, rrf_score))
+            reasons.append("federated_rrf")
     return round(score, 4), reasons
 
 

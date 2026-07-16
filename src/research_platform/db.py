@@ -90,6 +90,42 @@ class SourceVersionRow(Base):
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class SourceRelationRow(Base):
+    __tablename__ = "source_relations"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_id", "target_persistent_id", "relation_type", "provider",
+            name="uq_source_relation_identity",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    source_id: Mapped[str] = mapped_column(String(26), index=True)
+    target_source_id: Mapped[str | None] = mapped_column(String(26), index=True)
+    target_persistent_id: Mapped[str | None] = mapped_column(String(512), index=True)
+    relation_type: Mapped[str] = mapped_column(String(40), index=True)
+    provider: Mapped[str] = mapped_column(String(80))
+    metadata_json: Mapped[dict] = mapped_column("metadata", json_type(), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConnectorSyncCursorRow(Base):
+    __tablename__ = "connector_sync_cursors"
+    __table_args__ = (
+        UniqueConstraint("connector_id", "scope_key", name="uq_connector_sync_scope"),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    connector_id: Mapped[str] = mapped_column(String(100), index=True)
+    scope_key: Mapped[str] = mapped_column(String(512))
+    cursor_value: Mapped[str] = mapped_column(String(512))
+    metadata_json: Mapped[dict] = mapped_column("metadata", json_type(), default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class PassageRow(Base):
     __tablename__ = "passages"
     __table_args__ = (

@@ -18,8 +18,13 @@ from .db import create_schema, get_session
 from .embeddings import EmbeddingClient
 from .passages import retrieve_passages
 from .repository import Repository
-from .schemas import ArtifactView, CorpusSearchRequest, ResearchRunCreate, RunStatus, RunView
+from .paperqa_adapter import paperqa2_health
+from .schemas import (
+    ArtifactView, CorpusSearchRequest, ResearchRunCreate, RunStatus, RunView,
+    SourceFamily, ZoteroSyncRequest, ZoteroSyncResult,
+)
 from .storage import ObjectStore
+from .zotero_sync import ZoteroSyncService
 
 
 @asynccontextmanager
@@ -44,7 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.2.0",
+    title="Research Platform API", version="0.3.0",
     description="Local-first, multi-source evidence research platform", lifespan=lifespan,
 )
 
@@ -225,7 +230,95 @@ async def download_artifact(run_id: str, name: str, repo: Repository = Depends(r
 @app.get("/v1/connectors", dependencies=[Depends(authorize)])
 async def list_connectors(request: Request) -> list[dict]:
     registry = build_registry(get_settings(), request.app.state.http)
-    return [h.model_dump(mode="json") for h in await registry.health()]
+    health = [h.model_dump(mode="json") for h in await registry.health()]
+    health.append(paperqa2_health(get_settings()))
+    return health
+
+
+@app.get("/v1/zotero/collections", dependencies=[Depends(authorize)])
+async def list_zotero_collections(mode: str, request: Request) -> list[dict]:
+    if mode not in {"local", "web"}:
+        raise HTTPException(status_code=422, detail="mode must be local or web")
+    connector = build_registry(get_settings(), request.app.state.http).get(f"zotero_{mode}")
+    health = await connector.health()
+    if not health.enabled or not health.healthy:
+        raise HTTPException(status_code=503, detail=health.detail)
+    return await connector.list_collections()
+
+
+@app.post(
+    "/v1/zotero/sync", response_model=ZoteroSyncResult,
+    dependencies=[Depends(authorize)],
+)
+async def sync_zotero(
+    body: ZoteroSyncRequest, request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> ZoteroSyncResult:
+    try:
+        return await ZoteroSyncService(
+            get_settings(), session, request.app.state.http
+        ).sync(body)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/citation-graph",
+    dependencies=[Depends(authorize)],
+)
+async def citation_graph(run_id: str, repo: Repository = Depends(repository)) -> dict:
+    await _required_run(run_id, repo)
+    sources = {source.id: source for source in await repo.list_sources(run_id)}
+    relations = await repo.list_source_relations(run_id)
+    return {
+        "nodes": [{
+            "id": source.id, "title": source.title, "persistent_id": source.persistent_id,
+            "connector_id": source.connector_id,
+        } for source in sources.values()],
+        "edges": [{
+            "source_id": relation.source_id,
+            "target_source_id": relation.target_source_id,
+            "target_persistent_id": relation.target_persistent_id,
+            "relation_type": relation.relation_type,
+            "provider": relation.provider,
+            "metadata": relation.metadata_json,
+        } for relation in relations],
+    }
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/academic-coverage",
+    dependencies=[Depends(authorize)],
+)
+async def academic_coverage(run_id: str, repo: Repository = Depends(repository)) -> dict:
+    await _required_run(run_id, repo)
+    academic = [
+        source for source in await repo.list_sources(run_id)
+        if source.family == SourceFamily.ACADEMIC.value
+    ]
+    providers = {
+        provider
+        for source in academic
+        for provider in (source.metadata_json.get("provider_snapshots") or {})
+    }
+    versions = await repo.list_source_versions(run_id)
+    full_text_source_ids = {
+        source.id for source, version in versions
+        if bool(version.content.strip()) and version.acquisition_method != "zotero_metadata"
+    }
+    return {
+        "academic_sources": len(academic),
+        "providers": sorted(providers),
+        "with_doi": sum(
+            bool((source.metadata_json.get("scholarly_identity") or {}).get("doi"))
+            for source in academic
+        ),
+        "with_full_text": sum(source.id in full_text_source_ids for source in academic),
+        "retracted": sum(
+            bool(source.metadata_json.get("is_retracted")) for source in academic
+        ),
+        "citation_edges": len(await repo.list_source_relations(run_id)),
+    }
 
 
 @app.post("/v1/corpus/search", dependencies=[Depends(authorize)])

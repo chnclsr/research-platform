@@ -1,10 +1,30 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.7`
+Platform sürümü: `v0.3.0`
 
-Belge sürümü: `1.7`
+Belge sürümü: `1.8`
 
 Son güncelleme: `2026-07-16`
+
+## v0.3.0 — 2026-07-16
+
+- OpenAlex connector'ı güncel API key, abstract reconstruction, OA location, version,
+  retraction ve citation relation metadata ile yenilendi.
+- Semantic Scholar Academic Graph connector'ı; DOI/S2/CorpusId eşleme, rate limiting,
+  açık PDF metadata ve citation/reference traversal ile eklendi.
+- Zotero Local API ve Web API connector'ları, attachment full-text, collection/tag
+  filtresi ve incremental library-version sync desteğiyle eklendi.
+- Zotero kullanıcı notları corpus'ta saklanabilse de bilimsel evidence extraction dışında
+  tutuldu.
+- DOI/PMID/PMCID/arXiv/OpenAlex/S2/Zotero kimliklerini birleştiren scholarly identity
+  katmanı ve provider snapshot kaydı eklendi.
+- PostgreSQL `source_relations` citation graph ve `connector_sync_cursors` tabloları
+  eklendi.
+- Federated akademik sonuçlarda RRF sinyali, açık tam metin, çalışma türü, retraction ve
+  Zotero priority-tag sinyalleri reranking'e eklendi.
+- Citation graph, academic coverage, Zotero collections ve Zotero sync API'leri eklendi.
+- PaperQA2 mevcut pipeline'ı değiştirmeyen, varsayılan kapalı optional shadow evidence
+  backend'i olarak eklendi.
 
 ## v0.2.7 — 2026-07-16
 
