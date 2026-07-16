@@ -202,19 +202,18 @@ class GPUMonitor:
                 output = subprocess.check_output(
                     [
                         "nvidia-smi",
-                        "--query-gpu=memory.used,utilization.gpu,power.draw",
+                        "--query-gpu=memory.used,utilization.gpu",
                         "--format=csv,noheader,nounits",
                     ],
                     text=True,
                     timeout=3,
                 ).strip().splitlines()[0]
-                memory, utilization, power = [part.strip() for part in output.split(",")[:3]]
+                memory, utilization = [part.strip() for part in output.split(",")[:2]]
                 self.samples.append(
                     {
                         "seconds": round(time.perf_counter() - start, 3),
                         "memory_mib": int(memory),
                         "utilization_percent": int(utilization),
-                        "power_watts": float(power),
                     }
                 )
             except Exception:
@@ -236,9 +235,6 @@ class GPUMonitor:
             "mean_active_gpu_utilization_percent": round(
                 sum(int(sample["utilization_percent"]) for sample in active) / max(1, len(active)),
                 2,
-            ),
-            "peak_power_watts": round(
-                max((float(sample["power_watts"]) for sample in self.samples), default=0.0), 2
             ),
         }
 
@@ -577,6 +573,7 @@ async def run_model(
     stop_loaded_models()
     return {
         "profile": asdict(profile),
+        "research_question": question,
         "research": {
             "budget_seconds": RESEARCH_BUDGET_SECONDS,
             "wall_seconds": round(research_elapsed, 3),
@@ -604,7 +601,7 @@ async def run_model(
 
 def blind_payload(result: dict[str, Any]) -> dict[str, Any]:
     return {
-        "research_question": result["research"]["plan"],
+        "research_question": result["research_question"],
         "queries": result["research"]["plan"].get("queries", []),
         "retrieved_document_ids": result["research"]["retrieval_metrics"][
             "retrieved_document_ids"
