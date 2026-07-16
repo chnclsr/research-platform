@@ -1,10 +1,19 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.2.5`
+Platform sürümü: `v0.2.6`
 
-Belge sürümü: `1.5`
+Belge sürümü: `1.6`
 
 Son güncelleme: `2026-07-16`
+
+## v0.2.6 — 2026-07-16
+
+- Sayısal model sıralaması yerine ham çıktıların uzman yorumuna dayanan nitel değerlendirme
+  metodolojisi önceden kilitlenmiş belge olarak eklendi.
+- Körleştirme, formatter ayrımı, tartışmalı gold etiketleri ve metodoloji ihlali kuralları
+  tanımlandı.
+- Önceki otomatik holdout'un model ve parser geliştirmesinde kullanıldığı için bağımsız
+  holdout sayılamayacağı belgelendi.
 
 ## v0.2.5 — 2026-07-16
 

@@ -1,16 +1,19 @@
 # Research Platform V1
 
-Platform sürümü: `v0.2.5`
+Platform sürümü: `v0.2.6`
 
-Belge sürümü: `1.6`
+Belge sürümü: `1.7`
 
-Son güncelleme: `2026-07-15`
+Son güncelleme: `2026-07-16`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 
 Güncel Qwen 4B nesil karşılaştırması: `QWEN_4B_GENERATION_BENCHMARK_REPORT.md`.
 
 Nanbeige4.1-3B RTX 4060 kalite tavanı: `NANBEIGE41_3B_BENCHMARK_REPORT.md`.
+
+Model çıktılarının puansız ve vaka-temelli değerlendirme yöntemi:
+`QUALITATIVE_MODEL_EVALUATION_METHODOLOGY.md`.
 
 Tarihsel 4B–9B donanım karşılaştırması: `MODEL_HARDWARE_OPTIMIZED_BENCHMARK_REPORT.md`.
 
