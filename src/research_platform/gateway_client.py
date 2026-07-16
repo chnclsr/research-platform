@@ -75,6 +75,8 @@ class ResearchGatewayClient:
     ) -> Path:
         destination.mkdir(parents=True, exist_ok=True)
         target = destination / f"{run_id}_{mode.value}.zip"
+        if target.exists() and target.stat().st_size > 0:
+            return target.resolve()
         async with httpx.AsyncClient(timeout=None, headers=self.headers) as client:
             response = await client.get(
                 f"{self.base_url}/v1/research-runs/{run_id}/delivery/{mode.value}"

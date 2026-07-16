@@ -1,14 +1,19 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.4.1-dev`
+Platform sürümü: `v0.4.2`
 
-Belge sürümü: `2.1`
+Belge sürümü: `2.2`
 
 Son güncelleme: `2026-07-16`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 
 Codex, Claude ve Telegram erişim mimarisi: `AGENT_GATEWAY_ARCHITECTURE_REPORT.md`.
+
+Ofis ağı kurulumu ve ekip istemci adımları: `OFFICE_TEAM_SETUP.md`.
+
+Ofis sunucusu canlı uygulama ve doğrulama sonuçları:
+`OFFICE_SERVER_IMPLEMENTATION_REPORT.md`.
 
 Coverage recovery uygulaması ve canlı doğrulaması:
 `COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md`.
@@ -46,6 +51,7 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 - Claim/evidence ledger, audit ve adversarial review.
 - 14 denetlenebilir çıktı; ham veri, sonuç ve birleşik ZIP teslimatları.
 - Codex ve Claude için MCP araç katmanı.
+- Wi-Fi CIDR allowlist, güçlü bearer token ve yalnız MCP portunu açan ofis sunucusu modu.
 - Allowlist korumalı Telegram araştırma botu.
 - Ollama varsayılanı ve OpenAI-compatible alternatif.
 - Ollama JSON çağrılarında yapılandırılabilir thinking, context ve output sınırları.
@@ -77,6 +83,26 @@ Docker Hub sertifika doğrulaması başarısız olursa kurulum otomatik olarak P
 - Langflow: `http://localhost:7860`
 - MinIO Console: `http://localhost:9001`
 - MCP Gateway: `http://localhost:8010/mcp`
+
+## Ofis ağına açma
+
+API ve veri servislerini dışarı açmadan yalnız kimlik doğrulamalı MCP gateway'i mevcut Wi-Fi
+ağına bağlamak için:
+
+```powershell
+.\scripts\initialize_office_server.ps1
+.\scripts\start_office_server.ps1
+.\scripts\office_server_status.ps1
+```
+
+Windows Firewall kuralı yönetici yetkisiyle bir kez eklenir:
+
+```powershell
+.\scripts\configure_office_firewall.ps1
+```
+
+Ekip istemci kurulumu, otomatik başlatma ve Telegram allowlist akışı
+`OFFICE_TEAM_SETUP.md` belgesindedir.
 
 ## Agent Gateway
 
@@ -188,6 +214,7 @@ $env:TESTING="true"
 ## Güvenlik notları
 
 - API yalnız loopback'e publish edilir ve bearer token ister.
+- Ofis modunda yalnız MCP portu Wi-Fi IP'sinde dinler; bearer token ve CIDR allowlist zorunludur.
 - Acquisition yalnız standart portlardaki HTTP/HTTPS hedeflerini kabul eder.
 - DNS ve her redirect sonrasında public-IP kontrolü yapılır.
 - Crawl4AI düşük yetkili, read-only container'da çalışır.

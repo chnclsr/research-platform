@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     paperqa2_shadow_mode: bool = True
     paperqa2_max_documents: int = Field(20, ge=1, le=100)
     api_token: str = "change-me-local-token"
+    api_host: str = "127.0.0.1"
+    api_port: int = Field(8000, ge=1, le=65535)
     research_api_url: str = "http://localhost:8000"
     gateway_download_dir: str = "./data/deliveries"
     mcp_transport: str = "stdio"
@@ -72,6 +74,7 @@ class Settings(BaseSettings):
     mcp_port: int = Field(8010, ge=1, le=65535)
     mcp_bearer_token: str | None = None
     mcp_allowed_origins: list[str] = Field(default_factory=list)
+    mcp_allowed_networks: list[str] = Field(default_factory=list)
     telegram_bot_token: str | None = None
     telegram_api_url: str = "https://api.telegram.org"
     telegram_allowed_user_ids: list[int] = Field(default_factory=list)

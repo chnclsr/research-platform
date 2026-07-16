@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.4.1",
+    title="Research Platform API", version="0.4.2",
     description="Local-first, multi-source evidence research platform", lifespan=lifespan,
 )
 
@@ -378,4 +378,10 @@ async def test_connector(connector_id: str, request: Request) -> dict:
 
 
 def run() -> None:
-    uvicorn.run("research_platform.api:app", host="0.0.0.0", port=8000, reload=False)
+    settings = get_settings()
+    uvicorn.run(
+        "research_platform.api:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=False,
+    )

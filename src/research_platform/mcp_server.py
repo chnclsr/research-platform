@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import ipaddress
+import json
+import base64
+import hashlib
 from pathlib import Path
+import secrets
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -117,7 +122,7 @@ async def download_research_delivery(
     run_id: str,
     mode: Literal["raw", "result", "both"] = "both",
 ) -> dict:
-    """Save a durable ZIP delivery on the research server and return its absolute path."""
+    """Cache a durable ZIP on the research server; use read_research_delivery_chunk remotely."""
     target = await _client().download(
         run_id,
         DeliveryMode(mode),
@@ -126,13 +131,59 @@ async def download_research_delivery(
     return {"run_id": run_id, "mode": mode, "path": str(target), "size_bytes": target.stat().st_size}
 
 
+@mcp.tool()
+async def read_research_delivery_chunk(
+    run_id: str,
+    mode: Literal["raw", "result", "both"] = "both",
+    offset: int = 0,
+    max_bytes: int = 65_536,
+) -> dict:
+    """Read a ZIP delivery as base64 chunks so a remote Codex or Claude can reconstruct it."""
+    max_bytes = min(max(1, max_bytes), 262_144)
+    target = await _client().download(
+        run_id,
+        DeliveryMode(mode),
+        Path(settings.gateway_download_dir),
+    )
+    size = target.stat().st_size
+    offset = min(max(0, offset), size)
+    with target.open("rb") as handle:
+        handle.seek(offset)
+        payload = handle.read(max_bytes)
+    next_offset = offset + len(payload)
+    digest = None
+    if offset == 0:
+        with target.open("rb") as handle:
+            digest = hashlib.file_digest(handle, "sha256").hexdigest()
+    return {
+        "run_id": run_id,
+        "mode": mode,
+        "filename": target.name,
+        "offset": offset,
+        "next_offset": next_offset,
+        "size_bytes": size,
+        "complete": next_offset >= size,
+        "sha256": digest,
+        "base64": base64.b64encode(payload).decode("ascii"),
+    }
+
+
 def run() -> None:
     if settings.mcp_transport == "streamable-http":
+        token = settings.mcp_bearer_token or settings.api_token
+        if not _is_loopback_host(settings.mcp_host):
+            if len(token) < 32 or token.startswith("change-me"):
+                raise RuntimeError(
+                    "Non-loopback MCP requires a random bearer token of at least 32 characters"
+                )
+            if not settings.mcp_allowed_networks:
+                raise RuntimeError("Non-loopback MCP requires MCP_ALLOWED_NETWORKS")
         uvicorn.run(
             BearerProtectedMCP(
                 mcp.streamable_http_app(),
-                token=settings.mcp_bearer_token or settings.api_token,
+                token=token,
                 allowed_origins=set(settings.mcp_allowed_origins),
+                allowed_networks=set(settings.mcp_allowed_networks),
             ),
             host=settings.mcp_host,
             port=settings.mcp_port,
@@ -142,10 +193,21 @@ def run() -> None:
 
 
 class BearerProtectedMCP:
-    def __init__(self, app, *, token: str, allowed_origins: set[str]) -> None:
+    def __init__(
+        self,
+        app,
+        *,
+        token: str,
+        allowed_origins: set[str],
+        allowed_networks: set[str] | None = None,
+    ) -> None:
         self.app = app
         self.token = token
         self.allowed_origins = allowed_origins
+        self.allowed_networks = tuple(
+            ipaddress.ip_network(value, strict=False)
+            for value in (allowed_networks or set())
+        )
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] == "http":
@@ -153,14 +215,39 @@ class BearerProtectedMCP:
                 key.decode("latin-1").lower(): value.decode("latin-1")
                 for key, value in scope.get("headers", [])
             }
-            if headers.get("authorization") != f"Bearer {self.token}":
+            supplied = headers.get("authorization", "")
+            if not secrets.compare_digest(supplied, f"Bearer {self.token}"):
                 await self._reject(send, 401, b"Unauthorized")
+                return
+            if self.allowed_networks and not self._client_allowed(scope):
+                await self._reject(send, 403, b"Client network is not allowed")
                 return
             origin = headers.get("origin")
             if origin and origin not in self.allowed_origins:
                 await self._reject(send, 403, b"Invalid Origin")
                 return
+            if scope.get("path") == "/health":
+                await self._json(
+                    send,
+                    200,
+                    {
+                        "status": "healthy",
+                        "service": "research-platform-mcp",
+                        "version": "0.4.2",
+                    },
+                )
+                return
         await self.app(scope, receive, send)
+
+    def _client_allowed(self, scope) -> bool:
+        client = scope.get("client")
+        if not client:
+            return False
+        try:
+            address = ipaddress.ip_address(client[0])
+        except ValueError:
+            return False
+        return any(address in network for network in self.allowed_networks)
 
     @staticmethod
     async def _reject(send, status: int, body: bytes) -> None:
@@ -170,3 +257,26 @@ class BearerProtectedMCP:
             "headers": [(b"content-type", b"text/plain; charset=utf-8")],
         })
         await send({"type": "http.response.body", "body": body})
+
+    @staticmethod
+    async def _json(send, status: int, body: dict) -> None:
+        payload = json.dumps(body).encode("utf-8")
+        await send({
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(payload)).encode("ascii")),
+                (b"cache-control", b"no-store"),
+            ],
+        })
+        await send({"type": "http.response.body", "body": payload})
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False

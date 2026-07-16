@@ -1,10 +1,26 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.4.1-dev`
+Platform sürümü: `v0.4.2`
 
-Belge sürümü: `2.0`
+Belge sürümü: `2.1`
 
 Son güncelleme: `2026-07-16`
+
+## v0.4.2 — 2026-07-16
+
+- Aynı Wi-Fi ağındaki Codex ve Claude Code istemcileri için ofis sunucusu modu eklendi.
+- Native Research API varsayılan bind adresi `127.0.0.1` yapılarak gereksiz LAN erişimi kapatıldı.
+- Non-loopback MCP için en az 32 karakter rastgele bearer token ve `MCP_ALLOWED_NETWORKS`
+  zorunlu hale getirildi.
+- MCP gateway'e kimlik doğrulamalı `/health`, sabit-zaman token karşılaştırması ve istemci CIDR
+  kontrolü eklendi.
+- Wi-Fi IP/token üretimi, güvenli ekip erişim dosyası, durum kontrolü, firewall ve kullanıcı
+  oturumunda otomatik başlatma PowerShell scriptleri eklendi.
+- Prize bağlı kullanımda sunucunun uykuya girmesini engelleyen güç ayarı scripti eklendi.
+- Codex ve Claude Code ekip istemcileri için kurulum scriptleri eklendi.
+- Telegram botuna yetki vermeden kullanıcı/chat kimliğini gösteren `/whoami` komutu eklendi;
+  bütün araştırma komutları allowlist arkasında kaldı.
+- `OFFICE_TEAM_SETUP.md` işletim ve güvenlik dokümantasyonu eklendi.
 
 ## v0.4.1-dev — 2026-07-16
 

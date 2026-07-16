@@ -46,6 +46,38 @@ def test_mcp_gateway_requires_bearer_and_validates_origin():
         ).status_code == 200
 
 
+def test_mcp_gateway_health_and_network_allowlist():
+    async def endpoint(request):
+        return JSONResponse({"ok": True})
+
+    inner = Starlette(routes=[Route("/mcp", endpoint)])
+    allowed = BearerProtectedMCP(
+        inner,
+        token="secret",
+        allowed_origins=set(),
+        allowed_networks={"127.0.0.0/8"},
+    )
+    with TestClient(allowed, client=("127.0.0.1", 50000)) as client:
+        response = client.get(
+            "/health",
+            headers={"Authorization": "Bearer secret"},
+        )
+        assert response.status_code == 200
+        assert response.json()["service"] == "research-platform-mcp"
+
+    blocked = BearerProtectedMCP(
+        inner,
+        token="secret",
+        allowed_origins=set(),
+        allowed_networks={"10.0.10.0/24"},
+    )
+    with TestClient(blocked, client=("127.0.0.1", 50000)) as client:
+        assert client.get(
+            "/health",
+            headers={"Authorization": "Bearer secret"},
+        ).status_code == 403
+
+
 def test_telegram_requires_non_empty_allowlist():
     bot = object.__new__(TelegramResearchBot)
     bot.allowed_users = set()

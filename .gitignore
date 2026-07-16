@@ -7,6 +7,7 @@ __pycache__/
 data/
 logs/
 .env.native
+.env.office
 .pytest-research.db
 dist/
 htmlcov/

@@ -103,6 +103,15 @@ services:
   api:
     <<: *app
     command: ["research-api"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://host.docker.internal:3939}
+      CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -145,6 +154,7 @@ services:
       MCP_PORT: 8010
       MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-change-me-mcp-token}
       MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-[]}
+      MCP_ALLOWED_NETWORKS: ${MCP_ALLOWED_NETWORKS:-[]}
       GATEWAY_DOWNLOAD_DIR: /data/deliveries
     ports:
       - "8010:8010"

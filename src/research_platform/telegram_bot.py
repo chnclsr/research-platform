@@ -12,6 +12,7 @@ from .schemas import DeliveryMode, ResearchProtocol
 
 
 HELP = """Research Platform komutları:
+/whoami
 /research [raw|result|both] <soru>
 /status <run_id>
 /get <run_id> [raw|result|both]
@@ -64,9 +65,6 @@ class TelegramResearchBot:
 
     async def _handle(self, client: httpx.AsyncClient, message: dict) -> None:
         chat_id = int((message.get("chat") or {}).get("id", 0))
-        if not self._authorized(message):
-            await self._send_message(client, chat_id, "Bu bot için yetkiniz yok.")
-            return
         text = str(message.get("text") or "").strip()
         try:
             parts = shlex.split(text)
@@ -77,6 +75,21 @@ class TelegramResearchBot:
             await self._send_message(client, chat_id, HELP)
             return
         command = parts[0].split("@", 1)[0].lower()
+        if command == "/whoami":
+            user_id = int((message.get("from") or {}).get("id", 0))
+            await self._send_message(
+                client,
+                chat_id,
+                f"Telegram user_id: {user_id}\nTelegram chat_id: {chat_id}",
+            )
+            return
+        if not self._authorized(message):
+            await self._send_message(
+                client,
+                chat_id,
+                "Bu bot için araştırma yetkiniz yok. Kimliklerinizi görmek için /whoami yazın.",
+            )
+            return
         try:
             if command == "/research":
                 mode = DeliveryMode.BOTH
