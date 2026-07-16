@@ -25,9 +25,9 @@ if (-not $dockerReady) {
     throw "Docker Desktop 5 dakika içinde hazır olmadı."
 }
 
-docker compose up -d postgres redis minio crawl4ai
+docker compose up -d --wait --wait-timeout 180 postgres redis minio crawl4ai
 if ($LASTEXITCODE -ne 0) {
-    throw "Yerel altyapı container'ları başlatılamadı."
+    throw "Yerel altyapı container'ları sağlıklı başlatılamadı."
 }
 
 & "$PSScriptRoot\stop_native.ps1"
@@ -48,6 +48,21 @@ if (-not $currentAddress -or $currentAddress.IPAddress -ne $environment.MCP_HOST
 
 $headers = @{ Authorization = "Bearer $($environment.MCP_BEARER_TOKEN)" }
 $healthUrl = "http://$($environment.MCP_HOST):$($environment.MCP_PORT)/health"
+$apiHealthy = $false
+for ($attempt = 1; $attempt -le 30; $attempt++) {
+    try {
+        $apiHealth = Invoke-RestMethod "$($environment.RESEARCH_API_URL)/health" -TimeoutSec 5
+        if ($apiHealth.status -eq "healthy" -and $apiHealth.checks.redis -eq "ok") {
+            $apiHealthy = $true
+            break
+        }
+    } catch {}
+    Start-Sleep -Seconds 2
+}
+if (-not $apiHealthy) {
+    throw "Research API veya Redis kuyruğu sağlık kontrolü başarısız."
+}
+
 $healthy = $false
 for ($attempt = 1; $attempt -le 30; $attempt++) {
     try {
@@ -64,11 +79,12 @@ if (-not $healthy) {
 }
 
 $status = [ordered]@{
-    version = "0.4.2"
+    version = "0.4.3"
     started_at = (Get-Date).ToUniversalTime().ToString("o")
     mcp_url = "http://$($environment.MCP_HOST):$($environment.MCP_PORT)/mcp"
     health_url = $healthUrl
     api_url = $environment.RESEARCH_API_URL
+    queue = "healthy"
     telegram_enabled = [bool]$environment.TELEGRAM_BOT_TOKEN
 }
 $status | ConvertTo-Json | Set-Content "$root\logs\office-status.json" -Encoding UTF8

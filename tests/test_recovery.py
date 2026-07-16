@@ -17,6 +17,7 @@ from research_platform.schemas import (
     ConnectorCandidate,
     CoverageMetrics,
     ResearchProtocol,
+    RunStatus,
     SearchMission,
     SourceFamily,
 )
@@ -35,6 +36,24 @@ def official_protocol() -> ResearchProtocol:
         },
         budget={"max_sources": 12},
     )
+
+
+@pytest.mark.asyncio
+async def test_repository_refreshes_run_status_changed_by_another_session():
+    await create_schema()
+    protocol = official_protocol()
+    async with SessionLocal() as worker_session:
+        worker_repo = Repository(worker_session)
+        run = await worker_repo.create_run(protocol)
+        cached = await worker_repo.get_run(run.id)
+        assert cached.status == RunStatus.QUEUED.value
+
+        async with SessionLocal() as api_session:
+            api_repo = Repository(api_session)
+            await api_repo.update_run(run.id, status=RunStatus.CANCEL_REQUESTED.value)
+
+        refreshed = await worker_repo.get_run(run.id)
+        assert refreshed.status == RunStatus.CANCEL_REQUESTED.value
 
 
 def test_initial_missions_resolve_named_entities_to_official_domains():

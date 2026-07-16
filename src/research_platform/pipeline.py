@@ -148,6 +148,14 @@ class ResearchPipeline:
         row = await self.repo.get_run(run_id)
         if row is None:
             raise KeyError(run_id)
+        if row.status in {RunStatus.CANCEL_REQUESTED.value, RunStatus.CANCELLED.value}:
+            await self.repo.update_run(run_id, status=RunStatus.CANCELLED.value)
+            await self.repo.event(
+                run_id,
+                "cancelled",
+                {"stage": row.current_stage, "before_start": True},
+            )
+            return
         await self.repo.update_run(run_id, status=RunStatus.RUNNING.value, error=None)
         state: PipelineState = {
             "run_id": run_id, "protocol": row.protocol, "round_number": row.round_number,

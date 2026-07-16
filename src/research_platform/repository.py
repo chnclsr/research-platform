@@ -36,10 +36,24 @@ class Repository:
         return row
 
     async def get_run(self, run_id: str, *, lock: bool = False) -> ResearchRunRow | None:
-        stmt = select(ResearchRunRow).where(ResearchRunRow.id == run_id)
+        stmt = (
+            select(ResearchRunRow)
+            .where(ResearchRunRow.id == run_id)
+            .execution_options(populate_existing=True)
+        )
         if lock:
             stmt = stmt.with_for_update()
         return await self.session.scalar(stmt)
+
+    async def list_runs_by_statuses(self, statuses: set[str]) -> list[ResearchRunRow]:
+        if not statuses:
+            return []
+        rows = await self.session.scalars(
+            select(ResearchRunRow)
+            .where(ResearchRunRow.status.in_(statuses))
+            .order_by(ResearchRunRow.created_at)
+        )
+        return list(rows)
 
     async def update_run(self, run_id: str, **values: Any) -> ResearchRunRow:
         row = await self.get_run(run_id, lock=True)

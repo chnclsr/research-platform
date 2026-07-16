@@ -18,6 +18,8 @@ $result = [ordered]@{
     mcp_url = "http://$($environment.MCP_HOST):$($environment.MCP_PORT)/mcp"
     mcp_health = "unavailable"
     api_health = "unavailable"
+    redis_health = "unavailable"
+    worker_queue_heartbeat_ttl_seconds = -2
     processes = @{}
 }
 try {
@@ -26,10 +28,18 @@ try {
     $result.mcp_health = $_.Exception.Message
 }
 try {
-    $result.api_health = (Invoke-RestMethod "$($environment.RESEARCH_API_URL)/health" -TimeoutSec 15).status
+    $apiHealth = Invoke-RestMethod "$($environment.RESEARCH_API_URL)/health" -TimeoutSec 15
+    $result.api_health = $apiHealth.status
+    $result.redis_health = $apiHealth.checks.redis
 } catch {
     $result.api_health = $_.Exception.Message
 }
+try {
+    $ttl = docker exec research-platform-redis-1 redis-cli TTL arq:queue:health-check
+    if ($LASTEXITCODE -eq 0) {
+        $result.worker_queue_heartbeat_ttl_seconds = [int]$ttl
+    }
+} catch {}
 foreach ($name in @("api", "worker", "mcp", "telegram")) {
     $pidFile = Join-Path $root "logs\$name.pid"
     if (Test-Path $pidFile) {
@@ -39,4 +49,9 @@ foreach ($name in @("api", "worker", "mcp", "telegram")) {
         $result.processes[$name] = $false
     }
 }
+$result.processes["worker_operational"] = (
+    [bool]$result.processes["worker"] -and
+    $result.redis_health -eq "ok" -and
+    $result.worker_queue_heartbeat_ttl_seconds -gt 0
+)
 $result | ConvertTo-Json -Depth 4

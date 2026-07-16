@@ -1,6 +1,12 @@
+from types import SimpleNamespace
+
+import pytest
 from fastapi.testclient import TestClient
 
-from research_platform.api import app
+from research_platform.api import _reconcile_interrupted_runs, app
+from research_platform.db import SessionLocal, create_schema
+from research_platform.repository import Repository
+from research_platform.schemas import ResearchProtocol, RunStatus
 
 
 def test_create_and_read_run():
@@ -27,3 +33,45 @@ def test_api_rejects_bad_protocol():
         })
         assert response.status_code == 422
 
+
+@pytest.mark.asyncio
+async def test_startup_reconciles_queued_and_cancel_requested_runs():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Queue reconciliation",
+        primary_question="Can interrupted queue records be recovered safely?",
+    )
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        queued = await repo.create_run(protocol)
+        cancelled = await repo.create_run(protocol)
+        await repo.update_run(cancelled.id, status=RunStatus.CANCEL_REQUESTED.value)
+
+    class FakeRedis:
+        def __init__(self):
+            self.enqueued = []
+            self.removed = []
+
+        async def enqueue_job(self, function, run_id, **kwargs):
+            self.enqueued.append((function, run_id, kwargs))
+            return object()
+
+        async def zrem(self, key, value):
+            self.removed.append(("zrem", key, value))
+
+        async def delete(self, *keys):
+            self.removed.append(("delete", *keys))
+
+    redis = FakeRedis()
+    fake_app = SimpleNamespace(state=SimpleNamespace(redis=redis))
+    await _reconcile_interrupted_runs(fake_app)
+
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        cancelled_row = await repo.get_run(cancelled.id)
+        assert cancelled_row.status == RunStatus.CANCELLED.value
+    assert any(run_id == queued.id for _, run_id, _ in redis.enqueued)
+    assert any(
+        item[0] == "zrem" and item[2] == f"run:{cancelled.id}"
+        for item in redis.removed
+    )

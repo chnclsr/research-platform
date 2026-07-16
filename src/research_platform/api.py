@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 
 import httpx
 import uvicorn
+from arq.constants import (
+    default_queue_name,
+    in_progress_key_prefix,
+    job_key_prefix,
+    retry_key_prefix,
+)
 from arq.connections import RedisSettings, create_pool
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
@@ -14,7 +21,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .config import Settings, get_settings
 from .connectors import build_registry
-from .db import create_schema, get_session
+from .db import SessionLocal, create_schema, get_session
 from .embeddings import EmbeddingClient
 from .passages import retrieve_passages
 from .repository import Repository
@@ -25,6 +32,86 @@ from .schemas import (
 )
 from .storage import ObjectStore
 from .zotero_sync import ZoteroSyncService
+
+logger = logging.getLogger(__name__)
+
+
+async def _connect_redis(app: FastAPI, *, attempts: int = 1, delay_s: float = 1.0):
+    if app.state.redis is not None:
+        try:
+            await app.state.redis.ping()
+            return app.state.redis
+        except Exception:
+            try:
+                await app.state.redis.aclose()
+            except Exception:
+                pass
+            app.state.redis = None
+    settings = get_settings()
+    if settings.testing:
+        return None
+    async with app.state.redis_lock:
+        if app.state.redis is not None:
+            return app.state.redis
+        for attempt in range(1, attempts + 1):
+            try:
+                app.state.redis = await create_pool(
+                    RedisSettings.from_dsn(settings.redis_url)
+                )
+                return app.state.redis
+            except Exception as exc:
+                logger.warning(
+                    "Redis queue connection failed (%s/%s): %s",
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                if attempt < attempts:
+                    await asyncio.sleep(delay_s)
+    return None
+
+
+async def _reconcile_interrupted_runs(app: FastAPI) -> None:
+    redis = app.state.redis
+    if redis is None:
+        return
+
+    async def discard_stable_job(run_id: str) -> None:
+        job_id = f"run:{run_id}"
+        await redis.zrem(default_queue_name, job_id)
+        await redis.delete(
+            f"{job_key_prefix}{job_id}",
+            f"{in_progress_key_prefix}{job_id}",
+            f"{retry_key_prefix}{job_id}",
+        )
+
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        cancelled = await repo.list_runs_by_statuses({RunStatus.CANCEL_REQUESTED.value})
+        for row in cancelled:
+            await repo.update_run(row.id, status=RunStatus.CANCELLED.value)
+            await repo.event(
+                row.id,
+                "cancelled",
+                {"stage": row.current_stage, "reconciled": True},
+            )
+
+        terminal = await repo.list_runs_by_statuses({
+            RunStatus.CANCELLED.value,
+            RunStatus.COMPLETED.value,
+            RunStatus.COMPLETED_INCOMPLETE.value,
+            RunStatus.FAILED.value,
+        })
+        for row in terminal:
+            await discard_stable_job(row.id)
+
+        queued = await repo.list_runs_by_statuses({RunStatus.QUEUED.value})
+        for row in queued:
+            await redis.enqueue_job(
+                "execute_research_run",
+                row.id,
+                _job_id=f"run:{row.id}",
+            )
 
 
 @asynccontextmanager
@@ -37,11 +124,10 @@ async def lifespan(app: FastAPI):
         headers={"User-Agent": settings.user_agent},
     )
     app.state.redis = None
+    app.state.redis_lock = asyncio.Lock()
     if not settings.testing:
-        try:
-            app.state.redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        except Exception:
-            app.state.redis = None
+        await _connect_redis(app, attempts=30)
+        await _reconcile_interrupted_runs(app)
     yield
     await app.state.http.aclose()
     if app.state.redis:
@@ -49,7 +135,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.4.2",
+    title="Research Platform API", version="0.4.3",
     description="Local-first, multi-source evidence research platform", lifespan=lifespan,
 )
 
@@ -71,6 +157,7 @@ async def repository(session: AsyncSession = Depends(get_session)) -> Repository
 @app.get("/health")
 async def health(request: Request) -> dict:
     settings = get_settings()
+    await _connect_redis(request.app, attempts=1)
     checks = {"database": "ok", "redis": "ok" if request.app.state.redis else "unavailable"}
     try:
         response = await request.app.state.http.get(f"{settings.ollama_url}/api/version", timeout=3)
@@ -95,17 +182,39 @@ async def health(request: Request) -> dict:
         checks["minio"] = "ok" if response.is_success else "degraded"
     except Exception:
         checks["minio"] = "unavailable"
-    return {"status": "healthy" if checks["database"] == "ok" else "degraded", "checks": checks}
+    required_ok = checks["database"] == "ok" and checks["redis"] == "ok"
+    return {"status": "healthy" if required_ok else "degraded", "checks": checks}
 
 
 @app.post("/v1/research-runs", response_model=RunView, dependencies=[Depends(authorize)])
 async def create_research_run(
     body: ResearchRunCreate, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
+    settings = get_settings()
+    redis = await _connect_redis(request.app, attempts=3)
+    if redis is None and not settings.testing:
+        raise HTTPException(status_code=503, detail="Redis queue unavailable; run was not created")
     row = await repo.create_run(body.protocol)
-    if request.app.state.redis:
-        await request.app.state.redis.enqueue_job("execute_research_run", row.id, _job_id=f"run:{row.id}")
-    elif not get_settings().testing:
+    if redis is not None:
+        try:
+            queued = await redis.enqueue_job(
+                "execute_research_run",
+                row.id,
+                _job_id=f"run:{row.id}",
+            )
+            if queued is None:
+                raise RuntimeError("ARQ rejected the research job")
+        except Exception as exc:
+            await repo.update_run(
+                row.id,
+                status=RunStatus.FAILED.value,
+                error=f"Redis enqueue failed: {type(exc).__name__}: {exc}",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Research queue rejected the run",
+            ) from exc
+    elif not settings.testing:
         await repo.update_run(
             row.id, status=RunStatus.FAILED.value,
             error="Redis queue unavailable; run was not started",
@@ -141,10 +250,24 @@ async def resume_research_run(
     row = await _required_run(run_id, repo)
     if row.status != RunStatus.PAUSED.value:
         raise HTTPException(status_code=409, detail=f"Cannot resume run in {row.status}")
-    row = await repo.update_run(run_id, status=RunStatus.QUEUED.value)
-    if not request.app.state.redis:
+    redis = await _connect_redis(request.app, attempts=3)
+    if redis is None:
         raise HTTPException(status_code=503, detail="Redis queue unavailable")
-    await request.app.state.redis.enqueue_job("execute_research_run", run_id)
+    row = await repo.update_run(run_id, status=RunStatus.QUEUED.value)
+    try:
+        queued = await redis.enqueue_job("execute_research_run", run_id)
+        if queued is None:
+            raise RuntimeError("ARQ rejected the resumed research job")
+    except Exception as exc:
+        await repo.update_run(
+            run_id,
+            status=RunStatus.PAUSED.value,
+            error=f"Redis resume enqueue failed: {type(exc).__name__}: {exc}",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Research queue rejected the resumed run",
+        ) from exc
     return repo.run_view(row)
 
 

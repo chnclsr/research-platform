@@ -2,7 +2,7 @@
 
 Belge sürümü: `1.0`
 
-Platform sürümü: `v0.4.2`
+Platform sürümü: `v0.4.3`
 
 Tarih: `2026-07-16`
 

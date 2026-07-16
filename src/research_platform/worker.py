@@ -10,17 +10,19 @@ from .pipeline import ResearchPipeline
 
 
 async def startup(ctx: dict) -> None:
-    await create_schema()
     settings = get_settings()
     ctx["http"] = httpx.AsyncClient(
         transport=httpx.AsyncHTTPTransport(retries=3),
         timeout=settings.request_timeout_s,
         headers={"User-Agent": settings.user_agent},
     )
+    await create_schema()
 
 
 async def shutdown(ctx: dict) -> None:
-    await ctx["http"].aclose()
+    client = ctx.get("http")
+    if client is not None:
+        await client.aclose()
 
 
 async def execute_research_run(ctx: dict, run_id: str) -> None:
@@ -38,6 +40,7 @@ class WorkerSettings:
     max_jobs = 1
     job_timeout = 60 * 60
     keep_result = 60
+    health_check_interval = 30
 
 
 def run() -> None:

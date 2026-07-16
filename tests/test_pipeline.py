@@ -64,6 +64,25 @@ class DummyAcquisition:
 
 
 @pytest.mark.asyncio
+async def test_pipeline_preserves_cancellation_before_worker_start():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Pre-start cancellation",
+        primary_question="Does a cancelled queued run remain cancelled?",
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        await repo.update_run(row.id, status=RunStatus.CANCEL_REQUESTED.value)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        await pipeline.run(row.id)
+        cancelled = await repo.get_run(row.id)
+        assert cancelled.status == RunStatus.CANCELLED.value
+        events = await repo.events_after(row.id)
+        assert any(event.event_type == "cancelled" for event in events)
+
+
+@pytest.mark.asyncio
 async def test_pipeline_resumes_to_auditable_export():
     await create_schema()
     protocol = ResearchProtocol(

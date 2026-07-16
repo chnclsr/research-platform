@@ -1,10 +1,22 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.4.2`
+Platform sürümü: `v0.4.3`
 
 Belge sürümü: `2.1`
 
 Son güncelleme: `2026-07-16`
+
+## v0.4.3 — 2026-07-16
+
+- Ofis sunucusu başlangıcında Docker servisleri sağlıklı olana kadar bekleme eklendi.
+- API Redis bağlantısına yeniden deneme ve çalışma sırasında yeniden bağlanma eklendi.
+- Redis kuyruğu yokken sessiz `queued / INIT` run oluşturulması engellendi.
+- Açılışta eski queued ve cancel_requested run kayıtları uzlaştırılıyor.
+- Terminal run'lara ait yarım kalmış ARQ queue/in-progress anahtarları temizleniyor.
+- Worker düğüm sınırlarında run durumunu veritabanından yenileyerek uzak pause/cancel isteklerini
+  görüyor.
+- API ve durum betiği kuyruk/worker sağlığını doğru raporluyor.
+- Worker heartbeat aralığı 30 saniyeye indirildi.
 
 ## v0.4.2 — 2026-07-16
 

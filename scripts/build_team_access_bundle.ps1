@@ -6,7 +6,7 @@ if (-not (Test-Path $accessFile)) {
     throw "TEAM_ACCESS.txt bulunamadı. Önce initialize_office_server.ps1 çalıştırın."
 }
 
-$bundleRoot = Join-Path $accessRoot "research-platform-team-client-v0.4.2"
+$bundleRoot = Join-Path $accessRoot "research-platform-team-client-v0.4.3"
 if (Test-Path $bundleRoot) {
     Remove-Item -LiteralPath $bundleRoot -Recurse -Force
 }
@@ -20,7 +20,7 @@ Copy-Item (Join-Path $PSScriptRoot "install_claude_client.ps1") $bundleRoot
 $readme = @"
 Research Platform Team Client Bundle
 Bundle version: 1.0
-Platform version: v0.4.2
+Platform version: v0.4.3
 Date: 2026-07-16
 
 1. TEAM_ACCESS.txt dosyasındaki Server URL ve Bearer token değerlerini alın.
@@ -35,7 +35,7 @@ Bu ZIP erişim anahtarı içerir. Yalnız yetkili ekip üyeleriyle güvenli kana
     [System.Text.UTF8Encoding]::new($false)
 )
 
-$zipPath = Join-Path $accessRoot "research-platform-team-client-v0.4.2.zip"
+$zipPath = Join-Path $accessRoot "research-platform-team-client-v0.4.3.zip"
 if (Test-Path $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
