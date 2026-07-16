@@ -1,0 +1,126 @@
+{
+  "suite_id": "qualitative-research-v1",
+  "version": "1.0",
+  "locked_at": "2026-07-16",
+  "question": "Dört günlük çalışma haftası denemeleri, beyaz yaka çalışanlarında üretkenliği nedensel olarak artırırken çalışan refahını da iyileştiriyor mu? Seçilim, ölçüm, iş yoğunlaştırma, şirket öz-bildirimi ve uzun dönem sürdürülebilirlik sorunlarını ayırarak değerlendir.",
+  "required_evidence_dimensions": [
+    "controlled_or_comparative_evidence",
+    "productivity_measurement",
+    "wellbeing",
+    "work_intensification",
+    "selection_and_attrition",
+    "long_term_followup",
+    "counter_evidence"
+  ],
+  "relevant_document_ids": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D06",
+    "D07",
+    "D08",
+    "D09"
+  ],
+  "critical_document_ids": ["D02", "D04", "D05", "D06", "D08"],
+  "counter_evidence_ids": ["D04", "D05", "D08"],
+  "documents": [
+    {
+      "id": "D01",
+      "title": "Multi-company six-month four-day-week trial",
+      "source_type": "trial_report",
+      "text": "Sixty-one volunteer companies introduced a 32-hour week with no reduction in salary. Employee-reported burnout and job satisfaction improved. Participating firms reported that revenue was broadly stable. The study had no randomized control group, firms self-selected into the program, and productivity measures differed across companies."
+    },
+    {
+      "id": "D02",
+      "title": "Difference-in-differences analysis using matched firms",
+      "source_type": "independent_study",
+      "text": "Researchers matched twelve adopting firms to twenty-four non-adopting firms by sector and pre-trial growth. Output per employee increased by 3.1 percent relative to controls, but the 95 percent confidence interval ranged from -1.4 to 7.8 percent. Employee turnover declined. The authors state that the estimate is compatible with both no productivity effect and a moderate benefit."
+    },
+    {
+      "id": "D03",
+      "title": "Worker wellbeing survey with preregistered outcomes",
+      "source_type": "academic_study",
+      "text": "A preregistered panel survey found improvements in sleep, schedule control, and self-reported stress after six months. Response attrition was 22 percent, and workers with the highest baseline workload were more likely to leave the follow-up survey. Objective health outcomes were not collected."
+    },
+    {
+      "id": "D04",
+      "title": "Call-centre operational study",
+      "source_type": "operational_data",
+      "text": "A call centre reduced scheduled hours by 15 percent while maintaining weekly call targets. Calls handled per paid hour increased, but average call duration fell and post-call administrative time was frequently completed after scheduled shifts. Quality-assurance errors increased from 4.8 to 6.1 percent. Workers described the arrangement as more intense despite valuing the additional day off."
+    },
+    {
+      "id": "D05",
+      "title": "Manufacturing pilot discontinued after peak season",
+      "source_type": "counter_evidence",
+      "text": "A manufacturer ended its four-day-week pilot after nine months. Overtime expenditure rose by 18 percent during peak demand and maintenance backlogs accumulated. Absence rates initially declined but returned to baseline by month eight. The company retained flexible scheduling but restored a five-day production rota."
+    },
+    {
+      "id": "D06",
+      "title": "Two-year follow-up of early adopters",
+      "source_type": "longitudinal_study",
+      "text": "At two years, fourteen of the original twenty-one firms still used a four-day week. Retaining firms reported lower voluntary turnover and stable headcount-adjusted revenue. Seven firms had reverted or adopted seasonal exceptions. The follow-up did not obtain comparable financial records from firms that exited, creating survivorship bias."
+    },
+    {
+      "id": "D07",
+      "title": "Productivity measurement review",
+      "source_type": "systematic_review",
+      "text": "A review of thirty-two reduced-hours studies found that most relied on employer-defined key performance indicators or revenue, while only six used an external comparator. The review concluded that wellbeing improvements were more consistent than productivity improvements. Publication bias and heterogeneous definitions prevented meta-analysis."
+    },
+    {
+      "id": "D08",
+      "title": "Software delivery repository analysis",
+      "source_type": "independent_study",
+      "text": "Repository and issue-tracker data from four software teams showed no material change in completed work items after hours were reduced. Cycle time improved in two teams and worsened in one. Weekend commits increased, suggesting that some work may have shifted outside recorded hours. Defect reopening rates were unchanged."
+    },
+    {
+      "id": "D09",
+      "title": "Implementation mechanisms and boundary conditions",
+      "source_type": "qualitative_study",
+      "text": "Interviews across nine organizations indicated that successful reductions were accompanied by fewer meetings, narrower project portfolios, and greater employee autonomy. Where targets were unchanged without process redesign, employees reported skipped breaks and faster work pace. The authors caution against treating the schedule change as a standalone intervention."
+    },
+    {
+      "id": "D10",
+      "title": "Remote work and software productivity",
+      "source_type": "distractor",
+      "text": "A natural experiment compared software teams before and after a transition to remote work. The study concerns workplace location rather than reduced weekly hours."
+    },
+    {
+      "id": "D11",
+      "title": "Compressed four-day schedule in nursing",
+      "source_type": "distractor",
+      "text": "Nurses moved from five eight-hour shifts to four ten-hour shifts while total weekly hours remained forty. Fatigue increased at the end of longer shifts. This is a compressed schedule, not a reduction in working time."
+    },
+    {
+      "id": "D12",
+      "title": "Vendor announcement: productivity transformed",
+      "source_type": "distractor",
+      "text": "A scheduling software vendor states that its customers become 40 percent more productive after adopting its platform. No sample, protocol, comparator, or raw data are provided."
+    },
+    {
+      "id": "D13",
+      "title": "Three-day weekend tourism expenditure",
+      "source_type": "distractor",
+      "text": "Household tourism spending rises during holiday weekends. The report does not study employer productivity, worker wellbeing, or reduced-hours programs."
+    },
+    {
+      "id": "D14",
+      "title": "Part-time work and career progression",
+      "source_type": "distractor",
+      "text": "A cohort study examines promotion penalties among employees voluntarily working part time with proportionally lower salary. It does not evaluate organization-wide four-day-week trials."
+    },
+    {
+      "id": "D15",
+      "title": "School calendar reform",
+      "source_type": "distractor",
+      "text": "A school district adopted a four-day instructional week to reduce transport costs. The outcomes concern student attendance and educational attainment."
+    },
+    {
+      "id": "D16",
+      "title": "Meeting-free Fridays",
+      "source_type": "distractor",
+      "text": "A company prohibited internal meetings on Fridays but retained a five-day, forty-hour workweek. Employees reported more uninterrupted focus time."
+    }
+  ]
+}
