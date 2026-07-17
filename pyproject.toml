@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "research-platform"
-version = "0.6.0"
+version = "0.6.1"
 description = "Local-first, multi-source evidence research platform"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,6 +20,7 @@ dependencies = [
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "pypdf>=5.1,<7",
+  "psutil>=6.1,<8",
   "python-multipart>=0.0.20,<1",
   "pyyaml>=6.0,<7",
   "sqlalchemy>=2.0,<3",

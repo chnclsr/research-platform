@@ -1,10 +1,22 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.0`
+Platform sürümü: `v0.6.1`
 
-Belge sürümü: `2.5`
+Belge sürümü: `2.6`
 
 Son güncelleme: `2026-07-17`
+
+## v0.6.1 — 2026-07-17
+
+- Kontrol paneli araştırma operasyon merkezine dönüştürüldü; hızlı ana görünüm korunurken ağır run ayrıntıları isteğe bağlı yükleniyor.
+- Run drill-down ekranına LangGraph zaman çizelgesi, query branch sonuçları, kaynak hunisi, admission dağılımı ve yapılandırılmış event görünümü eklendi.
+- Sentinel recall, estimated completeness, relative recall, citation novelty, reserve false-negative ve coverage nedenleri görselleştirildi.
+- Kaynak kataloğu; connector, aile, keşif yöntemi, admission katmanı, relevance ve query branch provenance’ıyla panelden incelenebilir hale geldi.
+- Connector ekranına health, credential durumu, canlı çağrı başarı oranı, sonuç/kabul katkısı, ortalama/p95 gecikme, 429/403/timeout hata sınıfları ve bağlantı testi eklendi.
+- RTX 4060 kullanım, VRAM, sıcaklık ve güç değerleri ile CPU, RAM, disk ve Ollama model telemetrisi eklendi.
+- Run çıktı paketleri güvenli panel proxy’si üzerinden indirilebilir hale getirildi; API token istemciye açılmıyor.
+- Panelin LAN CIDR, Trusted Host, geçici control token ve CSP güvenlik sınırları korundu.
+- Yeni panel özet ve güvenlik regresyonlarıyla tam test paketi `103 passed` sonucuna ulaştı.
 
 ## v0.6.0 — 2026-07-17
 

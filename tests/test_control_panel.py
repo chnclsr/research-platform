@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from research_platform import control_panel
+from research_platform.db import SessionLocal, create_schema
+from research_platform.repository import Repository
+from research_platform.schemas import ResearchProtocol
 
 
 def _network_guard_app(networks: list[str]) -> FastAPI:
@@ -32,11 +36,13 @@ def test_control_panel_is_local_management_surface():
     with TestClient(control_panel.app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.6.0"
+        assert health.json()["version"] == "0.6.1"
 
         page = client.get("/")
         assert page.status_code == 200
         assert "Research Platform" in page.text
+        assert "Sentinel recall" in page.text
+        assert "Connector operasyon görünümü" in page.text
         assert control_panel.CONTROL_TOKEN in page.text
         assert page.headers["x-frame-options"] == "DENY"
 
@@ -71,3 +77,27 @@ def test_control_panel_status_and_stop_action_are_token_protected(monkeypatch):
 
         invalid = client.post("/api/system/stop")
         assert invalid.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_run_detail_exposes_timeline_funnel_and_quality():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        run = await repo.create_run(ResearchProtocol(
+            title="Panel detail",
+            primary_question="Does the panel explain research collection quality?",
+        ))
+        await repo.event(run.id, "stage", {"stage": "SEARCH", "round": 1})
+        await repo.event(run.id, "connector_metrics", {"calls": [{
+            "connector": "crossref", "branch_id": "query:0", "query": "quality",
+            "success": True, "result_count": 3, "latency_seconds": 0.5,
+        }]})
+        await repo.event(run.id, "coverage_gaps", {
+            "discovery_quality": {"sentinel_recall": 0.5, "accepted_candidates": 2},
+        })
+    detail = await control_panel._run_detail(run.id)
+    assert detail["timeline"][0]["stage"] == "SEARCH"
+    assert detail["funnel"]["steps"][0]["value"] == 3
+    assert detail["quality"]["sentinel_recall"] == 0.5
+    assert detail["query_branches"][0]["connectors"] == ["crossref"]

@@ -1,8 +1,8 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `1.1`
+Belge sürümü: `2.0`
 
-Platform sürümü: `v0.5.2`
+Platform sürümü: `v0.6.1`
 
 Tarih: `2026-07-17`
 
@@ -31,6 +31,14 @@ edilmemelidir.
 - Aktif ve sıradaki araştırmalar: durum, aşama, sıra, tur, kaynak ve iddia sayısı.
 - Son 20 terminal araştırma: tamamlandı, eksik tamamlandı, iptal veya hata.
 - Worker, API, MCP, Telegram ve panel loglarının son bölümü.
+- Run bazında pipeline zaman çizelgesi, aşama süreleri, checkpoint ve yapılandırılmış event’ler.
+- Kaynak hunisi, `accept / reserve / reject` dağılımı ve her eleme aşamasındaki kayıp.
+- Sentinel recall, estimated completeness, relative recall, citation novelty ve reserve false-negative ölçümleri.
+- Query branch başına connector, sonuç, başarı ve gecikme bilgisi.
+- Kaynakların connector, aile, admission, keşif yöntemi, relevance ve provenance bilgisi.
+- Connector health, credential eksikleri, çağrı başarı oranı, ortalama/p95 gecikme ve hata sınıfları.
+- RTX 4060 kullanım, VRAM, sıcaklık ve güç; CPU, RAM, disk ve model telemetrisi.
+- Araştırma çıktı paketlerini panelden güvenli indirme.
 
 ## Kontroller
 

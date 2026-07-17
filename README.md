@@ -1,8 +1,8 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.0`
+Platform sürümü: `v0.6.1`
 
-Belge sürümü: `2.5`
+Belge sürümü: `2.6`
 
 Son güncelleme: `2026-07-17`
 
@@ -21,6 +21,9 @@ Ofis sunucusu canlı uygulama ve doğrulama sonuçları:
 `OFFICE_SERVER_IMPLEMENTATION_REPORT.md`.
 
 Yerel kontrol paneli kullanımı: `CONTROL_PANEL_GUIDE.md`.
+
+Kontrol paneli operasyon merkezi uygulama raporu:
+`CONTROL_PANEL_V0.6.1_IMPLEMENTATION_REPORT.md`.
 
 Coverage recovery uygulaması ve canlı doğrulaması:
 `COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md`.
