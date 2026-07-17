@@ -16,7 +16,7 @@ Son güncelleme: `2026-07-17`
 - RTX 4060 kullanım, VRAM, sıcaklık ve güç değerleri ile CPU, RAM, disk ve Ollama model telemetrisi eklendi.
 - Run çıktı paketleri güvenli panel proxy’si üzerinden indirilebilir hale getirildi; API token istemciye açılmıyor.
 - Panelin LAN CIDR, Trusted Host, geçici control token ve CSP güvenlik sınırları korundu.
-- Yeni panel özet ve güvenlik regresyonlarıyla tam test paketi `103 passed` sonucuna ulaştı.
+- Yeni panel özet, GPU ve güvenlik regresyonlarıyla tam test paketi `104 passed` sonucuna ulaştı.
 
 ## v0.6.0 — 2026-07-17
 

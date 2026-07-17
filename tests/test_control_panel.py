@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
@@ -101,3 +103,24 @@ async def test_run_detail_exposes_timeline_funnel_and_quality():
     assert detail["funnel"]["steps"][0]["value"] == 3
     assert detail["quality"]["sentinel_recall"] == 0.5
     assert detail["query_branches"][0]["connectors"] == ["crossref"]
+
+
+@pytest.mark.asyncio
+async def test_gpu_snapshot_keeps_row_when_power_draw_is_not_available(monkeypatch):
+    class Process:
+        returncode = 0
+
+        async def communicate(self):
+            return (
+                b"0, NVIDIA GeForce RTX 4060, 7, 1388, 8188, 30, [N/A], 115.00\n",
+                b"",
+            )
+
+    async def fake_subprocess(*args, **kwargs):
+        return Process()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    rows = await control_panel._gpu_snapshot()
+    assert rows[0]["name"] == "NVIDIA GeForce RTX 4060"
+    assert rows[0]["memory_total_mb"] == 8188
+    assert rows[0]["power_draw_w"] is None

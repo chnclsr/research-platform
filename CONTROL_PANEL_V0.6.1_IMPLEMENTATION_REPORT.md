@@ -77,9 +77,8 @@ flowchart LR
 ## Doğrulama
 
 - Ruff: geçti.
-- Tam test paketi: `103 passed`.
+- Tam test paketi: `104 passed`.
 - Timeline süre, kaynak hunisi, admission, connector success/latency/error ve LLM hız özetleri için
   deterministik testler eklendi.
 - Run detail’in gerçek test veritabanından timeline, funnel, branch ve quality üretmesi doğrulandı.
 - LAN guard, control token ve servis aksiyonu regresyon testleri korunmuştur.
-

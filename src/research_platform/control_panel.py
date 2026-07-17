@@ -271,6 +271,12 @@ async def _gpu_snapshot() -> list[dict[str, Any]]:
     except (FileNotFoundError, TimeoutError):
         return []
     output = []
+    def number(value: str) -> float | None:
+        try:
+            return float(value)
+        except ValueError:
+            return None
+
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         values = [value.strip() for value in line.split(",")]
         if len(values) != 8:
@@ -279,14 +285,14 @@ async def _gpu_snapshot() -> list[dict[str, Any]]:
             output.append({
                 "index": int(values[0]),
                 "name": values[1],
-                "utilization_percent": float(values[2]),
-                "memory_used_mb": float(values[3]),
-                "memory_total_mb": float(values[4]),
-                "temperature_c": float(values[5]),
-                "power_draw_w": float(values[6]),
-                "power_limit_w": float(values[7]),
+                "utilization_percent": number(values[2]),
+                "memory_used_mb": number(values[3]),
+                "memory_total_mb": number(values[4]),
+                "temperature_c": number(values[5]),
+                "power_draw_w": number(values[6]),
+                "power_limit_w": number(values[7]),
             })
-        except ValueError:
+        except (TypeError, ValueError):
             continue
     return output
 
