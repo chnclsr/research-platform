@@ -18,7 +18,7 @@ def calculate_coverage(
     authority_coverage: float = 1.0,
     claim_audit_required: bool = True,
     sentinel_recall: float = 1.0,
-    estimated_completeness: float = 1.0,
+    estimated_completeness: float | None = None,
     relative_recall: float = 1.0,
     citation_frontier_novelty: float = 0.0,
     reserve_false_negative_rate: float = 0.0,
@@ -66,6 +66,7 @@ def calculate_coverage(
     if (
         quality_diagnostics_active
         and discovery_observations >= 5
+        and estimated_completeness is not None
         and estimated_completeness < stopping.minimum_estimated_completeness
     ):
         reasons.append("estimated_completeness")
@@ -90,7 +91,10 @@ def calculate_coverage(
         authority_coverage=round(authority_coverage, 4),
         saturated_rounds=saturated,
         sentinel_recall=round(sentinel_recall, 4),
-        estimated_completeness=round(estimated_completeness, 4),
+        estimated_completeness=(
+            round(estimated_completeness, 4)
+            if estimated_completeness is not None else None
+        ),
         relative_recall=round(relative_recall, 4),
         citation_frontier_novelty=round(citation_frontier_novelty, 4),
         reserve_false_negative_rate=round(reserve_false_negative_rate, 4),

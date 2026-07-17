@@ -10,6 +10,7 @@ from research_platform.schemas import (
     SourceFamily,
 )
 from research_platform.temporal import (
+    enrich_publication_date,
     constrain_text_to_scope,
     infer_relative_date_range,
     publication_datetime,
@@ -17,6 +18,35 @@ from research_platform.temporal import (
 
 
 NOW = datetime(2026, 7, 17, 12, 0, tzinfo=timezone.utc)
+
+
+def test_arxiv_identifier_enriches_missing_publication_date():
+    candidate = ConnectorCandidate(
+        connector_id="agentsearch_web",
+        family=SourceFamily.ACADEMIC,
+        title="Known paper",
+        url="https://arxiv.org/abs/2108.09293",
+        persistent_id="arxiv:2108.09293",
+    )
+    value, basis = enrich_publication_date(candidate)
+    assert value == datetime(2021, 8, 1, tzinfo=timezone.utc)
+    assert basis == "arxiv_identifier"
+    assert candidate.metadata["publication_date_basis"] == "arxiv_identifier"
+
+
+def test_explicit_document_metadata_enriches_missing_publication_date():
+    candidate = ConnectorCandidate(
+        connector_id="agentsearch_web",
+        family=SourceFamily.WEB,
+        title="Release note",
+        url="https://example.org/release",
+    )
+    value, basis = enrich_publication_date(
+        candidate,
+        '<meta property="article:published_time" content="2026-05-04T10:00:00Z">',
+    )
+    assert value == datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
+    assert basis == "document_metadata"
 
 
 def test_relative_last_three_months_becomes_an_explicit_utc_scope():
@@ -134,3 +164,36 @@ def test_academic_gate_does_not_use_related_page_links_to_change_the_paper_subje
         ),
     )
     assert document_relevance(document, protocol)[0] is False
+
+
+def test_required_sentinel_uses_verified_content_match_instead_of_generic_heading_rule():
+    candidate = ConnectorCandidate(
+        connector_id="source_seed",
+        family=SourceFamily.ACADEMIC,
+        title="Asleep at the Keyboard? Assessing the Security of GitHub Copilot's Code Contributions",
+        url="https://arxiv.org/abs/2108.09293",
+        persistent_id="arxiv:2108.09293",
+        metadata={"seeded": True, "sentinel_required": True},
+    )
+    document = AcquiredDocument(
+        candidate=candidate,
+        success=True,
+        access_status="open",
+        content=(
+            "We investigate the security of code contributions generated with GitHub Copilot. "
+            "The study evaluates whether generated programs contain vulnerable code."
+        ),
+        content_hash="sentinel",
+        acquisition_method="fixture",
+    )
+    accepted, score, reasons = document_relevance(
+        document,
+        ResearchProtocol(
+            title="Security evidence",
+            primary_question="Do AI coding assistants increase vulnerable code production?",
+            connectors={"profile": "custom", "included_families": ["academic"]},
+        ),
+    )
+    assert accepted
+    assert score >= 0.25
+    assert "required_sentinel:verified_content_match" in reasons

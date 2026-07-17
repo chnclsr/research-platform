@@ -5,6 +5,7 @@ import hashlib
 import pytest
 
 from research_platform.llm import DeterministicProvider, extract_claims
+from research_platform.evidence_quality import evidence_quality_gate, is_non_evidence_section
 from research_platform.passages import (
     chunk_document, html_to_markdown, merge_passage_claims, neighbor_context,
     relevant_sentence_claims,
@@ -165,3 +166,76 @@ def test_exact_sentence_is_kept_when_model_paraphrase_uses_same_quote():
     )
     merged = merge_passage_claims([model], [exact])
     assert [claim.text for claim in merged] == [model.text, exact.text]
+
+
+def test_reference_and_how_to_cite_sections_are_not_evidence():
+    assert is_non_evidence_section("Paper > References")
+    assert is_non_evidence_section("How to Cite")
+    assert is_non_evidence_section("Makale / Kaynakça")
+    assert not is_non_evidence_section("Results > Security findings")
+
+
+def test_evidence_gate_rejects_question_title_bibliography_and_source_title_claims():
+    valid, reason = evidence_quality_gate(
+        "A controlled study found that assistants increased vulnerable code production.",
+        "Do users write more insecure code with AI assistants?",
+        section_path="References",
+    )
+    assert not valid
+    assert reason == "non_evidence_section"
+
+    valid, reason = evidence_quality_gate(
+        "Boichuk, D. (2026). AI Assistants in Software Development. https://doi.org/10.1000/x",
+        "Boichuk, D. (2026). AI Assistants in Software Development. https://doi.org/10.1000/x",
+        section_path="Document",
+    )
+    assert not valid
+    assert reason == "bibliographic_text"
+
+    title = "AI Assistants in Software Development: Analysis of Security Risks"
+    valid, reason = evidence_quality_gate(
+        title,
+        title,
+        section_path="Abstract",
+        source_title=title,
+    )
+    assert not valid
+    assert reason == "source_title_as_claim"
+
+
+def test_evidence_gate_accepts_substantive_result_sentence():
+    valid, reason = evidence_quality_gate(
+        "Participants using the assistant produced more vulnerable solutions than controls.",
+        "Participants using the assistant produced more vulnerable solutions than controls in three of four tasks.",
+        section_path="Results",
+        source_title="Controlled Security Study",
+        entailment_score=0.82,
+    )
+    assert valid
+    assert reason == "accepted"
+
+
+def test_evidence_gate_rejects_access_paper_shell_text():
+    valid, reason = evidence_quality_gate(
+        "AI code assistants improve developers' use of security APIs in practice.",
+        "View a PDF of the paper titled Understanding the Impact of AI Code Assistants on Security API Usage, by Example Author and 4 other authors",
+        section_path="Title > Access Paper:",
+        entailment_score=0.8,
+    )
+    assert not valid
+    assert reason == "non_evidence_section"
+
+
+def test_evidence_gate_rejects_navigation_shell_concatenated_with_title():
+    shell = (
+        "Assessing the Security of GitHub Copilot's Code Contributions "
+        "Skip to main content arXiv is now an independent nonprofit!"
+    )
+    valid, reason = evidence_quality_gate(
+        shell,
+        shell,
+        section_path="Document",
+        entailment_score=0.84,
+    )
+    assert not valid
+    assert reason == "navigation_shell_text"

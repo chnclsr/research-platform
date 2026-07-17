@@ -18,6 +18,7 @@ from .config import Settings
 from .connectors import build_registry
 from .coverage import calculate_coverage
 from .discovery_quality import estimated_completeness, relation_to_candidate, sentinel_recall
+from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .embeddings import EmbeddingClient
 from .exporter import build_exports
 from .llm import LLMProvider, build_llm, decompose, extract_claims, generate_search_queries
@@ -52,7 +53,7 @@ from .schemas import (
     ExtractedClaim, Passage, ResearchProtocol, RunStatus, SearchMission, SourceFamily,
 )
 from .storage import ObjectStore
-from .temporal import constrain_text_to_scope
+from .temporal import constrain_text_to_scope, enrich_publication_date
 
 
 class PipelineState(TypedDict, total=False):
@@ -284,6 +285,14 @@ class ResearchPipeline:
             await self.repo.event(
                 state["run_id"], "connectors_skipped", {"connectors": unavailable},
             )
+        if protocol.connectors.citation_depth > 0 and not any(
+            "citations" in getattr(connector, "capabilities", ())
+            for connector in selected_connectors.values()
+        ):
+            await self.repo.event(state["run_id"], "citation_frontier_degraded", {
+                "reason": "no_healthy_citation_capable_connector",
+                "requested_depth": protocol.connectors.citation_depth,
+            })
         missions = [
             SearchMission.model_validate(item) for item in state.get("missions", [])
         ]
@@ -448,6 +457,16 @@ class ResearchPipeline:
         batches = await asyncio.gather(*calls)
         for error in connector_errors:
             await self.repo.event(state["run_id"], "connector_error", error)
+        citation_errors = [
+            error for error in connector_errors
+            if str(error.get("error", "")).startswith("citation frontier:")
+        ]
+        if citation_errors:
+            await self.repo.event(state["run_id"], "citation_frontier_degraded", {
+                "reason": "citation_provider_errors",
+                "error_count": len(citation_errors),
+                "connectors": sorted({str(item.get("connector")) for item in citation_errors}),
+            })
         if connector_metrics:
             await self.repo.event(
                 state["run_id"], "connector_metrics", {"calls": connector_metrics},
@@ -492,6 +511,7 @@ class ResearchPipeline:
                         "target_entities": mission.target_entities,
                         "authority": mission.required_authority.value,
                         "seeded": True,
+                        "sentinel_required": mission.branch_id.startswith("sentinel:"),
                         "relevance_score": 1.0,
                     },
                 )
@@ -788,6 +808,7 @@ class ResearchPipeline:
         for document in documents:
             if not document.success:
                 continue
+            enrich_publication_date(document.candidate, document.raw_content or document.content)
             temporal_ok, temporal_reason = temporal_relevance(
                 document.candidate, protocol, reject_unknown=True,
             )
@@ -812,7 +833,10 @@ class ResearchPipeline:
                     "stage": "post_acquisition_semantic",
                 })
                 continue
-            if not self.settings.testing:
+            if (
+                not self.settings.testing
+                and not document.candidate.metadata.get("sentinel_required")
+            ):
                 judged_relevant, judge_score, judge_reason = (
                     await self._semantic_source_judgment(protocol, document)
                 )
@@ -1022,6 +1046,8 @@ class ResearchPipeline:
                 doc = AcquiredDocument.model_validate(payload)
                 if doc.candidate.metadata.get("evidence_eligible") is False:
                     return []
+                if is_non_evidence_section(passage.section_path):
+                    return []
                 try:
                     model_claims = await extract_claims(
                         self.llm, doc,
@@ -1035,7 +1061,16 @@ class ResearchPipeline:
                     deterministic_claims = relevant_sentence_claims(
                         passage, evidence_questions, doc.candidate.id, limit=2,
                     )
-                    return merge_passage_claims(model_claims, deterministic_claims)[:4]
+                    merged = merge_passage_claims(model_claims, deterministic_claims)[:4]
+                    return [
+                        claim for claim in merged
+                        if evidence_quality_gate(
+                            claim.text,
+                            claim.quote,
+                            section_path=claim.section_path,
+                            source_title=doc.candidate.title,
+                        )[0]
+                    ]
                 except Exception as exc:
                     extraction_errors.append({"url": str(doc.candidate.url), "error": str(exc)[:500]})
                     return []
@@ -1057,6 +1092,11 @@ class ResearchPipeline:
         raw = state.get("claims", [])
         accepted: list[tuple[ExtractedClaim, str]] = []
         existing = await self.repo.list_claims(state["run_id"])
+        document_titles = {
+            payload["source_version_id"]: AcquiredDocument.model_validate(payload).candidate.title
+            for payload in state.get("documents", [])
+            if payload.get("source_version_id")
+        }
         seen: list[tuple[str, str]] = [
             (re.sub(r"\W+", " ", claim.text.lower()).strip(), claim.id) for claim in existing
         ]
@@ -1076,7 +1116,13 @@ class ResearchPipeline:
                 claim.text,
                 flags=re.IGNORECASE,
             ))
-            if relevance < 0.25 or promotional:
+            evidence_valid, _ = evidence_quality_gate(
+                claim.text,
+                claim.quote,
+                section_path=claim.section_path,
+                source_title=document_titles.get(version_id, ""),
+            )
+            if relevance < 0.25 or promotional or not evidence_valid:
                 continue
             normalized = re.sub(r"\W+", " ", claim.text.lower()).strip()
             match = next(
@@ -1291,6 +1337,7 @@ class ResearchPipeline:
             [{"id": claim.id, "text": claim.text} for claim in unresolved],
             dict(branch_counts),
             state.get("branch_queries", {}),
+            missed_sentinels,
         )
         exhausted = not recovery_missions(
             protocol, gaps, set(state.get("attempted_missions", [])),
@@ -1394,9 +1441,26 @@ class ResearchPipeline:
         minimum = protocol.evidence_policy.minimum_independent_sources
         for claim in claims:
             links = by_claim.get(claim.id, [])
-            domains = {re.sub(r"^www\.", "", re.sub(r"^https?://", "", s.url).split("/", 1)[0]) for _, s in links}
-            supporting = [e for e, _ in links if e.direction == "supports" and e.entailment_score >= 0.5]
-            contradicting = [e for e, _ in links if e.direction == "contradicts"]
+            evaluated_links = [
+                (e, source, *evidence_quality_gate(
+                    claim.text,
+                    e.quote,
+                    section_path=(e.location or {}).get("section_path"),
+                    source_title=source.title,
+                    entailment_score=e.entailment_score,
+                ))
+                for e, source in links
+            ]
+            valid_links = [(e, source) for e, source, valid, _ in evaluated_links if valid]
+            domains = {
+                re.sub(r"^www\.", "", re.sub(r"^https?://", "", s.url).split("/", 1)[0])
+                for _, s in valid_links
+            }
+            supporting = [
+                e for e, _ in valid_links
+                if e.direction == "supports" and e.entailment_score >= 0.5
+            ]
+            contradicting = [e for e, _ in valid_links if e.direction == "contradicts"]
             source_score = max(
                 (
                     max(
@@ -1425,6 +1489,10 @@ class ResearchPipeline:
                 "supporting_evidence": len(supporting), "counter_evidence": len(contradicting),
                 "independent_domains": len(domains), "minimum_required": minimum,
                 "question_relevance": relevance, "source_relevance": source_score,
+                "invalid_evidence": sum(not valid for _, _, valid, _ in evaluated_links),
+                "invalid_evidence_reasons": sorted({
+                    reason for _, _, valid, reason in evaluated_links if not valid
+                }),
             }
         await self.session.commit()
         coverage = CoverageMetrics.model_validate(state.get("coverage", {}))

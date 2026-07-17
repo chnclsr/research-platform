@@ -19,6 +19,7 @@ from research_platform.schemas import (
     ResearchProtocol,
     RunStatus,
     SearchMission,
+    SentinelSource,
     SourceFamily,
 )
 
@@ -80,6 +81,57 @@ def test_initial_missions_resolve_named_entities_to_official_domains():
     assert "https://code.claude.com/docs/en/mcp" in seed_urls
     assert "https://core.telegram.org/bots/api" in seed_urls
     assert "https://github.com/openai/codex" in seed_urls
+
+
+def test_required_sentinel_becomes_exact_seeded_search_mission():
+    protocol = ResearchProtocol(
+        title="Sentinel research",
+        primary_question="Do coding assistants affect software security?",
+        connectors={
+            "profile": "custom",
+            "included_families": ["academic", "web"],
+            "included_connectors": ["arxiv", "crossref", "agentsearch_web"],
+        },
+        sentinel_sources=[SentinelSource(
+            title="Asleep at the Keyboard?",
+            url="https://arxiv.org/abs/2108.09293",
+            persistent_id="arxiv:2108.09293",
+        )],
+    )
+    mission = next(
+        item for item in initial_missions(protocol, [protocol.primary_question])
+        if item.branch_id == "sentinel:0"
+    )
+    assert mission.required_family == SourceFamily.ACADEMIC
+    assert str(mission.seed_urls[0]) == "https://arxiv.org/abs/2108.09293"
+    assert '"Asleep at the Keyboard?"' in mission.query
+    assert "arxiv:2108.09293" in mission.query
+
+
+def test_missing_sentinel_creates_exact_recovery_mission():
+    protocol = ResearchProtocol(
+        title="Sentinel recovery",
+        primary_question="Do coding assistants affect software security?",
+        connectors={"profile": "custom", "included_families": ["academic"]},
+        sentinel_sources=[SentinelSource(
+            title="Asleep at the Keyboard?",
+            url="https://arxiv.org/abs/2108.09293",
+            persistent_id="arxiv:2108.09293",
+        )],
+    )
+    gaps = diagnose_gaps(
+        protocol,
+        CoverageMetrics(sentinel_recall=0.0),
+        [],
+        [],
+        missed_sentinels=["Asleep at the Keyboard?"],
+    )
+    mission = next(
+        item for item in recovery_missions(protocol, gaps, set())
+        if item.branch_id.startswith("sentinel:")
+    )
+    assert str(mission.seed_urls[0]) == "https://arxiv.org/abs/2108.09293"
+    assert "arxiv:2108.09293" in mission.query
 
 
 def test_uncovered_branch_recovery_preserves_original_branch_id():

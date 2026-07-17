@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import zipfile
 from collections import Counter
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 import yaml
 
 from .llm import LLMProvider
+from .evidence_quality import evidence_quality_gate
 from .repository import Repository
 from .schemas import CoverageMetrics, ResearchProtocol
 from .storage import ObjectStore
@@ -47,7 +49,12 @@ def _markdown(value: Any, level: int = 0) -> str:
 
 def _is_reportable(claim: Any) -> bool:
     relevance = float((claim.audit or {}).get("question_relevance", 0.0))
-    return claim.status in {"supported", "qualified"} and relevance >= 0.20
+    supporting = int((claim.audit or {}).get("supporting_evidence", 0))
+    return (
+        claim.status in {"supported", "qualified"}
+        and relevance >= 0.20
+        and supporting > 0
+    )
 
 
 async def build_exports(
@@ -89,15 +96,52 @@ async def build_exports(
         ),
     )
     for claim in ordered_reportable[:60]:
-        links = evidence_by_claim.get(claim.id, [])
+        links = [
+            (link, source)
+            for link, source in evidence_by_claim.get(claim.id, [])
+            if evidence_quality_gate(
+                claim.text,
+                link.quote,
+                section_path=(link.location or {}).get("section_path"),
+                source_title=source.title,
+                entailment_score=link.entailment_score,
+            )[0]
+        ]
         refs = ", ".join(f"{source.title} ({source.url})" for _, source in links)
+        quotes = " | ".join(link.quote[:600] for link, _ in links)
         candidate_context = (
             f"CLAIM: {claim.text}\nSTATUS: {claim.status}\n"
-            f"QUESTION_RELEVANCE: {claim.audit.get('question_relevance', 0)}\nSOURCES: {refs}"
+            f"QUESTION_RELEVANCE: {claim.audit.get('question_relevance', 0)}\n"
+            f"SOURCES: {refs}\nVERIFIED_QUOTES: {quotes}"
         )
         if len("\n\n".join([*context_lines, candidate_context])) > context_char_budget:
             break
         context_lines.append(candidate_context)
+    language_is_turkish = protocol.report_language.lower().startswith("tr")
+    deterministic_synthesis = {
+        "executive_summary": (
+            f"Kanıt denetimini geçen {len(reportable)} iddia vardır; bunların "
+            f"{sum(claim.status == 'supported' for claim in reportable)} tanesi bağımsız "
+            "kaynaklarla desteklenmiştir. Ayrıntılı ve kaynaklı bulgular raporun ilgili "
+            "bölümlerindedir."
+            if language_is_turkish else
+            f"{len(reportable)} claims passed evidence audit; "
+            f"{sum(claim.status == 'supported' for claim in reportable)} have independent support. "
+            "See the sourced findings for details."
+        ),
+        "report": (
+            "Model sentezi doğrulanabilirlik kapısını geçemediği için yeni yorum eklenmedi; "
+            "yalnız denetlenmiş bulgular raporlandı."
+            if language_is_turkish else
+            "No additional interpretation was added because model synthesis did not pass the "
+            "grounding gate; only audited findings are reported."
+        ),
+        "uncertainty": (
+            "Bağımsız destek, karşı kanıt ve kapsam eksikleri belirsizlik raporunda gösterilmiştir."
+            if language_is_turkish else
+            "Independent support, counterevidence, and coverage gaps are listed in the uncertainty report."
+        ),
+    }
     if protocol.output_mode == "raw":
         synthesis = {
             "executive_summary": "Ham veri modu seçildi; model sentezi çalıştırılmadı.",
@@ -106,28 +150,75 @@ async def build_exports(
                 "İddia çıkarımı, denetim ve sentez ham veri modunda bilinçli olarak atlandı."
             ),
         }
+    elif not context_lines:
+        synthesis = {
+            "executive_summary": (
+                "Denetim kapısından geçen raporlanabilir iddia bulunamadı. "
+                "Sistem, doğrulanmamış sonuç üretmek yerine araştırmayı eksik olarak teslim etti."
+                if language_is_turkish else
+                "No reportable claim passed the evidence audit. The system returned an incomplete "
+                "research result instead of generating an unverified conclusion."
+            ),
+            "report": (
+                "Doğrulanmış kanıt bulunmadığından model sentezi çalıştırılmadı."
+                if language_is_turkish else
+                "Model synthesis was skipped because no verified evidence was available."
+            ),
+            "uncertainty": (
+                "Kaynak ve kapsam eksikleri coverage ve belirsizlik raporlarında listelenmiştir."
+                if language_is_turkish else
+                "Source and coverage gaps are listed in the coverage and uncertainty reports."
+            ),
+        }
     else:
         try:
             synthesis = await llm.complete_json(
                 "Create concise JSON with executive_summary, report, and uncertainty. Use only the supplied "
-                "claims, distinguish supported from qualified findings, retain source URLs, and never add facts.",
+                "claims and VERIFIED_QUOTES, distinguish supported from qualified findings, retain source URLs, "
+                f"write every value in report language '{protocol.report_language}', and never add facts.",
                 f"QUESTION: {protocol.primary_question}\n\n" + "\n\n".join(context_lines),
             )
             if not isinstance(synthesis, dict):
                 synthesis = {"report": synthesis}
-        except Exception as exc:
-            synthesis = {
-                "executive_summary": (
-                    "Sentez modeli kullanılamadı; denetlenebilir kanıt dosyaları üretildi."
-                ),
-                "report": "Model sentezi mevcut değil.",
-                "uncertainty": f"LLM synthesis unavailable: {type(exc).__name__}",
+            synthesis_blob = json.dumps(synthesis, ensure_ascii=False)
+            allowed_urls = {
+                source.url
+                for claim in ordered_reportable
+                for _, source in evidence_by_claim.get(claim.id, [])
             }
+            output_urls = set(re.findall(r"https?://[^\s)\]>]+", synthesis_blob))
+            english_markers = len(re.findall(
+                r"\b(?:the|and|with|from|this|study|claim|source|evidence)\b",
+                synthesis_blob,
+                flags=re.IGNORECASE,
+            ))
+            turkish_markers = len(re.findall(
+                r"\b(?:ve|ile|bu|bir|çalışma|iddia|kaynak|kanıt|ancak)\b",
+                synthesis_blob,
+                flags=re.IGNORECASE,
+            ))
+            if output_urls - allowed_urls or (
+                language_is_turkish and english_markers > max(2, turkish_markers)
+            ):
+                synthesis = deterministic_synthesis
+        except Exception as exc:
+            synthesis = dict(deterministic_synthesis)
+            synthesis["uncertainty"] += f" LLM synthesis unavailable: {type(exc).__name__}."
 
     def render_findings(selected_claims: list[Any]) -> str:
         findings = []
         for index, claim in enumerate(selected_claims, 1):
-            links = evidence_by_claim.get(claim.id, [])
+            links = [
+                (link, source)
+                for link, source in evidence_by_claim.get(claim.id, [])
+                if evidence_quality_gate(
+                    claim.text,
+                    link.quote,
+                    section_path=(link.location or {}).get("section_path"),
+                    source_title=source.title,
+                    entailment_score=link.entailment_score,
+                )[0]
+            ]
             citations = "\n".join(
                 f"- [{source.title}]({source.url}) — {link.location.get('section_path') or 'Document'}, "
                 f"chars {link.location.get('start_char')}–{link.location.get('end_char')} — "

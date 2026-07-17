@@ -151,6 +151,41 @@ def publication_datetime(metadata: dict[str, Any] | None) -> tuple[datetime | No
     return None, None
 
 
+def enrich_publication_date(candidate: Any, content: str = "") -> tuple[datetime | None, str | None]:
+    """Enrich missing academic dates from stable identifiers or explicit page metadata."""
+    if getattr(candidate, "published_at", None) is not None:
+        return candidate.published_at, "candidate.published_at"
+    identity = " ".join([
+        str(getattr(candidate, "persistent_id", "") or ""),
+        str(getattr(candidate, "url", "") or ""),
+    ])
+    arxiv = re.search(r"(?:arxiv:|arxiv\.org/(?:abs|pdf)/)(\d{2})(\d{2})\.\d{4,5}", identity, re.I)
+    if arxiv:
+        year = 2000 + int(arxiv.group(1))
+        month = int(arxiv.group(2))
+        if 1 <= month <= 12:
+            value = datetime(year, month, 1, tzinfo=timezone.utc)
+            candidate.published_at = value
+            candidate.metadata["published_at"] = value.isoformat()
+            candidate.metadata["publication_date_basis"] = "arxiv_identifier"
+            return value, "arxiv_identifier"
+    excerpt = content[:100_000]
+    patterns = (
+        r'<meta[^>]+(?:name|property)=["\'](?:citation_(?:publication_)?date|article:published_time)["\'][^>]+content=["\']([^"\']+)',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:name|property)=["\'](?:citation_(?:publication_)?date|article:published_time)["\']',
+        r'"datePublished"\s*:\s*"([^"]+)"',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, excerpt, re.I)
+        parsed = parse_datetime(match.group(1)) if match else None
+        if parsed:
+            candidate.published_at = parsed
+            candidate.metadata["published_at"] = parsed.isoformat()
+            candidate.metadata["publication_date_basis"] = "document_metadata"
+            return parsed, "document_metadata"
+    return None, None
+
+
 def date_scope_decision(
     published_at: datetime | None,
     start_date: datetime | None,

@@ -1,10 +1,22 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.1`
+Platform sürümü: `v0.6.2`
 
-Belge sürümü: `2.6`
+Belge sürümü: `2.7`
 
 Son güncelleme: `2026-07-17`
+
+## v0.6.2 — 2026-07-17
+
+- Kaynakça, bibliyografya, `How to Cite`, footer ve benzeri citation-shell bölümleri kanıt çıkarımından çıkarıldı.
+- Bibliyografik kayıtların, soru biçimindeki çalışma başlıklarının ve kaynak başlığının iddia olarak raporlanmasını engelleyen fail-closed evidence quality gate eklendi.
+- `qualified` ve `supported` raporlaması için en az bir geçerli destek kanıtı zorunlu hale getirildi; geçersiz kanıt nedenleri claim audit kaydına ekleniyor.
+- Sentez yalnız doğrulanmış alıntıları alıyor ve protokolde seçilen rapor dilini açıkça uyguluyor.
+- Zorunlu sentinel kaynaklar exact title, persistent ID ve canonical URL ile ayrı arama/acquisition görevlerine dönüştürüldü; eksik sentinel için hedefli recovery eklendi.
+- arXiv kimliğinden ve açık HTML yayın metadata'sından edinim sonrası tarih enrichment eklendi.
+- Beşten az discovery observation olduğunda tahmini completeness artık yanıltıcı `%100` yerine ölçülmemiş (`null`) gösteriliyor.
+- Citation-capable connector bulunmadığında veya citation çağrıları hata verdiğinde `citation_frontier_degraded` olayı üretiliyor.
+- Toplam otomatik test sayısı `115 passed` sonucuna ulaştı.
 
 ## v0.6.1 — 2026-07-17
 

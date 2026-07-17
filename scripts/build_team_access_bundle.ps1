@@ -9,7 +9,7 @@ $serverIp = [regex]::Match($access, 'Server URL:\s*http://([^:/\s]+):8010/mcp').
 $token = [regex]::Match($access, 'Bearer token:\s*(\S+)').Groups[1].Value
 if (-not $serverIp -or -not $token) { throw "TEAM_ACCESS.txt icinden sunucu veya token okunamadi." }
 
-$version = "0.6.1"
+$version = "0.6.2"
 $bundleName = "research-platform-team-client-v$version"
 $bundleRoot = Join-Path $accessRoot $bundleName
 if (Test-Path $bundleRoot) { Remove-Item -LiteralPath $bundleRoot -Recurse -Force }

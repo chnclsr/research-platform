@@ -233,7 +233,7 @@ class CoverageMetrics(BaseModel):
     authority_coverage: float = 1.0
     saturated_rounds: int = 0
     sentinel_recall: float = 1.0
-    estimated_completeness: float = 1.0
+    estimated_completeness: float | None = None
     relative_recall: float = 1.0
     citation_frontier_novelty: float = 0.0
     reserve_false_negative_rate: float = 0.0
@@ -395,7 +395,7 @@ class CoverageGap(BaseModel):
     id: str = Field(default_factory=new_id)
     dimension: Literal[
         "source_family", "authority", "query_branch",
-        "claim_support", "counterevidence", "version",
+        "claim_support", "counterevidence", "version", "sentinel",
     ]
     topic: str
     branch_id: str | None = None

@@ -73,6 +73,12 @@ def test_capture_recapture_diagnostic_penalizes_singleton_heavy_pool():
     assert 0 < completeness < 1
 
 
+def test_capture_recapture_is_unavailable_for_tiny_samples():
+    completeness, observed = estimated_completeness([["a"], ["b"]])
+    assert completeness is None
+    assert observed == 2
+
+
 def test_sentinel_recall_matches_persistent_id_and_reports_missing_titles():
     recall, missing = sentinel_recall(
         [
@@ -83,4 +89,3 @@ def test_sentinel_recall_matches_persistent_id_and_reports_missing_titles():
     )
     assert recall == 0.5
     assert missing == ["Known B"]
-

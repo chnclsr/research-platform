@@ -68,7 +68,7 @@ def relation_to_candidate(
     )
 
 
-def estimated_completeness(provider_incidence: list[list[str]]) -> tuple[float, int]:
+def estimated_completeness(provider_incidence: list[list[str]]) -> tuple[float | None, int]:
     """Bias-corrected incidence estimator over the pooled relevant source set.
 
     This is a diagnostic, not an absolute recall guarantee. Singleton-heavy pools signal
@@ -77,7 +77,7 @@ def estimated_completeness(provider_incidence: list[list[str]]) -> tuple[float, 
     incidence = [len(set(row)) for row in provider_incidence if row]
     observed = len(incidence)
     if observed < 5:
-        return 1.0, observed
+        return None, observed
     frequencies = Counter(incidence)
     q1, q2 = frequencies.get(1, 0), frequencies.get(2, 0)
     unseen = (q1 * q1) / (2 * q2) if q2 else (q1 * max(0, q1 - 1)) / 2

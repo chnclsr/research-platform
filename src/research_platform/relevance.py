@@ -364,6 +364,7 @@ def document_relevance(
     academic_heading_satisfied = (
         candidate.family != SourceFamily.ACADEMIC
         or bool(primary_heading_phrases)
+        or bool(candidate.metadata.get("sentinel_required"))
     )
     accepted = (
         best_score >= 0.35
@@ -371,6 +372,16 @@ def document_relevance(
         and focus_satisfied
         and academic_heading_satisfied
     )
+    if candidate.metadata.get("sentinel_required"):
+        sentinel_terms = topic_terms(candidate.title)
+        sentinel_hits = sentinel_terms & body_terms
+        sentinel_score = len(sentinel_hits) / max(1, min(len(sentinel_terms), 8))
+        best_score = max(best_score, min(1.0, sentinel_score))
+        accepted = (
+            (best_score >= 0.25 and best_topic_count >= 2)
+            or (len(sentinel_hits) >= 3 and sentinel_score >= 0.35)
+        )
+        best_reasons.append("required_sentinel:verified_content_match")
     candidate.metadata["content_relevance_score"] = round(best_score, 4)
     candidate.metadata["content_relevance_reasons"] = best_reasons
     return accepted, round(best_score, 4), best_reasons

@@ -89,6 +89,32 @@ def initial_missions(
     queries: list[str],
 ) -> list[SearchMission]:
     missions: list[SearchMission] = []
+    included = set(protocol.connectors.included_connectors)
+    for index, sentinel in enumerate(
+        item for item in protocol.sentinel_sources if item.required
+    ):
+        identity = sentinel.persistent_id or sentinel.title
+        academic = bool(
+            (sentinel.persistent_id or "").lower().startswith(("arxiv:", "10."))
+            or "arxiv.org" in str(sentinel.url or "")
+            or "doi.org" in str(sentinel.url or "")
+        )
+        family = SourceFamily.ACADEMIC if academic else SourceFamily.WEB
+        connector_ids = list(FAMILY_CONNECTORS[family])
+        if included:
+            connector_ids = [item for item in connector_ids if item in included]
+        if "agentsearch_web" in included and "agentsearch_web" not in connector_ids:
+            connector_ids.append("agentsearch_web")
+        missions.append(SearchMission(
+            branch_id=f"sentinel:{index}",
+            query=f'"{sentinel.title}" {identity}',
+            connector_ids=connector_ids,
+            seed_urls=[sentinel.url] if sentinel.url else [],
+            required_family=family,
+            required_authority=AuthorityLevel.PRIMARY,
+            result_limit=min(10, protocol.budget.results_per_connector),
+            acquisition_slots=1,
+        ))
     entities = resolve_official_entities(protocol.primary_question)
     if protocol.authority_policy.minimum_authority == AuthorityLevel.OFFICIAL:
         for entity in entities:
@@ -164,11 +190,22 @@ def diagnose_gaps(
     unresolved_claims: list[dict[str, str]],
     branch_result_counts: dict[str, int] | None = None,
     branch_queries: dict[str, str] | None = None,
+    missed_sentinels: list[str] | None = None,
 ) -> list[CoverageGap]:
     gaps: list[CoverageGap] = []
     branch_result_counts = branch_result_counts or {}
     branch_queries = branch_queries or {}
     counts = Counter(source_families)
+    for title in missed_sentinels or []:
+        gaps.append(CoverageGap(
+            dimension="sentinel",
+            topic=title,
+            branch_id=f"sentinel:{title}",
+            missing_family=SourceFamily.ACADEMIC,
+            preferred_connectors=FAMILY_CONNECTORS[SourceFamily.ACADEMIC],
+            minimum_novel_sources=1,
+            priority=1.0,
+        ))
     for family, target in protocol.family_targets.items():
         missing = max(0, target.minimum_sources - counts.get(family.value, 0))
         if missing:
@@ -309,8 +346,21 @@ def recovery_missions(
                 "counterevidence": "counter evidence",
                 "query_branch": "evidence",
                 "version": "latest version",
+                "sentinel": "exact title persistent identifier",
             }[gap.dimension]
-            query = f"{gap.topic} {query_suffix}"
+            sentinel = next(
+                (
+                    item for item in protocol.sentinel_sources
+                    if item.title == gap.topic
+                ),
+                None,
+            )
+            if sentinel is not None:
+                identity = sentinel.persistent_id or sentinel.title
+                query = f'"{sentinel.title}" {identity}'
+                seed_urls = [sentinel.url] if sentinel.url else []
+            else:
+                query = f"{gap.topic} {query_suffix}"
             mission = SearchMission(
                 gap_id=gap.id,
                 branch_id=gap.branch_id or f"gap:{gap.id}",

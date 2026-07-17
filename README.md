@@ -1,6 +1,6 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.1`
+Platform sürümü: `v0.6.2`
 
 Belge sürümü: `2.6`
 
