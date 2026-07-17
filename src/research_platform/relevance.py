@@ -246,6 +246,59 @@ def filter_and_rank_candidates(
     return selected, rejected
 
 
+def classify_candidate_admission(
+    candidates: list[ConnectorCandidate],
+    protocol: ResearchProtocol,
+    accepted_limit: int,
+    *,
+    reserve_limit: int | None = None,
+) -> tuple[
+    list[ConnectorCandidate],
+    list[ConnectorCandidate],
+    list[dict[str, str | float]],
+]:
+    """Split discovery into accept/reserve/reject without weakening safety gates.
+
+    The reserve tier is deliberately acquired in a small audit sample. This lets the
+    content and semantic gates recover title-only false negatives while prompt injection,
+    explicit entity mismatches and domain-policy violations remain hard rejects.
+    """
+    accepted: list[ConnectorCandidate] = []
+    reserve: list[ConnectorCandidate] = []
+    rejected: list[dict[str, str | float]] = []
+    for candidate in candidates:
+        selected, row_rejections = filter_and_rank_candidates(
+            [candidate], protocol, 1,
+        )
+        if selected:
+            candidate.metadata["admission_tier"] = "accept"
+            accepted.append(candidate)
+            continue
+        rejection = row_rejections[0]
+        if rejection.get("reason") == "low_relevance":
+            candidate.metadata["admission_tier"] = "reserve"
+            candidate.metadata["admission_reason"] = "low_discovery_relevance"
+            reserve.append(candidate)
+        else:
+            candidate.metadata["admission_tier"] = "reject"
+            rejected.append(rejection)
+
+    def rank(item: ConnectorCandidate) -> tuple[float, int, int]:
+        providers = item.metadata.get("discovered_by_connectors", [])
+        return (
+            float(item.metadata.get("relevance_score", 0.0))
+            + min(0.15, float(item.metadata.get("federated_rrf_score", 0.0)))
+            + min(0.10, max(0, len(providers) - 1) * 0.05),
+            int(item.metadata.get("discovery_method") == "citation_frontier"),
+            int(bool(item.snippet)),
+        )
+
+    accepted = sorted(accepted, key=rank, reverse=True)[:accepted_limit]
+    reserve_cap = reserve_limit if reserve_limit is not None else max(1, accepted_limit // 5)
+    reserve = sorted(reserve, key=rank, reverse=True)[:reserve_cap]
+    return accepted, reserve, rejected
+
+
 def claim_relevance(text: str, question: str, source_score: float = 0.0) -> float:
     question_terms = topic_terms(question)
     claim_terms = topic_terms(text)

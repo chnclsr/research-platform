@@ -1,12 +1,14 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.5.3`
+Platform sürümü: `v0.6.0`
 
-Belge sürümü: `2.4`
+Belge sürümü: `2.5`
 
 Son güncelleme: `2026-07-17`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
+
+Recall güvencesi ve citation-frontier kalite paketi: `RESEARCH_QUALITY_V0.6.0_IMPLEMENTATION_REPORT.md`.
 
 Zamansal kapsam ve kaynak kalitesi düzeltmeleri:
 `TEMPORAL_AND_RELEVANCE_QUALITY_REPORT.md`.

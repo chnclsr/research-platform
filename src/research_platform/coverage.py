@@ -17,6 +17,14 @@ def calculate_coverage(
     *,
     authority_coverage: float = 1.0,
     claim_audit_required: bool = True,
+    sentinel_recall: float = 1.0,
+    estimated_completeness: float = 1.0,
+    relative_recall: float = 1.0,
+    citation_frontier_novelty: float = 0.0,
+    reserve_false_negative_rate: float = 0.0,
+    critical_connector_coverage: float = 1.0,
+    discovery_observations: int = 0,
+    quality_diagnostics_active: bool = False,
 ) -> CoverageMetrics:
     counts = Counter(source_families)
     weighted_scores = []
@@ -53,6 +61,26 @@ def calculate_coverage(
         reasons.append("unresolved_major_claims")
     if protocol.authority_policy.strict_for_major_claims and authority_coverage < 1.0:
         reasons.append("authority_coverage")
+    if protocol.sentinel_sources and sentinel_recall < stopping.minimum_sentinel_recall:
+        reasons.append("sentinel_recall")
+    if (
+        quality_diagnostics_active
+        and discovery_observations >= 5
+        and estimated_completeness < stopping.minimum_estimated_completeness
+    ):
+        reasons.append("estimated_completeness")
+    if (
+        quality_diagnostics_active
+        and reserve_false_negative_rate > stopping.maximum_reserve_false_negative_rate
+    ):
+        reasons.append("reserve_false_negative_rate")
+    if (
+        quality_diagnostics_active
+        and citation_frontier_novelty > stopping.maximum_citation_frontier_novelty
+    ):
+        reasons.append("citation_frontier_novelty")
+    if protocol.connectors.required_connectors and critical_connector_coverage < 1.0:
+        reasons.append("critical_connector_coverage")
     return CoverageMetrics(
         source_family_coverage=round(family_coverage, 4),
         query_branch_coverage=round(branch_coverage, 4),
@@ -61,6 +89,13 @@ def calculate_coverage(
         unresolved_major_claims=unresolved_major_claims,
         authority_coverage=round(authority_coverage, 4),
         saturated_rounds=saturated,
+        sentinel_recall=round(sentinel_recall, 4),
+        estimated_completeness=round(estimated_completeness, 4),
+        relative_recall=round(relative_recall, 4),
+        citation_frontier_novelty=round(citation_frontier_novelty, 4),
+        reserve_false_negative_rate=round(reserve_false_negative_rate, 4),
+        critical_connector_coverage=round(critical_connector_coverage, 4),
+        discovery_observations=discovery_observations,
         sufficient=not reasons,
         reasons=reasons,
     )

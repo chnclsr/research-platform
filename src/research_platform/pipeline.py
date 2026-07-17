@@ -17,6 +17,7 @@ from .acquisition import AcquisitionService
 from .config import Settings
 from .connectors import build_registry
 from .coverage import calculate_coverage
+from .discovery_quality import estimated_completeness, relation_to_candidate, sentinel_recall
 from .embeddings import EmbeddingClient
 from .exporter import build_exports
 from .llm import LLMProvider, build_llm, decompose, extract_claims, generate_search_queries
@@ -27,12 +28,14 @@ from .passages import (
 from .paperqa_adapter import PaperQA2EvidenceEngine
 from .normalization import canonicalize_url
 from .relevance import (
+    classify_candidate_admission,
     claim_relevance,
     document_relevance,
     domain_matches,
     filter_and_rank_candidates,
     temporal_relevance,
 )
+from .query_compiler import compile_provider_query
 from .recovery import (
     diagnose_gaps,
     initial_missions,
@@ -75,6 +78,9 @@ class PipelineState(TypedDict, total=False):
     stop_reason: str
     started_monotonic: float
     halted: bool
+    discovery_stats: dict[str, Any]
+    unavailable_connectors: list[str]
+    available_connectors: list[str]
 
 
 class PipelineHalted(RuntimeError):
@@ -247,10 +253,7 @@ class ResearchPipeline:
     async def search(self, state: PipelineState) -> dict:
         await self._boundary(state, "SEARCH")
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        configured_connectors = [
-            connector for connector in self.registry.selected(protocol.connectors)
-            if not connector.missing_credentials()
-        ]
+        configured_connectors = list(self.registry.selected(protocol.connectors))
 
         async def connector_is_usable(connector) -> tuple[Any, Any | None]:
             if not hasattr(connector, "health"):
@@ -286,24 +289,34 @@ class ResearchPipeline:
         if not missions:
             missions = initial_missions(protocol, state.get("queries", []))
         semaphore = asyncio.Semaphore(8)
+        citation_budget_lock = asyncio.Lock()
+        citation_seed_budget = min(12, max(4, protocol.budget.results_per_connector))
+        citation_seeds_used = 0
         connector_errors: list[dict[str, str]] = []
         connector_metrics: list[dict[str, Any]] = []
 
         async def one(connector, mission: SearchMission):
+            nonlocal citation_seeds_used
             async with semaphore:
                 started = time.perf_counter()
                 try:
+                    provider_query = compile_provider_query(
+                        connector.id,
+                        mission.query,
+                        protocol,
+                        state.get("concepts", []),
+                    )
                     domain = mission.domain_allowlist[0] if mission.domain_allowlist else None
                     if domain and hasattr(connector, "search_with_domain"):
                         rows = await connector.search_with_domain(
-                            mission.query, mission.result_limit, domain,
+                            provider_query, mission.result_limit, domain,
                         )
                     elif hasattr(connector, "search_scoped"):
                         rows = await connector.search_scoped(
-                            mission.query, mission.result_limit, protocol.scope,
+                            provider_query, mission.result_limit, protocol.scope,
                         )
                     else:
-                        rows = await connector.search(mission.query, mission.result_limit)
+                        rows = await connector.search(provider_query, mission.result_limit)
                     if domain:
                         rows = [
                             row for row in rows
@@ -324,16 +337,57 @@ class ResearchPipeline:
                         protocol.connectors.citation_depth > 0
                         and "citations" in getattr(connector, "capabilities", ())
                     ):
-                        for row in rows[: min(5, len(rows))]:
-                            relations = await connector.fetch_citations(row)
-                            relation_rows = [
-                                relation for relation in relations
-                                if relation.get("relation_type")
-                            ]
-                            if relation_rows:
-                                row.metadata.setdefault("citation_relations", []).extend(
-                                    relation_rows
-                                )
+                        citation_budget = min(20, max(4, mission.result_limit))
+                        frontier = rows[: min(5, len(rows))]
+                        seen_frontier = {candidate_dedupe_key(row) for row in rows}
+                        generated: list[ConnectorCandidate] = []
+                        for depth in range(1, protocol.connectors.citation_depth + 1):
+                            next_frontier: list[ConnectorCandidate] = []
+                            for parent in frontier[:5]:
+                                async with citation_budget_lock:
+                                    if citation_seeds_used >= citation_seed_budget:
+                                        break
+                                    citation_seeds_used += 1
+                                try:
+                                    relations = await connector.fetch_citations(parent)
+                                except Exception as exc:
+                                    connector_errors.append({
+                                        "connector": connector.id,
+                                        "error": f"citation frontier: {str(exc)[:450]}",
+                                    })
+                                    continue
+                                relation_rows = [
+                                    relation for relation in relations
+                                    if relation.get("relation_type")
+                                ]
+                                if relation_rows:
+                                    parent.metadata.setdefault(
+                                        "citation_relations", [],
+                                    ).extend(relation_rows)
+                                for relation in relation_rows:
+                                    candidate = relation_to_candidate(
+                                        relation,
+                                        connector_id=connector.id,
+                                        family=connector.family,
+                                        parent=parent,
+                                        depth=depth,
+                                    )
+                                    if candidate is None:
+                                        continue
+                                    key = candidate_dedupe_key(candidate)
+                                    if key in seen_frontier:
+                                        continue
+                                    seen_frontier.add(key)
+                                    generated.append(candidate)
+                                    next_frontier.append(candidate)
+                                    if len(generated) >= citation_budget:
+                                        break
+                                if len(generated) >= citation_budget:
+                                    break
+                            frontier = next_frontier
+                            if not frontier or len(generated) >= citation_budget:
+                                break
+                        rows.extend(generated)
                     for rank, row in enumerate(rows, 1):
                         row.metadata["query_branch"] = mission.branch_id
                         row.metadata["query_branches"] = [mission.branch_id]
@@ -344,8 +398,12 @@ class ResearchPipeline:
                             row.metadata["authority"] = "official"
                         row.metadata["provider_rank"] = rank
                         row.metadata["federated_rrf_score"] = 1 / (60 + rank)
+                        row.metadata["discovered_by_connectors"] = [connector.id]
+                        row.metadata["original_query"] = mission.query
+                        row.metadata["compiled_query"] = provider_query
                     connector_metrics.append({
                         "connector": connector.id, "query": mission.query,
+                        "compiled_query": provider_query,
                         "mission_id": mission.id, "branch_id": mission.branch_id,
                         "latency_seconds": round(time.perf_counter() - started, 4),
                         "result_count": len(rows), "success": True,
@@ -421,6 +479,14 @@ class ResearchPipeline:
             key = candidate_dedupe_key(candidate)
             if key in unique:
                 current = unique[key]
+                discovered_by = current.metadata.setdefault(
+                    "discovered_by_connectors", [current.connector_id],
+                )
+                for provider in candidate.metadata.get(
+                    "discovered_by_connectors", [candidate.connector_id],
+                ):
+                    if provider not in discovered_by:
+                        discovered_by.append(provider)
                 branches = current.metadata.setdefault("query_branches", [])
                 for branch in candidate.metadata.get("query_branches", []):
                     if branch not in branches:
@@ -451,6 +517,7 @@ class ResearchPipeline:
                     candidate.metadata["alternate_locations"] = current.metadata[
                         "alternate_locations"
                     ]
+                    candidate.metadata["discovered_by_connectors"] = discovered_by
                     unique[key] = candidate
             else:
                 unique[key] = candidate
@@ -508,16 +575,24 @@ class ResearchPipeline:
         remaining = max(0, protocol.budget.max_sources - len(existing))
         fraction = 0.40 if state.get("round_number", 1) == 1 else 0.30
         round_cap = min(remaining, max(1, math.ceil(protocol.budget.max_sources * fraction)))
+        reserve: list[ConnectorCandidate] = []
         if self.settings.testing:
             ranked, rejected = novel, []
+            for candidate in ranked:
+                candidate.metadata["admission_tier"] = "accept"
         else:
             rank_pool_limit = min(len(novel), max(round_cap * 4, round_cap))
-            ranked, rejected = filter_and_rank_candidates(
-                novel, protocol, rank_pool_limit,
+            ranked, reserve, rejected = classify_candidate_admission(
+                novel,
+                protocol,
+                rank_pool_limit,
+                reserve_limit=max(1, min(5, round_cap // 5)),
             )
-        candidates = select_mission_balanced_candidates(
-            ranked, missions, round_cap,
-        )
+        accepted_slots = max(0, round_cap - len(reserve))
+        candidates = [
+            *select_mission_balanced_candidates(ranked, missions, accepted_slots),
+            *reserve[: max(0, round_cap - accepted_slots)],
+        ]
         if rejected:
             await self.repo.event(
                 state["run_id"], "relevance_filter",
@@ -566,6 +641,20 @@ class ResearchPipeline:
             "corpus_documents": [doc.model_dump(mode="json") for doc in corpus_documents],
             "branch_result_counts": {},
             "source_count_before_round": len(existing),
+            "unavailable_connectors": [item["connector"] for item in unavailable],
+            "available_connectors": sorted(selected_connectors),
+            "discovery_stats": {
+                **state.get("discovery_stats", {}),
+                "pooled_candidates": len(novel),
+                "accepted_candidates": len(ranked),
+                "reserve_selected": len(reserve),
+                "hard_rejected": len(rejected),
+                "citation_candidates_selected": sum(
+                    candidate.metadata.get("discovery_method") == "citation_frontier"
+                    for candidate in candidates
+                ),
+                "citation_seeds_expanded": citation_seeds_used,
+            },
             "attempted_missions": list(dict.fromkeys([
                 *state.get("attempted_missions", []),
                 *(mission_signature(mission) for mission in missions),
@@ -659,6 +748,19 @@ class ResearchPipeline:
             version.id for _, version in await self.repo.list_source_versions(state["run_id"])
         }
         saved_docs = []
+        discovery_stats = dict(state.get("discovery_stats", {}))
+        discovery_stats["reserve_audited"] = int(
+            discovery_stats.get("reserve_audited", 0)
+        ) + sum(
+            document.success
+            and document.candidate.metadata.get("admission_tier") == "reserve"
+            for document in documents
+        )
+        discovery_stats.setdefault("reserve_relevant", 0)
+        discovery_stats.setdefault("citation_relevant", 0)
+        discovery_stats.setdefault("relevant_admitted", 0)
+        discovery_stats["round_citation_relevant"] = 0
+        discovery_stats["round_relevant_admitted"] = 0
         branch_counts: dict[str, int] = defaultdict(int)
         content_rejected: list[dict[str, Any]] = []
         for document in documents:
@@ -732,6 +834,13 @@ class ResearchPipeline:
             payload["source_id"] = source.id
             payload["source_version_id"] = version.id
             saved_docs.append(payload)
+            discovery_stats["relevant_admitted"] += 1
+            discovery_stats["round_relevant_admitted"] += 1
+            if document.candidate.metadata.get("admission_tier") == "reserve":
+                discovery_stats["reserve_relevant"] += 1
+            if document.candidate.metadata.get("discovery_method") == "citation_frontier":
+                discovery_stats["citation_relevant"] += 1
+                discovery_stats["round_citation_relevant"] += 1
             for branch in document.candidate.metadata.get("query_branches", []):
                 branch_counts[branch] += 1
             if document.outgoing_links:
@@ -752,7 +861,11 @@ class ResearchPipeline:
         await self._emit_llm_metrics(state["run_id"], "CONTENT_RELEVANCE")
         sources = await self.repo.list_sources(state["run_id"])
         await self.repo.update_run(state["run_id"], sources_count=len(sources))
-        return {"documents": saved_docs, "branch_result_counts": dict(branch_counts)}
+        return {
+            "documents": saved_docs,
+            "branch_result_counts": dict(branch_counts),
+            "discovery_stats": discovery_stats,
+        }
 
     async def chunk_index(self, state: PipelineState) -> dict:
         await self._boundary(state, "CHUNK_INDEX")
@@ -1072,11 +1185,72 @@ class ResearchPipeline:
         audited_count = len(audited)
         if protocol.output_mode == "raw":
             audited_count = len(major)
+        source_payloads = [
+            {
+                "title": source.title,
+                "url": source.url,
+                "persistent_id": source.persistent_id,
+            }
+            for source in sources
+        ]
+        measured_sentinel_recall, missed_sentinels = sentinel_recall(
+            protocol.sentinel_sources,
+            source_payloads,
+        )
+        provider_incidence = []
+        provider_union: set[str] = set()
+        for source in relevant_sources:
+            metadata = source.metadata_json or {}
+            providers = list(metadata.get("discovered_by_connectors") or [])
+            if not providers:
+                providers = list((metadata.get("provider_snapshots") or {}).keys())
+            if not providers:
+                providers = [source.connector_id]
+            provider_union.update(providers)
+            provider_incidence.append(providers)
+        completeness, discovery_observations = estimated_completeness(provider_incidence)
+        discovery_stats = dict(state.get("discovery_stats", {}))
+        reserve_audited = int(discovery_stats.get("reserve_audited", 0))
+        reserve_relevant = int(discovery_stats.get("reserve_relevant", 0))
+        reserve_false_negative_rate = (
+            reserve_relevant / reserve_audited if reserve_audited else 0.0
+        )
+        accepted_relevant = max(
+            0,
+            int(discovery_stats.get("relevant_admitted", 0)) - reserve_relevant,
+        )
+        relative_recall = accepted_relevant / max(
+            1, accepted_relevant + reserve_relevant,
+        )
+        round_relevant = int(discovery_stats.get("round_relevant_admitted", 0))
+        citation_frontier_novelty = int(
+            discovery_stats.get("round_citation_relevant", 0)
+        ) / max(1, round_relevant)
+        unavailable_connectors = set(state.get("unavailable_connectors", []))
+        required_connectors = set(protocol.connectors.required_connectors)
+        available_connectors = set(state.get("available_connectors", []))
+        critical_connector_coverage = (
+            len(required_connectors & available_connectors) / len(required_connectors)
+            if required_connectors else 1.0
+        )
+        quality_diagnostics_active = (
+            len(provider_union) >= 2
+            or reserve_audited > 0
+            or int(discovery_stats.get("citation_candidates_selected", 0)) > 0
+        )
         coverage = calculate_coverage(
             protocol, [s.family for s in relevant_sources], dict(branch_counts),
             len(major), audited_count, len(unresolved), rate, previous.saturated_rounds,
             authority_coverage=authority_coverage,
             claim_audit_required=protocol.output_mode != "raw",
+            sentinel_recall=measured_sentinel_recall,
+            estimated_completeness=completeness,
+            relative_recall=relative_recall,
+            citation_frontier_novelty=citation_frontier_novelty,
+            reserve_false_negative_rate=reserve_false_negative_rate,
+            critical_connector_coverage=critical_connector_coverage,
+            discovery_observations=discovery_observations,
+            quality_diagnostics_active=quality_diagnostics_active,
         )
         round_number = state.get("round_number", 1)
         elapsed = (time.monotonic() - state.get("started_monotonic", time.monotonic())) / 60
@@ -1103,6 +1277,18 @@ class ResearchPipeline:
         await self.repo.event(state["run_id"], "coverage_gaps", {
             "gaps": [gap.model_dump(mode="json") for gap in gaps],
             "stop_reason": stop_reason,
+            "discovery_quality": {
+                **discovery_stats,
+                "sentinel_recall": measured_sentinel_recall,
+                "missed_sentinels": missed_sentinels,
+                "estimated_completeness": completeness,
+                "relative_recall": relative_recall,
+                "provider_count": len(provider_union),
+                "citation_frontier_novelty": citation_frontier_novelty,
+                "reserve_false_negative_rate": reserve_false_negative_rate,
+                "critical_connector_coverage": critical_connector_coverage,
+                "unavailable_connectors": sorted(unavailable_connectors),
+            },
         })
         return {
             "coverage": coverage.model_dump(),

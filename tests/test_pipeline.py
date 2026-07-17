@@ -12,7 +12,8 @@ from research_platform.db import SessionLocal, create_schema
 from research_platform.pipeline import ResearchPipeline
 from research_platform.repository import Repository
 from research_platform.schemas import (
-    AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SourceFamily,
+    AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SearchMission,
+    SourceFamily,
 )
 from research_platform.storage import ObjectStore
 
@@ -35,6 +36,36 @@ class DummyConnector:
 class DummyRegistry:
     def selected(self, selection):
         return [DummyConnector()]
+
+
+class CitationConnector(DummyConnector):
+    id = "semantic_scholar"
+    family = SourceFamily.ACADEMIC
+    capabilities = ("search", "citations")
+
+    async def search(self, query: str, limit: int = 20):
+        return [ConnectorCandidate(
+            connector_id=self.id, family=self.family,
+            title="Seed evidence", url="https://example.org/seed",
+            snippet="lung CT cancer risk", persistent_id="seed",
+            metadata={"scholarly_ids": {"semantic_scholar_id": "seed"}},
+        )]
+
+    async def fetch_citations(self, candidate):
+        if candidate.persistent_id == "depth-2":
+            return []
+        target = "depth-1" if candidate.persistent_id == "seed" else "depth-2"
+        return [{
+            "relation_type": "cited_by",
+            "target_persistent_id": target,
+            "provider": self.id,
+            "metadata": {"paperId": target, "title": f"Evidence {target}"},
+        }]
+
+
+class CitationRegistry:
+    def selected(self, selection):
+        return [CitationConnector()]
 
 
 class FailingConnector(DummyConnector):
@@ -181,6 +212,43 @@ async def test_pipeline_preserves_cancellation_before_worker_start():
         assert cancelled.status == RunStatus.CANCELLED.value
         events = await repo.events_after(row.id)
         assert any(event.event_type == "cancelled" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_search_expands_citation_frontier_to_requested_depth():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Citation expansion",
+        primary_question="Which lung CT systems estimate cancer risk?",
+        connectors={
+            "profile": "custom",
+            "included_families": ["academic"],
+            "citation_depth": 2,
+        },
+        budget={"max_sources": 10, "results_per_connector": 4},
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.registry = CitationRegistry()
+        mission = SearchMission(
+            branch_id="query:0", query=protocol.primary_question,
+            connector_ids=["semantic_scholar"], result_limit=4,
+        )
+        result = await pipeline.search({
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "missions": [mission.model_dump(mode="json")],
+            "queries": [protocol.primary_question],
+            "round_number": 1,
+        })
+    depths = {
+        candidate["metadata"].get("citation_depth")
+        for candidate in result["candidates"]
+        if candidate["metadata"].get("discovery_method") == "citation_frontier"
+    }
+    assert depths == {1, 2}
 
 
 @pytest.mark.asyncio

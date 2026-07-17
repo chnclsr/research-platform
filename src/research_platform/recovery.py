@@ -134,12 +134,12 @@ def initial_missions(
         for family in targeted_families
         for connector in FAMILY_CONNECTORS.get(family, [])
     ))
-    for index, query in enumerate(queries[:5]):
+    for index, query in enumerate(queries[:8]):
         missions.append(SearchMission(
             branch_id=f"query:{index}",
             query=query,
             connector_ids=connector_ids,
-            result_limit=min(10, protocol.budget.results_per_connector),
+            result_limit=protocol.budget.results_per_connector,
             acquisition_slots=2,
         ))
     return missions

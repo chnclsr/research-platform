@@ -6,6 +6,9 @@ Platform sürümü: `v0.5.3`
 
 Tarih: `2026-07-17`
 
+Uygulama durumu: Önerilen birinci öncelik paketi `v0.6.0` sürümünde uygulanmıştır. Teknik sonuçlar
+`RESEARCH_QUALITY_V0.6.0_IMPLEMENTATION_REPORT.md` belgesindedir.
+
 ## Yönetici kararı
 
 Platformun bilgi toplama temeli doğru kurulmuş: çoklu connector registry, kaynak ailesi dengesi,

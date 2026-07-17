@@ -1,0 +1,33 @@
+title: Yüksek recall akademik araştırma
+primary_question: Hangi güncel akciğer BT radyomik sistemleri kanser riskini tahmin ediyor?
+languages: [tr, en]
+report_language: tr
+connectors:
+  profile: custom
+  included_families: [academic, web]
+  included_connectors: [semantic_scholar, crossref, arxiv, europe_pmc, agentsearch_web]
+  required_connectors: [semantic_scholar, crossref]
+  citation_depth: 2
+sentinel_sources:
+  - title: Proje mentörünün bildiği kritik yayın
+    persistent_id: 10.0000/example-doi
+    aliases: [Kritik yayın kısa adı]
+    required: true
+stopping_criteria:
+  minimum_source_coverage: 0.80
+  minimum_query_branch_coverage: 0.90
+  minimum_claim_audit_coverage: 0.95
+  minimum_sentinel_recall: 1.0
+  minimum_estimated_completeness: 0.75
+  maximum_reserve_false_negative_rate: 0.10
+  maximum_citation_frontier_novelty: 0.05
+  maximum_new_source_rate: 0.05
+  unresolved_major_claim_limit: 5
+  saturation_rounds: 2
+budget:
+  max_rounds: 6
+  max_sources: 150
+  max_wall_minutes: 240
+  results_per_connector: 30
+  acquisition_concurrency: 4
+output_mode: both

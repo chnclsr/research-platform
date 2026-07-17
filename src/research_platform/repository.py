@@ -164,6 +164,18 @@ class Repository:
             snapshots = dict(updated_metadata.get("provider_snapshots") or {})
             snapshots.update(persisted_metadata.get("provider_snapshots", {}))
             updated_metadata["provider_snapshots"] = snapshots
+            discovered_by = list(updated_metadata.get("discovered_by_connectors") or [])
+            for connector_id in persisted_metadata.get(
+                "discovered_by_connectors", [c.connector_id],
+            ):
+                if connector_id not in discovered_by:
+                    discovered_by.append(connector_id)
+            updated_metadata["discovered_by_connectors"] = discovered_by
+            branches = list(updated_metadata.get("query_branches") or [])
+            for branch in persisted_metadata.get("query_branches", []):
+                if branch not in branches:
+                    branches.append(branch)
+            updated_metadata["query_branches"] = branches
             alternate_locations = list(updated_metadata.get("alternate_locations") or [])
             if str(c.url) not in alternate_locations:
                 alternate_locations.append(str(c.url))

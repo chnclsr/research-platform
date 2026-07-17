@@ -172,6 +172,16 @@ async def test_semantic_scholar_retries_rate_limit():
 
 
 @pytest.mark.asyncio
+async def test_semantic_scholar_public_mode_remains_usable_without_key():
+    settings = Settings(_env_file=None, semantic_scholar_api_key=None, testing=True)
+    async with httpx.AsyncClient() as client:
+        health = await SemanticScholarConnector(settings, client).health()
+    assert health.enabled is True
+    assert health.healthy is True
+    assert "degraded" in health.detail
+
+
+@pytest.mark.asyncio
 async def test_crossref_serializes_and_retries_rate_limit():
     calls = 0
 

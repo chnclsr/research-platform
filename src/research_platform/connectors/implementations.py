@@ -137,7 +137,54 @@ class OpenAlexConnector(SourceConnector):
         return output
 
     async def fetch_citations(self, candidate: ConnectorCandidate) -> list[dict[str, Any]]:
-        return [{"cited_by_count": candidate.metadata.get("cited_by_count", 0)}]
+        openalex_id = (candidate.metadata.get("scholarly_ids") or {}).get(
+            "openalex_id"
+        )
+        if not openalex_id:
+            value = candidate.persistent_id or ""
+            if str(value).startswith("W"):
+                openalex_id = value
+        if not openalex_id:
+            return []
+        relation_limit = min(20, self.settings.semantic_scholar_citation_limit)
+        params_base = {
+            "api_key": self.settings.openalex_api_key,
+            "per-page": max(1, relation_limit),
+            "select": "id,doi,display_name,publication_date,abstract_inverted_index",
+        }
+        if self.settings.openalex_mailto:
+            params_base["mailto"] = self.settings.openalex_mailto
+        responses: list[tuple[str, list[dict[str, Any]]]] = []
+        references = [
+            str(item).rsplit("/", 1)[-1]
+            for item in candidate.metadata.get("referenced_works", [])[:relation_limit]
+        ]
+        if references:
+            params = {**params_base, "filter": f"openalex_id:{'|'.join(references)}"}
+            response = await self.client.get("https://api.openalex.org/works", params=params)
+            response.raise_for_status()
+            responses.append(("cites", response.json().get("results", [])))
+        params = {**params_base, "filter": f"cites:{openalex_id}"}
+        response = await self.client.get("https://api.openalex.org/works", params=params)
+        response.raise_for_status()
+        responses.append(("cited_by", response.json().get("results", [])))
+        relations: list[dict[str, Any]] = []
+        for relation_type, rows in responses:
+            for row in rows:
+                doi = normalize_doi(row.get("doi"))
+                target_id = str(row.get("id", "")).rsplit("/", 1)[-1]
+                relations.append({
+                    "relation_type": relation_type,
+                    "target_persistent_id": doi or target_id,
+                    "provider": "openalex",
+                    "metadata": {
+                        **row,
+                        "title": row.get("display_name", ""),
+                        "abstract": reconstruct_abstract(row.get("abstract_inverted_index")),
+                        "scholarly_ids": {"doi": doi, "openalex_id": target_id},
+                    },
+                })
+        return relations
 
     async def fetch_versions(self, candidate: ConnectorCandidate) -> list[dict[str, Any]]:
         return candidate.metadata.get("locations", [])
@@ -180,11 +227,14 @@ class SemanticScholarConnector(SourceConnector):
 
     async def health(self):
         health = await super().health()
-        health.healthy = bool(self.settings.semantic_scholar_api_key)
+        # Semantic Scholar supports unauthenticated public traffic. It is slower and
+        # more heavily throttled, but marking it unhealthy removed an entire academic
+        # discovery method from the research pool.
+        health.healthy = True
         health.detail = (
             "configured with API key"
             if self.settings.semantic_scholar_api_key
-            else "public access enabled but degraded; shared throttling applies"
+            else "public access active (degraded throughput; shared throttling applies)"
         )
         return health
 

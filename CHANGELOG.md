@@ -1,10 +1,23 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.5.3`
+Platform sürümü: `v0.6.0`
 
-Belge sürümü: `2.4`
+Belge sürümü: `2.5`
 
 Son güncelleme: `2026-07-17`
+
+## v0.6.0 — 2026-07-17
+
+- `v0.5.3` çalışma noktası `v0.5.3-research-quality-baseline` etiketi ve doğrulanmış bağımsız Git bundle ile korundu.
+- Protokole bilinen kritik kaynak/sentinel listesi ve gerekli connector tanımı eklendi.
+- İlk arama beş yerine sekiz sorgu dalını kullanıyor; connector sonuç limiti artık protokoldeki gerçek değeri koruyor.
+- Connector bazlı query compiler doğal dil sorgularını sağlayıcıya uygun, kısa sorgulara dönüştürüyor; tarih aralığı API alanlarında uygulanmaya devam ediyor.
+- Aday kabulü `accept / reserve / reject` katmanlarına ayrıldı; düşük metadata puanı alan güvenli adaylar küçük bir denetim örneğiyle içerik kapısına taşınıyor.
+- Semantic Scholar ve OpenAlex citation ilişkileri, en fazla iki derinlikli ve tur başına sınırlı gerçek citation frontier adaylarına dönüştürüldü.
+- Sentinel recall, incidence tabanlı tahmini completeness, relative recall, citation novelty, reserve false-negative ve kritik connector coverage ölçümleri stopping döngüsüne bağlandı.
+- Semantic Scholar anahtarsız public modda tamamen devre dışı bırakılmıyor; düşük kapasiteli/degraded ama kullanılabilir olarak raporlanıyor.
+- Provider provenance birleştirmesi connector katkılarını ve query branch’lerini kaynak üzerinde koruyor.
+- Yeni kalite testleriyle toplam test sayısı 96’ya yükseltildi.
 
 ## v0.5.3 — 2026-07-17
 

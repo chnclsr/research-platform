@@ -71,6 +71,10 @@ class StoppingCriteria(BaseModel):
     maximum_new_source_rate: float = Field(0.05, ge=0, le=1)
     unresolved_major_claim_limit: int = Field(5, ge=0)
     saturation_rounds: int = Field(2, ge=1, le=5)
+    minimum_sentinel_recall: float = Field(1.0, ge=0, le=1)
+    minimum_estimated_completeness: float = Field(0.75, ge=0, le=1)
+    maximum_reserve_false_negative_rate: float = Field(0.10, ge=0, le=1)
+    maximum_citation_frontier_novelty: float = Field(0.05, ge=0, le=1)
 
 
 class ResearchBudget(BaseModel):
@@ -86,6 +90,7 @@ class ConnectorSelection(BaseModel):
     included_families: list[SourceFamily] = Field(default_factory=lambda: CORE_FAMILIES.copy())
     excluded_connectors: list[str] = Field(default_factory=list)
     included_connectors: list[str] = Field(default_factory=list)
+    required_connectors: list[str] = Field(default_factory=list)
     trusted_domains: list[str] = Field(default_factory=list)
     zotero_collections: list[str] = Field(default_factory=list)
     zotero_tags: list[str] = Field(default_factory=list)
@@ -103,6 +108,16 @@ class ResearchScope(BaseModel):
     end_date: datetime | None = None
     geography: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)
+
+
+class SentinelSource(BaseModel):
+    """A known relevant source used to measure whether discovery misses obvious evidence."""
+
+    title: str = Field(min_length=3, max_length=1000)
+    url: str | None = None
+    persistent_id: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    required: bool = True
 
 
 ACADEMIC_PUBLICATION_SIGNALS = {
@@ -135,6 +150,7 @@ class ResearchProtocol(BaseModel):
     evidence_policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
     authority_policy: AuthorityPolicy = Field(default_factory=AuthorityPolicy)
     family_targets: dict[SourceFamily, FamilyTarget] = Field(default_factory=dict)
+    sentinel_sources: list[SentinelSource] = Field(default_factory=list, max_length=50)
     stopping_criteria: StoppingCriteria = Field(default_factory=StoppingCriteria)
     budget: ResearchBudget = Field(default_factory=ResearchBudget)
     output_mode: Literal["raw", "result", "both"] = "both"
@@ -216,6 +232,13 @@ class CoverageMetrics(BaseModel):
     unresolved_major_claims: int = 0
     authority_coverage: float = 1.0
     saturated_rounds: int = 0
+    sentinel_recall: float = 1.0
+    estimated_completeness: float = 1.0
+    relative_recall: float = 1.0
+    citation_frontier_novelty: float = 0.0
+    reserve_false_negative_rate: float = 0.0
+    critical_connector_coverage: float = 1.0
+    discovery_observations: int = 0
     sufficient: bool = False
     reasons: list[str] = Field(default_factory=list)
 
