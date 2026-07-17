@@ -85,8 +85,9 @@ kaynak nüfusu için erken uyarıdır.
 ### 5. Connector davranışı
 
 Semantic Scholar API anahtarı olmadığında connector artık yanlış biçimde `unhealthy` sayılmaz. Public mod
-`degraded` olarak açık kalır; shared throttling nedeniyle yavaştır. `required_connectors` alanıyla kritik bir
-connector devre dışıysa coverage açıkça başarısız olur. OpenAlex anahtarı halen gereklidir; bu güvenlik ve
+`degraded` olarak açık kalır; shared throttling nedeniyle yavaştır ve tur başına en fazla iki query branch
+çalıştırır. `required_connectors` alanıyla kritik bir connector devre dışıysa veya araştırma çağrılarının
+yarısından azı başarılıysa coverage açıkça başarısız olur. OpenAlex anahtarı halen gereklidir; bu güvenlik ve
 operasyon tercihi değiştirilmemiştir.
 
 ## Protokol kullanımı
@@ -100,10 +101,12 @@ kaçırıp kaçırmadığını ölçer.
 ## Doğrulama
 
 - Ruff: geçti.
-- Birim ve entegrasyon testleri: `96 passed`.
+- Birim ve entegrasyon testleri: `98 passed`.
 - Citation depth testi: depth 1 ve depth 2 kaynaklarının gerçek candidate havuzuna girdiğini doğruluyor.
 - Güvenlik regresyonu: prompt-injection benzeri discovery sonucu reserve’a değil hard reject’e gidiyor.
 - Public Semantic Scholar health testi: anahtarsız modun kullanılabilir/degraded kaldığını doğruluyor.
+- Canlı smoke testinde public Semantic Scholar 429 oranı gözlendi; fan-out iki sorguyla sınırlandı ve canlı
+  connector başarı oranı kritik connector coverage hesabına eklendi.
 - Sentinel, query compiler, incidence completeness ve reserve admission testleri eklendi.
 
 ## Bilinen sınırlar ve sonraki doğrulama
@@ -116,4 +119,3 @@ kaçırıp kaçırmadığını ölçer.
 - Gerçek alan araştırmasında sentinel’lı golden set çalıştırılmadan “mükemmel recall” iddiası yapılmamalıdır.
 - Sonraki kaynak genişletme sırası: PubMed/PMC, OpenCitations, Unpaywall, CORE ve Lens/EPO lisans durumuna
   göre patent citation graph’tır.
-

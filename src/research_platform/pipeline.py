@@ -81,6 +81,7 @@ class PipelineState(TypedDict, total=False):
     discovery_stats: dict[str, Any]
     unavailable_connectors: list[str]
     available_connectors: list[str]
+    connector_success_rates: dict[str, float]
 
 
 class PipelineHalted(RuntimeError):
@@ -420,6 +421,7 @@ class ResearchPipeline:
                     return []
 
         calls = []
+        scheduled_by_connector: dict[str, int] = defaultdict(int)
         for mission in missions:
             connector_ids = [
                 connector_id for connector_id in mission.connector_ids
@@ -435,7 +437,14 @@ class ResearchPipeline:
             for connector_id in connector_ids:
                 connector = selected_connectors.get(connector_id)
                 if connector is not None:
+                    if (
+                        connector_id == "semantic_scholar"
+                        and not self.settings.semantic_scholar_api_key
+                        and scheduled_by_connector[connector_id] >= 2
+                    ):
+                        continue
                     calls.append(one(connector, mission))
+                    scheduled_by_connector[connector_id] += 1
         batches = await asyncio.gather(*calls)
         for error in connector_errors:
             await self.repo.event(state["run_id"], "connector_error", error)
@@ -443,6 +452,18 @@ class ResearchPipeline:
             await self.repo.event(
                 state["run_id"], "connector_metrics", {"calls": connector_metrics},
             )
+        connector_attempts: dict[str, int] = defaultdict(int)
+        connector_successes: dict[str, int] = defaultdict(int)
+        for metric in connector_metrics:
+            connector_id = str(metric["connector"])
+            connector_attempts[connector_id] += 1
+            connector_successes[connector_id] += int(bool(metric["success"]))
+        connector_success_rates = {
+            connector_id: round(
+                connector_successes[connector_id] / max(1, attempts), 4,
+            )
+            for connector_id, attempts in connector_attempts.items()
+        }
         unique: dict[str, ConnectorCandidate] = {}
         for mission in missions:
             for seed_url in mission.seed_urls:
@@ -643,6 +664,7 @@ class ResearchPipeline:
             "source_count_before_round": len(existing),
             "unavailable_connectors": [item["connector"] for item in unavailable],
             "available_connectors": sorted(selected_connectors),
+            "connector_success_rates": connector_success_rates,
             "discovery_stats": {
                 **state.get("discovery_stats", {}),
                 "pooled_candidates": len(novel),
@@ -1229,8 +1251,15 @@ class ResearchPipeline:
         unavailable_connectors = set(state.get("unavailable_connectors", []))
         required_connectors = set(protocol.connectors.required_connectors)
         available_connectors = set(state.get("available_connectors", []))
+        connector_success_rates = state.get("connector_success_rates", {})
+        operational_required_connectors = {
+            connector_id
+            for connector_id in available_connectors
+            if float(connector_success_rates.get(connector_id, 0.0)) >= 0.5
+        }
         critical_connector_coverage = (
-            len(required_connectors & available_connectors) / len(required_connectors)
+            len(required_connectors & operational_required_connectors)
+            / len(required_connectors)
             if required_connectors else 1.0
         )
         quality_diagnostics_active = (
@@ -1288,6 +1317,7 @@ class ResearchPipeline:
                 "reserve_false_negative_rate": reserve_false_negative_rate,
                 "critical_connector_coverage": critical_connector_coverage,
                 "unavailable_connectors": sorted(unavailable_connectors),
+                "connector_success_rates": connector_success_rates,
             },
         })
         return {

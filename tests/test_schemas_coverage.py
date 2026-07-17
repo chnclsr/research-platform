@@ -31,6 +31,24 @@ def test_coverage_requires_every_threshold():
     assert result.source_family_coverage == 1.0
 
 
+def test_required_connector_must_be_operational_for_sufficient_coverage():
+    protocol = ResearchProtocol(
+        title="Critical connector",
+        primary_question="Is required connector coverage enforced?",
+        connectors={
+            "profile": "custom", "included_families": ["web"],
+            "required_connectors": ["agentsearch_web"],
+        },
+        stopping_criteria={"saturation_rounds": 1},
+    )
+    result = calculate_coverage(
+        protocol, ["web"], {"branch": 1}, 0, 0, 0, 0.0, 0,
+        claim_audit_required=False, critical_connector_coverage=0.0,
+    )
+    assert result.sufficient is False
+    assert "critical_connector_coverage" in result.reasons
+
+
 def test_invalid_protocol_rejects_unknown_fields():
     try:
         ResearchProtocol(

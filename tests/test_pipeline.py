@@ -43,7 +43,11 @@ class CitationConnector(DummyConnector):
     family = SourceFamily.ACADEMIC
     capabilities = ("search", "citations")
 
+    def __init__(self):
+        self.search_calls = 0
+
     async def search(self, query: str, limit: int = 20):
+        self.search_calls += 1
         return [ConnectorCandidate(
             connector_id=self.id, family=self.family,
             title="Seed evidence", url="https://example.org/seed",
@@ -64,8 +68,11 @@ class CitationConnector(DummyConnector):
 
 
 class CitationRegistry:
+    def __init__(self):
+        self.connector = CitationConnector()
+
     def selected(self, selection):
-        return [CitationConnector()]
+        return [self.connector]
 
 
 class FailingConnector(DummyConnector):
@@ -249,6 +256,39 @@ async def test_search_expands_citation_frontier_to_requested_depth():
         if candidate["metadata"].get("discovery_method") == "citation_frontier"
     }
     assert depths == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_public_semantic_scholar_fanout_is_limited_per_round():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Public S2 capacity",
+        primary_question="Which studies evaluate retrieval evidence quality?",
+        connectors={
+            "profile": "custom", "included_families": ["academic"],
+            "included_connectors": ["semantic_scholar"], "citation_depth": 0,
+        },
+        budget={"max_sources": 10, "results_per_connector": 2},
+    )
+    registry = CitationRegistry()
+    missions = [
+        SearchMission(
+            branch_id=f"query:{index}", query=f"evidence quality branch {index}",
+            connector_ids=["semantic_scholar"], result_limit=2,
+        )
+        for index in range(5)
+    ]
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.registry = registry
+        await pipeline.search({
+            "run_id": row.id, "protocol": protocol.model_dump(mode="json"),
+            "missions": [mission.model_dump(mode="json") for mission in missions],
+            "queries": [mission.query for mission in missions], "round_number": 1,
+        })
+    assert registry.connector.search_calls == 2
 
 
 @pytest.mark.asyncio

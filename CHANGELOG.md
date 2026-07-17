@@ -16,8 +16,9 @@ Son güncelleme: `2026-07-17`
 - Semantic Scholar ve OpenAlex citation ilişkileri, en fazla iki derinlikli ve tur başına sınırlı gerçek citation frontier adaylarına dönüştürüldü.
 - Sentinel recall, incidence tabanlı tahmini completeness, relative recall, citation novelty, reserve false-negative ve kritik connector coverage ölçümleri stopping döngüsüne bağlandı.
 - Semantic Scholar anahtarsız public modda tamamen devre dışı bırakılmıyor; düşük kapasiteli/degraded ama kullanılabilir olarak raporlanıyor.
+- Anahtarsız Semantic Scholar fan-out’u tur başına iki sorguyla sınırlı; kritik connector coverage canlı çağrı başarı oranını da denetliyor.
 - Provider provenance birleştirmesi connector katkılarını ve query branch’lerini kaynak üzerinde koruyor.
-- Yeni kalite testleriyle toplam test sayısı 96’ya yükseltildi.
+- Yeni kalite testleriyle toplam test sayısı 98’e yükseltildi.
 
 ## v0.5.3 — 2026-07-17
 
