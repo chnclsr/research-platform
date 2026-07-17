@@ -1,10 +1,24 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.4.3`
+Platform sürümü: `v0.5.0`
 
-Belge sürümü: `2.1`
+Belge sürümü: `2.2`
 
-Son güncelleme: `2026-07-16`
+Son güncelleme: `2026-07-17`
+
+## v0.5.0 — 2026-07-17
+
+- Araştırma servislerinden bağımsız çalışan localhost kontrol paneli eklendi.
+- API, worker, MCP ve Telegram süreçleri panelden başlatılabilir, durdurulabilir ve yeniden
+  başlatılabilir.
+- Aktif, sıradaki ve son tamamlanan run'lar; aşama, sıra, tur, kaynak ve iddia sayılarıyla
+  görüntüleniyor.
+- Run bazında pause, resume ve cancel kontrolleri eklendi.
+- Redis queue derinliği, ARQ worker heartbeat, Ollama modeli ve servis PID'leri izleniyor.
+- API, worker, MCP, Telegram ve panel logları tek ekrandan okunabiliyor.
+- Panel yalnız `127.0.0.1:8020` üzerinde çalışıyor; yönetim çağrıları sayfaya özgü geçici kontrol
+  tokenıyla korunuyor.
+- Oturum açılışında paneli başlatan Scheduled Task ve masaüstü kısayolu eklendi.
 
 ## v0.4.3 — 2026-07-16
 

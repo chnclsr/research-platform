@@ -1,7 +1,7 @@
 {
   "_document": {
     "version": "1.1",
-    "platform": "v0.4.3",
+    "platform": "v0.5.0",
     "date": "2026-07-16",
     "note": "RESEARCH_MCP_TOKEN ortam değişkeninden genişletilir."
   },

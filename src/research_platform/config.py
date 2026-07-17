@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     api_token: str = "change-me-local-token"
     api_host: str = "127.0.0.1"
     api_port: int = Field(8000, ge=1, le=65535)
+    control_panel_host: str = "127.0.0.1"
+    control_panel_port: int = Field(8020, ge=1, le=65535)
     research_api_url: str = "http://localhost:8000"
     gateway_download_dir: str = "./data/deliveries"
     mcp_transport: str = "stdio"

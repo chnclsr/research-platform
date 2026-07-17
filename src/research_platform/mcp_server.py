@@ -233,7 +233,7 @@ class BearerProtectedMCP:
                     {
                         "status": "healthy",
                         "service": "research-platform-mcp",
-                        "version": "0.4.3",
+                        "version": "0.5.0",
                     },
                 )
                 return

@@ -74,7 +74,7 @@ New-Item -ItemType Directory -Force -Path $accessDirectory | Out-Null
 $accessFile = Join-Path $accessDirectory "TEAM_ACCESS.txt"
 $access = @"
 Research Platform Office Access
-Version: 0.4.3
+Version: 0.5.0
 Date: 2026-07-16
 
 Server URL: http://$($address.IPAddress):8010/mcp

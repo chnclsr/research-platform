@@ -1,10 +1,10 @@
 # Research Platform Ofis Sunucusu
 
-Belge sürümü: `1.0`
+Belge sürümü: `1.1`
 
-Platform sürümü: `v0.4.3`
+Platform sürümü: `v0.5.0`
 
-Tarih: `2026-07-16`
+Tarih: `2026-07-17`
 
 ## Amaç
 
@@ -125,6 +125,13 @@ Komutlar:
 /resume <run_id>
 /cancel <run_id>
 ```
+
+## Yerel kontrol paneli
+
+Sunucu bilgisayarındaki servis, kuyruk, aktif run ve log yönetimi
+`http://127.0.0.1:8020` adresindeki bağımsız panelden yapılır. Panel yalnız localhost'a açıktır ve
+ekip bilgisayarlarından erişilemez. Kullanım ve güvenlik ayrıntıları `CONTROL_PANEL_GUIDE.md`
+belgesindedir.
 
 ## Erişim anahtarı yönetimi
 

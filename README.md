@@ -1,10 +1,10 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.4.3`
+Platform sürümü: `v0.5.0`
 
-Belge sürümü: `2.2`
+Belge sürümü: `2.3`
 
-Son güncelleme: `2026-07-16`
+Son güncelleme: `2026-07-17`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 
@@ -14,6 +14,8 @@ Ofis ağı kurulumu ve ekip istemci adımları: `OFFICE_TEAM_SETUP.md`.
 
 Ofis sunucusu canlı uygulama ve doğrulama sonuçları:
 `OFFICE_SERVER_IMPLEMENTATION_REPORT.md`.
+
+Yerel kontrol paneli kullanımı: `CONTROL_PANEL_GUIDE.md`.
 
 Coverage recovery uygulaması ve canlı doğrulaması:
 `COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md`.
@@ -53,6 +55,7 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 - Codex ve Claude için MCP araç katmanı.
 - Wi-Fi CIDR allowlist, güçlü bearer token ve yalnız MCP portunu açan ofis sunucusu modu.
 - Allowlist korumalı Telegram araştırma botu.
+- Servis, kuyruk, aktif run ve log yönetimi için bağımsız localhost kontrol paneli.
 - Ollama varsayılanı ve OpenAI-compatible alternatif.
 - Ollama JSON çağrılarında yapılandırılabilir thinking, context ve output sınırları.
 - Langflow için dört sabit kontrol bileşeni.
@@ -83,6 +86,7 @@ Docker Hub sertifika doğrulaması başarısız olursa kurulum otomatik olarak P
 - Langflow: `http://localhost:7860`
 - MinIO Console: `http://localhost:9001`
 - MCP Gateway: `http://localhost:8010/mcp`
+- Kontrol Paneli: `http://127.0.0.1:8020`
 
 ## Ofis ağına açma
 
