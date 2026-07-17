@@ -6,13 +6,14 @@ import pytest
 from research_platform.acquisition import AcquisitionService
 from research_platform.config import Settings
 from research_platform.connectors.implementations import (
-    OpenAlexConnector, SemanticScholarConnector,
+    ArxivConnector, CrossrefConnector, EuropePmcConnector, OpenAlexConnector,
+    SemanticScholarConnector,
 )
 from research_platform.connectors.zotero import ZoteroConnector
 from research_platform.db import SessionLocal, create_schema
 from research_platform.repository import Repository
 from research_platform.schemas import (
-    AcquiredDocument, ConnectorCandidate, ResearchProtocol, SourceFamily,
+    AcquiredDocument, ConnectorCandidate, ResearchProtocol, ResearchScope, SourceFamily,
 )
 from research_platform.scholarly import (
     candidate_dedupe_key, normalize_doi, reconstruct_abstract,
@@ -30,6 +31,48 @@ def test_scholarly_normalization_and_abstract_reconstruction():
     assert reconstruct_abstract({"second": [1], "first": [0], "again": [2]}) == (
         "first second again"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("connector_type", "response_body", "parameter", "expected"),
+    [
+        (
+            CrossrefConnector, {"message": {"items": []}},
+            "filter", "from-pub-date:2026-04-17",
+        ),
+        (
+            EuropePmcConnector, {"resultList": {"result": []}},
+            "query", "FIRST_PDATE:[2026-04-17 TO 2026-07-17]",
+        ),
+        (
+            ArxivConnector,
+            '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>',
+            "search_query",
+            "submittedDate:[202604170000 TO 202607172359]",
+        ),
+    ],
+)
+async def test_academic_connectors_push_date_scope_into_provider_query(
+    connector_type, response_body, parameter, expected,
+):
+    seen = {}
+
+    async def handler(request):
+        nonlocal seen
+        seen = dict(request.url.params)
+        if isinstance(response_body, str):
+            return httpx.Response(200, request=request, text=response_body)
+        return response(request, response_body)
+
+    scope = ResearchScope(
+        start_date="2026-04-17T00:00:00Z",
+        end_date="2026-07-17T23:59:00Z",
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        connector = connector_type(Settings(_env_file=None, testing=True), client)
+        await connector.search_scoped("lung cancer CT radiomics", 5, scope)
+    assert expected in seen[parameter]
 
 
 @pytest.mark.asyncio
@@ -124,6 +167,26 @@ async def test_semantic_scholar_retries_rate_limit():
     )
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         rows = await SemanticScholarConnector(settings, client).search("test", 1)
+    assert rows == []
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_crossref_serializes_and_retries_rate_limit():
+    calls = 0
+
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                429, request=request, headers={"Retry-After": "0"},
+            )
+        return response(request, {"message": {"items": []}})
+
+    settings = Settings(_env_file=None, crossref_rps=50, testing=True)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        rows = await CrossrefConnector(settings, client).search("lung CT", 1)
     assert rows == []
     assert calls == 2
 

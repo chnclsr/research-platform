@@ -132,9 +132,45 @@ def test_unrelated_official_legal_result_cannot_fill_named_product_research():
     assert rejected[0]["reason"] == "official_entity_mismatch"
 
 
-def test_claim_relevance_can_inherit_relevance_from_exact_primary_source():
-    assert claim_relevance("Uses SearXNG for discovery", "AgentSearch architecture", 1.0) == 0.9
+def test_claim_relevance_requires_claim_text_to_match_the_question():
+    assert claim_relevance(
+        "AgentSearch architecture uses SearXNG for discovery.",
+        "AgentSearch architecture",
+        1.0,
+    ) > 0.0
     assert claim_relevance("Barcelona architecture festival", "AgentSearch architecture", 0.0) < 0.20
+    assert claim_relevance(
+        "Stock volatility rises with financial leverage.",
+        "How does axial chest CT estimate lung cancer risk?",
+        1.0,
+    ) == 0.0
+
+
+def test_academic_metadata_uses_recall_floor_before_content_admission():
+    research_protocol = ResearchProtocol(
+        title="Recent lung CT publications",
+        primary_question=(
+            "What recent axial chest CT radiomics systems estimate lung cancer "
+            "nodule malignancy?"
+        ),
+    )
+    academic = ConnectorCandidate(
+        connector_id="crossref",
+        family=SourceFamily.ACADEMIC,
+        title="Lung cancer",
+        url="https://doi.org/10.1000/lung",
+    )
+    web = academic.model_copy(update={
+        "id": "web-result",
+        "connector_id": "agentsearch_web",
+        "family": SourceFamily.WEB,
+        "url": "https://example.com/lung",
+    })
+    selected, rejected = filter_and_rank_candidates(
+        [academic, web], research_protocol, 2,
+    )
+    assert selected == [academic]
+    assert rejected[0]["reason"] == "low_relevance"
 
 
 def test_entailment_is_capped_when_quote_does_not_support_claim_details():

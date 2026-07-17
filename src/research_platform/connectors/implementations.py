@@ -7,9 +7,10 @@ import time
 import xml.etree.ElementTree as ET
 from typing import Any
 from .base import CredentialOnlyConnector, SourceConnector
-from ..relevance import github_repositories
-from ..schemas import ConnectorCandidate, SourceFamily
+from ..relevance import github_repositories, topic_terms
+from ..schemas import ConnectorCandidate, ResearchScope, SourceFamily
 from ..scholarly import normalize_doi, reconstruct_abstract
+from ..temporal import parse_datetime
 
 
 def _text(value: Any) -> str:
@@ -68,6 +69,11 @@ class OpenAlexConnector(SourceConnector):
             self.family = SourceFamily.BOOKS_THESES
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
+        return await self.search_scoped(query, limit)
+
+    async def search_scoped(
+        self, query: str, limit: int = 20, scope: ResearchScope | None = None,
+    ) -> list[ConnectorCandidate]:
         params = {
             "search": query,
             "per-page": min(limit, 100),
@@ -80,8 +86,15 @@ class OpenAlexConnector(SourceConnector):
         }
         if self.settings.openalex_mailto:
             params["mailto"] = self.settings.openalex_mailto
+        filters = []
         if self.work_type:
-            params["filter"] = f"type:{self.work_type}"
+            filters.append(f"type:{self.work_type}")
+        if scope and scope.start_date:
+            filters.append(f"from_publication_date:{scope.start_date.date().isoformat()}")
+        if scope and scope.end_date:
+            filters.append(f"to_publication_date:{scope.end_date.date().isoformat()}")
+        if filters:
+            params["filter"] = ",".join(filters)
         response = await self.client.get("https://api.openalex.org/works", params=params)
         response.raise_for_status()
         output = []
@@ -176,14 +189,24 @@ class SemanticScholarConnector(SourceConnector):
         return health
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
+        return await self.search_scoped(query, limit)
+
+    async def search_scoped(
+        self, query: str, limit: int = 20, scope: ResearchScope | None = None,
+    ) -> list[ConnectorCandidate]:
         fields = (
             "paperId,corpusId,externalIds,url,title,abstract,venue,year,authors,"
             "citationCount,influentialCitationCount,referenceCount,openAccessPdf,"
             "publicationTypes,publicationDate,journal,isOpenAccess"
         )
+        params = {"query": query, "limit": min(limit, 100), "fields": fields}
+        if scope and (scope.start_date or scope.end_date):
+            start = scope.start_date.date().isoformat() if scope.start_date else ""
+            end = scope.end_date.date().isoformat() if scope.end_date else ""
+            params["publicationDateOrYear"] = f"{start}:{end}"
         response = await self._get(
             "https://api.semanticscholar.org/graph/v1/paper/search",
-            params={"query": query, "limit": min(limit, 100), "fields": fields},
+            params=params,
         )
         response.raise_for_status()
         output = []
@@ -257,9 +280,47 @@ class CrossrefConnector(SourceConnector):
     id = "crossref"
     family = SourceFamily.ACADEMIC
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._rate_lock = asyncio.Lock()
+        self._last_request = 0.0
+
+    async def _get(self, url: str, **kwargs):
+        for attempt in range(4):
+            async with self._rate_lock:
+                minimum_interval = 1 / self.settings.crossref_rps
+                wait = minimum_interval - (time.monotonic() - self._last_request)
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                response = await self.client.get(url, **kwargs)
+                self._last_request = time.monotonic()
+            if response.status_code != 429 or attempt == 3:
+                return response
+            try:
+                delay = float(response.headers.get("Retry-After", "2"))
+            except ValueError:
+                delay = 2.0
+            await asyncio.sleep(min(15.0, max(1.0, delay)))
+        return response
+
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
-            "https://api.crossref.org/works", params={"query": query, "rows": min(limit, 100)}
+        return await self.search_scoped(query, limit)
+
+    async def search_scoped(
+        self, query: str, limit: int = 20, scope: ResearchScope | None = None,
+    ) -> list[ConnectorCandidate]:
+        params = {"query": query, "rows": min(limit, 100)}
+        filters = []
+        if scope and scope.start_date:
+            filters.append(f"from-pub-date:{scope.start_date.date().isoformat()}")
+        if scope and scope.end_date:
+            filters.append(f"until-pub-date:{scope.end_date.date().isoformat()}")
+        if filters:
+            params["filter"] = ",".join(filters)
+        if self.settings.crossref_mailto:
+            params["mailto"] = self.settings.crossref_mailto
+        response = await self._get(
+            "https://api.crossref.org/works", params=params,
         )
         response.raise_for_status()
         output = []
@@ -282,9 +343,42 @@ class ArxivConnector(SourceConnector):
     family = SourceFamily.ACADEMIC
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
+        return await self.search_scoped(query, limit)
+
+    async def search_scoped(
+        self, query: str, limit: int = 20, scope: ResearchScope | None = None,
+    ) -> list[ConnectorCandidate]:
+        distinctive = topic_terms(query)
+        ordered_terms = []
+        for token in re.findall(r"[A-Za-zÀ-ž0-9_-]+", query.lower()):
+            normalized = token.replace("-", "").replace("_", "")
+            if normalized in distinctive and normalized not in ordered_terms:
+                ordered_terms.append(normalized)
+        # arXiv treats every field term as mandatory. Three distinctive anchors keep
+        # precision high without turning natural-language questions into zero-hit queries.
+        selected_terms = ordered_terms[:3]
+        search_query = (
+            " AND ".join(f"all:{term}" for term in selected_terms)
+            if selected_terms
+            else f'all:"{query}"'
+        )
+        if scope and (scope.start_date or scope.end_date):
+            start = scope.start_date or parse_datetime("1900-01-01")
+            end = scope.end_date or parse_datetime("2999-12-31")
+            start_text = start.strftime("%Y%m%d%H%M")
+            end_text = end.strftime("%Y%m%d%H%M")
+            search_query = (
+                f"({search_query}) AND submittedDate:[{start_text} TO {end_text}]"
+            )
         response = await self.client.get(
             "https://export.arxiv.org/api/query",
-            params={"search_query": f"all:{query}", "start": 0, "max_results": min(limit, 100)},
+            params={
+                "search_query": search_query,
+                "start": 0,
+                "max_results": min(limit, 100),
+                "sortBy": "submittedDate",
+                "sortOrder": "descending",
+            },
         )
         response.raise_for_status()
         root = ET.fromstring(response.text)
@@ -293,11 +387,15 @@ class ArxivConnector(SourceConnector):
         for entry in root.findall("a:entry", ns):
             url = entry.findtext("a:id", "", ns)
             pid = url.rsplit("/", 1)[-1]
+            published = parse_datetime(entry.findtext("a:published", "", ns))
+            updated = entry.findtext("a:updated", "", ns)
             item = self.candidate(
                 title=entry.findtext("a:title", "", ns), url=url,
                 snippet=entry.findtext("a:summary", "", ns), persistent_id=f"arxiv:{pid}",
                 authors=[a.findtext("a:name", "", ns) for a in entry.findall("a:author", ns)],
                 publisher="arXiv",
+                published_at=published,
+                metadata={"published": published.isoformat() if published else None, "updated": updated},
             )
             if item:
                 output.append(item)
@@ -309,9 +407,19 @@ class EuropePmcConnector(SourceConnector):
     family = SourceFamily.ACADEMIC
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
+        return await self.search_scoped(query, limit)
+
+    async def search_scoped(
+        self, query: str, limit: int = 20, scope: ResearchScope | None = None,
+    ) -> list[ConnectorCandidate]:
+        scoped_query = query
+        if scope and (scope.start_date or scope.end_date):
+            start = scope.start_date.date().isoformat() if scope.start_date else "1900-01-01"
+            end = scope.end_date.date().isoformat() if scope.end_date else "2999-12-31"
+            scoped_query = f"({query}) AND FIRST_PDATE:[{start} TO {end}] sort_date:y"
         response = await self.client.get(
             "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
-            params={"query": query, "pageSize": min(limit, 100), "format": "json"},
+            params={"query": scoped_query, "pageSize": min(limit, 100), "format": "json"},
         )
         response.raise_for_status()
         output = []

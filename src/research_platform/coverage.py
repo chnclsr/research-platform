@@ -16,6 +16,7 @@ def calculate_coverage(
     prior_saturated_rounds: int,
     *,
     authority_coverage: float = 1.0,
+    claim_audit_required: bool = True,
 ) -> CoverageMetrics:
     counts = Counter(source_families)
     weighted_scores = []
@@ -32,7 +33,11 @@ def calculate_coverage(
         sum(1 for count in branch_result_counts.values() if count >= 1) / len(branch_result_counts)
         if branch_result_counts else 0.0
     )
-    audit_coverage = audited_major_claims / major_claims if major_claims else 0.0
+    audit_coverage = (
+        audited_major_claims / major_claims
+        if major_claims
+        else (0.0 if claim_audit_required else 1.0)
+    )
     stopping = protocol.stopping_criteria
     saturated = prior_saturated_rounds + 1 if new_source_rate <= stopping.maximum_new_source_rate else 0
     reasons = []

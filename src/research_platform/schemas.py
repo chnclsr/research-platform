@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Literal
 
 import ulid
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+
+from .temporal import infer_relative_date_range
 
 
 def new_id() -> str:
@@ -102,6 +105,23 @@ class ResearchScope(BaseModel):
     domains: list[str] = Field(default_factory=list)
 
 
+ACADEMIC_PUBLICATION_SIGNALS = {
+    "academic", "article", "clinical", "doi", "journal", "literature", "paper",
+    "papers", "preprint", "published", "publication", "radiomics", "research",
+    "study", "studies", "trial", "arxiv", "makale", "yayın", "yayin", "çalışma",
+    "calisma",
+}
+
+
+def is_academic_publication_query(question: str) -> bool:
+    normalized = question.lower()
+    hits = sum(
+        bool(re.search(rf"(?<!\w){re.escape(signal)}(?!\w)", normalized))
+        for signal in ACADEMIC_PUBLICATION_SIGNALS
+    )
+    return hits >= 2
+
+
 class ResearchProtocol(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -121,10 +141,30 @@ class ResearchProtocol(BaseModel):
 
     @model_validator(mode="after")
     def normalize_targets_and_validate_budget(self) -> "ResearchProtocol":
+        if self.scope.start_date is None and self.scope.end_date is None:
+            inferred = infer_relative_date_range(self.primary_question)
+            if inferred:
+                self.scope.start_date, self.scope.end_date = inferred
+        if (
+            self.scope.start_date is not None
+            and self.scope.end_date is not None
+            and self.scope.start_date > self.scope.end_date
+        ):
+            raise ValueError("scope.start_date must not be after scope.end_date")
         if not self.family_targets:
-            self.family_targets = {
-                family: FamilyTarget() for family in self.connectors.included_families
-            }
+            if (
+                SourceFamily.ACADEMIC in self.connectors.included_families
+                and is_academic_publication_query(self.primary_question)
+            ):
+                self.family_targets = {
+                    SourceFamily.ACADEMIC: FamilyTarget(
+                        minimum_sources=min(2, self.budget.max_sources),
+                    ),
+                }
+            else:
+                self.family_targets = {
+                    family: FamilyTarget() for family in self.connectors.included_families
+                }
         else:
             self.family_targets = {
                 family: target

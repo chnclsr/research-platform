@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     epo_ops_secret: str | None = None
     openalex_api_key: str | None = None
     openalex_mailto: str | None = None
+    crossref_mailto: str | None = None
+    crossref_rps: float = Field(1.0, gt=0, le=50)
     semantic_scholar_api_key: str | None = None
     semantic_scholar_rps: float = Field(1.0, gt=0, le=100)
     semantic_scholar_citation_limit: int = Field(20, ge=0, le=500)

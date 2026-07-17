@@ -26,7 +26,13 @@ from .passages import (
 )
 from .paperqa_adapter import PaperQA2EvidenceEngine
 from .normalization import canonicalize_url
-from .relevance import claim_relevance, domain_matches, filter_and_rank_candidates
+from .relevance import (
+    claim_relevance,
+    document_relevance,
+    domain_matches,
+    filter_and_rank_candidates,
+    temporal_relevance,
+)
 from .recovery import (
     diagnose_gaps,
     initial_missions,
@@ -43,6 +49,7 @@ from .schemas import (
     ExtractedClaim, Passage, ResearchProtocol, RunStatus, SearchMission, SourceFamily,
 )
 from .storage import ObjectStore
+from .temporal import constrain_text_to_scope
 
 
 class PipelineState(TypedDict, total=False):
@@ -195,6 +202,12 @@ class ResearchPipeline:
         await self._boundary(state, "DECOMPOSE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         sub_questions, concepts = await decompose(self.llm, protocol.primary_question, protocol.sub_questions)
+        sub_questions = [
+            constrain_text_to_scope(
+                question, protocol.scope.start_date, protocol.scope.end_date,
+            )
+            for question in sub_questions
+        ]
         await self._emit_llm_metrics(state["run_id"], "DECOMPOSE")
         return {"sub_questions": sub_questions[:12], "concepts": concepts[:20]}
 
@@ -208,6 +221,12 @@ class ResearchPipeline:
             )
         except Exception:
             generated = []
+        generated = [
+            constrain_text_to_scope(
+                query, protocol.scope.start_date, protocol.scope.end_date,
+            )
+            for query in generated
+        ]
         await self._emit_llm_metrics(state["run_id"], "BUILD_QUERY_BRANCHES")
         queries = list(dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated]))
         for concept in state.get("concepts", [])[:3]:
@@ -278,6 +297,10 @@ class ResearchPipeline:
                     if domain and hasattr(connector, "search_with_domain"):
                         rows = await connector.search_with_domain(
                             mission.query, mission.result_limit, domain,
+                        )
+                    elif hasattr(connector, "search_scoped"):
+                        rows = await connector.search_scoped(
+                            mission.query, mission.result_limit, protocol.scope,
                         )
                     else:
                         rows = await connector.search(mission.query, mission.result_limit)
@@ -454,6 +477,34 @@ class ResearchPipeline:
                 "rejected_count": len(novelty_rejected),
                 "sample": novelty_rejected[:20],
             })
+        temporal_candidates = []
+        temporal_rejected = []
+        for candidate in novel:
+            accepted, reason = temporal_relevance(
+                candidate, protocol, reject_unknown=False,
+            )
+            if accepted:
+                temporal_candidates.append(candidate)
+            else:
+                temporal_rejected.append({
+                    "url": str(candidate.url),
+                    "published_at": (
+                        candidate.published_at.isoformat() if candidate.published_at else None
+                    ),
+                    "reason": reason,
+                })
+        if temporal_rejected:
+            await self.repo.event(state["run_id"], "temporal_scope_filter", {
+                "rejected_count": len(temporal_rejected),
+                "sample": temporal_rejected[:20],
+                "start_date": (
+                    protocol.scope.start_date.isoformat() if protocol.scope.start_date else None
+                ),
+                "end_date": (
+                    protocol.scope.end_date.isoformat() if protocol.scope.end_date else None
+                ),
+            })
+        novel = temporal_candidates
         remaining = max(0, protocol.budget.max_sources - len(existing))
         fraction = 0.40 if state.get("round_number", 1) == 1 else 0.30
         round_cap = min(remaining, max(1, math.ceil(protocol.budget.max_sources * fraction)))
@@ -549,17 +600,113 @@ class ResearchPipeline:
             )
         return {"documents": [d.model_dump(mode="json") for d in docs]}
 
+    async def _semantic_source_judgment(
+        self,
+        protocol: ResearchProtocol,
+        document: AcquiredDocument,
+    ) -> tuple[bool, float, str]:
+        """Use the local model only after deterministic gates pass."""
+        system_prompt = (
+            "Act as a strict research source admission gate. Decide whether the publication's "
+            "central subject directly helps answer the research question. A mere keyword mention, "
+            "related-article link, comparison cohort, background reference, or adjacent disease is "
+            "not directly relevant. Judge the source itself by its publication/update date; "
+            "a newly published systematic review can be relevant even when it summarizes "
+            "older studies. Return one JSON object with directly_relevant (boolean), "
+            "relevance_score (0..1, where 0 is unrelated and 1 is directly useful), and "
+            "reason (short string)."
+        )
+        user_prompt = (
+            f"QUESTION: {protocol.primary_question}\n"
+            f"DATE_SCOPE: {protocol.scope.start_date} to {protocol.scope.end_date}\n"
+            f"TITLE: {document.candidate.title}\n"
+            f"DISCOVERY_SNIPPET: {document.candidate.snippet[:1500]}\n"
+            f"DOCUMENT_EXCERPT: {document.content[:6000]}"
+        )
+        last_error = "invalid_response"
+        for _attempt in range(2):
+            try:
+                result = await self.llm.complete_json(system_prompt, user_prompt)
+                if not isinstance(result, dict) or not isinstance(
+                    result.get("directly_relevant"), bool,
+                ):
+                    last_error = "invalid_response"
+                    continue
+                relevance_score = max(
+                    0.0,
+                    min(1.0, float(result.get("relevance_score", 0.5))),
+                )
+                return (
+                    bool(result["directly_relevant"]),
+                    relevance_score,
+                    str(result.get("reason", ""))[:500],
+                )
+            except Exception as exc:
+                last_error = type(exc).__name__
+        strict_delivery = (
+            protocol.output_mode == "raw"
+            or protocol.authority_policy.strict_for_major_claims
+        )
+        if strict_delivery:
+            return False, 0.0, f"judge_unavailable_fail_closed:{last_error}"
+        return True, 1.0, f"judge_unavailable_fail_open:{last_error}"
+
     async def normalize(self, state: PipelineState) -> dict:
         await self._boundary(state, "NORMALIZE")
+        protocol = ResearchProtocol.model_validate(state["protocol"])
         documents = [AcquiredDocument.model_validate(d) for d in state.get("documents", [])]
         existing_version_ids = {
             version.id for _, version in await self.repo.list_source_versions(state["run_id"])
         }
         saved_docs = []
         branch_counts: dict[str, int] = defaultdict(int)
+        content_rejected: list[dict[str, Any]] = []
         for document in documents:
             if not document.success:
                 continue
+            temporal_ok, temporal_reason = temporal_relevance(
+                document.candidate, protocol, reject_unknown=True,
+            )
+            if not temporal_ok:
+                content_rejected.append({
+                    "url": str(document.candidate.url),
+                    "reason": temporal_reason,
+                    "stage": "post_acquisition_temporal",
+                })
+                continue
+            relevant, relevance_score, relevance_reasons = document_relevance(
+                document,
+                protocol,
+                [protocol.primary_question, *state.get("sub_questions", [])],
+            )
+            if not relevant:
+                content_rejected.append({
+                    "url": str(document.candidate.url),
+                    "reason": "content_not_relevant",
+                    "score": relevance_score,
+                    "details": relevance_reasons,
+                    "stage": "post_acquisition_semantic",
+                })
+                continue
+            if not self.settings.testing:
+                judged_relevant, judge_score, judge_reason = (
+                    await self._semantic_source_judgment(protocol, document)
+                )
+                document.candidate.metadata["semantic_relevance_judgment"] = {
+                    "directly_relevant": judged_relevant,
+                    "relevance_score": judge_score,
+                    "reason": judge_reason,
+                    "model": self.settings.llm_model,
+                }
+                if not judged_relevant or judge_score < 0.45:
+                    content_rejected.append({
+                        "url": str(document.candidate.url),
+                        "reason": "semantic_judge_not_directly_relevant",
+                        "relevance_score": judge_score,
+                        "details": judge_reason,
+                        "stage": "post_acquisition_llm",
+                    })
+                    continue
             snapshot = document.raw_content or document.content
             if snapshot and document.content_hash:
                 extension = {
@@ -597,6 +744,12 @@ class ResearchPipeline:
                     await self.repo.event(state["run_id"], "frontier_links", {
                         "source": document.final_url or str(document.candidate.url), "added": added,
                     })
+        if content_rejected:
+            await self.repo.event(state["run_id"], "content_relevance_filter", {
+                "rejected_count": len(content_rejected),
+                "sample": content_rejected[:20],
+            })
+        await self._emit_llm_metrics(state["run_id"], "CONTENT_RELEVANCE")
         sources = await self.repo.list_sources(state["run_id"])
         await self.repo.update_run(state["run_id"], sources_count=len(sources))
         return {"documents": saved_docs, "branch_result_counts": dict(branch_counts)}
@@ -842,15 +995,17 @@ class ResearchPipeline:
                         SourceFamily.WEB.value,
                         SourceFamily.ACADEMIC.value,
                     }
-                    and float(
-                        (source.metadata_json or {}).get("relevance_score", 0.0)
-                    ) >= 0.45
+                    and max(
+                        float((source.metadata_json or {}).get("relevance_score", 0.0)),
+                        float((source.metadata_json or {}).get("content_relevance_score", 0.0)),
+                    ) >= 0.35
                 )
                 or (
                     source.family == SourceFamily.CODE_DATA.value
-                    and float(
-                        (source.metadata_json or {}).get("relevance_score", 0.0)
-                    ) >= 0.55
+                    and max(
+                        float((source.metadata_json or {}).get("relevance_score", 0.0)),
+                        float((source.metadata_json or {}).get("content_relevance_score", 0.0)),
+                    ) >= 0.45
                 )
                 or (source.metadata_json or {}).get("authority") == "primary"
                 or (
@@ -921,6 +1076,7 @@ class ResearchPipeline:
             protocol, [s.family for s in relevant_sources], dict(branch_counts),
             len(major), audited_count, len(unresolved), rate, previous.saturated_rounds,
             authority_coverage=authority_coverage,
+            claim_audit_required=protocol.output_mode != "raw",
         )
         round_number = state.get("round_number", 1)
         elapsed = (time.monotonic() - state.get("started_monotonic", time.monotonic())) / 60
@@ -985,6 +1141,35 @@ class ResearchPipeline:
     async def audit(self, state: PipelineState) -> dict:
         await self._boundary(state, "AUDIT")
         protocol = ResearchProtocol.model_validate(state["protocol"])
+        if protocol.output_mode == "raw":
+            coverage = CoverageMetrics.model_validate(state.get("coverage", {}))
+            stopping = protocol.stopping_criteria
+            coverage.claim_audit_coverage = 1.0
+            coverage.unresolved_major_claims = 0
+            coverage.sufficient = (
+                coverage.source_family_coverage >= stopping.minimum_source_coverage
+                and coverage.query_branch_coverage >= stopping.minimum_query_branch_coverage
+                and coverage.saturated_rounds >= stopping.saturation_rounds
+                and (
+                    not protocol.authority_policy.strict_for_major_claims
+                    or coverage.authority_coverage >= 1.0
+                )
+            )
+            reasons = []
+            if coverage.source_family_coverage < stopping.minimum_source_coverage:
+                reasons.append("source_family_coverage")
+            if coverage.query_branch_coverage < stopping.minimum_query_branch_coverage:
+                reasons.append("query_branch_coverage")
+            if coverage.saturated_rounds < stopping.saturation_rounds:
+                reasons.append("query_saturation")
+            if (
+                protocol.authority_policy.strict_for_major_claims
+                and coverage.authority_coverage < 1.0
+            ):
+                reasons.append("authority_coverage")
+            coverage.reasons = reasons
+            await self.repo.update_run(state["run_id"], coverage=coverage.model_dump())
+            return {"coverage": coverage.model_dump()}
         evidence = await self.repo.list_evidence(state["run_id"])
         by_claim: dict[str, list[tuple]] = defaultdict(list)
         for claim, link, source in evidence:
@@ -997,7 +1182,13 @@ class ResearchPipeline:
             supporting = [e for e, _ in links if e.direction == "supports" and e.entailment_score >= 0.5]
             contradicting = [e for e, _ in links if e.direction == "contradicts"]
             source_score = max(
-                (float((source.metadata_json or {}).get("relevance_score", 0.0)) for _, source in links),
+                (
+                    max(
+                        float((source.metadata_json or {}).get("relevance_score", 0.0)),
+                        float((source.metadata_json or {}).get("content_relevance_score", 0.0)),
+                    )
+                    for _, source in links
+                ),
                 default=0.0,
             )
             quotes = " ".join(link.quote for link, _ in links)

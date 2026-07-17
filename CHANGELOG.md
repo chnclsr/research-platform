@@ -1,10 +1,25 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.5.0`
+Platform sürümü: `v0.5.1`
 
 Belge sürümü: `2.2`
 
 Son güncelleme: `2026-07-17`
+
+## v0.5.1 — 2026-07-17
+
+- Göreli zaman ifadeleri zorunlu UTC araştırma kapsamına dönüştürüldü.
+- Akademik sağlayıcılara tarih filtresi ve edinim sonrası tarih/alaka kapısı eklendi.
+- Akademik yayın sorularında ilgisiz resmî ve kod kaynakları coverage uğruna zorlanmıyor.
+- Claim alakasının yalnız kaynak puanından miras alınması engellendi.
+- Ham veri modundaki yanlış claim-audit coverage eksiği giderildi.
+- Yerel modelle belge-merkezli semantik kaynak kabul kapısı ve strict ham teslimde
+  tekrar denemeli fail-closed politikası eklendi.
+- Crossref için seri istek sınırı, `Retry-After` desteği ve yapılandırılabilir polite-pool
+  e-posta alanı eklendi.
+- Akademik başlık metadata'sında recall eşiği düşürüldü; nihai precision edinim sonrası
+  deterministik ve LLM kapılarında korunuyor.
+- `01KXNSZAGK5SBQEWFW5CY76385` için tarih ve alaka regresyon testleri eklendi.
 
 ## v0.5.0 — 2026-07-17
 

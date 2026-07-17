@@ -219,7 +219,7 @@ async def build_status() -> dict[str, Any]:
     any_running = any(item["running"] for item in processes.values())
     overall = "running" if core_running else "degraded" if any_running else "stopped"
     return {
-        "version": "0.5.0",
+        "version": "0.5.1",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "overall": overall,
         "processes": processes,
@@ -263,7 +263,7 @@ async def _run_powershell(script: str) -> tuple[int, str]:
 
 app = FastAPI(
     title="Research Platform Control Panel",
-    version="0.5.0",
+    version="0.5.1",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -288,7 +288,7 @@ async def index() -> HTMLResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.5.0"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.5.1"}
 
 
 @app.get("/api/status", dependencies=[Depends(require_control_token)])

@@ -63,6 +63,107 @@ class DummyAcquisition:
         )
 
 
+class SemanticJudgeLLM:
+    def __init__(self, response):
+        self.response = response
+
+    async def complete_json(self, system_prompt, user_prompt):
+        return self.response
+
+
+class FailingSemanticJudgeLLM:
+    def __init__(self):
+        self.calls = 0
+
+    async def complete_json(self, system_prompt, user_prompt):
+        self.calls += 1
+        raise ValueError("invalid model JSON")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (
+            {
+                "directly_relevant": False,
+                "relevance_score": 0.1,
+                "reason": "Adjacent disease only",
+            },
+            (False, 0.1, "Adjacent disease only"),
+        ),
+        (
+            {
+                "directly_relevant": True,
+                "relevance_score": 0.9,
+                "reason": "Direct CT risk evidence",
+            },
+            (True, 0.9, "Direct CT risk evidence"),
+        ),
+    ],
+)
+async def test_semantic_source_judge_uses_relevance_score(response, expected):
+    protocol = ResearchProtocol(
+        title="Semantic source admission",
+        primary_question="What recent CT models estimate lung cancer risk?",
+    )
+    candidate = ConnectorCandidate(
+        connector_id="fixture",
+        family=SourceFamily.ACADEMIC,
+        title="Fixture publication",
+        url="https://example.com/publication",
+    )
+    document = AcquiredDocument(
+        candidate=candidate,
+        success=True,
+        content="Publication content",
+        content_type="text/plain",
+        acquisition_method="fixture",
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = SemanticJudgeLLM(response)
+        assert await pipeline._semantic_source_judgment(protocol, document) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("output_mode", "expected_relevant", "expected_policy"),
+    [
+        ("raw", False, "fail_closed"),
+        ("both", True, "fail_open"),
+    ],
+)
+async def test_semantic_source_judge_retries_and_uses_delivery_failure_policy(
+    output_mode, expected_relevant, expected_policy,
+):
+    protocol = ResearchProtocol(
+        title="Semantic source failure policy",
+        primary_question="Which evidence directly answers the research question?",
+        output_mode=output_mode,
+    )
+    document = AcquiredDocument(
+        candidate=ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.WEB,
+            title="Fixture source",
+            url="https://example.com/source",
+        ),
+        success=True,
+        content="Fixture content",
+        content_type="text/plain",
+        acquisition_method="fixture",
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        llm = FailingSemanticJudgeLLM()
+        pipeline.llm = llm
+        relevant, _, reason = await pipeline._semantic_source_judgment(protocol, document)
+    assert relevant is expected_relevant
+    assert expected_policy in reason
+    assert llm.calls == 2
+
+
 @pytest.mark.asyncio
 async def test_pipeline_preserves_cancellation_before_worker_start():
     await create_schema()

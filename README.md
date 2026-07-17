@@ -1,12 +1,15 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.5.0`
+Platform sürümü: `v0.5.1`
 
 Belge sürümü: `2.3`
 
 Son güncelleme: `2026-07-17`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
+
+Zamansal kapsam ve kaynak kalitesi düzeltmeleri:
+`TEMPORAL_AND_RELEVANCE_QUALITY_REPORT.md`.
 
 Codex, Claude ve Telegram erişim mimarisi: `AGENT_GATEWAY_ARCHITECTURE_REPORT.md`.
 

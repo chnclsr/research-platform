@@ -106,6 +106,9 @@ class Repository:
         c = document.candidate
         persisted_metadata = dict(c.metadata)
         persisted_metadata.pop("inline_fulltext", None)
+        if c.published_at is not None:
+            persisted_metadata["published_at"] = c.published_at.isoformat()
+            persisted_metadata.setdefault("publication_year", c.published_at.year)
         canonical = document.canonical_url or canonicalize_url(str(c.url))
         dedupe_key = candidate_dedupe_key(c)[:512]
         source = await self.session.scalar(

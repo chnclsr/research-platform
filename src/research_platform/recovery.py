@@ -125,9 +125,13 @@ def initial_missions(
                 result_limit=min(10, protocol.budget.results_per_connector),
                 acquisition_slots=1,
             ))
+    targeted_families = [
+        family for family, target in protocol.family_targets.items()
+        if target.minimum_sources > 0
+    ] or protocol.connectors.included_families
     connector_ids = list(dict.fromkeys(
         connector
-        for family in protocol.connectors.included_families
+        for family in targeted_families
         for connector in FAMILY_CONNECTORS.get(family, [])
     ))
     for index, query in enumerate(queries[:5]):
@@ -139,6 +143,18 @@ def initial_missions(
             acquisition_slots=2,
         ))
     return missions
+
+
+def targeted_connector_ids(protocol: ResearchProtocol) -> list[str]:
+    families = [
+        family for family, target in protocol.family_targets.items()
+        if target.minimum_sources > 0
+    ] or protocol.connectors.included_families
+    return list(dict.fromkeys(
+        connector
+        for family in families
+        for connector in FAMILY_CONNECTORS.get(family, [])
+    ))
 
 
 def diagnose_gaps(
@@ -195,11 +211,7 @@ def diagnose_gaps(
             topic=claim["text"],
             claim_ids=[claim["id"]],
             required_authority=protocol.authority_policy.minimum_authority,
-            preferred_connectors=list(dict.fromkeys(
-                connector
-                for family in protocol.connectors.included_families
-                for connector in FAMILY_CONNECTORS.get(family, [])
-            )),
+            preferred_connectors=targeted_connector_ids(protocol),
             priority=0.75,
         ))
     for branch_id, count in branch_result_counts.items():
@@ -212,11 +224,7 @@ def diagnose_gaps(
         missing_family = None
         required_authority = AuthorityLevel.ANY
         target_domains: list[str] = []
-        preferred_connectors = list(dict.fromkeys(
-            connector
-            for family in protocol.connectors.included_families
-            for connector in FAMILY_CONNECTORS.get(family, [])
-        ))
+        preferred_connectors = targeted_connector_ids(protocol)
         if branch_id.startswith("code:"):
             target_entities = [branch_id.split(":", 1)[1]]
             missing_family = SourceFamily.CODE_DATA
@@ -261,11 +269,7 @@ def diagnose_gaps(
                 f"saturation probe {coverage.saturated_rounds + 1}"
             ),
             branch_id=best_branch,
-            preferred_connectors=list(dict.fromkeys(
-                connector
-                for family in protocol.connectors.included_families
-                for connector in FAMILY_CONNECTORS.get(family, [])
-            )),
+            preferred_connectors=targeted_connector_ids(protocol),
             minimum_novel_sources=1,
             priority=0.55,
         ))
