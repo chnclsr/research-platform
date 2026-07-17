@@ -14,8 +14,10 @@ $address = Get-NetIPAddress -InterfaceAlias $InterfaceAlias -AddressFamily IPv4 
     Select-Object -First 1
 if (-not $address) { throw "$InterfaceAlias IPv4 adresi bulunamadı." }
 
-$displayName = "Research Platform MCP - Office LAN"
-Get-NetFirewallRule -DisplayName $displayName -ErrorAction SilentlyContinue |
+$displayName = "Research Platform Services - Office LAN"
+@("Research Platform MCP - Office LAN", $displayName) | ForEach-Object {
+    Get-NetFirewallRule -DisplayName $_ -ErrorAction SilentlyContinue
+} |
     Remove-NetFirewallRule
 New-NetFirewallRule `
     -DisplayName $displayName `
@@ -23,11 +25,11 @@ New-NetFirewallRule `
     -Action Allow `
     -Protocol TCP `
     -LocalAddress $address.IPAddress `
-    -LocalPort 8010 `
+    -LocalPort 8010,8020 `
     -RemoteAddress LocalSubnet `
     -Profile Domain,Private,Public `
-    -Description "Research Platform MCP; bearer token ve uygulama katmanı CIDR allowlist ile korunur." |
+    -Description "Research Platform MCP ve kontrol paneli; uygulama katmanı CIDR allowlist ile korunur." |
     Out-Null
 
 Write-Host "Firewall kuralı eklendi: $displayName"
-Write-Host "Yalnız LocalSubnet -> $($address.IPAddress):8010"
+Write-Host "Yalnız LocalSubnet -> $($address.IPAddress):8010,8020"

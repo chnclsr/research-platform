@@ -1,13 +1,38 @@
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from research_platform import control_panel
+
+
+def _network_guard_app(networks: list[str]) -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(
+        control_panel.ControlPanelNetworkGuard,
+        allowed_networks=networks,
+    )
+
+    @app.get("/")
+    async def index():
+        return {"ok": True}
+
+    return app
+
+
+def test_control_panel_network_guard_allows_office_cidr_and_rejects_others():
+    guarded = _network_guard_app(["10.0.10.0/24"])
+    with TestClient(guarded, client=("10.0.10.42", 50000)) as allowed:
+        assert allowed.get("/").status_code == 200
+    with TestClient(guarded, client=("10.0.11.42", 50000)) as denied:
+        response = denied.get("/")
+        assert response.status_code == 403
+        assert response.text == "Office network access denied"
 
 
 def test_control_panel_is_local_management_surface():
     with TestClient(control_panel.app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.5.1"
+        assert health.json()["version"] == "0.5.2"
 
         page = client.get("/")
         assert page.status_code == 200

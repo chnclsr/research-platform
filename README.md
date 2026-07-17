@@ -1,8 +1,8 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.5.1`
+Platform sürümü: `v0.5.2`
 
-Belge sürümü: `2.3`
+Belge sürümü: `2.4`
 
 Son güncelleme: `2026-07-17`
 
@@ -58,7 +58,7 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 - Codex ve Claude için MCP araç katmanı.
 - Wi-Fi CIDR allowlist, güçlü bearer token ve yalnız MCP portunu açan ofis sunucusu modu.
 - Allowlist korumalı Telegram araştırma botu.
-- Servis, kuyruk, aktif run ve log yönetimi için bağımsız localhost kontrol paneli.
+- Servis, kuyruk, aktif run ve log yönetimi için ofis CIDR allowlist korumalı kontrol paneli.
 - Ollama varsayılanı ve OpenAI-compatible alternatif.
 - Ollama JSON çağrılarında yapılandırılabilir thinking, context ve output sınırları.
 - Langflow için dört sabit kontrol bileşeni.
@@ -89,12 +89,12 @@ Docker Hub sertifika doğrulaması başarısız olursa kurulum otomatik olarak P
 - Langflow: `http://localhost:7860`
 - MinIO Console: `http://localhost:9001`
 - MCP Gateway: `http://localhost:8010/mcp`
-- Kontrol Paneli: `http://127.0.0.1:8020`
+- Kontrol Paneli: yerel `http://127.0.0.1:8020`, ofis ağı `http://<sunucu-ip>:8020`
 
 ## Ofis ağına açma
 
-API ve veri servislerini dışarı açmadan yalnız kimlik doğrulamalı MCP gateway'i mevcut Wi-Fi
-ağına bağlamak için:
+API ve veri servislerini dışarı açmadan kimlik doğrulamalı MCP gateway'i ve CIDR korumalı kontrol
+panelini mevcut Wi-Fi ağına bağlamak için:
 
 ```powershell
 .\scripts\initialize_office_server.ps1

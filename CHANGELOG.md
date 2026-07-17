@@ -1,10 +1,20 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.5.1`
+Platform sürümü: `v0.5.2`
 
-Belge sürümü: `2.2`
+Belge sürümü: `2.3`
 
 Son güncelleme: `2026-07-17`
+
+## v0.5.2 — 2026-07-17
+
+- Kontrol paneli ofis kullanımı için `0.0.0.0:8020` üzerinde dinleyecek biçimde yapılandırıldı.
+- Loopback ve yapılandırılmış ofis CIDR'ı dışındaki istemcileri reddeden uygulama katmanı ağ koruması
+  eklendi.
+- Trusted Host listesine ofis sunucusu IP'si ve bilgisayar adı eklendi.
+- Windows Firewall betiği yalnız `LocalSubnet` için MCP `8010/TCP` ve panel `8020/TCP` portlarını
+  birlikte açacak biçimde güncellendi.
+- Panel LAN adresi, ekip kurulum ve kontrol paneli belgelerine eklendi.
 
 ## v0.5.1 — 2026-07-17
 

@@ -1,8 +1,8 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `1.0`
+Belge sürümü: `1.1`
 
-Platform sürümü: `v0.5.1`
+Platform sürümü: `v0.5.2`
 
 Tarih: `2026-07-17`
 
@@ -11,11 +11,16 @@ Tarih: `2026-07-17`
 Kontrol paneli, ana araştırma servislerinden bağımsız çalışan yerel bir supervisor'dır. API, worker,
 MCP veya Telegram kapatılsa bile panel açık kalır ve sistem yeniden panel üzerinden başlatılabilir.
 
-Panel adresi: `http://127.0.0.1:8020`
+Panel adresleri:
 
-Panel güvenlik nedeniyle yalnız bu bilgisayardan erişilebilir; Wi-Fi/LAN arayüzüne bind edilmez.
-Yönetim istekleri her panel açılışında üretilen, yalnız aynı-origin sayfanın okuyabildiği geçici bir
-kontrol tokenıyla korunur.
+- Sunucu bilgisayarı: `http://127.0.0.1:8020`
+- Ofis ağı: `http://10.0.10.109:8020`
+
+Panel `0.0.0.0:8020` üzerinde dinler; uygulama katmanı yalnız yapılandırılmış ofis CIDR'ını ve
+loopback istemcilerini kabul eder. Windows Firewall kuralı da yalnız `LocalSubnet` istemcilerine
+8020/TCP izni verir. Yönetim istekleri her panel açılışında üretilen, yalnız aynı-origin sayfanın
+okuyabildiği geçici bir kontrol tokenıyla korunur. Panel internet yönlendiricisinde port-forward
+edilmemelidir.
 
 ## Görünen bilgiler
 

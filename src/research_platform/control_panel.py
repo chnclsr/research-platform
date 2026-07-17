@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import ctypes
+import ipaddress
 import secrets
+import socket
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,6 +51,34 @@ action_state: dict[str, Any] = {
     "started_at": None,
     "last_error": None,
 }
+
+
+class ControlPanelNetworkGuard:
+    """Allow the panel only from loopback or explicitly configured office CIDRs."""
+
+    def __init__(self, app, allowed_networks: list[str] | tuple[str, ...] = ()):
+        self.app = app
+        self.allowed_networks = tuple(
+            ipaddress.ip_network(network, strict=False) for network in allowed_networks
+        )
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            client_host = (scope.get("client") or ("", 0))[0]
+            allowed = client_host == "testclient"
+            if not allowed:
+                try:
+                    address = ipaddress.ip_address(client_host)
+                    allowed = address.is_loopback or any(
+                        address in network for network in self.allowed_networks
+                    )
+                except ValueError:
+                    allowed = False
+            if not allowed:
+                response = PlainTextResponse("Office network access denied", status_code=403)
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -219,7 +249,7 @@ async def build_status() -> dict[str, Any]:
     any_running = any(item["running"] for item in processes.values())
     overall = "running" if core_running else "degraded" if any_running else "stopped"
     return {
-        "version": "0.5.1",
+        "version": "0.5.2",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "overall": overall,
         "processes": processes,
@@ -263,14 +293,27 @@ async def _run_powershell(script: str) -> tuple[int, str]:
 
 app = FastAPI(
     title="Research Platform Control Panel",
-    version="0.5.1",
+    version="0.5.2",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
 )
+panel_settings = get_settings()
+panel_networks = (
+    panel_settings.control_panel_allowed_networks
+    or panel_settings.mcp_allowed_networks
+)
+app.add_middleware(ControlPanelNetworkGuard, allowed_networks=panel_networks)
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"],
+    allowed_hosts=[
+        "127.0.0.1",
+        "localhost",
+        "[::1]",
+        "testserver",
+        panel_settings.mcp_host,
+        socket.gethostname(),
+    ],
 )
 
 
@@ -288,7 +331,7 @@ async def index() -> HTMLResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.5.1"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.5.2"}
 
 
 @app.get("/api/status", dependencies=[Depends(require_control_token)])
@@ -354,8 +397,12 @@ async def logs(service: str) -> PlainTextResponse:
 
 def run() -> None:
     settings = get_settings()
-    if settings.control_panel_host not in {"127.0.0.1", "localhost", "::1"}:
-        raise RuntimeError("Control panel güvenlik nedeniyle yalnız loopback adresinde çalışabilir")
+    networks = settings.control_panel_allowed_networks or settings.mcp_allowed_networks
+    if (
+        settings.control_panel_host not in {"127.0.0.1", "localhost", "::1"}
+        and not networks
+    ):
+        raise RuntimeError("LAN control panel requires CONTROL_PANEL_ALLOWED_NETWORKS")
     uvicorn.run(
         "research_platform.control_panel:app",
         host=settings.control_panel_host,

@@ -47,10 +47,19 @@ if (Test-Path $pidFile) {
 
 if (-not $running) {
     $port = if ($env:CONTROL_PANEL_PORT) { $env:CONTROL_PANEL_PORT } else { "8020" }
+    $hostAddress = if ($env:CONTROL_PANEL_HOST) { $env:CONTROL_PANEL_HOST } else { "127.0.0.1" }
+    $allowedNetworks = if ($env:CONTROL_PANEL_ALLOWED_NETWORKS) {
+        $env:CONTROL_PANEL_ALLOWED_NETWORKS
+    } else {
+        $env:MCP_ALLOWED_NETWORKS
+    }
+    if ($hostAddress -notin @("127.0.0.1", "localhost", "::1") -and -not $allowedNetworks) {
+        throw "LAN control panel için CONTROL_PANEL_ALLOWED_NETWORKS zorunludur."
+    }
     $panel = Start-Process -FilePath $venvPython `
         -ArgumentList @(
             "-m", "uvicorn", "research_platform.control_panel:app",
-            "--host", "127.0.0.1", "--port", $port, "--no-access-log"
+            "--host", $hostAddress, "--port", $port, "--no-access-log"
         ) `
         -WorkingDirectory $root -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput "$root\logs\control-panel.stdout.log" `
@@ -72,3 +81,6 @@ if (-not $healthy) { throw "Control panel sağlık kontrolü başarısız: $url"
 
 if (-not $NoBrowser) { Start-Process $url }
 Write-Host "Research Platform Control Panel: $url"
+if ($env:CONTROL_PANEL_HOST -eq "0.0.0.0" -and $env:MCP_HOST) {
+    Write-Host "Office LAN Control Panel: http://$($env:MCP_HOST):$port"
+}
