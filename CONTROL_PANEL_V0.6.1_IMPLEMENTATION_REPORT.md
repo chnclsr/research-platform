@@ -82,3 +82,15 @@ flowchart LR
   deterministik testler eklendi.
 - Run detail’in gerçek test veritabanından timeline, funnel, branch ve quality üretmesi doğrulandı.
 - LAN guard, control token ve servis aksiyonu regresyon testleri korunmuştur.
+
+## Canlı doğrulama
+
+- Panel, API, worker, MCP, Telegram, PostgreSQL ve Redis sağlıklı çalışıyor.
+- RTX 4060 canlı olarak görüldü: 8.188 MB VRAM, kullanım ve sıcaklık okunuyor; sürücünün `N/A`
+  döndürdüğü güç alanı diğer GPU metriklerini düşürmeden işleniyor.
+- Panel 28 connector’ı listeledi; 14 connector için geçmiş operasyon çağrıları ve gecikme metrikleri
+  üretildi.
+- `01KXQMRR8ZNK9JMGX67W5XRSAT` üzerinde 14 timeline aşaması, altı funnel adımı, sekiz query branch,
+  37 yapılandırılmış event ve 17 artifact başarıyla getirildi.
+- Crossref panel bağlantı testi bir gerçek sonuçla geçti.
+- Sıfır ve sıfırdan büyük artifact’ların güvenli proxy indirmesi byte uzunluğu eşleşmesiyle doğrulandı.
