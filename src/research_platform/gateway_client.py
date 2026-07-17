@@ -35,6 +35,15 @@ class ResearchGatewayClient:
             response.raise_for_status()
             return response.json()
 
+    async def runs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/research-runs",
+                params={"limit": min(max(1, limit), 200)},
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def action(self, run_id: str, action: str) -> dict[str, Any]:
         if action not in {"pause", "resume", "cancel"}:
             raise ValueError(f"Unsupported action: {action}")

@@ -79,7 +79,7 @@ if (-not $healthy) {
 }
 
 $status = [ordered]@{
-    version = "0.5.2"
+    version = "0.5.3"
     started_at = (Get-Date).ToUniversalTime().ToString("o")
     mcp_url = "http://$($environment.MCP_HOST):$($environment.MCP_PORT)/mcp"
     health_url = $healthUrl

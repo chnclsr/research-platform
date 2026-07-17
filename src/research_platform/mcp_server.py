@@ -7,7 +7,9 @@ import hashlib
 from pathlib import Path
 import secrets
 from typing import Literal
+from urllib.parse import parse_qs
 
+import httpx
 from mcp.server.fastmcp import FastMCP
 import uvicorn
 
@@ -233,11 +235,52 @@ class BearerProtectedMCP:
                     {
                         "status": "healthy",
                         "service": "research-platform-mcp",
-                        "version": "0.5.2",
+                        "version": "0.5.3",
                     },
                 )
                 return
+            if scope.get("path", "").startswith("/client/v1/"):
+                await self._client_api(scope, send)
+                return
         await self.app(scope, receive, send)
+
+    async def _client_api(self, scope, send) -> None:
+        if scope.get("method") != "GET":
+            await self._reject(send, 405, b"Method Not Allowed")
+            return
+        path = scope.get("path", "")
+        parts = [part for part in path.split("/") if part]
+        try:
+            if parts == ["client", "v1", "research-runs"]:
+                query = parse_qs(scope.get("query_string", b"").decode("ascii", errors="ignore"))
+                limit = int(query.get("limit", ["50"])[0])
+                await self._json(send, 200, await _client().runs(limit=limit))
+                return
+            if len(parts) == 4 and parts[:3] == ["client", "v1", "research-runs"]:
+                await self._json(send, 200, await _client().status(parts[3]))
+                return
+            if (
+                len(parts) == 6
+                and parts[:3] == ["client", "v1", "research-runs"]
+                and parts[4] == "delivery"
+            ):
+                mode = DeliveryMode(parts[5])
+                target = await _client().download(
+                    parts[3], mode, Path(settings.gateway_download_dir)
+                )
+                await self._file(send, target)
+                return
+        except (ValueError, TypeError):
+            await self._reject(send, 400, b"Invalid request")
+            return
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            await self._reject(send, status if 400 <= status < 600 else 502, b"Upstream request failed")
+            return
+        except httpx.HTTPError:
+            await self._reject(send, 502, b"Research API unavailable")
+            return
+        await self._reject(send, 404, b"Not Found")
 
     def _client_allowed(self, scope) -> bool:
         client = scope.get("client")
@@ -271,6 +314,24 @@ class BearerProtectedMCP:
             ],
         })
         await send({"type": "http.response.body", "body": payload})
+
+    @staticmethod
+    async def _file(send, path: Path) -> None:
+        size = path.stat().st_size
+        await send({
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [
+                (b"content-type", b"application/zip"),
+                (b"content-length", str(size).encode("ascii")),
+                (b"content-disposition", f'attachment; filename="{path.name}"'.encode("ascii")),
+                (b"cache-control", b"no-store"),
+            ],
+        })
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                await send({"type": "http.response.body", "body": chunk, "more_body": True})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
 
 
 def _is_loopback_host(host: str) -> bool:

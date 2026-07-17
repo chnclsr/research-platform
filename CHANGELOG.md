@@ -1,10 +1,17 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.5.2`
+Platform sürümü: `v0.5.3`
 
-Belge sürümü: `2.3`
+Belge sürümü: `2.4`
 
 Son güncelleme: `2026-07-17`
+
+## v0.5.3 — 2026-07-17
+
+- MCP ağ geçidine bearer/CIDR korumalı istemci run listeleme, durum ve ZIP indirme uçları eklendi.
+- Ekip paketi `.env` değerlerini otomatik okur; yeni işleri masaüstüne doğrulanmış ZIP olarak indirir.
+- Codex ve Claude kurucuları ortak arka plan eşitleyicisini kurar; uygulama hook bağımlılığı kaldırıldı.
+- Başarısız/iptal edilen işler için durum JSON'u ve tekrar denemeli eşitleme günlüğü eklendi.
 
 ## v0.5.2 — 2026-07-17
 

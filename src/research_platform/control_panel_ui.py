@@ -109,7 +109,7 @@ CONTROL_PANEL_HTML = r"""<!doctype html>
       </section>
     </div>
 
-    <div class="footer"><span>Yalnız izinli ofis ağından erişilebilir · v0.5.2</span><span id="last-update">—</span></div>
+    <div class="footer"><span>Yalnız izinli ofis ağından erişilebilir · v0.5.3</span><span id="last-update">—</span></div>
   </main>
   <div id="toast" class="toast" role="status"></div>
   <script>

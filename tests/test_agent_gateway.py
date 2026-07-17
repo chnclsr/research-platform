@@ -11,6 +11,7 @@ from starlette.testclient import TestClient
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.mcp_server import BearerProtectedMCP
 from research_platform.telegram_bot import TelegramResearchBot
+import research_platform.mcp_server as mcp_module
 
 
 def _protected_test_app():
@@ -104,3 +105,47 @@ async def test_gateway_reads_raw_artifacts_in_chunks():
     assert route.called
     assert result.startswith("cdef")
     assert "next_offset=6" in result
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gateway_lists_recent_runs():
+    route = respx.get("http://research.test/v1/research-runs").mock(
+        return_value=httpx.Response(200, json=[{"id": "RUN1"}])
+    )
+    client = ResearchGatewayClient("http://research.test", "token")
+    assert await client.runs(limit=25) == [{"id": "RUN1"}]
+    assert route.calls[0].request.url.params["limit"] == "25"
+
+
+def test_authenticated_client_api_lists_status_and_downloads(tmp_path, monkeypatch):
+    archive = tmp_path / "RUN1_both.zip"
+    archive.write_bytes(b"PK\x03\x04test")
+
+    class FakeGateway:
+        async def runs(self, *, limit=50):
+            return [{"id": "RUN1", "limit": limit}]
+
+        async def status(self, run_id):
+            return {"id": run_id, "status": "completed"}
+
+        async def download(self, run_id, mode, destination):
+            return archive
+
+    monkeypatch.setattr(mcp_module, "_client", lambda: FakeGateway())
+    protected = BearerProtectedMCP(
+        Starlette(routes=[]), token="secret", allowed_origins=set()
+    )
+    headers = {"Authorization": "Bearer secret"}
+    with TestClient(protected) as client:
+        listed = client.get("/client/v1/research-runs?limit=12", headers=headers)
+        assert listed.status_code == 200
+        assert listed.json() == [{"id": "RUN1", "limit": 12}]
+        status = client.get("/client/v1/research-runs/RUN1", headers=headers)
+        assert status.json()["status"] == "completed"
+        delivery = client.get(
+            "/client/v1/research-runs/RUN1/delivery/both", headers=headers
+        )
+        assert delivery.status_code == 200
+        assert delivery.content == archive.read_bytes()
+        assert delivery.headers["content-type"] == "application/zip"

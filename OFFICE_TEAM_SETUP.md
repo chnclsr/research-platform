@@ -1,8 +1,8 @@
 # Research Platform Ofis Sunucusu
 
-Belge sürümü: `1.2`
+Belge sürümü: `1.3`
 
-Platform sürümü: `v0.5.2`
+Platform sürümü: `v0.5.3`
 
 Tarih: `2026-07-17`
 
@@ -76,17 +76,21 @@ Prize bağlı kullanımda uyku ve hazırda bekletmeyi kapatmak için:
 Sunucudaki `scripts/install_codex_client.ps1` dosyasını ekip bilgisayarına kopyalayın:
 
 ```powershell
-.\install_codex_client.ps1 -ServerIp "10.0.10.109" -Token "<TEAM_ACCESS token>"
+.\install_codex_client.ps1
 ```
 
 Script `RESEARCH_MCP_TOKEN` kullanıcı ortam değişkenini ve
 `~/.codex/config.toml` içindeki `mcp_servers.research_platform` kaydını oluşturur. Codex
 uygulaması/CLI/IDE tamamen yeniden başlatılmalıdır.
 
+Paket içindeki `.env` sunucu ve token değerlerini otomatik sağlar. Kurucu ayrıca masaüstünde
+`can-sagligi-deep-research` klasörünü açar ve tamamlanan yeni işlerin ham+sonuç ZIP paketlerini
+arka planda bu klasöre indirir. Ayrıntılar `RESEARCH_SETUP.md` belgesindedir.
+
 ## Ekip bilgisayarında Claude Code
 
 ```powershell
-.\install_claude_client.ps1 -ServerIp "10.0.10.109" -Token "<TEAM_ACCESS token>"
+.\install_claude_client.ps1
 ```
 
 Bu kurulum Claude Code’un kullanıcı kapsamına HTTP MCP sunucusunu ekler. Yerel ağdaki sunucuya

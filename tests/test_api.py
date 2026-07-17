@@ -24,6 +24,9 @@ def test_create_and_read_run():
         fetched = client.get(f"/v1/research-runs/{created['id']}")
         assert fetched.status_code == 200
         assert fetched.json()["protocol"]["title"] == "API acceptance test"
+        listed = client.get("/v1/research-runs?limit=10")
+        assert listed.status_code == 200
+        assert any(run["id"] == created["id"] for run in listed.json())
 
 
 def test_api_rejects_bad_protocol():

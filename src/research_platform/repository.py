@@ -55,6 +55,14 @@ class Repository:
         )
         return list(rows)
 
+    async def list_runs(self, *, limit: int = 50) -> list[ResearchRunRow]:
+        rows = await self.session.scalars(
+            select(ResearchRunRow)
+            .order_by(ResearchRunRow.created_at.desc())
+            .limit(min(max(1, limit), 200))
+        )
+        return list(rows)
+
     async def update_run(self, run_id: str, **values: Any) -> ResearchRunRow:
         row = await self.get_run(run_id, lock=True)
         if row is None:

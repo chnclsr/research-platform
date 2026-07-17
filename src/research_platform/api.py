@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.5.2",
+    title="Research Platform API", version="0.5.3",
     description="Local-first, multi-source evidence research platform", lifespan=lifespan,
 )
 
@@ -233,6 +233,13 @@ async def _required_run(run_id: str, repo: Repository) -> object:
 @app.get("/v1/research-runs/{run_id}", response_model=RunView, dependencies=[Depends(authorize)])
 async def get_research_run(run_id: str, repo: Repository = Depends(repository)) -> RunView:
     return repo.run_view(await _required_run(run_id, repo))
+
+
+@app.get("/v1/research-runs", response_model=list[RunView], dependencies=[Depends(authorize)])
+async def list_research_runs(
+    limit: int = 50, repo: Repository = Depends(repository),
+) -> list[RunView]:
+    return [repo.run_view(row) for row in await repo.list_runs(limit=limit)]
 
 
 @app.post("/v1/research-runs/{run_id}/pause", response_model=RunView, dependencies=[Depends(authorize)])
