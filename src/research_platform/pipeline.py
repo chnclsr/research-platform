@@ -6,6 +6,7 @@ import math
 import re
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any, TypedDict
 
@@ -84,13 +85,14 @@ class PipelineState(TypedDict, total=False):
     unavailable_connectors: list[str]
     available_connectors: list[str]
     connector_success_rates: dict[str, float]
+    budget_started_at: str
 
 
 class PipelineHalted(RuntimeError):
     pass
 
 
-class PipelineStageTimeout(TimeoutError):
+class PipelineStageTimeout(RuntimeError):
     pass
 
 
@@ -228,6 +230,7 @@ class ResearchPipeline:
             )
             return
         await self.repo.update_run(run_id, status=RunStatus.RUNNING.value, error=None)
+        protocol = ResearchProtocol.model_validate(row.protocol)
         state: PipelineState = {
             "run_id": run_id, "protocol": row.protocol, "round_number": row.round_number,
             "started_monotonic": time.monotonic(), "coverage": row.coverage or {},
@@ -238,8 +241,23 @@ class ResearchPipeline:
             state["run_id"] = run_id
             state["protocol"] = row.protocol
             state["started_monotonic"] = time.monotonic()
+        state.setdefault("budget_started_at", datetime.now(timezone.utc).isoformat())
+        budget_started_at = datetime.fromisoformat(
+            state["budget_started_at"].replace("Z", "+00:00"),
+        )
+        elapsed_seconds = max(
+            0.0,
+            (datetime.now(timezone.utc) - budget_started_at).total_seconds(),
+        )
+        remaining_seconds = max(
+            0.01,
+            protocol.budget.max_wall_minutes * 60 - elapsed_seconds,
+        )
         try:
-            result = await self.graph.ainvoke(state, {"recursion_limit": 80})
+            result = await asyncio.wait_for(
+                self.graph.ainvoke(state, {"recursion_limit": 80}),
+                timeout=remaining_seconds,
+            )
             if result.get("halted"):
                 return
             coverage = CoverageMetrics.model_validate(result.get("coverage", {}))
@@ -247,6 +265,42 @@ class ResearchPipeline:
             await self.repo.update_run(run_id, status=status.value, current_stage="COMPLETE", coverage=coverage.model_dump())
             await self.repo.event(run_id, "complete", {"status": status.value})
         except PipelineHalted:
+            return
+        except asyncio.TimeoutError:
+            await self.session.rollback()
+            current = await self.repo.get_run(run_id)
+            coverage = CoverageMetrics.model_validate(current.coverage or {})
+            coverage.sufficient = False
+            coverage.reasons = list(dict.fromkeys([*coverage.reasons, "budget_exhausted"]))
+            await self.repo.update_run(
+                run_id,
+                status=RunStatus.COMPLETED_INCOMPLETE.value,
+                current_stage="COMPLETE",
+                coverage=coverage.model_dump(),
+                error=None,
+            )
+            await self.repo.event(run_id, "budget_exhausted", {
+                "max_wall_minutes": protocol.budget.max_wall_minutes,
+                "hard_limit": True,
+            })
+            try:
+                artifacts = await build_exports(
+                    run_id, protocol, coverage, self.repo, self.store, self.llm,
+                )
+                await self.repo.event(run_id, "artifacts", {"names": artifacts})
+            except Exception as exc:
+                await self.session.rollback()
+                await self.repo.event(run_id, "budget_export_error", {
+                    "error": f"{type(exc).__name__}: {str(exc)[:500]}",
+                })
+            await self.repo.event(
+                run_id,
+                "complete",
+                {
+                    "status": RunStatus.COMPLETED_INCOMPLETE.value,
+                    "reason": "budget_exhausted",
+                },
+            )
             return
         except Exception as exc:
             await self.session.rollback()
@@ -793,7 +847,25 @@ class ResearchPipeline:
                 })
                 return document
 
-        docs = await asyncio.gather(*(one(c) for c in candidates))
+        tasks = [asyncio.create_task(one(candidate)) for candidate in candidates]
+        docs = []
+        total = len(tasks)
+        try:
+            for completed, task in enumerate(asyncio.as_completed(tasks), 1):
+                document = await task
+                docs.append(document)
+                await self.repo.update_run(state["run_id"], current_stage="ACQUIRE")
+                await self.repo.event(state["run_id"], "acquisition_progress", {
+                    "completed": completed,
+                    "total": total,
+                    "successful": sum(item.success for item in docs),
+                    "last_url": str(document.candidate.url),
+                    "last_method": document.acquisition_method,
+                })
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
         docs = [*docs, *[
             AcquiredDocument.model_validate(row) for row in state.get("corpus_documents", [])
         ]]
@@ -1400,7 +1472,15 @@ class ResearchPipeline:
             quality_diagnostics_active=quality_diagnostics_active,
         )
         round_number = state.get("round_number", 1)
-        elapsed = (time.monotonic() - state.get("started_monotonic", time.monotonic())) / 60
+        budget_started_at = datetime.fromisoformat(
+            state.get("budget_started_at", datetime.now(timezone.utc).isoformat()).replace(
+                "Z", "+00:00",
+            )
+        )
+        elapsed = max(
+            0.0,
+            (datetime.now(timezone.utc) - budget_started_at).total_seconds() / 60,
+        )
         budget_hit = round_number >= protocol.budget.max_rounds or elapsed >= protocol.budget.max_wall_minutes or len(sources) >= protocol.budget.max_sources
         gaps = diagnose_gaps(
             protocol,

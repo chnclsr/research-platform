@@ -8,18 +8,58 @@ import httpx
 
 from .config import get_settings
 from .gateway_client import ResearchGatewayClient
-from .schemas import DeliveryMode, ResearchProtocol
+from .schemas import DeliveryMode, ResearchBudget, ResearchProtocol
 
 
 HELP = """Research Platform komutları:
 /whoami
-/research [raw|result|both] <soru>
+/research [raw|result|both] [--minutes N] [--sources N] <soru>
 /status <run_id>
 /get <run_id> [raw|result|both]
 /pause <run_id>
 /resume <run_id>
 /cancel <run_id>
 """
+
+
+def parse_research_request(
+    parts: list[str],
+    *,
+    default_minutes: int,
+    maximum_minutes: int,
+    default_sources: int,
+    default_rounds: int,
+) -> tuple[DeliveryMode, str, ResearchBudget]:
+    mode = DeliveryMode.BOTH
+    tokens = list(parts)
+    if tokens and tokens[0] in {item.value for item in DeliveryMode}:
+        mode = DeliveryMode(tokens.pop(0))
+    minutes = default_minutes
+    sources = default_sources
+    while tokens and tokens[0].startswith("--"):
+        option = tokens.pop(0)
+        if option not in {"--minutes", "--sources"} or not tokens:
+            raise ValueError(f"Geçersiz veya eksik seçenek: {option}")
+        try:
+            value = int(tokens.pop(0))
+        except ValueError as exc:
+            raise ValueError(f"{option} tam sayı olmalıdır.") from exc
+        if option == "--minutes":
+            if not 1 <= value <= maximum_minutes:
+                raise ValueError(f"--minutes 1-{maximum_minutes} arasında olmalıdır.")
+            minutes = value
+        else:
+            if not 1 <= value <= 150:
+                raise ValueError("--sources 1-150 arasında olmalıdır.")
+            sources = value
+    question = " ".join(tokens).strip()
+    if not question:
+        raise ValueError("Araştırma sorusu eksik.")
+    return mode, question, ResearchBudget(
+        max_wall_minutes=minutes,
+        max_sources=sources,
+        max_rounds=default_rounds,
+    )
 
 
 class TelegramResearchBot:
@@ -99,22 +139,25 @@ class TelegramResearchBot:
             return
         try:
             if command == "/research":
-                mode = DeliveryMode.BOTH
-                question_parts = parts[1:]
-                if question_parts and question_parts[0] in {mode.value for mode in DeliveryMode}:
-                    mode = DeliveryMode(question_parts.pop(0))
-                question = " ".join(question_parts).strip()
-                if not question:
-                    raise ValueError("Araştırma sorusu eksik.")
+                mode, question, budget = parse_research_request(
+                    parts[1:],
+                    default_minutes=self.settings.telegram_default_max_wall_minutes,
+                    maximum_minutes=self.settings.telegram_max_wall_minutes,
+                    default_sources=self.settings.telegram_default_max_sources,
+                    default_rounds=self.settings.telegram_default_max_rounds,
+                )
                 run = await self.gateway.start(ResearchProtocol(
                     title=question[:120],
                     primary_question=question,
                     output_mode=mode.value,
+                    budget=budget,
                 ))
                 await self._send_message(
                     client,
                     chat_id,
                     f"Run başlatıldı: {run['id']}\nTeslim modu: {mode.value}\n"
+                    f"Bütçe: {budget.max_wall_minutes} dk, "
+                    f"{budget.max_sources} kaynak, {budget.max_rounds} tur\n"
                     f"Durum için: /status {run['id']}",
                 )
             elif command == "/status" and len(parts) == 2:

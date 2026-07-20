@@ -10,7 +10,7 @@ from starlette.testclient import TestClient
 
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.mcp_server import BearerProtectedMCP
-from research_platform.telegram_bot import TelegramResearchBot
+from research_platform.telegram_bot import TelegramResearchBot, parse_research_request
 import research_platform.mcp_server as mcp_module
 
 
@@ -120,6 +120,43 @@ def test_telegram_can_authorize_all_private_users_when_explicitly_enabled():
         "from": {"id": 999},
         "chat": {"id": 999, "type": "private"},
     })
+
+
+def test_telegram_research_defaults_have_bounded_resource_budget():
+    mode, question, budget = parse_research_request(
+        ["raw", "akciğer", "BT", "araştırması"],
+        default_minutes=20,
+        maximum_minutes=60,
+        default_sources=50,
+        default_rounds=3,
+    )
+    assert mode.value == "raw"
+    assert question == "akciğer BT araştırması"
+    assert budget.max_wall_minutes == 20
+    assert budget.max_sources == 50
+    assert budget.max_rounds == 3
+
+
+def test_telegram_research_allows_bounded_time_and_source_overrides():
+    _, question, budget = parse_research_request(
+        ["both", "--minutes", "35", "--sources", "80", "zor", "konu"],
+        default_minutes=20,
+        maximum_minutes=60,
+        default_sources=50,
+        default_rounds=3,
+    )
+    assert question == "zor konu"
+    assert budget.max_wall_minutes == 35
+    assert budget.max_sources == 80
+
+    with pytest.raises(ValueError, match="1-60"):
+        parse_research_request(
+            ["--minutes", "90", "soru"],
+            default_minutes=20,
+            maximum_minutes=60,
+            default_sources=50,
+            default_rounds=3,
+        )
 
 
 @pytest.mark.asyncio

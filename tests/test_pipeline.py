@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import zipfile
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -293,6 +294,44 @@ async def test_hung_node_has_a_hard_safety_timeout():
         events = await repo.events_after(row.id)
 
     assert any(event.event_type == "stage_timeout" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_wall_budget_is_persistent_and_hard_across_worker_restarts(monkeypatch):
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Persistent wall budget",
+        primary_question="Does elapsed research time survive a worker restart?",
+        budget={"max_wall_minutes": 1},
+    )
+
+    class HangingGraph:
+        async def ainvoke(self, state, config):
+            await asyncio.Event().wait()
+
+    async def fake_exports(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr("research_platform.pipeline.build_exports", fake_exports)
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        await repo.checkpoint(row.id, "VALIDATE_PROTOCOL", {
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "budget_started_at": (
+                datetime.now(timezone.utc) - timedelta(minutes=2)
+            ).isoformat(),
+        })
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.graph = HangingGraph()
+        await pipeline.run(row.id)
+        finished = await repo.get_run(row.id)
+        events = await repo.events_after(row.id)
+
+    assert finished.status == RunStatus.COMPLETED_INCOMPLETE.value
+    assert "budget_exhausted" in finished.coverage["reasons"]
+    assert any(event.event_type == "budget_exhausted" for event in events)
 
 
 @pytest.mark.asyncio

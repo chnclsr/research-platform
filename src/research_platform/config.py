@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     telegram_allowed_chat_ids: list[int] = Field(default_factory=list)
     telegram_allow_group_chats: bool = False
     telegram_allow_all_users: bool = False
+    telegram_default_max_wall_minutes: int = Field(20, ge=1, le=180)
+    telegram_max_wall_minutes: int = Field(60, ge=1, le=1440)
+    telegram_default_max_sources: int = Field(50, ge=1, le=500)
+    telegram_default_max_rounds: int = Field(3, ge=1, le=12)
     user_agent: str = "ResearchPlatform/0.1 (local research; contact=local)"
 
     max_download_bytes: int = 25 * 1024 * 1024

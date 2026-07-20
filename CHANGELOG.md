@@ -1,10 +1,19 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.3`
+Platform sürümü: `v0.6.4`
 
-Belge sürümü: `2.8`
+Belge sürümü: `2.9`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.4 — 2026-07-20
+
+- Run wall-clock bütçesi gerçek hard deadline haline getirildi ve `budget_started_at` checkpoint içinde saklanarak worker restartında sayaç sıfırlanması engellendi.
+- Süre dolduğunda run `completed_incomplete` olarak kapanıyor, `budget_exhausted` audit olayı ve mevcut corpus üzerinden çıktı paketi üretiliyor.
+- Telegram işleri varsayılan olarak 20 dakika, 50 kaynak ve 3 turla sınırlandı; izin verilen üst süre 60 dakika.
+- Telegram `/research` komutuna `--minutes` ve `--sources` seçenekleri eklendi; bot başlangıç mesajında uygulanan bütçeyi gösteriyor.
+- Acquisition sırasında her tamamlanan URL için ilerleme olayı ve run heartbeat güncellemesi eklendi.
+- Tam otomatik test sonucu `124 passed`.
 
 ## v0.6.3 — 2026-07-20
 
