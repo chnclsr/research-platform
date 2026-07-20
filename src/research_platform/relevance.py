@@ -139,7 +139,7 @@ def candidate_relevance(candidate: ConnectorCandidate, protocol: ResearchProtoco
             score = min(1.0, score + 0.05)
             reasons.append("full_text_available")
         publication_types = {
-            str(value).lower() for value in metadata.get("publicationTypes", [])
+            str(value).lower() for value in (metadata.get("publicationTypes") or [])
         }
         work_type = str(metadata.get("type") or "").lower()
         if work_type in {"review", "systematic-review", "meta-analysis"} or (
@@ -147,7 +147,7 @@ def candidate_relevance(candidate: ConnectorCandidate, protocol: ResearchProtoco
         ):
             score = min(1.0, score + 0.05)
             reasons.append("evidence_synthesis_type")
-        if set(protocol.connectors.zotero_tags).intersection(metadata.get("tags", [])):
+        if set(protocol.connectors.zotero_tags).intersection(metadata.get("tags") or []):
             score = min(1.0, score + 0.10)
             reasons.append("zotero_priority_tag")
         rrf_score = float(metadata.get("federated_rrf_score", 0.0))

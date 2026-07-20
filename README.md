@@ -1,10 +1,10 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.2`
+Platform sürümü: `v0.6.3`
 
-Belge sürümü: `2.6`
+Belge sürümü: `2.7`
 
-Son güncelleme: `2026-07-17`
+Son güncelleme: `2026-07-20`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
 

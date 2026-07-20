@@ -1,10 +1,18 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.2`
+Platform sürümü: `v0.6.3`
 
-Belge sürümü: `2.7`
+Belge sürümü: `2.8`
 
-Son güncelleme: `2026-07-17`
+Son güncelleme: `2026-07-20`
+
+## v0.6.3 — 2026-07-20
+
+- SEARCH ve ACQUIRE çalışırken bir saniyelik aralıklarla pause/cancel durumu denetleniyor; bloklayan I/O görevi iptal edilip run terminal duruma geçiriliyor.
+- SEARCH için 600 saniye, ACQUIRE için 900 saniye kesin güvenlik zaman aşımı ve denetlenebilir `stage_timeout` olayı eklendi.
+- Kuyruktaki işler worker beklenmeden doğrudan `cancelled` durumuna geçiriliyor.
+- Worker yeniden başladığında eski ARQ in-progress/retry kilitleri temizleniyor; çalışan ve kuyruktaki işler PostgreSQL checkpoint'inden otomatik yeniden kuyruğa alınıyor.
+- İptal, hard-timeout, null metadata ve worker recovery regresyon testleri eklendi; toplam test sonucu `121 passed`.
 
 ## v0.6.2 — 2026-07-17
 

@@ -90,6 +90,9 @@ class Settings(BaseSettings):
 
     max_download_bytes: int = 25 * 1024 * 1024
     request_timeout_s: float = 25.0
+    pipeline_control_poll_s: float = Field(1.0, ge=0.1, le=10.0)
+    search_stage_timeout_s: float = Field(600.0, ge=10.0, le=3600.0)
+    acquisition_stage_timeout_s: float = Field(900.0, ge=10.0, le=3600.0)
     acquisition_concurrency: int = Field(4, ge=1, le=16)
     domain_delay_s: float = Field(0.5, ge=0)
     allow_private_networks: bool = False

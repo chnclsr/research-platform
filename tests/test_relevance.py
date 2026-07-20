@@ -71,6 +71,19 @@ def test_connector_round_robin_prevents_first_connector_monopoly():
     assert {row.connector_id for row in selected} == {"agentsearch_web", "github"}
 
 
+def test_null_academic_list_metadata_is_treated_as_empty():
+    row = ConnectorCandidate(
+        connector_id="semantic_scholar",
+        family=SourceFamily.ACADEMIC,
+        title="AgentSearch retrieval architecture study",
+        url="https://example.org/paper",
+        snippet="AgentSearch retrieval architecture and search providers",
+        metadata={"publicationTypes": None, "tags": None},
+    )
+    selected, _ = filter_and_rank_candidates([row], protocol(), 1)
+    assert selected == [row]
+
+
 def test_prompt_injection_like_discovery_result_is_quarantined():
     row = candidate(
         "agentsearch_web",

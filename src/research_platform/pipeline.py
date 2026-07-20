@@ -17,6 +17,7 @@ from .acquisition import AcquisitionService
 from .config import Settings
 from .connectors import build_registry
 from .coverage import calculate_coverage
+from .db import SessionLocal
 from .discovery_quality import estimated_completeness, relation_to_candidate, sentinel_recall
 from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .embeddings import EmbeddingClient
@@ -89,6 +90,10 @@ class PipelineHalted(RuntimeError):
     pass
 
 
+class PipelineStageTimeout(TimeoutError):
+    pass
+
+
 class ResearchPipeline:
     def __init__(self, settings: Settings, session: AsyncSession, client: httpx.AsyncClient):
         self.settings = settings
@@ -158,6 +163,57 @@ class ResearchPipeline:
         metrics = self.llm.drain_metrics()
         if metrics:
             await self.repo.event(run_id, "llm_metrics", {"stage": stage, "calls": metrics})
+
+    async def _interruptible(
+        self,
+        awaitable,
+        state: PipelineState,
+        stage: str,
+        timeout_s: float,
+    ):
+        """Wait for node I/O while observing pause/cancel and a hard deadline."""
+        task = asyncio.ensure_future(awaitable)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        poll_s = self.settings.pipeline_control_poll_s
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                task.cancel()
+                async with SessionLocal() as control_session:
+                    await Repository(control_session).event(
+                        state["run_id"],
+                        "stage_timeout",
+                        {"stage": stage, "timeout_seconds": timeout_s},
+                    )
+                raise PipelineStageTimeout(
+                    f"{stage} exceeded its {timeout_s:g} second safety limit"
+                )
+            done, _ = await asyncio.wait({task}, timeout=min(poll_s, remaining))
+            if task in done:
+                return task.result()
+
+            # The node may be using the pipeline session at the same moment. A
+            # dedicated control session avoids concurrent AsyncSession access.
+            async with SessionLocal() as control_session:
+                control_repo = Repository(control_session)
+                run = await control_repo.get_run(state["run_id"])
+                if run is None:
+                    task.cancel()
+                    raise KeyError(state["run_id"])
+                if run.status == RunStatus.PAUSED.value:
+                    task.cancel()
+                    await control_repo.event(
+                        run.id, "paused", {"stage": stage, "in_node": True},
+                    )
+                    raise PipelineHalted("paused")
+                if run.status in {RunStatus.CANCEL_REQUESTED.value, RunStatus.CANCELLED.value}:
+                    task.cancel()
+                    await control_repo.update_run(run.id, status=RunStatus.CANCELLED.value)
+                    await control_repo.event(
+                        run.id, "cancelled", {"stage": stage, "in_node": True},
+                    )
+                    raise PipelineHalted("cancelled")
 
     async def run(self, run_id: str) -> None:
         row = await self.repo.get_run(run_id)
@@ -254,6 +310,14 @@ class ResearchPipeline:
 
     async def search(self, state: PipelineState) -> dict:
         await self._boundary(state, "SEARCH")
+        return await self._interruptible(
+            self._search_node(state),
+            state,
+            "SEARCH",
+            self.settings.search_stage_timeout_s,
+        )
+
+    async def _search_node(self, state: PipelineState) -> dict:
         protocol = ResearchProtocol.model_validate(state["protocol"])
         configured_connectors = list(self.registry.selected(protocol.connectors))
 
@@ -705,6 +769,14 @@ class ResearchPipeline:
 
     async def acquire(self, state: PipelineState) -> dict:
         await self._boundary(state, "ACQUIRE")
+        return await self._interruptible(
+            self._acquire_node(state),
+            state,
+            "ACQUIRE",
+            self.settings.acquisition_stage_timeout_s,
+        )
+
+    async def _acquire_node(self, state: PipelineState) -> dict:
         protocol = ResearchProtocol.model_validate(state["protocol"])
         candidates = [ConnectorCandidate.model_validate(c) for c in state.get("candidates", [])]
         semaphore = asyncio.Semaphore(protocol.budget.acquisition_concurrency)

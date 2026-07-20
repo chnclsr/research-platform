@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import zipfile
@@ -9,7 +10,7 @@ import pytest
 
 from research_platform.config import get_settings
 from research_platform.db import SessionLocal, create_schema
-from research_platform.pipeline import ResearchPipeline
+from research_platform.pipeline import PipelineHalted, PipelineStageTimeout, ResearchPipeline
 from research_platform.repository import Repository
 from research_platform.schemas import (
     AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SearchMission,
@@ -219,6 +220,79 @@ async def test_pipeline_preserves_cancellation_before_worker_start():
         assert cancelled.status == RunStatus.CANCELLED.value
         events = await repo.events_after(row.id)
         assert any(event.event_type == "cancelled" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_in_node_cancellation_interrupts_hung_io_promptly():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Hung I/O cancellation",
+        primary_question="Can an active search be cancelled?",
+    )
+    settings = get_settings().model_copy(update={
+        "pipeline_control_poll_s": 0.01,
+        "search_stage_timeout_s": 1.0,
+    })
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        await repo.update_run(row.id, status=RunStatus.RUNNING.value)
+        pipeline = ResearchPipeline(settings, session, client)
+
+        async def never_returns():
+            await asyncio.Event().wait()
+
+        async def request_cancel():
+            await asyncio.sleep(0.03)
+            async with SessionLocal() as control_session:
+                await Repository(control_session).update_run(
+                    row.id, status=RunStatus.CANCEL_REQUESTED.value,
+                )
+
+        control = asyncio.create_task(request_cancel())
+        with pytest.raises(PipelineHalted, match="cancelled"):
+            await pipeline._interruptible(
+                never_returns(),
+                {"run_id": row.id},
+                "SEARCH",
+                settings.search_stage_timeout_s,
+            )
+        await control
+        await asyncio.sleep(0)
+        cancelled = await repo.get_run(row.id)
+        events = await repo.events_after(row.id)
+
+    assert cancelled.status == RunStatus.CANCELLED.value
+    assert any(
+        event.event_type == "cancelled" and event.payload.get("in_node")
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_hung_node_has_a_hard_safety_timeout():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Hung node timeout",
+        primary_question="Does a hung node terminate?",
+    )
+    settings = get_settings().model_copy(update={"pipeline_control_poll_s": 0.01})
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(settings, session, client)
+
+        async def never_returns():
+            await asyncio.Event().wait()
+
+        with pytest.raises(PipelineStageTimeout, match="SEARCH exceeded"):
+            await pipeline._interruptible(
+                never_returns(), {"run_id": row.id}, "SEARCH", 0.03,
+            )
+        await asyncio.sleep(0)
+        events = await repo.events_after(row.id)
+
+    assert any(event.event_type == "stage_timeout" for event in events)
 
 
 @pytest.mark.asyncio

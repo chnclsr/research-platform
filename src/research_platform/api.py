@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.6.2",
+    title="Research Platform API", version="0.6.3",
     description="Local-first, multi-source evidence research platform", lifespan=lifespan,
 )
 
@@ -283,7 +283,17 @@ async def cancel_research_run(run_id: str, repo: Repository = Depends(repository
     row = await _required_run(run_id, repo)
     if row.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_INCOMPLETE.value, RunStatus.CANCELLED.value}:
         raise HTTPException(status_code=409, detail=f"Cannot cancel run in {row.status}")
-    return repo.run_view(await repo.update_run(run_id, status=RunStatus.CANCEL_REQUESTED.value))
+    # A queued job has no in-flight work to unwind. The worker pre-start guard
+    # safely ignores a stale queue entry if Redis has already delivered it.
+    status = (
+        RunStatus.CANCELLED.value
+        if row.status == RunStatus.QUEUED.value
+        else RunStatus.CANCEL_REQUESTED.value
+    )
+    row = await repo.update_run(run_id, status=status)
+    if status == RunStatus.CANCELLED.value:
+        await repo.event(run_id, "cancelled", {"stage": row.current_stage, "before_start": True})
+    return repo.run_view(row)
 
 
 @app.get("/v1/research-runs/{run_id}/events", dependencies=[Depends(authorize)])
