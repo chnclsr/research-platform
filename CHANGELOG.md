@@ -1,10 +1,19 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.4`
+Platform sürümü: `v0.6.5`
 
-Belge sürümü: `2.9`
+Belge sürümü: `3.0`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.5 — 2026-07-20
+
+- `ResearchBudget.max_sources` opsiyonel hale getirildi; boş/null değer global kaynak tavanı olmadığı anlamına geliyor.
+- Telegram araştırmalarında `--sources` verilmezse kaynak sayısı süre bütçesine bağlı olarak sınırsızdır.
+- `--sources N` ile pozitif herhangi bir kullanıcı limiti seçilebilir; yapay üst sınır kaldırıldı.
+- MCP `start_research` aracında `max_sources` varsayılanı `null` yapıldı; Codex/Claude isterse sayı gönderebilir.
+- Sınırsız modda discovery turundaki bütün kabul edilmiş yeni adaylar acquisition'a alınır; süre hard limit ve connector/tur limitleri korunur.
+- Tam otomatik test sonucu `125 passed`.
 
 ## v0.6.4 — 2026-07-20
 

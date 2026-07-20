@@ -1,10 +1,10 @@
 # Research Platform Ofis Sunucusu
 
-Belge sürümü: `1.3`
+Belge sürümü: `1.4`
 
-Platform sürümü: `v0.6.2`
+Platform sürümü: `v0.6.5`
 
-Tarih: `2026-07-17`
+Tarih: `2026-07-20`
 
 ## Amaç
 
@@ -122,12 +122,19 @@ araştırma yetkisi vermez. Sonra allowlist’i kaydedin:
 Komutlar:
 
 ```text
-/research [raw|result|both] <soru>
+/research [raw|result|both] [--minutes N] [--sources N] <soru>
 /status <run_id>
 /get <run_id> [raw|result|both]
 /pause <run_id>
 /resume <run_id>
 /cancel <run_id>
+```
+
+`--sources` verilmezse kaynak sayısı için global tavan uygulanmaz; araştırma süre,
+coverage, saturation veya tur kriteriyle durur. Örnek kullanıcı limiti:
+
+```text
+/research raw --minutes 30 --sources 500 araştırma sorusu
 ```
 
 ## Yerel kontrol paneli

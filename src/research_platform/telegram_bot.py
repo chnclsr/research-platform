@@ -27,7 +27,7 @@ def parse_research_request(
     *,
     default_minutes: int,
     maximum_minutes: int,
-    default_sources: int,
+    default_sources: int | None,
     default_rounds: int,
 ) -> tuple[DeliveryMode, str, ResearchBudget]:
     mode = DeliveryMode.BOTH
@@ -49,8 +49,8 @@ def parse_research_request(
                 raise ValueError(f"--minutes 1-{maximum_minutes} arasında olmalıdır.")
             minutes = value
         else:
-            if not 1 <= value <= 150:
-                raise ValueError("--sources 1-150 arasında olmalıdır.")
+            if value < 1:
+                raise ValueError("--sources pozitif olmalıdır.")
             sources = value
     question = " ".join(tokens).strip()
     if not question:
@@ -157,7 +157,8 @@ class TelegramResearchBot:
                     chat_id,
                     f"Run başlatıldı: {run['id']}\nTeslim modu: {mode.value}\n"
                     f"Bütçe: {budget.max_wall_minutes} dk, "
-                    f"{budget.max_sources} kaynak, {budget.max_rounds} tur\n"
+                    f"{budget.max_sources or 'süreye bağlı sınırsız'} kaynak, "
+                    f"{budget.max_rounds} tur\n"
                     f"Durum için: /status {run['id']}",
                 )
             elif command == "/status" and len(parts) == 2:

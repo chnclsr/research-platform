@@ -43,7 +43,7 @@ async def start_research(
     title: str = "Agent research request",
     output_mode: Literal["raw", "result", "both"] = "both",
     max_wall_minutes: int = 45,
-    max_sources: int = 150,
+    max_sources: int | None = None,
 ) -> dict:
     """Start a research run and return its durable run id."""
     protocol = ResearchProtocol(
@@ -235,7 +235,7 @@ class BearerProtectedMCP:
                     {
                         "status": "healthy",
                         "service": "research-platform-mcp",
-                        "version": "0.6.4",
+                        "version": "0.6.5",
                     },
                 )
                 return

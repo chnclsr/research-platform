@@ -122,18 +122,18 @@ def test_telegram_can_authorize_all_private_users_when_explicitly_enabled():
     })
 
 
-def test_telegram_research_defaults_have_bounded_resource_budget():
+def test_telegram_research_defaults_use_time_without_source_ceiling():
     mode, question, budget = parse_research_request(
         ["raw", "akciğer", "BT", "araştırması"],
         default_minutes=20,
         maximum_minutes=60,
-        default_sources=50,
+        default_sources=None,
         default_rounds=3,
     )
     assert mode.value == "raw"
     assert question == "akciğer BT araştırması"
     assert budget.max_wall_minutes == 20
-    assert budget.max_sources == 50
+    assert budget.max_sources is None
     assert budget.max_rounds == 3
 
 
@@ -142,19 +142,28 @@ def test_telegram_research_allows_bounded_time_and_source_overrides():
         ["both", "--minutes", "35", "--sources", "80", "zor", "konu"],
         default_minutes=20,
         maximum_minutes=60,
-        default_sources=50,
+        default_sources=None,
         default_rounds=3,
     )
     assert question == "zor konu"
     assert budget.max_wall_minutes == 35
     assert budget.max_sources == 80
 
+    _, _, large_budget = parse_research_request(
+        ["--sources", "5000", "geniş", "tarama"],
+        default_minutes=20,
+        maximum_minutes=60,
+        default_sources=None,
+        default_rounds=3,
+    )
+    assert large_budget.max_sources == 5000
+
     with pytest.raises(ValueError, match="1-60"):
         parse_research_request(
             ["--minutes", "90", "soru"],
             default_minutes=20,
             maximum_minutes=60,
-            default_sources=50,
+            default_sources=None,
             default_rounds=3,
         )
 

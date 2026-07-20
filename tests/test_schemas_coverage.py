@@ -77,6 +77,22 @@ def test_protocol_rejects_impossible_family_target_budget():
         )
 
 
+def test_protocol_without_source_limit_accepts_large_family_targets():
+    protocol = ResearchProtocol(
+        title="Unlimited source protocol",
+        primary_question="Can collection continue until its time budget expires?",
+        connectors={
+            "profile": "custom",
+            "included_families": ["web", "academic"],
+        },
+        family_targets={
+            "web": {"minimum_sources": 80},
+            "academic": {"minimum_sources": 80},
+        },
+    )
+    assert protocol.budget.max_sources is None
+
+
 def test_official_documentation_question_infers_strict_authority():
     protocol = ResearchProtocol(
         title="Official source protocol",

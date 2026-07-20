@@ -731,9 +731,16 @@ class ResearchPipeline:
                 ),
             })
         novel = temporal_candidates
-        remaining = max(0, protocol.budget.max_sources - len(existing))
-        fraction = 0.40 if state.get("round_number", 1) == 1 else 0.30
-        round_cap = min(remaining, max(1, math.ceil(protocol.budget.max_sources * fraction)))
+        if protocol.budget.max_sources is None:
+            remaining: int | None = None
+            round_cap = max(1, len(novel))
+        else:
+            remaining = max(0, protocol.budget.max_sources - len(existing))
+            fraction = 0.40 if state.get("round_number", 1) == 1 else 0.30
+            round_cap = min(
+                remaining,
+                max(1, math.ceil(protocol.budget.max_sources * fraction)),
+            )
         reserve: list[ConnectorCandidate] = []
         if self.settings.testing:
             ranked, rejected = novel, []
@@ -793,7 +800,11 @@ class ResearchPipeline:
                     "candidate_passages": len(corpus_passages), "selected_passages": len(corpus_hits),
                     "selected_documents": len(corpus_documents),
                 })
-        corpus_slots = max(0, remaining - len(candidates))
+        corpus_slots = (
+            self.settings.local_corpus_results
+            if remaining is None
+            else max(0, remaining - len(candidates))
+        )
         corpus_documents = corpus_documents[:corpus_slots]
         return {
             "candidates": [c.model_dump(mode="json") for c in candidates],
@@ -1481,7 +1492,15 @@ class ResearchPipeline:
             0.0,
             (datetime.now(timezone.utc) - budget_started_at).total_seconds() / 60,
         )
-        budget_hit = round_number >= protocol.budget.max_rounds or elapsed >= protocol.budget.max_wall_minutes or len(sources) >= protocol.budget.max_sources
+        source_budget_hit = (
+            protocol.budget.max_sources is not None
+            and len(sources) >= protocol.budget.max_sources
+        )
+        budget_hit = (
+            round_number >= protocol.budget.max_rounds
+            or elapsed >= protocol.budget.max_wall_minutes
+            or source_budget_hit
+        )
         gaps = diagnose_gaps(
             protocol,
             coverage,

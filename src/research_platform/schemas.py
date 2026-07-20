@@ -79,7 +79,7 @@ class StoppingCriteria(BaseModel):
 
 class ResearchBudget(BaseModel):
     max_rounds: int = Field(4, ge=1, le=12)
-    max_sources: int = Field(150, ge=1, le=2000)
+    max_sources: int | None = Field(None, ge=1)
     max_wall_minutes: int = Field(45, ge=1, le=1440)
     results_per_connector: int = Field(20, ge=1, le=100)
     acquisition_concurrency: int = Field(4, ge=1, le=16)
@@ -174,7 +174,11 @@ class ResearchProtocol(BaseModel):
             ):
                 self.family_targets = {
                     SourceFamily.ACADEMIC: FamilyTarget(
-                        minimum_sources=min(2, self.budget.max_sources),
+                        minimum_sources=(
+                            min(2, self.budget.max_sources)
+                            if self.budget.max_sources is not None
+                            else 2
+                        ),
                     ),
                 }
             else:
@@ -188,7 +192,7 @@ class ResearchProtocol(BaseModel):
                 if family in self.connectors.included_families
             }
         required = sum(target.minimum_sources for target in self.family_targets.values())
-        if required > self.budget.max_sources:
+        if self.budget.max_sources is not None and required > self.budget.max_sources:
             raise ValueError(
                 f"family_targets require at least {required} sources but max_sources is "
                 f"{self.budget.max_sources}"
