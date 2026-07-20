@@ -38,11 +38,14 @@ class TelegramResearchBot:
         self.allowed_users = set(self.settings.telegram_allowed_user_ids)
         self.allowed_chats = set(self.settings.telegram_allowed_chat_ids)
         self.allow_group_chats = self.settings.telegram_allow_group_chats
+        self.allow_all_users = self.settings.telegram_allow_all_users
 
     def _authorized(self, message: dict) -> bool:
         user_id = int((message.get("from") or {}).get("id", 0))
         chat = message.get("chat") or {}
         chat_id = int(chat.get("id", 0))
+        if self.allow_all_users:
+            return True
         if self.allow_group_chats and chat.get("type") in {"group", "supergroup"}:
             return True
         return (
