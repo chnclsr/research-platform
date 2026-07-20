@@ -1,10 +1,23 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.7`
+Platform sürümü: `v0.6.8`
 
-Belge sürümü: `3.2`
+Belge sürümü: `3.3`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.8 — 2026-07-20
+
+- Dört seçilebilir human-in-the-loop checkpoint eklendi: planlama soruları, plan,
+  kaynak-domain seçimi ve rapor taslağı incelemesi.
+- `awaiting_input` durumu, tip güvenli `/respond` API'si ve yanlış/eskimiş interaction
+  yanıtlarına karşı `400/409` doğrulaması eklendi.
+- Beş dakika yanıt gelmeyen işler state korunarak `paused` durumuna alınır; yanıt sonrası
+  en yüksek kullanılabilir öncelikle yeniden kuyruğa girer. Kullanıcı bekleme süresi araştırma
+  çalışma bütçesinden düşülmez.
+- Kontrol paneline checkpoint kartları, plan/taslak onayı, serbest metin yönlendirmesi ve
+  domain bazlı kaynak seçimi eklendi.
+- Telegram'a `--hitl` ve `/respond`; MCP'ye checkpoint yapılandırması ve yanıt aracı eklendi.
 
 ## v0.6.7 — 2026-07-20
 

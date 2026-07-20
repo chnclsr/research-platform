@@ -47,6 +47,13 @@ Get-Content -LiteralPath $EnvFile -Encoding UTF8 | ForEach-Object {
     }
 }
 
+# Apply durable schema changes before any process opens the new model. Existing
+# data remains in place and Alembic only runs revisions not yet recorded.
+& $venvPython -m alembic upgrade head
+if ($LASTEXITCODE -ne 0) {
+    throw "Veritabanı migration işlemi başarısız oldu. Servisler başlatılmadı."
+}
+
 New-Item -ItemType Directory -Force -Path "$root\logs" | Out-Null
 
 foreach ($name in @("api", "worker", "mcp", "telegram")) {

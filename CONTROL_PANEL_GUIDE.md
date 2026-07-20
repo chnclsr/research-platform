@@ -1,8 +1,8 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `2.1`
+Belge sürümü: `2.2`
 
-Platform sürümü: `v0.6.7`
+Platform sürümü: `v0.6.8`
 
 Tarih: `2026-07-20`
 
@@ -41,6 +41,8 @@ edilmemelidir.
 - Connector health, credential eksikleri, çağrı başarı oranı, ortalama/p95 gecikme ve hata sınıfları.
 - RTX 4060 kullanım, VRAM, sıcaklık ve güç; CPU, RAM, disk ve model telemetrisi.
 - Araştırma çıktı paketlerini panelden güvenli indirme.
+- HITL checkpoint geldiğinde soru yanıtlama, plan/taslak onaylama veya değişiklik isteme ve
+  kaynak domainlerini dahil etme/dışlama kartları.
 
 ## Kontroller
 

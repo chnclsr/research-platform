@@ -6,7 +6,7 @@ import base64
 import hashlib
 from pathlib import Path
 import secrets
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import parse_qs
 
 import httpx
@@ -15,7 +15,7 @@ import uvicorn
 
 from .config import get_settings
 from .gateway_client import ResearchGatewayClient
-from .schemas import DeliveryMode, ResearchBudget, ResearchProtocol
+from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 
 
 settings = get_settings()
@@ -44,6 +44,10 @@ async def start_research(
     output_mode: Literal["raw", "result", "both"] = "both",
     max_wall_minutes: int = 45,
     max_sources: int | None = None,
+    planning_questions: bool = False,
+    plan_review: bool = False,
+    source_review: bool = False,
+    outline_review: bool = False,
 ) -> dict:
     """Start a research run and return its durable run id."""
     protocol = ResearchProtocol(
@@ -53,6 +57,12 @@ async def start_research(
         budget=ResearchBudget(
             max_wall_minutes=max_wall_minutes,
             max_sources=max_sources,
+        ),
+        hitl=HitlConfig(
+            planning_questions=planning_questions,
+            plan_review=plan_review,
+            source_review=source_review,
+            outline_review=outline_review,
         ),
     )
     run = await _client().start(protocol)
@@ -72,6 +82,16 @@ async def control_research(
 ) -> dict:
     """Pause, resume or cancel a research run at a safe node boundary."""
     return await _client().action(run_id, action)
+
+
+@mcp.tool()
+async def respond_to_research_checkpoint(
+    run_id: str,
+    interaction_id: str,
+    response: dict[str, Any],
+) -> dict:
+    """Answer the active HITL checkpoint; use the response shape shown by research_status."""
+    return await _client().respond(run_id, interaction_id, response)
 
 
 @mcp.tool()
@@ -130,7 +150,12 @@ async def download_research_delivery(
         DeliveryMode(mode),
         Path(settings.gateway_download_dir),
     )
-    return {"run_id": run_id, "mode": mode, "path": str(target), "size_bytes": target.stat().st_size}
+    return {
+        "run_id": run_id,
+        "mode": mode,
+        "path": str(target),
+        "size_bytes": target.stat().st_size,
+    }
 
 
 @mcp.tool()
@@ -207,8 +232,7 @@ class BearerProtectedMCP:
         self.token = token
         self.allowed_origins = allowed_origins
         self.allowed_networks = tuple(
-            ipaddress.ip_network(value, strict=False)
-            for value in (allowed_networks or set())
+            ipaddress.ip_network(value, strict=False) for value in (allowed_networks or set())
         )
 
     async def __call__(self, scope, receive, send) -> None:
@@ -235,7 +259,7 @@ class BearerProtectedMCP:
                     {
                         "status": "healthy",
                         "service": "research-platform-mcp",
-                        "version": "0.6.7",
+                        "version": "0.6.8",
                     },
                 )
                 return
@@ -275,7 +299,9 @@ class BearerProtectedMCP:
             return
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
-            await self._reject(send, status if 400 <= status < 600 else 502, b"Upstream request failed")
+            await self._reject(
+                send, status if 400 <= status < 600 else 502, b"Upstream request failed"
+            )
             return
         except httpx.HTTPError:
             await self._reject(send, 502, b"Research API unavailable")
@@ -294,40 +320,46 @@ class BearerProtectedMCP:
 
     @staticmethod
     async def _reject(send, status: int, body: bytes) -> None:
-        await send({
-            "type": "http.response.start",
-            "status": status,
-            "headers": [(b"content-type", b"text/plain; charset=utf-8")],
-        })
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [(b"content-type", b"text/plain; charset=utf-8")],
+            }
+        )
         await send({"type": "http.response.body", "body": body})
 
     @staticmethod
     async def _json(send, status: int, body: dict) -> None:
         payload = json.dumps(body).encode("utf-8")
-        await send({
-            "type": "http.response.start",
-            "status": status,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(payload)).encode("ascii")),
-                (b"cache-control", b"no-store"),
-            ],
-        })
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(payload)).encode("ascii")),
+                    (b"cache-control", b"no-store"),
+                ],
+            }
+        )
         await send({"type": "http.response.body", "body": payload})
 
     @staticmethod
     async def _file(send, path: Path) -> None:
         size = path.stat().st_size
-        await send({
-            "type": "http.response.start",
-            "status": 200,
-            "headers": [
-                (b"content-type", b"application/zip"),
-                (b"content-length", str(size).encode("ascii")),
-                (b"content-disposition", f'attachment; filename="{path.name}"'.encode("ascii")),
-                (b"cache-control", b"no-store"),
-            ],
-        })
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/zip"),
+                    (b"content-length", str(size).encode("ascii")),
+                    (b"content-disposition", f'attachment; filename="{path.name}"'.encode("ascii")),
+                    (b"cache-control", b"no-store"),
+                ],
+            }
+        )
         with path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
                 await send({"type": "http.response.body", "body": chunk, "more_body": True})

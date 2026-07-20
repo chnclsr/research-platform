@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import httpx
 from arq import run_worker
-from arq.constants import default_queue_name, in_progress_key_prefix, job_key_prefix, retry_key_prefix
+from arq.cron import cron
+from arq.constants import (
+    default_queue_name,
+    in_progress_key_prefix,
+    job_key_prefix,
+    retry_key_prefix,
+)
 from arq.connections import RedisSettings
 
 from .config import get_settings
@@ -10,6 +16,7 @@ from .db import SessionLocal, create_schema
 from .pipeline import ResearchPipeline
 from .repository import Repository
 from .schemas import RunStatus
+from datetime import datetime, timezone
 
 
 async def _recover_interrupted_jobs(ctx: dict) -> None:
@@ -37,10 +44,12 @@ async def _recover_interrupted_jobs(ctx: dict) -> None:
                 {"stage": row.current_stage, "worker_recovery": True},
             )
 
-        resumable = await repo.list_runs_by_statuses({
-            RunStatus.RUNNING.value,
-            RunStatus.QUEUED.value,
-        })
+        resumable = await repo.list_runs_by_statuses(
+            {
+                RunStatus.RUNNING.value,
+                RunStatus.QUEUED.value,
+            }
+        )
         for row in resumable:
             await discard(row.id)
             await repo.update_run(row.id, status=RunStatus.QUEUED.value)
@@ -80,8 +89,34 @@ async def execute_research_run(ctx: dict, run_id: str) -> None:
         await pipeline.run(run_id)
 
 
+async def expire_hitl_interactions(ctx: dict) -> None:
+    """Release worker resources while preserving unanswered HITL state."""
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        rows = await repo.list_runs_by_statuses({RunStatus.AWAITING_INPUT.value})
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            interaction = row.interaction or {}
+            expires_at = interaction.get("expires_at")
+            if not expires_at:
+                continue
+            expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+            if expiry <= now:
+                await repo.update_run(row.id, status=RunStatus.PAUSED.value)
+                await repo.event(
+                    row.id,
+                    "hitl_paused",
+                    {
+                        "interaction_id": interaction.get("interaction_id"),
+                        "type": interaction.get("type"),
+                        "reason": "input_timeout",
+                    },
+                )
+
+
 class WorkerSettings:
-    functions = [execute_research_run]
+    functions = [execute_research_run, expire_hitl_interactions]
+    cron_jobs = [cron(expire_hitl_interactions, second={0, 30}, run_at_startup=True)]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

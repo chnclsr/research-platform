@@ -6,9 +6,10 @@ import math
 import re
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from typing import Any, TypedDict
+from urllib.parse import urlparse
 
 import httpx
 from langgraph.graph import END, START, StateGraph
@@ -25,7 +26,11 @@ from .embeddings import EmbeddingClient
 from .exporter import build_exports
 from .llm import LLMProvider, build_llm, decompose, extract_claims, generate_search_queries
 from .passages import (
-    chunk_document, merge_passage_claims, neighbor_context, passage_payload, relevant_sentence_claims,
+    chunk_document,
+    merge_passage_claims,
+    neighbor_context,
+    passage_payload,
+    relevant_sentence_claims,
     retrieve_passages,
 )
 from .paperqa_adapter import PaperQA2EvidenceEngine
@@ -51,8 +56,18 @@ from .recovery import (
 from .repository import Repository
 from .scholarly import candidate_dedupe_key
 from .schemas import (
-    AcquiredDocument, AuthorityLevel, ConnectorCandidate, CoverageGap, CoverageMetrics,
-    ExtractedClaim, Passage, ResearchProtocol, RunStatus, SearchMission, SourceFamily,
+    AcquiredDocument,
+    AuthorityLevel,
+    ConnectorCandidate,
+    CoverageGap,
+    CoverageMetrics,
+    ExtractedClaim,
+    Passage,
+    ResearchProtocol,
+    RunStatus,
+    SearchMission,
+    SourceFamily,
+    new_id,
 )
 from .storage import ObjectStore
 from .temporal import constrain_text_to_scope, enrich_publication_date
@@ -86,6 +101,8 @@ class PipelineState(TypedDict, total=False):
     available_connectors: list[str]
     connector_success_rates: dict[str, float]
     budget_started_at: str
+    hitl_guidance: list[str]
+    report_outline_guidance: str
 
 
 class PipelineHalted(RuntimeError):
@@ -139,7 +156,8 @@ class ResearchPipeline:
         graph.add_edge("ANALYZE_CLAIMS", "AUDIT")
         graph.add_edge("AUDIT", "CHECK_COVERAGE")
         graph.add_conditional_edges(
-            "CHECK_COVERAGE", self._coverage_route,
+            "CHECK_COVERAGE",
+            self._coverage_route,
             {"expand": "PLAN_RECOVERY", "finish": "ADVERSARIAL_REVIEW", "halt": END},
         )
         graph.add_edge("PLAN_RECOVERY", "SEARCH")
@@ -159,7 +177,49 @@ class ResearchPipeline:
             await self.repo.event(run.id, "cancelled", {"stage": stage})
             raise PipelineHalted("cancelled")
         await self.repo.checkpoint(run.id, stage, dict(state))
-        await self.repo.event(run.id, "stage", {"stage": stage, "round": state.get("round_number", 0)})
+        await self.repo.event(
+            run.id, "stage", {"stage": stage, "round": state.get("round_number", 0)}
+        )
+
+    async def _hitl_response(self, run_id: str, interaction_type: str) -> dict | None:
+        run = await self.repo.get_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        for entry in reversed(run.hitl_history or []):
+            if entry.get("type") == interaction_type:
+                response = entry.get("response")
+                return response if isinstance(response, dict) else {}
+        return None
+
+    async def _maybe_hitl(
+        self,
+        state: PipelineState,
+        interaction_type: str,
+        data: dict[str, Any],
+        checkpoint_stage: str,
+    ) -> dict | None:
+        protocol = ResearchProtocol.model_validate(state["protocol"])
+        if not getattr(protocol.hitl, interaction_type):
+            return None
+        previous = await self._hitl_response(state["run_id"], interaction_type)
+        if previous is not None:
+            return previous
+        now = datetime.now(timezone.utc)
+        interaction = {
+            "interaction_id": new_id(),
+            "type": interaction_type,
+            "data": data,
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=5)).isoformat(),
+        }
+        await self.repo.checkpoint(state["run_id"], checkpoint_stage, dict(state))
+        await self.repo.update_run(
+            state["run_id"],
+            status=RunStatus.AWAITING_INPUT.value,
+            interaction=interaction,
+        )
+        await self.repo.event(state["run_id"], "hitl_awaiting_input", interaction)
+        raise PipelineHalted("awaiting_input")
 
     async def _emit_llm_metrics(self, run_id: str, stage: str) -> None:
         metrics = self.llm.drain_metrics()
@@ -206,14 +266,18 @@ class ResearchPipeline:
                 if run.status == RunStatus.PAUSED.value:
                     task.cancel()
                     await control_repo.event(
-                        run.id, "paused", {"stage": stage, "in_node": True},
+                        run.id,
+                        "paused",
+                        {"stage": stage, "in_node": True},
                     )
                     raise PipelineHalted("paused")
                 if run.status in {RunStatus.CANCEL_REQUESTED.value, RunStatus.CANCELLED.value}:
                     task.cancel()
                     await control_repo.update_run(run.id, status=RunStatus.CANCELLED.value)
                     await control_repo.event(
-                        run.id, "cancelled", {"stage": stage, "in_node": True},
+                        run.id,
+                        "cancelled",
+                        {"stage": stage, "in_node": True},
                     )
                     raise PipelineHalted("cancelled")
 
@@ -232,8 +296,11 @@ class ResearchPipeline:
         await self.repo.update_run(run_id, status=RunStatus.RUNNING.value, error=None)
         protocol = ResearchProtocol.model_validate(row.protocol)
         state: PipelineState = {
-            "run_id": run_id, "protocol": row.protocol, "round_number": row.round_number,
-            "started_monotonic": time.monotonic(), "coverage": row.coverage or {},
+            "run_id": run_id,
+            "protocol": row.protocol,
+            "round_number": row.round_number,
+            "started_monotonic": time.monotonic(),
+            "coverage": row.coverage or {},
         }
         checkpoint = await self.repo.latest_checkpoint(run_id)
         if checkpoint and row.status == RunStatus.RUNNING.value:
@@ -262,7 +329,12 @@ class ResearchPipeline:
                 return
             coverage = CoverageMetrics.model_validate(result.get("coverage", {}))
             status = RunStatus.COMPLETED if coverage.sufficient else RunStatus.COMPLETED_INCOMPLETE
-            await self.repo.update_run(run_id, status=status.value, current_stage="COMPLETE", coverage=coverage.model_dump())
+            await self.repo.update_run(
+                run_id,
+                status=status.value,
+                current_stage="COMPLETE",
+                coverage=coverage.model_dump(),
+            )
             await self.repo.event(run_id, "complete", {"status": status.value})
         except PipelineHalted:
             return
@@ -279,20 +351,33 @@ class ResearchPipeline:
                 coverage=coverage.model_dump(),
                 error=None,
             )
-            await self.repo.event(run_id, "budget_exhausted", {
-                "max_wall_minutes": protocol.budget.max_wall_minutes,
-                "hard_limit": True,
-            })
+            await self.repo.event(
+                run_id,
+                "budget_exhausted",
+                {
+                    "max_wall_minutes": protocol.budget.max_wall_minutes,
+                    "hard_limit": True,
+                },
+            )
             try:
                 artifacts = await build_exports(
-                    run_id, protocol, coverage, self.repo, self.store, self.llm,
+                    run_id,
+                    protocol,
+                    coverage,
+                    self.repo,
+                    self.store,
+                    self.llm,
                 )
                 await self.repo.event(run_id, "artifacts", {"names": artifacts})
             except Exception as exc:
                 await self.session.rollback()
-                await self.repo.event(run_id, "budget_export_error", {
-                    "error": f"{type(exc).__name__}: {str(exc)[:500]}",
-                })
+                await self.repo.event(
+                    run_id,
+                    "budget_export_error",
+                    {
+                        "error": f"{type(exc).__name__}: {str(exc)[:500]}",
+                    },
+                )
             await self.repo.event(
                 run_id,
                 "complete",
@@ -305,7 +390,9 @@ class ResearchPipeline:
         except Exception as exc:
             await self.session.rollback()
             await self.repo.update_run(
-                run_id, status=RunStatus.FAILED.value, current_stage="FAILED",
+                run_id,
+                status=RunStatus.FAILED.value,
+                current_stage="FAILED",
                 error=f"{type(exc).__name__}: {exc}",
             )
             await self.repo.event(run_id, "failed", {"error": f"{type(exc).__name__}: {exc}"})
@@ -319,48 +406,118 @@ class ResearchPipeline:
     async def decompose_question(self, state: PipelineState) -> dict:
         await self._boundary(state, "DECOMPOSE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        sub_questions, concepts = await decompose(self.llm, protocol.primary_question, protocol.sub_questions)
+        sub_questions, concepts = await decompose(
+            self.llm, protocol.primary_question, protocol.sub_questions
+        )
         sub_questions = [
             constrain_text_to_scope(
-                question, protocol.scope.start_date, protocol.scope.end_date,
+                question,
+                protocol.scope.start_date,
+                protocol.scope.end_date,
             )
             for question in sub_questions
         ]
         await self._emit_llm_metrics(state["run_id"], "DECOMPOSE")
-        return {"sub_questions": sub_questions[:12], "concepts": concepts[:20]}
+        output = {"sub_questions": sub_questions[:12], "concepts": concepts[:20]}
+        response = await self._maybe_hitl(
+            {**state, **output},
+            "planning_questions",
+            {
+                "questions": [
+                    {"question": "Araştırmanın coğrafi veya kurumsal kapsamı ne olmalı?"},
+                    {
+                        "question": "Öncelikli kaynak türleri ve özellikle dışlanacak kaynaklar var mı?"
+                    },
+                    {
+                        "question": "Sonuç hangi kararı desteklemeli veya hangi belirsizliği çözmeli?"
+                    },
+                ]
+            },
+            "DECOMPOSE",
+        )
+        if response:
+            guidance = [
+                str(item.get("answer", "")).strip()
+                for item in response.get("answers", [])
+                if str(item.get("answer", "")).strip()
+            ]
+            output["hitl_guidance"] = guidance
+            output["sub_questions"] = list(
+                dict.fromkeys(
+                    [
+                        *output["sub_questions"],
+                        *guidance,
+                    ]
+                )
+            )[:12]
+        return output
 
     async def build_query_branches(self, state: PipelineState) -> dict:
         await self._boundary(state, "BUILD_QUERY_BRANCHES")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         try:
             generated = await generate_search_queries(
-                self.llm, protocol.primary_question, state.get("sub_questions", []),
-                [f.value for f in protocol.connectors.included_families], protocol.languages,
+                self.llm,
+                protocol.primary_question,
+                state.get("sub_questions", []),
+                [f.value for f in protocol.connectors.included_families],
+                protocol.languages,
             )
         except Exception:
             generated = []
         generated = [
             constrain_text_to_scope(
-                query, protocol.scope.start_date, protocol.scope.end_date,
+                query,
+                protocol.scope.start_date,
+                protocol.scope.end_date,
             )
             for query in generated
         ]
         await self._emit_llm_metrics(state["run_id"], "BUILD_QUERY_BRANCHES")
-        queries = list(dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated]))
+        queries = list(
+            dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated])
+        )
         for concept in state.get("concepts", [])[:3]:
             queries.append(f"{concept} criticism limitations")
         queries = queries[:8]
         missions = initial_missions(protocol, queries)
-        return {
+        output = {
             "queries": queries,
             "missions": [mission.model_dump(mode="json") for mission in missions],
             "attempted_missions": [],
             "required_branch_ids": [mission.branch_id for mission in missions],
-            "branch_queries": {
-                mission.branch_id: mission.query for mission in missions
-            },
+            "branch_queries": {mission.branch_id: mission.query for mission in missions},
             "round_number": max(1, state.get("round_number", 0)),
         }
+        response = await self._maybe_hitl(
+            {**state, **output},
+            "plan_review",
+            {
+                "plan": {
+                    "primary_question": protocol.primary_question,
+                    "sub_questions": state.get("sub_questions", []),
+                    "queries": queries,
+                    "source_families": [
+                        item.value for item in protocol.connectors.included_families
+                    ],
+                    "budget": protocol.budget.model_dump(mode="json"),
+                },
+            },
+            "BUILD_QUERY_BRANCHES",
+        )
+        if response and not response.get("approved", False):
+            modification = str(response.get("modifications", "")).strip()
+            if modification:
+                output["queries"] = list(dict.fromkeys([*queries, modification]))[:12]
+                output["missions"] = [
+                    mission.model_dump(mode="json")
+                    for mission in initial_missions(protocol, output["queries"])
+                ]
+                output["required_branch_ids"] = [item["branch_id"] for item in output["missions"]]
+                output["branch_queries"] = {
+                    item["branch_id"]: item["query"] for item in output["missions"]
+                }
+        return output
 
     async def search(self, state: PipelineState) -> dict:
         await self._boundary(state, "SEARCH")
@@ -383,9 +540,9 @@ class ResearchPipeline:
             except Exception:
                 return connector, None
 
-        health_rows = await asyncio.gather(*(
-            connector_is_usable(connector) for connector in configured_connectors
-        ))
+        health_rows = await asyncio.gather(
+            *(connector_is_usable(connector) for connector in configured_connectors)
+        )
         selected_connectors = {
             connector.id: connector
             for connector, health in health_rows
@@ -401,19 +558,23 @@ class ResearchPipeline:
         ]
         if unavailable:
             await self.repo.event(
-                state["run_id"], "connectors_skipped", {"connectors": unavailable},
+                state["run_id"],
+                "connectors_skipped",
+                {"connectors": unavailable},
             )
         if protocol.connectors.citation_depth > 0 and not any(
             "citations" in getattr(connector, "capabilities", ())
             for connector in selected_connectors.values()
         ):
-            await self.repo.event(state["run_id"], "citation_frontier_degraded", {
-                "reason": "no_healthy_citation_capable_connector",
-                "requested_depth": protocol.connectors.citation_depth,
-            })
-        missions = [
-            SearchMission.model_validate(item) for item in state.get("missions", [])
-        ]
+            await self.repo.event(
+                state["run_id"],
+                "citation_frontier_degraded",
+                {
+                    "reason": "no_healthy_citation_capable_connector",
+                    "requested_depth": protocol.connectors.citation_depth,
+                },
+            )
+        missions = [SearchMission.model_validate(item) for item in state.get("missions", [])]
         if not missions:
             missions = initial_missions(protocol, state.get("queries", []))
         semaphore = asyncio.Semaphore(8)
@@ -437,33 +598,34 @@ class ResearchPipeline:
                     domain = mission.domain_allowlist[0] if mission.domain_allowlist else None
                     if domain and hasattr(connector, "search_with_domain"):
                         rows = await connector.search_with_domain(
-                            provider_query, mission.result_limit, domain,
+                            provider_query,
+                            mission.result_limit,
+                            domain,
                         )
                     elif hasattr(connector, "search_scoped"):
                         rows = await connector.search_scoped(
-                            provider_query, mission.result_limit, protocol.scope,
+                            provider_query,
+                            mission.result_limit,
+                            protocol.scope,
                         )
                     else:
                         rows = await connector.search(provider_query, mission.result_limit)
                     if domain:
-                        rows = [
-                            row for row in rows
-                            if domain_matches(str(row.url), [domain])
-                        ]
+                        rows = [row for row in rows if domain_matches(str(row.url), [domain])]
                     if (
                         mission.target_entities
                         and mission.required_family == SourceFamily.CODE_DATA
                     ):
                         rows = [
-                            row for row in rows
+                            row
+                            for row in rows
                             if matches_target_entities(
                                 f"{row.title} {row.snippet} {row.url}",
                                 mission.target_entities,
                             )
                         ]
-                    if (
-                        protocol.connectors.citation_depth > 0
-                        and "citations" in getattr(connector, "capabilities", ())
+                    if protocol.connectors.citation_depth > 0 and "citations" in getattr(
+                        connector, "capabilities", ()
                     ):
                         citation_budget = min(20, max(4, mission.result_limit))
                         frontier = rows[: min(5, len(rows))]
@@ -479,18 +641,22 @@ class ResearchPipeline:
                                 try:
                                     relations = await connector.fetch_citations(parent)
                                 except Exception as exc:
-                                    connector_errors.append({
-                                        "connector": connector.id,
-                                        "error": f"citation frontier: {str(exc)[:450]}",
-                                    })
+                                    connector_errors.append(
+                                        {
+                                            "connector": connector.id,
+                                            "error": f"citation frontier: {str(exc)[:450]}",
+                                        }
+                                    )
                                     continue
                                 relation_rows = [
-                                    relation for relation in relations
+                                    relation
+                                    for relation in relations
                                     if relation.get("relation_type")
                                 ]
                                 if relation_rows:
                                     parent.metadata.setdefault(
-                                        "citation_relations", [],
+                                        "citation_relations",
+                                        [],
                                     ).extend(relation_rows)
                                 for relation in relation_rows:
                                     candidate = relation_to_candidate(
@@ -529,34 +695,46 @@ class ResearchPipeline:
                         row.metadata["discovered_by_connectors"] = [connector.id]
                         row.metadata["original_query"] = mission.query
                         row.metadata["compiled_query"] = provider_query
-                    connector_metrics.append({
-                        "connector": connector.id, "query": mission.query,
-                        "compiled_query": provider_query,
-                        "mission_id": mission.id, "branch_id": mission.branch_id,
-                        "latency_seconds": round(time.perf_counter() - started, 4),
-                        "result_count": len(rows), "success": True,
-                    })
+                    connector_metrics.append(
+                        {
+                            "connector": connector.id,
+                            "query": mission.query,
+                            "compiled_query": provider_query,
+                            "mission_id": mission.id,
+                            "branch_id": mission.branch_id,
+                            "latency_seconds": round(time.perf_counter() - started, 4),
+                            "result_count": len(rows),
+                            "success": True,
+                        }
+                    )
                     return rows
                 except Exception as exc:
                     connector_errors.append({"connector": connector.id, "error": str(exc)[:500]})
-                    connector_metrics.append({
-                        "connector": connector.id, "query": mission.query,
-                        "mission_id": mission.id, "branch_id": mission.branch_id,
-                        "latency_seconds": round(time.perf_counter() - started, 4),
-                        "result_count": 0, "success": False,
-                    })
+                    connector_metrics.append(
+                        {
+                            "connector": connector.id,
+                            "query": mission.query,
+                            "mission_id": mission.id,
+                            "branch_id": mission.branch_id,
+                            "latency_seconds": round(time.perf_counter() - started, 4),
+                            "result_count": 0,
+                            "success": False,
+                        }
+                    )
                     return []
 
         calls = []
         scheduled_by_connector: dict[str, int] = defaultdict(int)
         for mission in missions:
             connector_ids = [
-                connector_id for connector_id in mission.connector_ids
+                connector_id
+                for connector_id in mission.connector_ids
                 if connector_id in selected_connectors
             ]
             if not connector_ids and mission.required_family is not None:
                 connector_ids = [
-                    connector_id for connector_id, connector in selected_connectors.items()
+                    connector_id
+                    for connector_id, connector in selected_connectors.items()
                     if connector.family == mission.required_family
                 ]
             if not connector_ids:
@@ -576,18 +754,25 @@ class ResearchPipeline:
         for error in connector_errors:
             await self.repo.event(state["run_id"], "connector_error", error)
         citation_errors = [
-            error for error in connector_errors
+            error
+            for error in connector_errors
             if str(error.get("error", "")).startswith("citation frontier:")
         ]
         if citation_errors:
-            await self.repo.event(state["run_id"], "citation_frontier_degraded", {
-                "reason": "citation_provider_errors",
-                "error_count": len(citation_errors),
-                "connectors": sorted({str(item.get("connector")) for item in citation_errors}),
-            })
+            await self.repo.event(
+                state["run_id"],
+                "citation_frontier_degraded",
+                {
+                    "reason": "citation_provider_errors",
+                    "error_count": len(citation_errors),
+                    "connectors": sorted({str(item.get("connector")) for item in citation_errors}),
+                },
+            )
         if connector_metrics:
             await self.repo.event(
-                state["run_id"], "connector_metrics", {"calls": connector_metrics},
+                state["run_id"],
+                "connector_metrics",
+                {"calls": connector_metrics},
             )
         connector_attempts: dict[str, int] = defaultdict(int)
         connector_successes: dict[str, int] = defaultdict(int)
@@ -597,26 +782,22 @@ class ResearchPipeline:
             connector_successes[connector_id] += int(bool(metric["success"]))
         connector_success_rates = {
             connector_id: round(
-                connector_successes[connector_id] / max(1, attempts), 4,
+                connector_successes[connector_id] / max(1, attempts),
+                4,
             )
             for connector_id, attempts in connector_attempts.items()
         }
         unique: dict[str, ConnectorCandidate] = {}
         for mission in missions:
             for seed_url in mission.seed_urls:
-                family = (
-                    mission.required_family
-                    or (
-                        SourceFamily.OFFICIAL_LEGAL
-                        if mission.required_authority == AuthorityLevel.OFFICIAL
-                        else SourceFamily.WEB
-                    )
+                family = mission.required_family or (
+                    SourceFamily.OFFICIAL_LEGAL
+                    if mission.required_authority == AuthorityLevel.OFFICIAL
+                    else SourceFamily.WEB
                 )
                 candidate = ConnectorCandidate(
                     connector_id=(
-                        "official_seed"
-                        if family == SourceFamily.OFFICIAL_LEGAL
-                        else "source_seed"
+                        "official_seed" if family == SourceFamily.OFFICIAL_LEGAL else "source_seed"
                     ),
                     family=family,
                     title=mission.query,
@@ -639,10 +820,12 @@ class ResearchPipeline:
             if key in unique:
                 current = unique[key]
                 discovered_by = current.metadata.setdefault(
-                    "discovered_by_connectors", [current.connector_id],
+                    "discovered_by_connectors",
+                    [current.connector_id],
                 )
                 for provider in candidate.metadata.get(
-                    "discovered_by_connectors", [candidate.connector_id],
+                    "discovered_by_connectors",
+                    [candidate.connector_id],
                 ):
                     if provider not in discovered_by:
                         discovered_by.append(provider)
@@ -652,10 +835,9 @@ class ResearchPipeline:
                         branches.append(branch)
                 snapshots = current.metadata.setdefault("provider_snapshots", {})
                 snapshots.update(candidate.metadata.get("provider_snapshots", {}))
-                current.metadata["federated_rrf_score"] = (
-                    float(current.metadata.get("federated_rrf_score", 0.0))
-                    + float(candidate.metadata.get("federated_rrf_score", 0.0))
-                )
+                current.metadata["federated_rrf_score"] = float(
+                    current.metadata.get("federated_rrf_score", 0.0)
+                ) + float(candidate.metadata.get("federated_rrf_score", 0.0))
                 current.metadata.setdefault("alternate_locations", []).append(str(candidate.url))
                 for relation in candidate.metadata.get("citation_relations", []):
                     if relation not in current.metadata.setdefault("citation_relations", []):
@@ -685,51 +867,73 @@ class ResearchPipeline:
         ):
             frontier = await self.repo.pop_frontier_candidates(
                 state["run_id"],
-                min(protocol.budget.results_per_connector, self.settings.frontier_max_links_per_document),
+                min(
+                    protocol.budget.results_per_connector,
+                    self.settings.frontier_max_links_per_document,
+                ),
             )
             for item in frontier:
                 candidate = ConnectorCandidate(
-                    connector_id="link_frontier", family="web", title=item["url"],
-                    url=item["url"], snippet="Discovered from an acquired source",
-                    metadata={**item, "query_branches": [missions[0].branch_id] if missions else []},
+                    connector_id="link_frontier",
+                    family="web",
+                    title=item["url"],
+                    url=item["url"],
+                    snippet="Discovered from an acquired source",
+                    metadata={
+                        **item,
+                        "query_branches": [missions[0].branch_id] if missions else [],
+                    },
                 )
                 unique.setdefault(canonicalize_url(str(candidate.url)), candidate)
         existing = await self.repo.list_sources(state["run_id"])
         novel, novelty_rejected = await self.repo.filter_novel_candidates(
-            state["run_id"], list(unique.values()),
+            state["run_id"],
+            list(unique.values()),
         )
         if novelty_rejected:
-            await self.repo.event(state["run_id"], "novelty_filter", {
-                "rejected_count": len(novelty_rejected),
-                "sample": novelty_rejected[:20],
-            })
+            await self.repo.event(
+                state["run_id"],
+                "novelty_filter",
+                {
+                    "rejected_count": len(novelty_rejected),
+                    "sample": novelty_rejected[:20],
+                },
+            )
         temporal_candidates = []
         temporal_rejected = []
         for candidate in novel:
             accepted, reason = temporal_relevance(
-                candidate, protocol, reject_unknown=False,
+                candidate,
+                protocol,
+                reject_unknown=False,
             )
             if accepted:
                 temporal_candidates.append(candidate)
             else:
-                temporal_rejected.append({
-                    "url": str(candidate.url),
-                    "published_at": (
-                        candidate.published_at.isoformat() if candidate.published_at else None
-                    ),
-                    "reason": reason,
-                })
+                temporal_rejected.append(
+                    {
+                        "url": str(candidate.url),
+                        "published_at": (
+                            candidate.published_at.isoformat() if candidate.published_at else None
+                        ),
+                        "reason": reason,
+                    }
+                )
         if temporal_rejected:
-            await self.repo.event(state["run_id"], "temporal_scope_filter", {
-                "rejected_count": len(temporal_rejected),
-                "sample": temporal_rejected[:20],
-                "start_date": (
-                    protocol.scope.start_date.isoformat() if protocol.scope.start_date else None
-                ),
-                "end_date": (
-                    protocol.scope.end_date.isoformat() if protocol.scope.end_date else None
-                ),
-            })
+            await self.repo.event(
+                state["run_id"],
+                "temporal_scope_filter",
+                {
+                    "rejected_count": len(temporal_rejected),
+                    "sample": temporal_rejected[:20],
+                    "start_date": (
+                        protocol.scope.start_date.isoformat() if protocol.scope.start_date else None
+                    ),
+                    "end_date": (
+                        protocol.scope.end_date.isoformat() if protocol.scope.end_date else None
+                    ),
+                },
+            )
         novel = temporal_candidates
         if protocol.budget.max_sources is None:
             remaining: int | None = None
@@ -761,7 +965,8 @@ class ResearchPipeline:
         ]
         if rejected:
             await self.repo.event(
-                state["run_id"], "relevance_filter",
+                state["run_id"],
+                "relevance_filter",
                 {"rejected_count": len(rejected), "sample": rejected[:20]},
             )
         corpus_documents: list[AcquiredDocument] = []
@@ -773,33 +978,47 @@ class ResearchPipeline:
                 except Exception:
                     query_vectors = [[] for _ in state["queries"]]
                 corpus_hits = retrieve_passages(
-                    corpus_passages, state["queries"], query_vectors,
+                    corpus_passages,
+                    state["queries"],
+                    query_vectors,
                     per_question=max(1, self.settings.local_corpus_results // 2),
                 )
-                corpus_hits = [
-                    hit for hit in corpus_hits if hit.retrieval_score >= 0.60
-                ][:self.settings.local_corpus_results]
-                corpus_documents = await self.repo.corpus_documents(list(dict.fromkeys(
-                    hit.source_version_id for hit in corpus_hits
-                )))
+                corpus_hits = [hit for hit in corpus_hits if hit.retrieval_score >= 0.60][
+                    : self.settings.local_corpus_results
+                ]
+                corpus_documents = await self.repo.corpus_documents(
+                    list(dict.fromkeys(hit.source_version_id for hit in corpus_hits))
+                )
                 if not self.settings.testing and corpus_documents:
                     accepted_candidates, corpus_rejected = filter_and_rank_candidates(
                         [document.candidate for document in corpus_documents],
-                        protocol, self.settings.local_corpus_results,
+                        protocol,
+                        self.settings.local_corpus_results,
                     )
                     accepted_ids = {candidate.id for candidate in accepted_candidates}
                     corpus_documents = [
-                        document for document in corpus_documents
+                        document
+                        for document in corpus_documents
                         if document.candidate.id in accepted_ids
                     ]
                     if corpus_rejected:
-                        await self.repo.event(state["run_id"], "local_corpus_relevance_filter", {
-                            "rejected_count": len(corpus_rejected), "sample": corpus_rejected[:10],
-                        })
-                await self.repo.event(state["run_id"], "local_corpus_search", {
-                    "candidate_passages": len(corpus_passages), "selected_passages": len(corpus_hits),
-                    "selected_documents": len(corpus_documents),
-                })
+                        await self.repo.event(
+                            state["run_id"],
+                            "local_corpus_relevance_filter",
+                            {
+                                "rejected_count": len(corpus_rejected),
+                                "sample": corpus_rejected[:10],
+                            },
+                        )
+                await self.repo.event(
+                    state["run_id"],
+                    "local_corpus_search",
+                    {
+                        "candidate_passages": len(corpus_passages),
+                        "selected_passages": len(corpus_hits),
+                        "selected_documents": len(corpus_documents),
+                    },
+                )
         corpus_slots = (
             self.settings.local_corpus_results
             if remaining is None
@@ -826,10 +1045,14 @@ class ResearchPipeline:
                 ),
                 "citation_seeds_expanded": citation_seeds_used,
             },
-            "attempted_missions": list(dict.fromkeys([
-                *state.get("attempted_missions", []),
-                *(mission_signature(mission) for mission in missions),
-            ])),
+            "attempted_missions": list(
+                dict.fromkeys(
+                    [
+                        *state.get("attempted_missions", []),
+                        *(mission_signature(mission) for mission in missions),
+                    ]
+                )
+            ),
         }
 
     async def acquire(self, state: PipelineState) -> dict:
@@ -851,11 +1074,15 @@ class ResearchPipeline:
             async with semaphore:
                 started = time.perf_counter()
                 document = await self.acquisition.acquire(candidate)
-                acquisition_metrics.append({
-                    "connector": candidate.connector_id, "url": str(candidate.url),
-                    "latency_seconds": round(time.perf_counter() - started, 4),
-                    "success": document.success, "method": document.acquisition_method,
-                })
+                acquisition_metrics.append(
+                    {
+                        "connector": candidate.connector_id,
+                        "url": str(candidate.url),
+                        "latency_seconds": round(time.perf_counter() - started, 4),
+                        "success": document.success,
+                        "method": document.acquisition_method,
+                    }
+                )
                 return document
 
         tasks = [asyncio.create_task(one(candidate)) for candidate in candidates]
@@ -866,23 +1093,30 @@ class ResearchPipeline:
                 document = await task
                 docs.append(document)
                 await self.repo.update_run(state["run_id"], current_stage="ACQUIRE")
-                await self.repo.event(state["run_id"], "acquisition_progress", {
-                    "completed": completed,
-                    "total": total,
-                    "successful": sum(item.success for item in docs),
-                    "last_url": str(document.candidate.url),
-                    "last_method": document.acquisition_method,
-                })
+                await self.repo.event(
+                    state["run_id"],
+                    "acquisition_progress",
+                    {
+                        "completed": completed,
+                        "total": total,
+                        "successful": sum(item.success for item in docs),
+                        "last_url": str(document.candidate.url),
+                        "last_method": document.acquisition_method,
+                    },
+                )
         finally:
             for task in tasks:
                 if not task.done():
                     task.cancel()
-        docs = [*docs, *[
-            AcquiredDocument.model_validate(row) for row in state.get("corpus_documents", [])
-        ]]
+        docs = [
+            *docs,
+            *[AcquiredDocument.model_validate(row) for row in state.get("corpus_documents", [])],
+        ]
         if acquisition_metrics:
             await self.repo.event(
-                state["run_id"], "acquisition_metrics", {"calls": acquisition_metrics},
+                state["run_id"],
+                "acquisition_metrics",
+                {"calls": acquisition_metrics},
             )
         return {"documents": [d.model_dump(mode="json") for d in docs]}
 
@@ -914,7 +1148,8 @@ class ResearchPipeline:
             try:
                 result = await self.llm.complete_json(system_prompt, user_prompt)
                 if not isinstance(result, dict) or not isinstance(
-                    result.get("directly_relevant"), bool,
+                    result.get("directly_relevant"),
+                    bool,
                 ):
                     last_error = "invalid_response"
                     continue
@@ -930,8 +1165,7 @@ class ResearchPipeline:
             except Exception as exc:
                 last_error = type(exc).__name__
         strict_delivery = (
-            protocol.output_mode == "raw"
-            or protocol.authority_policy.strict_for_major_claims
+            protocol.output_mode == "raw" or protocol.authority_policy.strict_for_major_claims
         )
         if strict_delivery:
             return False, 0.0, f"judge_unavailable_fail_closed:{last_error}"
@@ -940,17 +1174,35 @@ class ResearchPipeline:
     async def normalize(self, state: PipelineState) -> dict:
         await self._boundary(state, "NORMALIZE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
+        prior_source_review = await self._hitl_response(state["run_id"], "source_review")
+        if prior_source_review is not None and any(
+            payload.get("source_version_id") for payload in state.get("documents", [])
+        ):
+            included = set(prior_source_review.get("included_domains", []))
+            excluded = set(prior_source_review.get("excluded_domains", [])) - included
+            await self.repo.apply_source_domain_review(state["run_id"], included, excluded)
+            documents = [
+                payload
+                for payload in state.get("documents", [])
+                if (
+                    urlparse(str(AcquiredDocument.model_validate(payload).candidate.url)).hostname
+                    or ""
+                ).lower()
+                not in excluded
+            ]
+            return {
+                "documents": documents,
+                "branch_result_counts": state.get("branch_result_counts", {}),
+                "discovery_stats": state.get("discovery_stats", {}),
+            }
         documents = [AcquiredDocument.model_validate(d) for d in state.get("documents", [])]
         existing_version_ids = {
             version.id for _, version in await self.repo.list_source_versions(state["run_id"])
         }
         saved_docs = []
         discovery_stats = dict(state.get("discovery_stats", {}))
-        discovery_stats["reserve_audited"] = int(
-            discovery_stats.get("reserve_audited", 0)
-        ) + sum(
-            document.success
-            and document.candidate.metadata.get("admission_tier") == "reserve"
+        discovery_stats["reserve_audited"] = int(discovery_stats.get("reserve_audited", 0)) + sum(
+            document.success and document.candidate.metadata.get("admission_tier") == "reserve"
             for document in documents
         )
         discovery_stats.setdefault("reserve_relevant", 0)
@@ -965,14 +1217,18 @@ class ResearchPipeline:
                 continue
             enrich_publication_date(document.candidate, document.raw_content or document.content)
             temporal_ok, temporal_reason = temporal_relevance(
-                document.candidate, protocol, reject_unknown=True,
+                document.candidate,
+                protocol,
+                reject_unknown=True,
             )
             if not temporal_ok:
-                content_rejected.append({
-                    "url": str(document.candidate.url),
-                    "reason": temporal_reason,
-                    "stage": "post_acquisition_temporal",
-                })
+                content_rejected.append(
+                    {
+                        "url": str(document.candidate.url),
+                        "reason": temporal_reason,
+                        "stage": "post_acquisition_temporal",
+                    }
+                )
                 continue
             relevant, relevance_score, relevance_reasons = document_relevance(
                 document,
@@ -980,20 +1236,21 @@ class ResearchPipeline:
                 [protocol.primary_question, *state.get("sub_questions", [])],
             )
             if not relevant:
-                content_rejected.append({
-                    "url": str(document.candidate.url),
-                    "reason": "content_not_relevant",
-                    "score": relevance_score,
-                    "details": relevance_reasons,
-                    "stage": "post_acquisition_semantic",
-                })
+                content_rejected.append(
+                    {
+                        "url": str(document.candidate.url),
+                        "reason": "content_not_relevant",
+                        "score": relevance_score,
+                        "details": relevance_reasons,
+                        "stage": "post_acquisition_semantic",
+                    }
+                )
                 continue
-            if (
-                not self.settings.testing
-                and not document.candidate.metadata.get("sentinel_required")
+            if not self.settings.testing and not document.candidate.metadata.get(
+                "sentinel_required"
             ):
-                judged_relevant, judge_score, judge_reason = (
-                    await self._semantic_source_judgment(protocol, document)
+                judged_relevant, judge_score, judge_reason = await self._semantic_source_judgment(
+                    protocol, document
                 )
                 document.candidate.metadata["semantic_relevance_judgment"] = {
                     "directly_relevant": judged_relevant,
@@ -1002,33 +1259,43 @@ class ResearchPipeline:
                     "model": self.settings.llm_model,
                 }
                 if not judged_relevant or judge_score < 0.45:
-                    content_rejected.append({
-                        "url": str(document.candidate.url),
-                        "reason": "semantic_judge_not_directly_relevant",
-                        "relevance_score": judge_score,
-                        "details": judge_reason,
-                        "stage": "post_acquisition_llm",
-                    })
+                    content_rejected.append(
+                        {
+                            "url": str(document.candidate.url),
+                            "reason": "semantic_judge_not_directly_relevant",
+                            "relevance_score": judge_score,
+                            "details": judge_reason,
+                            "stage": "post_acquisition_llm",
+                        }
+                    )
                     continue
             snapshot = document.raw_content or document.content
             if snapshot and document.content_hash:
                 extension = {
-                    "html": "html", "pdf": "pdf", "json": "json", "xml": "xml",
+                    "html": "html",
+                    "pdf": "pdf",
+                    "json": "json",
+                    "xml": "xml",
                 }.get(document.document_type, "txt")
                 snapshot_key = f"{state['run_id']}/sources/{document.content_hash}.{extension}"
                 snapshot_bytes = (
-                    base64.b64decode(snapshot) if document.document_type == "pdf" and document.raw_content
+                    base64.b64decode(snapshot)
+                    if document.document_type == "pdf" and document.raw_content
                     else snapshot.encode("utf-8", errors="replace")
                 )
                 await self.store.put(snapshot_key, snapshot_bytes, document.content_type)
                 document.candidate.metadata["raw_snapshot_key"] = snapshot_key
             source, version = await self.repo.save_document(state["run_id"], document)
             if version.id in existing_version_ids:
-                await self.repo.event(state["run_id"], "duplicate_source_version", {
-                    "source_id": source.id,
-                    "source_version_id": version.id,
-                    "url": source.url,
-                })
+                await self.repo.event(
+                    state["run_id"],
+                    "duplicate_source_version",
+                    {
+                        "source_id": source.id,
+                        "source_version_id": version.id,
+                        "url": source.url,
+                    },
+                )
                 continue
             existing_version_ids.add(version.id)
             payload = document.model_dump(mode="json")
@@ -1046,27 +1313,92 @@ class ResearchPipeline:
                 branch_counts[branch] += 1
             if document.outgoing_links:
                 added = await self.repo.add_frontier_links(
-                    state["run_id"], document.final_url or str(document.candidate.url),
+                    state["run_id"],
+                    document.final_url or str(document.candidate.url),
                     document.outgoing_links,
                     max_links=self.settings.frontier_max_links_per_document,
                 )
                 if added:
-                    await self.repo.event(state["run_id"], "frontier_links", {
-                        "source": document.final_url or str(document.candidate.url), "added": added,
-                    })
+                    await self.repo.event(
+                        state["run_id"],
+                        "frontier_links",
+                        {
+                            "source": document.final_url or str(document.candidate.url),
+                            "added": added,
+                        },
+                    )
         if content_rejected:
-            await self.repo.event(state["run_id"], "content_relevance_filter", {
-                "rejected_count": len(content_rejected),
-                "sample": content_rejected[:20],
-            })
+            await self.repo.event(
+                state["run_id"],
+                "content_relevance_filter",
+                {
+                    "rejected_count": len(content_rejected),
+                    "sample": content_rejected[:20],
+                },
+            )
         await self._emit_llm_metrics(state["run_id"], "CONTENT_RELEVANCE")
         sources = await self.repo.list_sources(state["run_id"])
         await self.repo.update_run(state["run_id"], sources_count=len(sources))
-        return {
+        output = {
             "documents": saved_docs,
             "branch_result_counts": dict(branch_counts),
             "discovery_stats": discovery_stats,
         }
+        grouped: dict[str, dict[str, Any]] = {}
+        for payload in saved_docs:
+            document = AcquiredDocument.model_validate(payload)
+            domain = (urlparse(str(document.candidate.url)).hostname or "unknown").lower()
+            item = grouped.setdefault(
+                domain,
+                {
+                    "domain": domain,
+                    "source_count": 0,
+                    "scores": [],
+                    "ai_recommendation": "include",
+                },
+            )
+            item["source_count"] += 1
+            item["scores"].append(
+                float(document.candidate.metadata.get("content_relevance_score", 0.5))
+            )
+        domains = []
+        for item in grouped.values():
+            scores = item.pop("scores")
+            item["avg_relevance_score"] = round(sum(scores) / max(1, len(scores)), 4)
+            item["ai_recommendation"] = (
+                "include" if item["avg_relevance_score"] >= 0.35 else "exclude"
+            )
+            domains.append(item)
+        response = await self._maybe_hitl(
+            {**state, **output},
+            "source_review",
+            {"domains": sorted(domains, key=lambda item: (-item["source_count"], item["domain"]))},
+            "NORMALIZE",
+        )
+        if response:
+            included = set(response.get("included_domains", []))
+            excluded = set(response.get("excluded_domains", [])) - included
+            await self.repo.apply_source_domain_review(state["run_id"], included, excluded)
+            output["documents"] = [
+                payload
+                for payload in saved_docs
+                if (
+                    urlparse(str(AcquiredDocument.model_validate(payload).candidate.url)).hostname
+                    or ""
+                ).lower()
+                not in excluded
+            ]
+            await self.repo.event(
+                state["run_id"],
+                "hitl_source_filter",
+                {
+                    "included_domains": sorted(included),
+                    "excluded_domains": sorted(excluded),
+                    "retained_documents": len(output["documents"]),
+                    "excluded_documents": len(saved_docs) - len(output["documents"]),
+                },
+            )
+        return output
 
     async def chunk_index(self, state: PipelineState) -> dict:
         await self._boundary(state, "CHUNK_INDEX")
@@ -1092,19 +1424,27 @@ class ResearchPipeline:
                 passage.embedding = vector
         except Exception as exc:
             await self.repo.event(
-                state["run_id"], "embedding_fallback", {"error": str(exc)[:500]},
+                state["run_id"],
+                "embedding_fallback",
+                {"error": str(exc)[:500]},
             )
         metrics = self.embeddings.drain_metrics()
         if metrics:
             await self.repo.event(
-                state["run_id"], "embedding_metrics", {"stage": "CHUNK_INDEX", "calls": metrics},
+                state["run_id"],
+                "embedding_metrics",
+                {"stage": "CHUNK_INDEX", "calls": metrics},
             )
         await self.repo.save_passages(all_passages)
-        await self.repo.event(state["run_id"], "passage_index", {
-            "passage_count": len(all_passages),
-            "embedded_count": sum(bool(passage.embedding) for passage in all_passages),
-            "total_tokens": sum(passage.token_count for passage in all_passages),
-        })
+        await self.repo.event(
+            state["run_id"],
+            "passage_index",
+            {
+                "passage_count": len(all_passages),
+                "embedded_count": sum(bool(passage.embedding) for passage in all_passages),
+                "total_tokens": sum(passage.token_count for passage in all_passages),
+            },
+        )
         return {"passages": []}
 
     async def retrieve_relevant_passages(self, state: PipelineState) -> dict:
@@ -1112,41 +1452,67 @@ class ResearchPipeline:
         protocol = ResearchProtocol.model_validate(state["protocol"])
         version_ids = [payload["source_version_id"] for payload in state.get("documents", [])]
         if not version_ids:
-            await self.repo.event(state["run_id"], "passage_retrieval", {
-                "question_count": 0, "candidate_count": 0, "selected_count": 0,
-                "reason": "no_new_source_versions",
-            })
+            await self.repo.event(
+                state["run_id"],
+                "passage_retrieval",
+                {
+                    "question_count": 0,
+                    "candidate_count": 0,
+                    "selected_count": 0,
+                    "reason": "no_new_source_versions",
+                },
+            )
             return {"passages": []}
         passages = await self.repo.list_passages(state["run_id"], version_ids)
-        questions = list(dict.fromkeys([
-            protocol.primary_question, *state.get("sub_questions", []),
-        ]))
+        questions = list(
+            dict.fromkeys(
+                [
+                    protocol.primary_question,
+                    *state.get("sub_questions", []),
+                ]
+            )
+        )
         try:
             query_embeddings = await self.embeddings.embed(questions)
         except Exception as exc:
             query_embeddings = [[] for _ in questions]
             await self.repo.event(
-                state["run_id"], "embedding_fallback", {"stage": "retrieval", "error": str(exc)[:500]},
+                state["run_id"],
+                "embedding_fallback",
+                {"stage": "retrieval", "error": str(exc)[:500]},
             )
         metrics = self.embeddings.drain_metrics()
         if metrics:
             await self.repo.event(
-                state["run_id"], "embedding_metrics",
+                state["run_id"],
+                "embedding_metrics",
                 {"stage": "RETRIEVE_PASSAGES", "calls": metrics},
             )
         selected = retrieve_passages(
-            passages, questions, query_embeddings,
+            passages,
+            questions,
+            query_embeddings,
             per_question=self.settings.passages_per_question,
         )[:16]
         await self.repo.save_passages(selected)
-        await self.repo.event(state["run_id"], "passage_retrieval", {
-            "question_count": len(questions), "candidate_count": len(passages),
-            "selected_count": len(selected),
-            "selected": [{
-                "passage_id": passage.id, "section": passage.section_path,
-                "score": passage.retrieval_score, "questions": passage.matched_questions,
-            } for passage in selected],
-        })
+        await self.repo.event(
+            state["run_id"],
+            "passage_retrieval",
+            {
+                "question_count": len(questions),
+                "candidate_count": len(passages),
+                "selected_count": len(selected),
+                "selected": [
+                    {
+                        "passage_id": passage.id,
+                        "section": passage.section_path,
+                        "score": passage.retrieval_score,
+                        "questions": passage.matched_questions,
+                    }
+                    for passage in selected
+                ],
+            },
+        )
         if self.settings.paperqa2_enabled and self.settings.paperqa2_shadow_mode:
             shadow_documents = [
                 {
@@ -1158,11 +1524,13 @@ class ResearchPipeline:
             ]
             try:
                 shadow = await PaperQA2EvidenceEngine(self.settings).retrieve_evidence(
-                    protocol.primary_question, shadow_documents,
+                    protocol.primary_question,
+                    shadow_documents,
                 )
             except Exception as exc:
                 shadow = {
-                    "engine": "paperqa2", "available": False,
+                    "engine": "paperqa2",
+                    "available": False,
                     "reason": f"{type(exc).__name__}: {exc}",
                 }
             await self.repo.event(state["run_id"], "paperqa2_shadow", shadow)
@@ -1178,7 +1546,9 @@ class ResearchPipeline:
         protocol = ResearchProtocol.model_validate(state["protocol"])
         if protocol.output_mode == "raw":
             await self.repo.event(
-                state["run_id"], "claim_extraction_skipped", {"reason": "raw_output_mode"},
+                state["run_id"],
+                "claim_extraction_skipped",
+                {"reason": "raw_output_mode"},
             )
             return {"claims": []}
         documents = state.get("documents", [])
@@ -1186,12 +1556,15 @@ class ResearchPipeline:
         if not passages:
             return {"claims": []}
         all_passages = await self.repo.list_passages(state["run_id"])
-        evidence_questions = list(dict.fromkeys([
-            protocol.primary_question, *state.get("sub_questions", []),
-        ]))
-        documents_by_version = {
-            payload["source_version_id"]: payload for payload in documents
-        }
+        evidence_questions = list(
+            dict.fromkeys(
+                [
+                    protocol.primary_question,
+                    *state.get("sub_questions", []),
+                ]
+            )
+        )
+        documents_by_version = {payload["source_version_id"]: payload for payload in documents}
         semaphore = asyncio.Semaphore(2)
         extraction_errors: list[dict[str, str]] = []
 
@@ -1205,20 +1578,27 @@ class ResearchPipeline:
                     return []
                 try:
                     model_claims = await extract_claims(
-                        self.llm, doc,
+                        self.llm,
+                        doc,
                         research_question=protocol.primary_question,
                         content_override=passage.text,
                         neighbor_context=neighbor_context(passage, all_passages),
-                        passage_id=passage.id, section_path=passage.section_path,
-                        page_number=passage.page_number, original_offset=passage.start_char,
+                        passage_id=passage.id,
+                        section_path=passage.section_path,
+                        page_number=passage.page_number,
+                        original_offset=passage.start_char,
                         retrieval_score=passage.retrieval_score,
                     )
                     deterministic_claims = relevant_sentence_claims(
-                        passage, evidence_questions, doc.candidate.id, limit=2,
+                        passage,
+                        evidence_questions,
+                        doc.candidate.id,
+                        limit=2,
                     )
                     merged = merge_passage_claims(model_claims, deterministic_claims)[:4]
                     return [
-                        claim for claim in merged
+                        claim
+                        for claim in merged
                         if evidence_quality_gate(
                             claim.text,
                             claim.quote,
@@ -1227,7 +1607,9 @@ class ResearchPipeline:
                         )[0]
                     ]
                 except Exception as exc:
-                    extraction_errors.append({"url": str(doc.candidate.url), "error": str(exc)[:500]})
+                    extraction_errors.append(
+                        {"url": str(doc.candidate.url), "error": str(exc)[:500]}
+                    )
                     return []
 
         batches = await asyncio.gather(*(one(passage) for passage in passages))
@@ -1260,17 +1642,21 @@ class ResearchPipeline:
             claim = ExtractedClaim.model_validate(payload)
             relevance = claim_relevance(
                 claim.text,
-                " ".join([
-                    ResearchProtocol.model_validate(state["protocol"]).primary_question,
-                    *state.get("sub_questions", []),
-                ]),
+                " ".join(
+                    [
+                        ResearchProtocol.model_validate(state["protocol"]).primary_question,
+                        *state.get("sub_questions", []),
+                    ]
+                ),
             )
-            promotional = bool(re.search(
-                r"\b(kurun|takip edin|kaydet|olmazsa olmaz|rakipsiz|süper güç|"
-                r"install it|follow me|must-have)\b",
-                claim.text,
-                flags=re.IGNORECASE,
-            ))
+            promotional = bool(
+                re.search(
+                    r"\b(kurun|takip edin|kaydet|olmazsa olmaz|rakipsiz|süper güç|"
+                    r"install it|follow me|must-have)\b",
+                    claim.text,
+                    flags=re.IGNORECASE,
+                )
+            )
             evidence_valid, _ = evidence_quality_gate(
                 claim.text,
                 claim.quote,
@@ -1281,7 +1667,11 @@ class ResearchPipeline:
                 continue
             normalized = re.sub(r"\W+", " ", claim.text.lower()).strip()
             match = next(
-                ((other, claim_id) for other, claim_id in seen if SequenceMatcher(None, normalized, other).ratio() > 0.92),
+                (
+                    (other, claim_id)
+                    for other, claim_id in seen
+                    if SequenceMatcher(None, normalized, other).ratio() > 0.92
+                ),
                 None,
             )
             if match:
@@ -1292,12 +1682,18 @@ class ResearchPipeline:
         await self.repo.save_claims(state["run_id"], accepted)
         total_claims = await self.repo.list_claims(state["run_id"])
         await self.repo.update_run(state["run_id"], claims_count=len(total_claims))
-        return {"claims": [{**c.model_dump(mode="json"), "source_version_id": v} for c, v in accepted]}
+        return {
+            "claims": [{**c.model_dump(mode="json"), "source_version_id": v} for c, v in accepted]
+        }
 
     async def check_coverage(self, state: PipelineState) -> dict:
         await self._boundary(state, "CHECK_COVERAGE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        sources = await self.repo.list_sources(state["run_id"])
+        sources = [
+            source
+            for source in await self.repo.list_sources(state["run_id"])
+            if not (source.metadata_json or {}).get("excluded_by_hitl")
+        ]
         claims = await self.repo.list_claims(state["run_id"])
         evidence = await self.repo.list_evidence(state["run_id"])
         previous_count = state.get("source_count_before_round", 0)
@@ -1306,7 +1702,8 @@ class ResearchPipeline:
         previous = CoverageMetrics.model_validate(state.get("coverage", {}))
         major = sorted(
             [
-                c for c in claims
+                c
+                for c in claims
                 if c.importance == "major"
                 and float((c.audit or {}).get("question_relevance", 0.0)) >= 0.25
             ],
@@ -1318,30 +1715,30 @@ class ResearchPipeline:
         audited = [c for c in major if c.audit]
         unresolved = [c for c in major if c.status != "supported"]
         official_entities = resolve_official_entities(protocol.primary_question)
-        official_domains = [
-            domain
-            for entity in official_entities
-            for domain in entity["domains"]
-        ]
+        official_domains = [domain for entity in official_entities for domain in entity["domains"]]
         relevant_sources = [
-            source for source in sources
+            source
+            for source in sources
             if (
                 (
-                    source.family in {
+                    source.family
+                    in {
                         SourceFamily.WEB.value,
                         SourceFamily.ACADEMIC.value,
                     }
                     and max(
                         float((source.metadata_json or {}).get("relevance_score", 0.0)),
                         float((source.metadata_json or {}).get("content_relevance_score", 0.0)),
-                    ) >= 0.35
+                    )
+                    >= 0.35
                 )
                 or (
                     source.family == SourceFamily.CODE_DATA.value
                     and max(
                         float((source.metadata_json or {}).get("relevance_score", 0.0)),
                         float((source.metadata_json or {}).get("content_relevance_score", 0.0)),
-                    ) >= 0.45
+                    )
+                    >= 0.45
                 )
                 or (source.metadata_json or {}).get("authority") == "primary"
                 or (
@@ -1373,36 +1770,31 @@ class ResearchPipeline:
         if official_entities:
             covered_entities = 0
             evidence_source_ids = {
-                source.id for claim, link, source in evidence
-                if link.entailment_score >= 0.5
-                and claim.status not in {"irrelevant", "unresolved"}
+                source.id
+                for claim, link, source in evidence
+                if link.entailment_score >= 0.5 and claim.status not in {"irrelevant", "unresolved"}
             }
             for entity in official_entities:
                 if any(
                     (source.metadata_json or {}).get("authority") == "official"
                     and domain_matches(source.url, entity["domains"])
-                    and (
-                        protocol.output_mode == "raw"
-                        or source.id in evidence_source_ids
-                    )
+                    and (protocol.output_mode == "raw" or source.id in evidence_source_ids)
                     for source in relevant_sources
                 ):
                     covered_entities += 1
             authority_coverage = covered_entities / len(official_entities)
         else:
             authority_coverage = (
-                len(official_major_claim_ids) / len(major) if major
+                len(official_major_claim_ids) / len(major)
+                if major
                 else (
                     1.0
-                    if protocol.output_mode == "raw" and any(
+                    if protocol.output_mode == "raw"
+                    and any(
                         (source.metadata_json or {}).get("authority") == "official"
                         for source in relevant_sources
                     )
-                    else (
-                        1.0
-                        if not protocol.authority_policy.strict_for_major_claims
-                        else 0.0
-                    )
+                    else (1.0 if not protocol.authority_policy.strict_for_major_claims else 0.0)
                 )
             )
         audited_count = len(audited)
@@ -1435,20 +1827,19 @@ class ResearchPipeline:
         discovery_stats = dict(state.get("discovery_stats", {}))
         reserve_audited = int(discovery_stats.get("reserve_audited", 0))
         reserve_relevant = int(discovery_stats.get("reserve_relevant", 0))
-        reserve_false_negative_rate = (
-            reserve_relevant / reserve_audited if reserve_audited else 0.0
-        )
+        reserve_false_negative_rate = reserve_relevant / reserve_audited if reserve_audited else 0.0
         accepted_relevant = max(
             0,
             int(discovery_stats.get("relevant_admitted", 0)) - reserve_relevant,
         )
         relative_recall = accepted_relevant / max(
-            1, accepted_relevant + reserve_relevant,
+            1,
+            accepted_relevant + reserve_relevant,
         )
         round_relevant = int(discovery_stats.get("round_relevant_admitted", 0))
-        citation_frontier_novelty = int(
-            discovery_stats.get("round_citation_relevant", 0)
-        ) / max(1, round_relevant)
+        citation_frontier_novelty = int(discovery_stats.get("round_citation_relevant", 0)) / max(
+            1, round_relevant
+        )
         unavailable_connectors = set(state.get("unavailable_connectors", []))
         required_connectors = set(protocol.connectors.required_connectors)
         available_connectors = set(state.get("available_connectors", []))
@@ -1459,9 +1850,9 @@ class ResearchPipeline:
             if float(connector_success_rates.get(connector_id, 0.0)) >= 0.5
         }
         critical_connector_coverage = (
-            len(required_connectors & operational_required_connectors)
-            / len(required_connectors)
-            if required_connectors else 1.0
+            len(required_connectors & operational_required_connectors) / len(required_connectors)
+            if required_connectors
+            else 1.0
         )
         quality_diagnostics_active = (
             len(provider_union) >= 2
@@ -1469,8 +1860,14 @@ class ResearchPipeline:
             or int(discovery_stats.get("citation_candidates_selected", 0)) > 0
         )
         coverage = calculate_coverage(
-            protocol, [s.family for s in relevant_sources], dict(branch_counts),
-            len(major), audited_count, len(unresolved), rate, previous.saturated_rounds,
+            protocol,
+            [s.family for s in relevant_sources],
+            dict(branch_counts),
+            len(major),
+            audited_count,
+            len(unresolved),
+            rate,
+            previous.saturated_rounds,
             authority_coverage=authority_coverage,
             claim_audit_required=protocol.output_mode != "raw",
             sentinel_recall=measured_sentinel_recall,
@@ -1485,7 +1882,8 @@ class ResearchPipeline:
         round_number = state.get("round_number", 1)
         budget_started_at = datetime.fromisoformat(
             state.get("budget_started_at", datetime.now(timezone.utc).isoformat()).replace(
-                "Z", "+00:00",
+                "Z",
+                "+00:00",
             )
         )
         elapsed = max(
@@ -1493,8 +1891,7 @@ class ResearchPipeline:
             (datetime.now(timezone.utc) - budget_started_at).total_seconds() / 60,
         )
         source_budget_hit = (
-            protocol.budget.max_sources is not None
-            and len(sources) >= protocol.budget.max_sources
+            protocol.budget.max_sources is not None and len(sources) >= protocol.budget.max_sources
         )
         budget_hit = (
             round_number >= protocol.budget.max_rounds
@@ -1511,33 +1908,43 @@ class ResearchPipeline:
             missed_sentinels,
         )
         exhausted = not recovery_missions(
-            protocol, gaps, set(state.get("attempted_missions", [])),
+            protocol,
+            gaps,
+            set(state.get("attempted_missions", [])),
         )
         stop_reason = (
-            "coverage_sufficient" if coverage.sufficient
+            "coverage_sufficient"
+            if coverage.sufficient
             else ("budget_exhausted" if budget_hit or exhausted else "expand")
         )
         await self.repo.update_run(
-            state["run_id"], coverage=coverage.model_dump(), round_number=round_number,
-            sources_count=len(sources), claims_count=len(claims),
+            state["run_id"],
+            coverage=coverage.model_dump(),
+            round_number=round_number,
+            sources_count=len(sources),
+            claims_count=len(claims),
         )
-        await self.repo.event(state["run_id"], "coverage_gaps", {
-            "gaps": [gap.model_dump(mode="json") for gap in gaps],
-            "stop_reason": stop_reason,
-            "discovery_quality": {
-                **discovery_stats,
-                "sentinel_recall": measured_sentinel_recall,
-                "missed_sentinels": missed_sentinels,
-                "estimated_completeness": completeness,
-                "relative_recall": relative_recall,
-                "provider_count": len(provider_union),
-                "citation_frontier_novelty": citation_frontier_novelty,
-                "reserve_false_negative_rate": reserve_false_negative_rate,
-                "critical_connector_coverage": critical_connector_coverage,
-                "unavailable_connectors": sorted(unavailable_connectors),
-                "connector_success_rates": connector_success_rates,
+        await self.repo.event(
+            state["run_id"],
+            "coverage_gaps",
+            {
+                "gaps": [gap.model_dump(mode="json") for gap in gaps],
+                "stop_reason": stop_reason,
+                "discovery_quality": {
+                    **discovery_stats,
+                    "sentinel_recall": measured_sentinel_recall,
+                    "missed_sentinels": missed_sentinels,
+                    "estimated_completeness": completeness,
+                    "relative_recall": relative_recall,
+                    "provider_count": len(provider_union),
+                    "citation_frontier_novelty": citation_frontier_novelty,
+                    "reserve_false_negative_rate": reserve_false_negative_rate,
+                    "critical_connector_coverage": critical_connector_coverage,
+                    "unavailable_connectors": sorted(unavailable_connectors),
+                    "connector_success_rates": connector_success_rates,
+                },
             },
-        })
+        )
         return {
             "coverage": coverage.model_dump(),
             "gaps": [gap.model_dump(mode="json") for gap in gaps],
@@ -1556,10 +1963,14 @@ class ResearchPipeline:
         attempted = set(state.get("attempted_missions", []))
         gaps = [CoverageGap.model_validate(item) for item in state.get("gaps", [])]
         missions = recovery_missions(protocol, gaps, attempted)
-        await self.repo.event(state["run_id"], "recovery_plan", {
-            "round": round_number,
-            "missions": [mission.model_dump(mode="json") for mission in missions],
-        })
+        await self.repo.event(
+            state["run_id"],
+            "recovery_plan",
+            {
+                "round": round_number,
+                "missions": [mission.model_dump(mode="json") for mission in missions],
+            },
+        )
         branch_queries = dict(state.get("branch_queries", {}))
         for mission in missions:
             branch_queries.setdefault(mission.branch_id, mission.query)
@@ -1613,13 +2024,17 @@ class ResearchPipeline:
         for claim in claims:
             links = by_claim.get(claim.id, [])
             evaluated_links = [
-                (e, source, *evidence_quality_gate(
-                    claim.text,
-                    e.quote,
-                    section_path=(e.location or {}).get("section_path"),
-                    source_title=source.title,
-                    entailment_score=e.entailment_score,
-                ))
+                (
+                    e,
+                    source,
+                    *evidence_quality_gate(
+                        claim.text,
+                        e.quote,
+                        section_path=(e.location or {}).get("section_path"),
+                        source_title=source.title,
+                        entailment_score=e.entailment_score,
+                    ),
+                )
                 for e, source in links
             ]
             valid_links = [(e, source) for e, source, valid, _ in evaluated_links if valid]
@@ -1628,8 +2043,7 @@ class ResearchPipeline:
                 for _, s in valid_links
             }
             supporting = [
-                e for e, _ in valid_links
-                if e.direction == "supports" and e.entailment_score >= 0.5
+                e for e, _ in valid_links if e.direction == "supports" and e.entailment_score >= 0.5
             ]
             contradicting = [e for e, _ in valid_links if e.direction == "contradicts"]
             source_score = max(
@@ -1657,20 +2071,26 @@ class ResearchPipeline:
             else:
                 claim.status = "unresolved"
             claim.audit = {
-                "supporting_evidence": len(supporting), "counter_evidence": len(contradicting),
-                "independent_domains": len(domains), "minimum_required": minimum,
-                "question_relevance": relevance, "source_relevance": source_score,
+                "supporting_evidence": len(supporting),
+                "counter_evidence": len(contradicting),
+                "independent_domains": len(domains),
+                "minimum_required": minimum,
+                "question_relevance": relevance,
+                "source_relevance": source_score,
                 "invalid_evidence": sum(not valid for _, _, valid, _ in evaluated_links),
-                "invalid_evidence_reasons": sorted({
-                    reason for _, _, valid, reason in evaluated_links if not valid
-                }),
+                "invalid_evidence_reasons": sorted(
+                    {reason for _, _, valid, reason in evaluated_links if not valid}
+                ),
             }
         await self.session.commit()
         coverage = CoverageMetrics.model_validate(state.get("coverage", {}))
         major = [c for c in claims if c.importance == "major"]
         audited = [
-            c for c in major
-            if c.audit and c.audit.get("question_relevance", 0.0) >= 0.20 and c.status != "irrelevant"
+            c
+            for c in major
+            if c.audit
+            and c.audit.get("question_relevance", 0.0) >= 0.20
+            and c.status != "irrelevant"
         ]
         unresolved = [c for c in major if c.status in {"unresolved", "irrelevant"}]
         coverage.claim_audit_coverage = round(len(audited) / len(major), 4) if major else 0.0
@@ -1703,20 +2123,52 @@ class ResearchPipeline:
         claims = await self.repo.list_claims(state["run_id"])
         weak = [c.id for c in claims if c.status != "supported"]
         excluded = [
-            c.id for c in claims
-            if c.status in {"irrelevant", "unresolved"} or c.audit.get("question_relevance", 0.0) < 0.20
+            c.id
+            for c in claims
+            if c.status in {"irrelevant", "unresolved"}
+            or c.audit.get("question_relevance", 0.0) < 0.20
         ]
         await self.repo.event(
-            state["run_id"], "adversarial_review",
+            state["run_id"],
+            "adversarial_review",
             {"weak_claim_ids": weak, "excluded_claim_ids": excluded},
         )
+        outline = {
+            "title": ResearchProtocol.model_validate(state["protocol"]).title,
+            "sections": [
+                "Yönetici özeti",
+                "Kapsam ve yöntem",
+                "Denetlenmiş temel bulgular",
+                "Çelişen kanıtlar",
+                "Belirsizlikler ve kapsam boşlukları",
+                "Sonuç",
+            ],
+            "supported_claims": sum(claim.status == "supported" for claim in claims),
+            "qualified_claims": sum(claim.status == "qualified" for claim in claims),
+        }
+        response = await self._maybe_hitl(
+            state,
+            "outline_review",
+            {"outline": outline},
+            "ADVERSARIAL_REVIEW",
+        )
+        if response and not response.get("approved", False):
+            return {"report_outline_guidance": str(response.get("modifications", ""))[:5000]}
         return {}
 
     async def synthesize_export(self, state: PipelineState) -> dict:
         await self._boundary(state, "SYNTHESIZE_EXPORT")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         coverage = CoverageMetrics.model_validate(state.get("coverage", {}))
-        artifacts = await build_exports(state["run_id"], protocol, coverage, self.repo, self.store, self.llm)
+        artifacts = await build_exports(
+            state["run_id"],
+            protocol,
+            coverage,
+            self.repo,
+            self.store,
+            self.llm,
+            outline_guidance=state.get("report_outline_guidance", ""),
+        )
         await self._emit_llm_metrics(state["run_id"], "SYNTHESIZE_EXPORT")
         await self.repo.event(state["run_id"], "artifacts", {"names": artifacts})
         return {}

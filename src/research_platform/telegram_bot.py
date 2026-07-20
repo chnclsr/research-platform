@@ -10,13 +10,14 @@ import httpx
 
 from .config import get_settings
 from .gateway_client import ResearchGatewayClient
-from .schemas import DeliveryMode, ResearchBudget, ResearchProtocol
+from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 
 
 HELP = """Research Platform komutları:
 /whoami
-/research [raw|result|both] [--minutes N] [--sources N] <soru>
+/research [raw|result|both] [--hitl] [--minutes N] [--sources N] <soru>
 /status <run_id>
+/respond <run_id> approve|reject|answer|include ...
 /get <run_id> [raw|result|both]
 /pause <run_id>
 /resume <run_id>
@@ -79,10 +80,14 @@ def parse_research_request(
     question = " ".join(tokens).strip()
     if not question:
         raise ValueError("Araştırma sorusu eksik.")
-    return mode, question, ResearchBudget(
-        max_wall_minutes=minutes,
-        max_sources=sources,
-        max_rounds=default_rounds,
+    return (
+        mode,
+        question,
+        ResearchBudget(
+            max_wall_minutes=minutes,
+            max_sources=sources,
+            max_rounds=default_rounds,
+        ),
     )
 
 
@@ -92,8 +97,7 @@ class TelegramResearchBot:
         if not self.settings.telegram_bot_token:
             raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
         self.bot_url = (
-            f"{self.settings.telegram_api_url.rstrip('/')}/bot"
-            f"{self.settings.telegram_bot_token}"
+            f"{self.settings.telegram_api_url.rstrip('/')}/bot{self.settings.telegram_bot_token}"
         )
         self.gateway = ResearchGatewayClient(
             self.settings.research_api_url,
@@ -113,9 +117,8 @@ class TelegramResearchBot:
             return True
         if self.allow_group_chats and chat.get("type") in {"group", "supergroup"}:
             return True
-        return (
-            bool(self.allowed_users or self.allowed_chats)
-            and (user_id in self.allowed_users or chat_id in self.allowed_chats)
+        return bool(self.allowed_users or self.allowed_chats) and (
+            user_id in self.allowed_users or chat_id in self.allowed_chats
         )
 
     async def _send_message(self, client: httpx.AsyncClient, chat_id: int, text: str) -> None:
@@ -125,7 +128,10 @@ class TelegramResearchBot:
         )
 
     async def _send_document(
-        self, client: httpx.AsyncClient, chat_id: int, path: Path,
+        self,
+        client: httpx.AsyncClient,
+        chat_id: int,
+        path: Path,
     ) -> None:
         with path.open("rb") as handle:
             await client.post(
@@ -259,7 +265,9 @@ class TelegramResearchBot:
             await self._start_research(client, chat_id, protocol)
         except (httpx.HTTPError, ValueError) as exc:
             await self._send_message(
-                client, chat_id, f"İşlem başarısız: {str(exc)[:1000]}",
+                client,
+                chat_id,
+                f"İşlem başarısız: {str(exc)[:1000]}",
             )
 
     async def _handle(self, client: httpx.AsyncClient, message: dict) -> None:
@@ -292,8 +300,10 @@ class TelegramResearchBot:
         try:
             if command == "/research":
                 explicit_minutes = "--minutes" in parts[1:]
+                hitl_enabled = "--hitl" in parts[1:]
+                research_parts = [item for item in parts[1:] if item != "--hitl"]
                 mode, question, budget = parse_research_request(
-                    parts[1:],
+                    research_parts,
                     default_minutes=self.settings.telegram_default_max_wall_minutes,
                     maximum_minutes=self.settings.telegram_max_wall_minutes,
                     default_sources=self.settings.telegram_default_max_sources,
@@ -304,6 +314,12 @@ class TelegramResearchBot:
                     primary_question=question,
                     output_mode=mode.value,
                     budget=budget,
+                    hitl=HitlConfig(
+                        planning_questions=hitl_enabled,
+                        plan_review=hitl_enabled,
+                        source_review=hitl_enabled,
+                        outline_review=hitl_enabled,
+                    ),
                 )
                 if explicit_minutes:
                     await self._start_research(client, chat_id, protocol)
@@ -311,11 +327,72 @@ class TelegramResearchBot:
                     await self._offer_duration(client, message, protocol)
             elif command == "/status" and len(parts) == 2:
                 run = await self.gateway.status(parts[1])
+                interaction = run.get("interaction") or {}
+                hitl_note = ""
+                if interaction:
+                    hitl_note = (
+                        f"\nKullanıcı girdisi bekleniyor: {interaction.get('type')}"
+                        f"\nInteraction: {interaction.get('interaction_id')}"
+                        f"\nYanıt: /respond {run['id']} ..."
+                    )
                 await self._send_message(
                     client,
                     chat_id,
                     f"{run['id']}\nDurum: {run['status']}\nAşama: {run['current_stage']}\n"
-                    f"Kaynak: {run['sources_count']} | İddia: {run['claims_count']}",
+                    f"Kaynak: {run['sources_count']} | İddia: {run['claims_count']}"
+                    f"{hitl_note}",
+                )
+            elif command == "/respond" and len(parts) >= 3:
+                run = await self.gateway.status(parts[1])
+                interaction = run.get("interaction") or {}
+                interaction_id = interaction.get("interaction_id")
+                interaction_type = interaction.get("type")
+                if not interaction_id:
+                    raise ValueError("Bekleyen kullanıcı girdisi yok.")
+                verb = parts[2].lower()
+                tail = " ".join(parts[3:]).strip()
+                if interaction_type in {"plan_review", "outline_review"}:
+                    if verb not in {"approve", "reject"}:
+                        raise ValueError("approve veya reject <değişiklik> kullanın.")
+                    payload = {"approved": verb == "approve"}
+                    if tail:
+                        payload["modifications"] = tail
+                elif interaction_type == "planning_questions":
+                    if verb != "answer" or not tail:
+                        raise ValueError("answer <yanıt> kullanın.")
+                    questions = (interaction.get("data") or {}).get("questions", [])
+                    payload = {
+                        "answers": [
+                            {"question": item.get("question", ""), "answer": tail}
+                            for item in questions
+                        ]
+                    }
+                elif interaction_type == "source_review":
+                    tokens = parts[2:]
+                    lowered = [item.lower() for item in tokens]
+                    if "include" not in lowered:
+                        raise ValueError("include <alan,adları> [exclude <alan,adları>] kullanın.")
+                    include_at = lowered.index("include")
+                    exclude_at = lowered.index("exclude") if "exclude" in lowered else len(tokens)
+                    include_text = " ".join(tokens[include_at + 1 : exclude_at])
+                    exclude_text = (
+                        " ".join(tokens[exclude_at + 1 :]) if exclude_at < len(tokens) else ""
+                    )
+                    payload = {
+                        "included_domains": [
+                            x.strip() for x in include_text.split(",") if x.strip()
+                        ],
+                        "excluded_domains": [
+                            x.strip() for x in exclude_text.split(",") if x.strip()
+                        ],
+                    }
+                else:
+                    raise ValueError("Bilinmeyen checkpoint türü.")
+                updated = await self.gateway.respond(parts[1], interaction_id, payload)
+                await self._send_message(
+                    client,
+                    chat_id,
+                    f"{updated['id']}: yanıt alındı, durum {updated['status']}",
                 )
             elif command == "/get" and len(parts) in {2, 3}:
                 mode = DeliveryMode(parts[2] if len(parts) == 3 else "both")

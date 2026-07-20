@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import uvicorn
@@ -27,13 +28,63 @@ from .passages import retrieve_passages
 from .repository import Repository
 from .paperqa_adapter import paperqa2_health
 from .schemas import (
-    ArtifactView, CorpusSearchRequest, DeliveryMode, ResearchRunCreate, RunStatus, RunView,
-    SourceFamily, ZoteroSyncRequest, ZoteroSyncResult,
+    ArtifactView,
+    CorpusSearchRequest,
+    DeliveryMode,
+    HitlRespondRequest,
+    ResearchRunCreate,
+    RunStatus,
+    RunView,
+    SourceFamily,
+    ZoteroSyncRequest,
+    ZoteroSyncResult,
 )
 from .storage import ObjectStore
 from .zotero_sync import ZoteroSyncService
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_hitl_response(interaction_type: str, response: dict) -> dict:
+    if interaction_type == "planning_questions":
+        answers = response.get("answers")
+        if not isinstance(answers, list) or not answers:
+            raise HTTPException(status_code=400, detail="answers must be a non-empty list")
+        if any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("question"), str)
+            or not isinstance(item.get("answer"), str)
+            or not item["answer"].strip()
+            for item in answers
+        ):
+            raise HTTPException(
+                status_code=400, detail="each answer needs question and answer strings"
+            )
+        return {"answers": answers}
+    if interaction_type in {"plan_review", "outline_review"}:
+        if not isinstance(response.get("approved"), bool):
+            raise HTTPException(status_code=400, detail="approved boolean is required")
+        result = {"approved": response["approved"]}
+        if response.get("modifications"):
+            result["modifications"] = str(response["modifications"])[:5000]
+        return result
+    if interaction_type == "source_review":
+        included = response.get("included_domains")
+        excluded = response.get("excluded_domains")
+        if not isinstance(included, list) or not isinstance(excluded, list):
+            raise HTTPException(
+                status_code=400,
+                detail="included_domains and excluded_domains arrays are required",
+            )
+        return {
+            "included_domains": [
+                str(item).strip().lower() for item in included if str(item).strip()
+            ],
+            "excluded_domains": [
+                str(item).strip().lower() for item in excluded if str(item).strip()
+            ],
+        }
+    raise HTTPException(status_code=400, detail="Unknown interaction type")
 
 
 async def _connect_redis(app: FastAPI, *, attempts: int = 1, delay_s: float = 1.0):
@@ -55,9 +106,7 @@ async def _connect_redis(app: FastAPI, *, attempts: int = 1, delay_s: float = 1.
             return app.state.redis
         for attempt in range(1, attempts + 1):
             try:
-                app.state.redis = await create_pool(
-                    RedisSettings.from_dsn(settings.redis_url)
-                )
+                app.state.redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
                 return app.state.redis
             except Exception as exc:
                 logger.warning(
@@ -96,12 +145,14 @@ async def _reconcile_interrupted_runs(app: FastAPI) -> None:
                 {"stage": row.current_stage, "reconciled": True},
             )
 
-        terminal = await repo.list_runs_by_statuses({
-            RunStatus.CANCELLED.value,
-            RunStatus.COMPLETED.value,
-            RunStatus.COMPLETED_INCOMPLETE.value,
-            RunStatus.FAILED.value,
-        })
+        terminal = await repo.list_runs_by_statuses(
+            {
+                RunStatus.CANCELLED.value,
+                RunStatus.COMPLETED.value,
+                RunStatus.COMPLETED_INCOMPLETE.value,
+                RunStatus.FAILED.value,
+            }
+        )
         for row in terminal:
             await discard_stable_job(row.id)
 
@@ -135,8 +186,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Research Platform API", version="0.6.7",
-    description="Local-first, multi-source evidence research platform", lifespan=lifespan,
+    title="Research Platform API",
+    version="0.6.8",
+    description="Local-first, multi-source evidence research platform",
+    lifespan=lifespan,
 )
 
 
@@ -216,7 +269,8 @@ async def create_research_run(
             ) from exc
     elif not settings.testing:
         await repo.update_run(
-            row.id, status=RunStatus.FAILED.value,
+            row.id,
+            status=RunStatus.FAILED.value,
             error="Redis queue unavailable; run was not started",
         )
     row = await repo.get_run(row.id)
@@ -237,12 +291,15 @@ async def get_research_run(run_id: str, repo: Repository = Depends(repository)) 
 
 @app.get("/v1/research-runs", response_model=list[RunView], dependencies=[Depends(authorize)])
 async def list_research_runs(
-    limit: int = 50, repo: Repository = Depends(repository),
+    limit: int = 50,
+    repo: Repository = Depends(repository),
 ) -> list[RunView]:
     return [repo.run_view(row) for row in await repo.list_runs(limit=limit)]
 
 
-@app.post("/v1/research-runs/{run_id}/pause", response_model=RunView, dependencies=[Depends(authorize)])
+@app.post(
+    "/v1/research-runs/{run_id}/pause", response_model=RunView, dependencies=[Depends(authorize)]
+)
 async def pause_research_run(run_id: str, repo: Repository = Depends(repository)) -> RunView:
     row = await _required_run(run_id, repo)
     if row.status not in {RunStatus.QUEUED.value, RunStatus.RUNNING.value}:
@@ -250,13 +307,17 @@ async def pause_research_run(run_id: str, repo: Repository = Depends(repository)
     return repo.run_view(await repo.update_run(run_id, status=RunStatus.PAUSED.value))
 
 
-@app.post("/v1/research-runs/{run_id}/resume", response_model=RunView, dependencies=[Depends(authorize)])
+@app.post(
+    "/v1/research-runs/{run_id}/resume", response_model=RunView, dependencies=[Depends(authorize)]
+)
 async def resume_research_run(
     run_id: str, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
     row = await _required_run(run_id, repo)
     if row.status != RunStatus.PAUSED.value:
         raise HTTPException(status_code=409, detail=f"Cannot resume run in {row.status}")
+    if row.interaction:
+        raise HTTPException(status_code=409, detail="Respond to the pending HITL interaction first")
     redis = await _connect_redis(request.app, attempts=3)
     if redis is None:
         raise HTTPException(status_code=503, detail="Redis queue unavailable")
@@ -278,16 +339,94 @@ async def resume_research_run(
     return repo.run_view(row)
 
 
-@app.post("/v1/research-runs/{run_id}/cancel", response_model=RunView, dependencies=[Depends(authorize)])
+@app.post(
+    "/v1/research-runs/{run_id}/respond",
+    response_model=RunView,
+    dependencies=[Depends(authorize)],
+)
+async def respond_to_hitl(
+    run_id: str,
+    body: HitlRespondRequest,
+    request: Request,
+    repo: Repository = Depends(repository),
+) -> RunView:
+    row = await _required_run(run_id, repo)
+    if row.status not in {RunStatus.AWAITING_INPUT.value, RunStatus.PAUSED.value}:
+        raise HTTPException(status_code=409, detail=f"Run is not awaiting input: {row.status}")
+    interaction = row.interaction or {}
+    if interaction.get("interaction_id") != body.interaction_id:
+        raise HTTPException(status_code=409, detail="interaction_id mismatch")
+    response = _validate_hitl_response(str(interaction.get("type")), body.response)
+    responded_at = datetime.now(timezone.utc)
+    created_at = datetime.fromisoformat(
+        str(interaction.get("created_at", responded_at.isoformat())).replace("Z", "+00:00")
+    )
+    checkpoint = await repo.latest_checkpoint(run_id)
+    if checkpoint:
+        checkpoint_state = dict(checkpoint.state or {})
+        budget_started = checkpoint_state.get("budget_started_at")
+        if budget_started:
+            started_at = datetime.fromisoformat(str(budget_started).replace("Z", "+00:00"))
+            checkpoint_state["budget_started_at"] = (
+                started_at + max(timedelta(0), responded_at - created_at)
+            ).isoformat()
+            await repo.checkpoint(run_id, checkpoint.stage, checkpoint_state)
+    history = [
+        *(row.hitl_history or []),
+        {
+            **interaction,
+            "responded_at": responded_at.isoformat(),
+            "auto_continued": False,
+            "response": response,
+        },
+    ]
+    redis = await _connect_redis(request.app, attempts=3)
+    if redis is None:
+        raise HTTPException(status_code=503, detail="Redis queue unavailable")
+    row = await repo.update_run(
+        run_id,
+        status=RunStatus.QUEUED.value,
+        interaction=None,
+        hitl_history=history,
+        error=None,
+    )
+    await repo.event(
+        run_id,
+        "hitl_responded",
+        {
+            "interaction_id": body.interaction_id,
+            "type": interaction.get("type"),
+            "response": response,
+        },
+    )
+    queued = await redis.enqueue_job("execute_research_run", run_id)
+    if queued is None:
+        await repo.update_run(run_id, status=RunStatus.PAUSED.value)
+        raise HTTPException(status_code=503, detail="Research queue rejected the HITL response")
+    return repo.run_view(row)
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/cancel", response_model=RunView, dependencies=[Depends(authorize)]
+)
 async def cancel_research_run(run_id: str, repo: Repository = Depends(repository)) -> RunView:
     row = await _required_run(run_id, repo)
-    if row.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_INCOMPLETE.value, RunStatus.CANCELLED.value}:
+    if row.status in {
+        RunStatus.COMPLETED.value,
+        RunStatus.COMPLETED_INCOMPLETE.value,
+        RunStatus.CANCELLED.value,
+    }:
         raise HTTPException(status_code=409, detail=f"Cannot cancel run in {row.status}")
     # A queued job has no in-flight work to unwind. The worker pre-start guard
     # safely ignores a stale queue entry if Redis has already delivered it.
     status = (
         RunStatus.CANCELLED.value
-        if row.status == RunStatus.QUEUED.value
+        if row.status
+        in {
+            RunStatus.QUEUED.value,
+            RunStatus.AWAITING_INPUT.value,
+            RunStatus.PAUSED.value,
+        }
         else RunStatus.CANCEL_REQUESTED.value
     )
     row = await repo.update_run(run_id, status=status)
@@ -306,12 +445,23 @@ async def stream_events(run_id: str, repo: Repository = Depends(repository)) -> 
             rows = await repo.events_after(run_id, after_id)
             for row in rows:
                 after_id = row.id
-                yield {"id": str(row.id), "event": row.event_type, "data": json.dumps(row.payload, ensure_ascii=False)}
+                yield {
+                    "id": str(row.id),
+                    "event": row.event_type,
+                    "data": json.dumps(row.payload, ensure_ascii=False),
+                }
             run = await repo.get_run(run_id)
-            if run and run.status in {
-                RunStatus.COMPLETED.value, RunStatus.COMPLETED_INCOMPLETE.value,
-                RunStatus.CANCELLED.value, RunStatus.FAILED.value,
-            } and not rows:
+            if (
+                run
+                and run.status
+                in {
+                    RunStatus.COMPLETED.value,
+                    RunStatus.COMPLETED_INCOMPLETE.value,
+                    RunStatus.CANCELLED.value,
+                    RunStatus.FAILED.value,
+                }
+                and not rows
+            ):
                 break
             yield {"event": "heartbeat", "data": "{}"}
             await asyncio.sleep(1)
@@ -322,19 +472,33 @@ async def stream_events(run_id: str, repo: Repository = Depends(repository)) -> 
 @app.get("/v1/research-runs/{run_id}/sources", dependencies=[Depends(authorize)])
 async def list_sources(run_id: str, repo: Repository = Depends(repository)) -> list[dict]:
     await _required_run(run_id, repo)
-    return [{
-        "id": s.id, "family": s.family, "connector_id": s.connector_id,
-        "title": s.title, "url": s.url, "persistent_id": s.persistent_id,
-    } for s in await repo.list_sources(run_id)]
+    return [
+        {
+            "id": s.id,
+            "family": s.family,
+            "connector_id": s.connector_id,
+            "title": s.title,
+            "url": s.url,
+            "persistent_id": s.persistent_id,
+        }
+        for s in await repo.list_sources(run_id)
+    ]
 
 
 @app.get("/v1/research-runs/{run_id}/claims", dependencies=[Depends(authorize)])
 async def list_claims(run_id: str, repo: Repository = Depends(repository)) -> list[dict]:
     await _required_run(run_id, repo)
-    return [{
-        "id": c.id, "text": c.text, "importance": c.importance,
-        "status": c.status, "confidence": c.confidence, "audit": c.audit,
-    } for c in await repo.list_claims(run_id)]
+    return [
+        {
+            "id": c.id,
+            "text": c.text,
+            "importance": c.importance,
+            "status": c.status,
+            "confidence": c.confidence,
+            "audit": c.audit,
+        }
+        for c in await repo.list_claims(run_id)
+    ]
 
 
 @app.get("/v1/research-runs/{run_id}/coverage", dependencies=[Depends(authorize)])
@@ -343,26 +507,35 @@ async def get_coverage(run_id: str, repo: Repository = Depends(repository)) -> d
 
 
 @app.get(
-    "/v1/research-runs/{run_id}/artifacts", response_model=list[ArtifactView],
+    "/v1/research-runs/{run_id}/artifacts",
+    response_model=list[ArtifactView],
     dependencies=[Depends(authorize)],
 )
 async def list_artifacts(run_id: str, repo: Repository = Depends(repository)) -> list[ArtifactView]:
     await _required_run(run_id, repo)
-    return [ArtifactView(
-        name=a.name, media_type=a.media_type, size_bytes=a.size_bytes,
-        download_url=f"/v1/research-runs/{run_id}/artifacts/{a.name}",
-    ) for a in await repo.list_artifacts(run_id)]
+    return [
+        ArtifactView(
+            name=a.name,
+            media_type=a.media_type,
+            size_bytes=a.size_bytes,
+            download_url=f"/v1/research-runs/{run_id}/artifacts/{a.name}",
+        )
+        for a in await repo.list_artifacts(run_id)
+    ]
 
 
 @app.get("/v1/research-runs/{run_id}/artifacts/{name}", dependencies=[Depends(authorize)])
-async def download_artifact(run_id: str, name: str, repo: Repository = Depends(repository)) -> Response:
+async def download_artifact(
+    run_id: str, name: str, repo: Repository = Depends(repository)
+) -> Response:
     artifacts = {a.name: a for a in await repo.list_artifacts(run_id)}
     artifact = artifacts.get(name)
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
     data = await ObjectStore(get_settings()).get(artifact.object_key)
     return Response(
-        data, media_type=artifact.media_type,
+        data,
+        media_type=artifact.media_type,
         headers={"Content-Disposition": f'attachment; filename="{artifact.name}"'},
     )
 
@@ -372,7 +545,9 @@ async def download_artifact(run_id: str, name: str, repo: Repository = Depends(r
     dependencies=[Depends(authorize)],
 )
 async def download_delivery(
-    run_id: str, mode: DeliveryMode, repo: Repository = Depends(repository),
+    run_id: str,
+    mode: DeliveryMode,
+    repo: Repository = Depends(repository),
 ) -> Response:
     bundle_by_mode = {
         DeliveryMode.RAW: "raw_bundle.zip",
@@ -402,17 +577,17 @@ async def list_zotero_collections(mode: str, request: Request) -> list[dict]:
 
 
 @app.post(
-    "/v1/zotero/sync", response_model=ZoteroSyncResult,
+    "/v1/zotero/sync",
+    response_model=ZoteroSyncResult,
     dependencies=[Depends(authorize)],
 )
 async def sync_zotero(
-    body: ZoteroSyncRequest, request: Request,
+    body: ZoteroSyncRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> ZoteroSyncResult:
     try:
-        return await ZoteroSyncService(
-            get_settings(), session, request.app.state.http
-        ).sync(body)
+        return await ZoteroSyncService(get_settings(), session, request.app.state.http).sync(body)
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -426,18 +601,26 @@ async def citation_graph(run_id: str, repo: Repository = Depends(repository)) ->
     sources = {source.id: source for source in await repo.list_sources(run_id)}
     relations = await repo.list_source_relations(run_id)
     return {
-        "nodes": [{
-            "id": source.id, "title": source.title, "persistent_id": source.persistent_id,
-            "connector_id": source.connector_id,
-        } for source in sources.values()],
-        "edges": [{
-            "source_id": relation.source_id,
-            "target_source_id": relation.target_source_id,
-            "target_persistent_id": relation.target_persistent_id,
-            "relation_type": relation.relation_type,
-            "provider": relation.provider,
-            "metadata": relation.metadata_json,
-        } for relation in relations],
+        "nodes": [
+            {
+                "id": source.id,
+                "title": source.title,
+                "persistent_id": source.persistent_id,
+                "connector_id": source.connector_id,
+            }
+            for source in sources.values()
+        ],
+        "edges": [
+            {
+                "source_id": relation.source_id,
+                "target_source_id": relation.target_source_id,
+                "target_persistent_id": relation.target_persistent_id,
+                "relation_type": relation.relation_type,
+                "provider": relation.provider,
+                "metadata": relation.metadata_json,
+            }
+            for relation in relations
+        ],
     }
 
 
@@ -448,7 +631,8 @@ async def citation_graph(run_id: str, repo: Repository = Depends(repository)) ->
 async def academic_coverage(run_id: str, repo: Repository = Depends(repository)) -> dict:
     await _required_run(run_id, repo)
     academic = [
-        source for source in await repo.list_sources(run_id)
+        source
+        for source in await repo.list_sources(run_id)
         if source.family == SourceFamily.ACADEMIC.value
     ]
     providers = {
@@ -458,7 +642,8 @@ async def academic_coverage(run_id: str, repo: Repository = Depends(repository))
     }
     versions = await repo.list_source_versions(run_id)
     full_text_source_ids = {
-        source.id for source, version in versions
+        source.id
+        for source, version in versions
         if bool(version.content.strip()) and version.acquisition_method != "zotero_metadata"
     }
     return {
@@ -469,16 +654,16 @@ async def academic_coverage(run_id: str, repo: Repository = Depends(repository))
             for source in academic
         ),
         "with_full_text": sum(source.id in full_text_source_ids for source in academic),
-        "retracted": sum(
-            bool(source.metadata_json.get("is_retracted")) for source in academic
-        ),
+        "retracted": sum(bool(source.metadata_json.get("is_retracted")) for source in academic),
         "citation_edges": len(await repo.list_source_relations(run_id)),
     }
 
 
 @app.post("/v1/corpus/search", dependencies=[Depends(authorize)])
 async def search_local_corpus(
-    body: CorpusSearchRequest, request: Request, repo: Repository = Depends(repository),
+    body: CorpusSearchRequest,
+    request: Request,
+    repo: Repository = Depends(repository),
 ) -> list[dict]:
     passages = await repo.list_corpus_passages(exclude_run_id="", limit=5000)
     if not passages:
@@ -487,18 +672,28 @@ async def search_local_corpus(
         vectors = await EmbeddingClient(get_settings(), request.app.state.http).embed([body.query])
     except Exception:
         vectors = [[]]
-    selected = retrieve_passages(passages, [body.query], vectors, per_question=body.top_k)[:body.top_k]
-    source_metadata = await repo.source_metadata_for_versions(list({
-        passage.source_version_id for passage in selected
-    }))
-    return [{
-        "passage_id": passage.id, "source_version_id": passage.source_version_id,
-        "section_path": passage.section_path, "page_number": passage.page_number,
-        "start_char": passage.start_char, "end_char": passage.end_char,
-        "language": passage.language, "document_type": passage.document_type,
-        "score": passage.retrieval_score, "text": passage.text,
-        "source": source_metadata.get(passage.source_version_id, {}),
-    } for passage in selected]
+    selected = retrieve_passages(passages, [body.query], vectors, per_question=body.top_k)[
+        : body.top_k
+    ]
+    source_metadata = await repo.source_metadata_for_versions(
+        list({passage.source_version_id for passage in selected})
+    )
+    return [
+        {
+            "passage_id": passage.id,
+            "source_version_id": passage.source_version_id,
+            "section_path": passage.section_path,
+            "page_number": passage.page_number,
+            "start_char": passage.start_char,
+            "end_char": passage.end_char,
+            "language": passage.language,
+            "document_type": passage.document_type,
+            "score": passage.retrieval_score,
+            "text": passage.text,
+            "source": source_metadata.get(passage.source_version_id, {}),
+        }
+        for passage in selected
+    ]
 
 
 @app.post("/v1/connectors/{connector_id}/test", dependencies=[Depends(authorize)])

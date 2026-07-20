@@ -85,6 +85,15 @@ class ResearchBudget(BaseModel):
     acquisition_concurrency: int = Field(4, ge=1, le=16)
 
 
+class HitlConfig(BaseModel):
+    """Optional user checkpoints for a single research run."""
+
+    planning_questions: bool = False
+    plan_review: bool = False
+    source_review: bool = False
+    outline_review: bool = False
+
+
 class ConnectorSelection(BaseModel):
     profile: Literal["core", "all", "custom"] = "core"
     included_families: list[SourceFamily] = Field(default_factory=lambda: CORE_FAMILIES.copy())
@@ -121,9 +130,27 @@ class SentinelSource(BaseModel):
 
 
 ACADEMIC_PUBLICATION_SIGNALS = {
-    "academic", "article", "clinical", "doi", "journal", "literature", "paper",
-    "papers", "preprint", "published", "publication", "radiomics", "research",
-    "study", "studies", "trial", "arxiv", "makale", "yayın", "yayin", "çalışma",
+    "academic",
+    "article",
+    "clinical",
+    "doi",
+    "journal",
+    "literature",
+    "paper",
+    "papers",
+    "preprint",
+    "published",
+    "publication",
+    "radiomics",
+    "research",
+    "study",
+    "studies",
+    "trial",
+    "arxiv",
+    "makale",
+    "yayın",
+    "yayin",
+    "çalışma",
     "calisma",
 }
 
@@ -154,6 +181,7 @@ class ResearchProtocol(BaseModel):
     stopping_criteria: StoppingCriteria = Field(default_factory=StoppingCriteria)
     budget: ResearchBudget = Field(default_factory=ResearchBudget)
     output_mode: Literal["raw", "result", "both"] = "both"
+    hitl: HitlConfig = Field(default_factory=HitlConfig)
 
     @model_validator(mode="after")
     def normalize_targets_and_validate_budget(self) -> "ResearchProtocol":
@@ -198,9 +226,8 @@ class ResearchProtocol(BaseModel):
                 f"{self.budget.max_sources}"
             )
         normalized_question = self.primary_question.lower()
-        if (
-            self.authority_policy.minimum_authority == AuthorityLevel.ANY
-            and any(term in normalized_question for term in ("resmî", "resmi", "official documentation"))
+        if self.authority_policy.minimum_authority == AuthorityLevel.ANY and any(
+            term in normalized_question for term in ("resmî", "resmi", "official documentation")
         ):
             self.authority_policy.minimum_authority = AuthorityLevel.OFFICIAL
             self.authority_policy.strict_for_major_claims = True
@@ -210,6 +237,7 @@ class ResearchProtocol(BaseModel):
 class RunStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
+    AWAITING_INPUT = "awaiting_input"
     PAUSED = "paused"
     CANCEL_REQUESTED = "cancel_requested"
     CANCELLED = "cancelled"
@@ -226,6 +254,11 @@ class DeliveryMode(StrEnum):
 
 class ResearchRunCreate(BaseModel):
     protocol: ResearchProtocol
+
+
+class HitlRespondRequest(BaseModel):
+    interaction_id: str = Field(min_length=3, max_length=100)
+    response: dict[str, Any]
 
 
 class CoverageMetrics(BaseModel):
@@ -259,6 +292,9 @@ class RunView(BaseModel):
     created_at: datetime
     updated_at: datetime
     error: str | None = None
+    hitl_config: HitlConfig = Field(default_factory=HitlConfig)
+    interaction: dict[str, Any] | None = None
+    hitl_history: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ConnectorCandidate(BaseModel):
@@ -309,8 +345,13 @@ class CitationGraphEdge(BaseModel):
     target_source_id: str | None = None
     target_persistent_id: str | None = None
     relation_type: Literal[
-        "cites", "cited_by", "is_version_of", "is_preprint_of",
-        "has_attachment", "supplements", "related_zotero_item",
+        "cites",
+        "cited_by",
+        "is_version_of",
+        "is_preprint_of",
+        "has_attachment",
+        "supplements",
+        "related_zotero_item",
     ]
     provider: str
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -398,8 +439,13 @@ class CorpusSearchRequest(BaseModel):
 class CoverageGap(BaseModel):
     id: str = Field(default_factory=new_id)
     dimension: Literal[
-        "source_family", "authority", "query_branch",
-        "claim_support", "counterevidence", "version", "sentinel",
+        "source_family",
+        "authority",
+        "query_branch",
+        "claim_support",
+        "counterevidence",
+        "version",
+        "sentinel",
     ]
     topic: str
     branch_id: str | None = None

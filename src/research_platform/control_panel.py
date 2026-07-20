@@ -55,6 +55,7 @@ ACTIVE_STATUSES = {
     RunStatus.QUEUED.value,
     RunStatus.RUNNING.value,
     RunStatus.PAUSED.value,
+    RunStatus.AWAITING_INPUT.value,
     RunStatus.CANCEL_REQUESTED.value,
 }
 TERMINAL_STATUSES = {
@@ -157,13 +158,15 @@ async def _queue_snapshot() -> dict[str, Any]:
         for position, (job_id, score) in enumerate(rows, start=1):
             running = bool(await redis.exists(f"{in_progress_key_prefix}{job_id}"))
             run_id = job_id.removeprefix("run:") if job_id.startswith("run:") else None
-            jobs.append({
-                "job_id": job_id,
-                "run_id": run_id,
-                "position": position,
-                "running": running,
-                "score": score,
-            })
+            jobs.append(
+                {
+                    "job_id": job_id,
+                    "run_id": run_id,
+                    "position": position,
+                    "running": running,
+                    "score": score,
+                }
+            )
         return {
             "available": True,
             "depth": len(rows),
@@ -195,32 +198,39 @@ async def _run_snapshot(queue: dict[str, Any]) -> dict[str, list[dict[str, Any]]
         if item["run_id"] and not item["running"]
     }
     async with SessionLocal() as session:
-        rows = list(await session.scalars(
-            select(ResearchRunRow).order_by(ResearchRunRow.created_at.desc()).limit(60)
-        ))
+        rows = list(
+            await session.scalars(
+                select(ResearchRunRow).order_by(ResearchRunRow.created_at.desc()).limit(60)
+            )
+        )
     serialized = []
     for row in rows:
         protocol = row.protocol or {}
-        serialized.append({
-            "id": row.id,
-            "status": row.status,
-            "current_stage": row.current_stage,
-            "title": protocol.get("title") or "İsimsiz araştırma",
-            "question": protocol.get("primary_question") or "",
-            "output_mode": protocol.get("output_mode") or "both",
-            "round_number": row.round_number,
-            "sources_count": row.sources_count,
-            "claims_count": row.claims_count,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-            "error": row.error,
-            "coverage": row.coverage or {},
-            "elapsed_seconds": round(
-                max(0.0, (row.updated_at - row.created_at).total_seconds()), 2,
-            ) if row.created_at and row.updated_at else 0.0,
-            "queue_position": queue_positions.get(row.id),
-            "progress_percent": pipeline_progress(row.current_stage, row.status),
-        })
+        serialized.append(
+            {
+                "id": row.id,
+                "status": row.status,
+                "current_stage": row.current_stage,
+                "title": protocol.get("title") or "İsimsiz araştırma",
+                "question": protocol.get("primary_question") or "",
+                "output_mode": protocol.get("output_mode") or "both",
+                "round_number": row.round_number,
+                "sources_count": row.sources_count,
+                "claims_count": row.claims_count,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "error": row.error,
+                "coverage": row.coverage or {},
+                "elapsed_seconds": round(
+                    max(0.0, (row.updated_at - row.created_at).total_seconds()),
+                    2,
+                )
+                if row.created_at and row.updated_at
+                else 0.0,
+                "queue_position": queue_positions.get(row.id),
+                "progress_percent": pipeline_progress(row.current_stage, row.status),
+            }
+        )
     return {
         "active": [item for item in serialized if item["status"] in ACTIVE_STATUSES],
         "recent": [item for item in serialized if item["status"] in TERMINAL_STATUSES][:20],
@@ -257,8 +267,7 @@ async def _external_health() -> dict[str, Any]:
 
 async def _gpu_snapshot() -> list[dict[str, Any]]:
     command = (
-        "index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,"
-        "power.draw,power.limit"
+        "index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit"
     )
     try:
         process = await asyncio.create_subprocess_exec(
@@ -274,6 +283,7 @@ async def _gpu_snapshot() -> list[dict[str, Any]]:
     except (FileNotFoundError, TimeoutError):
         return []
     output = []
+
     def number(value: str) -> float | None:
         try:
             return float(value)
@@ -285,16 +295,18 @@ async def _gpu_snapshot() -> list[dict[str, Any]]:
         if len(values) != 8:
             continue
         try:
-            output.append({
-                "index": int(values[0]),
-                "name": values[1],
-                "utilization_percent": number(values[2]),
-                "memory_used_mb": number(values[3]),
-                "memory_total_mb": number(values[4]),
-                "temperature_c": number(values[5]),
-                "power_draw_w": number(values[6]),
-                "power_limit_w": number(values[7]),
-            })
+            output.append(
+                {
+                    "index": int(values[0]),
+                    "name": values[1],
+                    "utilization_percent": number(values[2]),
+                    "memory_used_mb": number(values[3]),
+                    "memory_total_mb": number(values[4]),
+                    "temperature_c": number(values[5]),
+                    "power_draw_w": number(values[6]),
+                    "power_limit_w": number(values[7]),
+                }
+            )
         except (TypeError, ValueError):
             continue
     return output
@@ -345,7 +357,7 @@ async def build_status() -> dict[str, Any]:
     any_running = any(item["running"] for item in processes.values())
     overall = "running" if core_running else "degraded" if any_running else "stopped"
     return {
-        "version": "0.6.7",
+        "version": "0.6.8",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "overall": overall,
         "processes": processes,
@@ -363,28 +375,41 @@ async def _run_detail(run_id: str) -> dict[str, Any]:
         run = await session.get(ResearchRunRow, run_id)
         if run is None:
             raise HTTPException(status_code=404, detail="Araştırma bulunamadı")
-        events = list(await session.scalars(
-            select(EventRow).where(EventRow.run_id == run_id).order_by(EventRow.id).limit(5000)
-        ))
-        sources = list(await session.scalars(
-            select(SourceRow).where(SourceRow.run_id == run_id)
-            .order_by(SourceRow.created_at.desc()).limit(500)
-        ))
-        claims = list(await session.scalars(
-            select(ClaimRow).where(ClaimRow.run_id == run_id)
-        ))
-        evidence = list((await session.scalars(
-            select(EvidenceRow).join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
-            .where(ClaimRow.run_id == run_id)
-        )).all())
-        artifacts = list(await session.scalars(
-            select(ArtifactRow).where(ArtifactRow.run_id == run_id)
-            .order_by(ArtifactRow.name)
-        ))
-        checkpoints = list(await session.scalars(
-            select(CheckpointRow).where(CheckpointRow.run_id == run_id)
-            .order_by(CheckpointRow.created_at)
-        ))
+        events = list(
+            await session.scalars(
+                select(EventRow).where(EventRow.run_id == run_id).order_by(EventRow.id).limit(5000)
+            )
+        )
+        sources = list(
+            await session.scalars(
+                select(SourceRow)
+                .where(SourceRow.run_id == run_id)
+                .order_by(SourceRow.created_at.desc())
+                .limit(500)
+            )
+        )
+        claims = list(await session.scalars(select(ClaimRow).where(ClaimRow.run_id == run_id)))
+        evidence = list(
+            (
+                await session.scalars(
+                    select(EvidenceRow)
+                    .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
+                    .where(ClaimRow.run_id == run_id)
+                )
+            ).all()
+        )
+        artifacts = list(
+            await session.scalars(
+                select(ArtifactRow).where(ArtifactRow.run_id == run_id).order_by(ArtifactRow.name)
+            )
+        )
+        checkpoints = list(
+            await session.scalars(
+                select(CheckpointRow)
+                .where(CheckpointRow.run_id == run_id)
+                .order_by(CheckpointRow.created_at)
+            )
+        )
     claim_statuses: dict[str, int] = {}
     for claim in claims:
         claim_statuses[claim.status] = claim_statuses.get(claim.status, 0) + 1
@@ -409,6 +434,8 @@ async def _run_detail(run_id: str) -> dict[str, Any]:
             "error": run.error,
             "protocol": run.protocol or {},
             "coverage": run.coverage or {},
+            "interaction": run.interaction,
+            "hitl_history": run.hitl_history or [],
         },
         "timeline": stage_timeline(events, updated or datetime.now(timezone.utc)),
         "flow": pipeline_flow(
@@ -428,34 +455,43 @@ async def _run_detail(run_id: str) -> dict[str, Any]:
             "statuses": claim_statuses,
             "evidence_links": len(evidence),
         },
-        "sources": [{
-            "id": source.id,
-            "title": source.title,
-            "url": source.url,
-            "family": source.family,
-            "connector_id": source.connector_id,
-            "persistent_id": source.persistent_id,
-            "created_at": source.created_at.isoformat() if source.created_at else None,
-            "admission_tier": (source.metadata_json or {}).get("admission_tier", "accept"),
-            "discovery_method": (source.metadata_json or {}).get("discovery_method", "search"),
-            "relevance_score": max(
-                _safe_float((source.metadata_json or {}).get("relevance_score")),
-                _safe_float((source.metadata_json or {}).get("content_relevance_score")),
-            ),
-            "query_branches": (source.metadata_json or {}).get("query_branches", []),
-            "published_at": (source.metadata_json or {}).get("published_at"),
-        } for source in sources],
+        "sources": [
+            {
+                "id": source.id,
+                "title": source.title,
+                "url": source.url,
+                "family": source.family,
+                "connector_id": source.connector_id,
+                "persistent_id": source.persistent_id,
+                "created_at": source.created_at.isoformat() if source.created_at else None,
+                "admission_tier": (source.metadata_json or {}).get("admission_tier", "accept"),
+                "discovery_method": (source.metadata_json or {}).get("discovery_method", "search"),
+                "relevance_score": max(
+                    _safe_float((source.metadata_json or {}).get("relevance_score")),
+                    _safe_float((source.metadata_json or {}).get("content_relevance_score")),
+                ),
+                "query_branches": (source.metadata_json or {}).get("query_branches", []),
+                "published_at": (source.metadata_json or {}).get("published_at"),
+            }
+            for source in sources
+        ],
         "events": [serialize_event(event) for event in events[-150:]],
-        "checkpoints": [{
-            "stage": checkpoint.stage,
-            "created_at": checkpoint.created_at.isoformat() if checkpoint.created_at else None,
-        } for checkpoint in checkpoints],
-        "artifacts": [{
-            "name": artifact.name,
-            "media_type": artifact.media_type,
-            "size_bytes": artifact.size_bytes,
-            "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
-        } for artifact in artifacts],
+        "checkpoints": [
+            {
+                "stage": checkpoint.stage,
+                "created_at": checkpoint.created_at.isoformat() if checkpoint.created_at else None,
+            }
+            for checkpoint in checkpoints
+        ],
+        "artifacts": [
+            {
+                "name": artifact.name,
+                "media_type": artifact.media_type,
+                "size_bytes": artifact.size_bytes,
+                "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
+            }
+            for artifact in artifacts
+        ],
     }
 
 
@@ -473,14 +509,26 @@ async def _connector_snapshot() -> list[dict[str, Any]]:
     except httpx.HTTPError:
         health_rows = []
     async with SessionLocal() as session:
-        events = list(await session.scalars(
-            select(EventRow).where(EventRow.event_type.in_((
-                "connector_metrics", "connector_error",
-            ))).order_by(EventRow.id.desc()).limit(2500)
-        ))
-        sources = list(await session.scalars(
-            select(SourceRow).order_by(SourceRow.created_at.desc()).limit(5000)
-        ))
+        events = list(
+            await session.scalars(
+                select(EventRow)
+                .where(
+                    EventRow.event_type.in_(
+                        (
+                            "connector_metrics",
+                            "connector_error",
+                        )
+                    )
+                )
+                .order_by(EventRow.id.desc())
+                .limit(2500)
+            )
+        )
+        sources = list(
+            await session.scalars(
+                select(SourceRow).order_by(SourceRow.created_at.desc()).limit(5000)
+            )
+        )
     operations = connector_operations(list(reversed(events)))
     accepted_counts: dict[str, int] = {}
     for source in sources:
@@ -491,24 +539,32 @@ async def _connector_snapshot() -> list[dict[str, Any]]:
     for connector_id in sorted(ids):
         health = health_by_id.get(connector_id, {})
         metrics = operations.get(connector_id, {})
-        output.append({
-            "id": connector_id,
-            "family": health.get("family", "unknown"),
-            "enabled": health.get("enabled", False),
-            "healthy": health.get("healthy", False),
-            "detail": health.get("detail", "Health verisi alınamadı"),
-            "capabilities": health.get("capabilities", []),
-            "requires_credentials": health.get("requires_credentials", False),
-            "missing_credentials": health.get("missing_credentials", []),
-            "accepted_sources": accepted_counts.get(connector_id, 0),
-            **{
-                "calls": 0, "successes": 0, "success_rate": 0.0,
-                "result_count": 0, "errors": 0, "error_types": {},
-                "average_latency_seconds": 0.0, "p95_latency_seconds": 0.0,
-                "last_success_at": None, "last_error_at": None,
-                **metrics,
-            },
-        })
+        output.append(
+            {
+                "id": connector_id,
+                "family": health.get("family", "unknown"),
+                "enabled": health.get("enabled", False),
+                "healthy": health.get("healthy", False),
+                "detail": health.get("detail", "Health verisi alınamadı"),
+                "capabilities": health.get("capabilities", []),
+                "requires_credentials": health.get("requires_credentials", False),
+                "missing_credentials": health.get("missing_credentials", []),
+                "accepted_sources": accepted_counts.get(connector_id, 0),
+                **{
+                    "calls": 0,
+                    "successes": 0,
+                    "success_rate": 0.0,
+                    "result_count": 0,
+                    "errors": 0,
+                    "error_types": {},
+                    "average_latency_seconds": 0.0,
+                    "p95_latency_seconds": 0.0,
+                    "last_success_at": None,
+                    "last_error_at": None,
+                    **metrics,
+                },
+            }
+        )
     return output
 
 
@@ -544,15 +600,14 @@ async def _run_powershell(script: str) -> tuple[int, str]:
 
 app = FastAPI(
     title="Research Platform Control Panel",
-    version="0.6.7",
+    version="0.6.8",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
 )
 panel_settings = get_settings()
 panel_networks = (
-    panel_settings.control_panel_allowed_networks
-    or panel_settings.mcp_allowed_networks
+    panel_settings.control_panel_allowed_networks or panel_settings.mcp_allowed_networks
 )
 app.add_middleware(ControlPanelNetworkGuard, allowed_networks=panel_networks)
 app.add_middleware(
@@ -582,7 +637,7 @@ async def index() -> HTMLResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.6.7"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.6.8"}
 
 
 @app.get("/api/status", dependencies=[Depends(require_control_token)])
@@ -645,12 +700,14 @@ async def system_action(action: Literal["start", "stop", "restart"]) -> dict[str
     if action_lock.locked():
         raise HTTPException(status_code=409, detail="Başka bir sistem işlemi devam ediyor")
     async with action_lock:
-        action_state.update({
-            "busy": True,
-            "action": action,
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "last_error": None,
-        })
+        action_state.update(
+            {
+                "busy": True,
+                "action": action,
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "last_error": None,
+            }
+        )
         script = "stop_native.ps1" if action == "stop" else "start_office_server.ps1"
         try:
             return_code, output = await _run_powershell(script)
@@ -682,8 +739,29 @@ async def run_action(
     return response.json()
 
 
-@app.get("/api/logs/{service}", response_class=PlainTextResponse,
-         dependencies=[Depends(require_control_token)])
+@app.post("/api/runs/{run_id}/respond", dependencies=[Depends(require_control_token)])
+async def run_respond(run_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                f"{settings.research_api_url.rstrip('/')}/v1/research-runs/{run_id}/respond",
+                headers={"Authorization": f"Bearer {settings.api_token}"},
+                json=body,
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
+    if not response.is_success:
+        detail = response.json().get("detail", response.text[:500])
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
+
+
+@app.get(
+    "/api/logs/{service}",
+    response_class=PlainTextResponse,
+    dependencies=[Depends(require_control_token)],
+)
 async def logs(service: str) -> PlainTextResponse:
     if service not in LOG_SERVICES:
         raise HTTPException(status_code=404, detail="Bilinmeyen servis")
@@ -699,10 +777,7 @@ async def logs(service: str) -> PlainTextResponse:
 def run() -> None:
     settings = get_settings()
     networks = settings.control_panel_allowed_networks or settings.mcp_allowed_networks
-    if (
-        settings.control_panel_host not in {"127.0.0.1", "localhost", "::1"}
-        and not networks
-    ):
+    if settings.control_panel_host not in {"127.0.0.1", "localhost", "::1"} and not networks:
         raise RuntimeError("LAN control panel requires CONTROL_PANEL_ALLOWED_NETWORKS")
     uvicorn.run(
         "research_platform.control_panel:app",

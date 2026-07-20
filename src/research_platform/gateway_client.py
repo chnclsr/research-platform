@@ -48,22 +48,37 @@ class ResearchGatewayClient:
         if action not in {"pause", "resume", "cancel"}:
             raise ValueError(f"Unsupported action: {action}")
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.post(f"{self.base_url}/v1/research-runs/{run_id}/{action}")
+            response.raise_for_status()
+            return response.json()
+
+    async def respond(
+        self,
+        run_id: str,
+        interaction_id: str,
+        response_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
             response = await client.post(
-                f"{self.base_url}/v1/research-runs/{run_id}/{action}"
+                f"{self.base_url}/v1/research-runs/{run_id}/respond",
+                json={"interaction_id": interaction_id, "response": response_payload},
             )
             response.raise_for_status()
             return response.json()
 
     async def artifacts(self, run_id: str) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
-            response = await client.get(
-                f"{self.base_url}/v1/research-runs/{run_id}/artifacts"
-            )
+            response = await client.get(f"{self.base_url}/v1/research-runs/{run_id}/artifacts")
             response.raise_for_status()
             return response.json()
 
     async def read_artifact(
-        self, run_id: str, name: str, *, offset: int = 0, max_chars: int = 100_000,
+        self,
+        run_id: str,
+        name: str,
+        *,
+        offset: int = 0,
+        max_chars: int = 100_000,
     ) -> str:
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
             response = await client.get(
@@ -71,7 +86,7 @@ class ResearchGatewayClient:
             )
             response.raise_for_status()
             text = response.content.decode("utf-8", errors="replace")
-            selected = text[offset:offset + max_chars]
+            selected = text[offset : offset + max_chars]
             if offset + max_chars < len(text):
                 selected += f"\n\n[TRUNCATED next_offset={offset + max_chars}]"
             return selected

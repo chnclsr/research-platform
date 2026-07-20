@@ -54,9 +54,7 @@ def pipeline_flow(
         visits[stage] += 1
     last_observed = str(timeline[-1]["stage"]) if timeline else current_stage
     effective_stage = (
-        "COMPLETE"
-        if current_stage == "COMPLETE"
-        else last_observed if timeline else current_stage
+        "COMPLETE" if current_stage == "COMPLETE" else last_observed if timeline else current_stage
     )
     terminal = status in {"completed", "completed_incomplete", "failed", "cancelled"}
     nodes = []
@@ -65,20 +63,22 @@ def pipeline_flow(
         if stage == "INIT" and not timeline:
             state = "active" if status in {"queued", "running"} else state
         if stage == effective_stage and not terminal:
-            state = "paused" if status == "paused" else "active"
+            state = "paused" if status in {"paused", "awaiting_input"} else "active"
         if stage == last_observed and status in {"failed", "cancelled"}:
             state = "error"
         if stage == "COMPLETE" and status in {"completed", "completed_incomplete"}:
             state = "completed"
         if terminal and state == "pending":
             state = "skipped"
-        nodes.append({
-            "stage": stage,
-            "label": label,
-            "state": state,
-            "visits": visits[stage],
-            "duration_seconds": round(durations[stage], 2),
-        })
+        nodes.append(
+            {
+                "stage": stage,
+                "label": label,
+                "state": state,
+                "visits": visits[stage],
+                "duration_seconds": round(durations[stage], 2),
+            }
+        )
     return {
         "nodes": nodes,
         "progress_percent": pipeline_progress(effective_stage, status),
@@ -112,23 +112,27 @@ def stage_timeline(events: list[Any], now: datetime | None = None) -> list[dict[
             continue
         payload = _event_value(event, "payload", {}) or {}
         created_at = _event_value(event, "created_at")
-        stages.append({
-            "stage": payload.get("stage", "UNKNOWN"),
-            "round": payload.get("round", 0),
-            "created_at": created_at,
-        })
+        stages.append(
+            {
+                "stage": payload.get("stage", "UNKNOWN"),
+                "round": payload.get("round", 0),
+                "created_at": created_at,
+            }
+        )
     stages.sort(key=lambda item: item["created_at"] or now)
     output = []
     for index, item in enumerate(stages):
         start = item["created_at"] or now
         end = stages[index + 1]["created_at"] if index + 1 < len(stages) else now
-        output.append({
-            "stage": item["stage"],
-            "round": item["round"],
-            "started_at": start.isoformat(),
-            "duration_seconds": round(max(0.0, (end - start).total_seconds()), 2),
-            "active": index == len(stages) - 1,
-        })
+        output.append(
+            {
+                "stage": item["stage"],
+                "round": item["round"],
+                "started_at": start.isoformat(),
+                "duration_seconds": round(max(0.0, (end - start).total_seconds()), 2),
+                "active": index == len(stages) - 1,
+            }
+        )
     return output
 
 
@@ -166,23 +170,36 @@ def source_funnel(events: list[Any], final_sources: int) -> dict[str, Any]:
             values["content_rejected"] += int(payload.get("rejected_count", 0))
         elif event_type == "coverage_gaps":
             latest_quality = payload.get("discovery_quality", {}) or latest_quality
-    admission.update({
-        "accept": int(latest_quality.get("accepted_candidates", 0)),
-        "reserve": int(latest_quality.get("reserve_selected", 0)),
-        "reject": int(latest_quality.get("hard_rejected", 0)),
-    })
+    admission.update(
+        {
+            "accept": int(latest_quality.get("accepted_candidates", 0)),
+            "reserve": int(latest_quality.get("reserve_selected", 0)),
+            "reject": int(latest_quality.get("hard_rejected", 0)),
+        }
+    )
     ordered = [
         {"id": "discovered", "label": "Arama sonucu", "value": values["discovered"]},
-        {"id": "after_dedupe", "label": "Tekilleştirme sonrası", "value": max(
-            0, values["discovered"] - values["deduplicated"],
-        )},
-        {"id": "after_temporal", "label": "Tarih filtresi sonrası", "value": max(
-            0,
-            values["discovered"] - values["deduplicated"] - values["temporal_rejected"],
-        )},
-        {"id": "acquisition_attempted", "label": "Edinime seçilen", "value": values[
-            "acquisition_attempted"
-        ]},
+        {
+            "id": "after_dedupe",
+            "label": "Tekilleştirme sonrası",
+            "value": max(
+                0,
+                values["discovered"] - values["deduplicated"],
+            ),
+        },
+        {
+            "id": "after_temporal",
+            "label": "Tarih filtresi sonrası",
+            "value": max(
+                0,
+                values["discovered"] - values["deduplicated"] - values["temporal_rejected"],
+            ),
+        },
+        {
+            "id": "acquisition_attempted",
+            "label": "Edinime seçilen",
+            "value": values["acquisition_attempted"],
+        },
         {"id": "acquired", "label": "Başarılı edinim", "value": values["acquisition_succeeded"]},
         {"id": "final", "label": "Nihai ilgili kaynak", "value": final_sources},
     ]
@@ -196,15 +213,18 @@ def query_branch_summary(events: list[Any]) -> list[dict[str, Any]]:
             continue
         for call in (_event_value(event, "payload", {}) or {}).get("calls", []):
             branch_id = str(call.get("branch_id") or "unknown")
-            branch = branches.setdefault(branch_id, {
-                "branch_id": branch_id,
-                "query": call.get("query") or "",
-                "result_count": 0,
-                "calls": 0,
-                "successful_calls": 0,
-                "connectors": [],
-                "latency_seconds": 0.0,
-            })
+            branch = branches.setdefault(
+                branch_id,
+                {
+                    "branch_id": branch_id,
+                    "query": call.get("query") or "",
+                    "result_count": 0,
+                    "calls": 0,
+                    "successful_calls": 0,
+                    "connectors": [],
+                    "latency_seconds": 0.0,
+                },
+            )
             branch["calls"] += 1
             branch["successful_calls"] += int(bool(call.get("success")))
             branch["result_count"] += int(call.get("result_count", 0))
@@ -216,16 +236,18 @@ def query_branch_summary(events: list[Any]) -> list[dict[str, Any]]:
 
 
 def connector_operations(events: list[Any]) -> dict[str, dict[str, Any]]:
-    rows: dict[str, dict[str, Any]] = defaultdict(lambda: {
-        "calls": 0,
-        "successes": 0,
-        "result_count": 0,
-        "latencies": [],
-        "errors": 0,
-        "error_types": defaultdict(int),
-        "last_success_at": None,
-        "last_error_at": None,
-    })
+    rows: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {
+            "calls": 0,
+            "successes": 0,
+            "result_count": 0,
+            "latencies": [],
+            "errors": 0,
+            "error_types": defaultdict(int),
+            "last_success_at": None,
+            "last_error_at": None,
+        }
+    )
     for event in events:
         event_type = _event_value(event, "event_type")
         payload = _event_value(event, "payload", {}) or {}
@@ -247,10 +269,14 @@ def connector_operations(events: list[Any]) -> dict[str, dict[str, Any]]:
             row = rows[connector]
             row["errors"] += 1
             error = str(payload.get("error") or "unknown").lower()
-            error_type = next((
-                name for name in ("429", "403", "timeout", "connection", "citation")
-                if name in error
-            ), "other")
+            error_type = next(
+                (
+                    name
+                    for name in ("429", "403", "timeout", "connection", "citation")
+                    if name in error
+                ),
+                "other",
+            )
             row["error_types"][error_type] += 1
             row["last_error_at"] = stamp
     output = {}
@@ -281,7 +307,10 @@ def llm_summary(events: list[Any]) -> dict[str, Any]:
         "completion_tokens": completion_tokens,
         "wall_seconds": round(sum(float(call.get("wall_seconds", 0.0)) for call in calls), 2),
         "tokens_per_second": round(
-            completion_tokens / generation_seconds, 2,
-        ) if generation_seconds else 0.0,
+            completion_tokens / generation_seconds,
+            2,
+        )
+        if generation_seconds
+        else 0.0,
         "models": sorted({str(call.get("model")) for call in calls if call.get("model")}),
     }

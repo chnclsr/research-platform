@@ -1,8 +1,8 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.7`
+Platform sürümü: `v0.6.8`
 
-Belge sürümü: `3.1`
+Belge sürümü: `3.2`
 
 Son güncelleme: `2026-07-20`
 
@@ -144,6 +144,31 @@ Bot komutları:
 /resume <run_id>
 /cancel <run_id>
 ```
+
+## Human-in-the-loop (HITL)
+
+Bir run için dört checkpoint bağımsız olarak açılabilir: `planning_questions`,
+`plan_review`, `source_review` ve `outline_review`. Checkpoint geldiğinde durum
+`awaiting_input` olur. Beş dakika içinde yanıt gelmezse worker belleği tutulmaz;
+state PostgreSQL'de korunarak durum `paused` olur. Aynı interaction daha sonra
+yanıtlandığında araştırma yeniden kuyruğa alınır ve kullanıcı bekleme süresi çalışma
+bütçesinden düşülmez.
+
+API protokol örneği:
+
+```json
+"hitl": {
+  "planning_questions": true,
+  "plan_review": true,
+  "source_review": true,
+  "outline_review": true
+}
+```
+
+Yanıt uç noktası `POST /v1/research-runs/{id}/respond` olup gövdede güncel
+`interaction_id` ve checkpoint türüne uygun `response` ister. Telegram'da bütün
+checkpoint'leri açmak için `/research --hitl <soru>`; bağlı Codex/Claude için MCP
+`start_research` HITL bayrakları ve `respond_to_research_checkpoint` aracı kullanılır.
 
 ## API ile araştırma başlatma
 
