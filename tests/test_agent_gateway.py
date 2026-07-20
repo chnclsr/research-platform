@@ -83,13 +83,29 @@ def test_telegram_requires_non_empty_allowlist():
     bot = object.__new__(TelegramResearchBot)
     bot.allowed_users = set()
     bot.allowed_chats = set()
-    message = {"from": {"id": 10}, "chat": {"id": 20}}
+    bot.allow_group_chats = False
+    message = {"from": {"id": 10}, "chat": {"id": 20, "type": "private"}}
     assert not bot._authorized(message)
     bot.allowed_users = {10}
     assert bot._authorized(message)
     bot.allowed_users = set()
     bot.allowed_chats = {20}
     assert bot._authorized(message)
+
+
+def test_telegram_can_authorize_every_member_of_group_without_opening_private_chats():
+    bot = object.__new__(TelegramResearchBot)
+    bot.allowed_users = set()
+    bot.allowed_chats = set()
+    bot.allow_group_chats = True
+    assert bot._authorized({
+        "from": {"id": 999},
+        "chat": {"id": -100123, "type": "supergroup"},
+    })
+    assert not bot._authorized({
+        "from": {"id": 999},
+        "chat": {"id": 999, "type": "private"},
+    })
 
 
 @pytest.mark.asyncio

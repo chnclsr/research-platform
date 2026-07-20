@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     telegram_api_url: str = "https://api.telegram.org"
     telegram_allowed_user_ids: list[int] = Field(default_factory=list)
     telegram_allowed_chat_ids: list[int] = Field(default_factory=list)
+    telegram_allow_group_chats: bool = False
     user_agent: str = "ResearchPlatform/0.1 (local research; contact=local)"
 
     max_download_bytes: int = 25 * 1024 * 1024
