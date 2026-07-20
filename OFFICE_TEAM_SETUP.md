@@ -1,8 +1,8 @@
 # Research Platform Ofis Sunucusu
 
-Belge sürümü: `1.4`
+Belge sürümü: `1.5`
 
-Platform sürümü: `v0.6.5`
+Platform sürümü: `v0.6.6`
 
 Tarih: `2026-07-20`
 
@@ -129,6 +129,11 @@ Komutlar:
 /resume <run_id>
 /cancel <run_id>
 ```
+
+`--minutes` verilmezse bot dört buton gösterir: **Hızlı (10 dk)**,
+**Standart (30 dk)**, **Derin (120 dk)** ve **Maksimum (180 dk)**. Araştırma yalnız
+kullanıcı bir süre düğmesine bastıktan sonra kuyruğa alınır. `--minutes N` verilirse bu
+ekran atlanarak iş doğrudan başlatılır.
 
 `--sources` verilmezse kaynak sayısı için global tavan uygulanmaz; araştırma süre,
 coverage, saturation veya tur kriteriyle durur. Örnek kullanıcı limiti:

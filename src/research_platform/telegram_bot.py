@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import shlex
+import time
 from pathlib import Path
 
 import httpx
@@ -20,6 +22,28 @@ HELP = """Research Platform komutları:
 /resume <run_id>
 /cancel <run_id>
 """
+
+RESEARCH_TIME_OPTIONS = (
+    ("⚡ Hızlı", 10),
+    ("⚖ Standart", 30),
+    ("🧠 Derin", 120),
+    ("🔥 Maksimum", 180),
+)
+PENDING_REQUEST_TTL_SECONDS = 15 * 60
+
+
+def duration_keyboard(request_id: str) -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": f"{label} · {minutes} dk",
+                    "callback_data": f"research_time:{request_id}:{minutes}",
+                }
+            ]
+            for label, minutes in RESEARCH_TIME_OPTIONS
+        ]
+    }
 
 
 def parse_research_request(
@@ -79,6 +103,7 @@ class TelegramResearchBot:
         self.allowed_chats = set(self.settings.telegram_allowed_chat_ids)
         self.allow_group_chats = self.settings.telegram_allow_group_chats
         self.allow_all_users = self.settings.telegram_allow_all_users
+        self.pending_research: dict[str, dict] = {}
 
     def _authorized(self, message: dict) -> bool:
         user_id = int((message.get("from") or {}).get("id", 0))
@@ -110,6 +135,133 @@ class TelegramResearchBot:
                 timeout=None,
             )
 
+    async def _start_research(
+        self,
+        client: httpx.AsyncClient,
+        chat_id: int,
+        protocol: ResearchProtocol,
+    ) -> None:
+        run = await self.gateway.start(protocol)
+        budget = protocol.budget
+        await self._send_message(
+            client,
+            chat_id,
+            f"Run başlatıldı: {run['id']}\nTeslim modu: {protocol.output_mode}\n"
+            f"Bütçe: {budget.max_wall_minutes} dk, "
+            f"{budget.max_sources or 'süreye bağlı sınırsız'} kaynak, "
+            f"{budget.max_rounds} tur\n"
+            f"Durum için: /status {run['id']}",
+        )
+
+    async def _offer_duration(
+        self,
+        client: httpx.AsyncClient,
+        message: dict,
+        protocol: ResearchProtocol,
+    ) -> None:
+        now = time.monotonic()
+        self.pending_research = {
+            key: value
+            for key, value in self.pending_research.items()
+            if now - float(value["created_at"]) < PENDING_REQUEST_TTL_SECONDS
+        }
+        request_id = secrets.token_urlsafe(6)
+        chat_id = int((message.get("chat") or {}).get("id", 0))
+        user_id = int((message.get("from") or {}).get("id", 0))
+        self.pending_research[request_id] = {
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "created_at": now,
+            "protocol": protocol.model_dump(mode="json"),
+        }
+        await client.post(
+            f"{self.bot_url}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": (
+                    "Araştırma süresini seçin:\n"
+                    "Kaynak sayısı süre boyunca sınırsızdır; coverage yeterli olursa "
+                    "araştırma daha erken tamamlanabilir."
+                ),
+                "reply_markup": duration_keyboard(request_id),
+            },
+        )
+
+    async def _handle_callback(self, client: httpx.AsyncClient, callback: dict) -> None:
+        callback_id = str(callback.get("id") or "")
+        message = callback.get("message") or {}
+        chat = message.get("chat") or {}
+        chat_id = int(chat.get("id", 0))
+        user = callback.get("from") or {}
+        auth_message = {"from": user, "chat": chat}
+        if not self._authorized(auth_message):
+            await client.post(
+                f"{self.bot_url}/answerCallbackQuery",
+                json={
+                    "callback_query_id": callback_id,
+                    "text": "Araştırma yetkiniz yok.",
+                    "show_alert": True,
+                },
+            )
+            return
+        data = str(callback.get("data") or "")
+        parts = data.split(":")
+        if len(parts) != 3 or parts[0] != "research_time":
+            await client.post(
+                f"{self.bot_url}/answerCallbackQuery",
+                json={"callback_query_id": callback_id, "text": "Geçersiz seçim."},
+            )
+            return
+        request_id = parts[1]
+        pending = self.pending_research.pop(request_id, None)
+        try:
+            minutes = int(parts[2])
+        except ValueError:
+            minutes = 0
+        valid_minutes = {value for _, value in RESEARCH_TIME_OPTIONS}
+        expired = pending and (
+            time.monotonic() - float(pending["created_at"]) >= PENDING_REQUEST_TTL_SECONDS
+        )
+        if (
+            pending is None
+            or expired
+            or int(pending["chat_id"]) != chat_id
+            or int(pending["user_id"]) != int(user.get("id", 0))
+            or minutes not in valid_minutes
+            or minutes > self.settings.telegram_max_wall_minutes
+        ):
+            await client.post(
+                f"{self.bot_url}/answerCallbackQuery",
+                json={
+                    "callback_query_id": callback_id,
+                    "text": "Bu seçim geçersiz veya süresi dolmuş.",
+                    "show_alert": True,
+                },
+            )
+            return
+        await client.post(
+            f"{self.bot_url}/answerCallbackQuery",
+            json={"callback_query_id": callback_id, "text": "Araştırma başlatılıyor…"},
+        )
+        protocol = ResearchProtocol.model_validate(pending["protocol"])
+        protocol.budget = protocol.budget.model_copy(
+            update={"max_wall_minutes": minutes},
+        )
+        await client.post(
+            f"{self.bot_url}/editMessageReplyMarkup",
+            json={
+                "chat_id": chat_id,
+                "message_id": int(message.get("message_id", 0)),
+                "reply_markup": {"inline_keyboard": []},
+            },
+        )
+        try:
+            await self._start_research(client, chat_id, protocol)
+        except (httpx.HTTPError, ValueError) as exc:
+            await self._send_message(
+                client, chat_id, f"İşlem başarısız: {str(exc)[:1000]}",
+            )
+
     async def _handle(self, client: httpx.AsyncClient, message: dict) -> None:
         chat_id = int((message.get("chat") or {}).get("id", 0))
         text = str(message.get("text") or "").strip()
@@ -139,6 +291,7 @@ class TelegramResearchBot:
             return
         try:
             if command == "/research":
+                explicit_minutes = "--minutes" in parts[1:]
                 mode, question, budget = parse_research_request(
                     parts[1:],
                     default_minutes=self.settings.telegram_default_max_wall_minutes,
@@ -146,21 +299,16 @@ class TelegramResearchBot:
                     default_sources=self.settings.telegram_default_max_sources,
                     default_rounds=self.settings.telegram_default_max_rounds,
                 )
-                run = await self.gateway.start(ResearchProtocol(
+                protocol = ResearchProtocol(
                     title=question[:120],
                     primary_question=question,
                     output_mode=mode.value,
                     budget=budget,
-                ))
-                await self._send_message(
-                    client,
-                    chat_id,
-                    f"Run başlatıldı: {run['id']}\nTeslim modu: {mode.value}\n"
-                    f"Bütçe: {budget.max_wall_minutes} dk, "
-                    f"{budget.max_sources or 'süreye bağlı sınırsız'} kaynak, "
-                    f"{budget.max_rounds} tur\n"
-                    f"Durum için: /status {run['id']}",
                 )
+                if explicit_minutes:
+                    await self._start_research(client, chat_id, protocol)
+                else:
+                    await self._offer_duration(client, message, protocol)
             elif command == "/status" and len(parts) == 2:
                 run = await self.gateway.status(parts[1])
                 await self._send_message(
@@ -192,7 +340,7 @@ class TelegramResearchBot:
                     params={
                         "offset": offset,
                         "timeout": 60,
-                        "allowed_updates": '["message"]',
+                        "allowed_updates": '["message","callback_query"]',
                     },
                 )
                 response.raise_for_status()
@@ -201,6 +349,9 @@ class TelegramResearchBot:
                     message = update.get("message")
                     if message:
                         await self._handle(client, message)
+                    callback = update.get("callback_query")
+                    if callback:
+                        await self._handle_callback(client, callback)
 
 
 def run() -> None:

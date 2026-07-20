@@ -1,10 +1,20 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.5`
+Platform sürümü: `v0.6.6`
 
-Belge sürümü: `3.0`
+Belge sürümü: `3.1`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.6 — 2026-07-20
+
+- Telegram `/research` komutu süre verilmediğinde işi hemen başlatmak yerine inline süre seçimi gösteriyor.
+- Süre modları Hızlı (10 dk), Standart (30 dk), Derin (120 dk) ve Maksimum (180 dk) olarak tanımlandı.
+- Callback yalnız isteği oluşturan kullanıcı ve chat tarafından, 15 dakika içinde, bir kez kullanılabiliyor.
+- Seçimden sonra butonlar kaldırılıyor ve uygulanan süre ile kaynak politikası başlangıç mesajında gösteriliyor.
+- `--minutes N` kullanan otomasyonlar ve ileri kullanıcılar için doğrudan başlatma yolu korundu.
+- Telegram polling artık `callback_query` update türünü de alıyor.
+- Tam otomatik test sonucu `127 passed`.
 
 ## v0.6.5 — 2026-07-20
 

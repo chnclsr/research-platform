@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import httpx
 import pytest
 import respx
@@ -10,7 +12,9 @@ from starlette.testclient import TestClient
 
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.mcp_server import BearerProtectedMCP
-from research_platform.telegram_bot import TelegramResearchBot, parse_research_request
+from research_platform.telegram_bot import (
+    TelegramResearchBot, duration_keyboard, parse_research_request,
+)
 import research_platform.mcp_server as mcp_module
 
 
@@ -126,7 +130,7 @@ def test_telegram_research_defaults_use_time_without_source_ceiling():
     mode, question, budget = parse_research_request(
         ["raw", "akciğer", "BT", "araştırması"],
         default_minutes=20,
-        maximum_minutes=60,
+        maximum_minutes=180,
         default_sources=None,
         default_rounds=3,
     )
@@ -141,7 +145,7 @@ def test_telegram_research_allows_bounded_time_and_source_overrides():
     _, question, budget = parse_research_request(
         ["both", "--minutes", "35", "--sources", "80", "zor", "konu"],
         default_minutes=20,
-        maximum_minutes=60,
+        maximum_minutes=180,
         default_sources=None,
         default_rounds=3,
     )
@@ -158,14 +162,80 @@ def test_telegram_research_allows_bounded_time_and_source_overrides():
     )
     assert large_budget.max_sources == 5000
 
-    with pytest.raises(ValueError, match="1-60"):
+    with pytest.raises(ValueError, match="1-180"):
         parse_research_request(
-            ["--minutes", "90", "soru"],
+            ["--minutes", "190", "soru"],
             default_minutes=20,
-            maximum_minutes=60,
+            maximum_minutes=180,
             default_sources=None,
             default_rounds=3,
         )
+
+
+def test_duration_keyboard_exposes_four_research_modes():
+    keyboard = duration_keyboard("REQ1")["inline_keyboard"]
+    assert [row[0]["callback_data"] for row in keyboard] == [
+        "research_time:REQ1:10",
+        "research_time:REQ1:30",
+        "research_time:REQ1:120",
+        "research_time:REQ1:180",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_telegram_research_waits_for_inline_duration_selection():
+    class FakeClient:
+        def __init__(self):
+            self.posts = []
+
+        async def post(self, url, **kwargs):
+            self.posts.append((url, kwargs))
+            return SimpleNamespace()
+
+    class FakeGateway:
+        def __init__(self):
+            self.protocols = []
+
+        async def start(self, protocol):
+            self.protocols.append(protocol)
+            return {"id": "RUN1"}
+
+    bot = object.__new__(TelegramResearchBot)
+    bot.settings = SimpleNamespace(
+        telegram_default_max_wall_minutes=20,
+        telegram_max_wall_minutes=180,
+        telegram_default_max_sources=None,
+        telegram_default_max_rounds=3,
+    )
+    bot.bot_url = "https://telegram.test/botTOKEN"
+    bot.gateway = FakeGateway()
+    bot.allowed_users = set()
+    bot.allowed_chats = set()
+    bot.allow_group_chats = False
+    bot.allow_all_users = True
+    bot.pending_research = {}
+    client = FakeClient()
+    message = {
+        "from": {"id": 7},
+        "chat": {"id": 11, "type": "private"},
+        "text": "/research raw kaynak sınırı olmayan araştırma",
+    }
+
+    await bot._handle(client, message)
+    assert bot.gateway.protocols == []
+    picker = client.posts[-1][1]["json"]["reply_markup"]["inline_keyboard"]
+    callback_data = picker[1][0]["callback_data"]
+
+    await bot._handle_callback(client, {
+        "id": "CALLBACK1",
+        "from": {"id": 7},
+        "data": callback_data,
+        "message": {"message_id": 99, "chat": {"id": 11, "type": "private"}},
+    })
+
+    assert len(bot.gateway.protocols) == 1
+    assert bot.gateway.protocols[0].budget.max_wall_minutes == 30
+    assert bot.gateway.protocols[0].budget.max_sources is None
 
 
 @pytest.mark.asyncio
