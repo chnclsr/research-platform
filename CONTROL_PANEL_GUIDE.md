@@ -1,8 +1,8 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `2.2`
+Belge sürümü: `2.3`
 
-Platform sürümü: `v0.6.8`
+Platform sürümü: `v0.6.9`
 
 Tarih: `2026-07-20`
 

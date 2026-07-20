@@ -1,10 +1,17 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.8`
+Platform sürümü: `v0.6.9`
 
-Belge sürümü: `3.3`
+Belge sürümü: `3.4`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.9 — 2026-07-20
+
+- Telegram `/research both 2 <soru>` kısa yazımı artık `2` değerini dakika olarak algılar
+  ve süre seçim menüsünü tekrar açmadan araştırmayı doğrudan başlatır.
+- Açık `--minutes 2` biçimi ve süre verilmediğinde gösterilen butonlu seçim akışı korunmuştur.
+- Tam regresyon paketi `135 passed`.
 
 ## v0.6.8 — 2026-07-20
 

@@ -1,8 +1,8 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.8`
+Platform sürümü: `v0.6.9`
 
-Belge sürümü: `3.2`
+Belge sürümü: `3.3`
 
 Son güncelleme: `2026-07-20`
 
@@ -137,7 +137,7 @@ docker compose --profile telegram up -d telegram-bot
 Bot komutları:
 
 ```text
-/research [raw|result|both] <soru>
+/research [raw|result|both] [dakika] [--hitl] <soru>
 /status <run_id>
 /get <run_id> [raw|result|both]
 /pause <run_id>
@@ -169,6 +169,9 @@ Yanıt uç noktası `POST /v1/research-runs/{id}/respond` olup gövdede güncel
 `interaction_id` ve checkpoint türüne uygun `response` ister. Telegram'da bütün
 checkpoint'leri açmak için `/research --hitl <soru>`; bağlı Codex/Claude için MCP
 `start_research` HITL bayrakları ve `respond_to_research_checkpoint` aracı kullanılır.
+
+Telegram'da süre hem `/research both --minutes 2 <soru>` hem de kısa biçimde
+`/research both 2 <soru>` olarak verilebilir. Süre yazılmazsa bot seçim menüsünü gösterir.
 
 ## API ile araştırma başlatma
 

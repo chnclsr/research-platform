@@ -187,7 +187,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Research Platform API",
-    version="0.6.8",
+    version="0.6.9",
     description="Local-first, multi-source evidence research platform",
     lifespan=lifespan,
 )

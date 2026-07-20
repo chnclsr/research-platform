@@ -15,7 +15,7 @@ from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 
 HELP = """Research Platform komutları:
 /whoami
-/research [raw|result|both] [--hitl] [--minutes N] [--sources N] <soru>
+/research [raw|result|both] [dakika|--minutes N] [--hitl] [--sources N] <soru>
 /status <run_id>
 /respond <run_id> approve|reject|answer|include ...
 /get <run_id> [raw|result|both]
@@ -61,6 +61,10 @@ def parse_research_request(
         mode = DeliveryMode(tokens.pop(0))
     minutes = default_minutes
     sources = default_sources
+    if tokens and tokens[0].lstrip("+-").isdigit():
+        minutes = int(tokens.pop(0))
+        if not 1 <= minutes <= maximum_minutes:
+            raise ValueError(f"Süre 1-{maximum_minutes} dakika arasında olmalıdır.")
     while tokens and tokens[0].startswith("--"):
         option = tokens.pop(0)
         if option not in {"--minutes", "--sources"} or not tokens:
@@ -88,6 +92,15 @@ def parse_research_request(
             max_sources=sources,
             max_rounds=default_rounds,
         ),
+    )
+
+
+def has_explicit_duration(parts: list[str]) -> bool:
+    tokens = [item for item in parts if item != "--hitl"]
+    if tokens and tokens[0] in {item.value for item in DeliveryMode}:
+        tokens.pop(0)
+    return "--minutes" in tokens or bool(
+        tokens and tokens[0].lstrip("+-").isdigit()
     )
 
 
@@ -299,7 +312,7 @@ class TelegramResearchBot:
             return
         try:
             if command == "/research":
-                explicit_minutes = "--minutes" in parts[1:]
+                explicit_minutes = has_explicit_duration(parts[1:])
                 hitl_enabled = "--hitl" in parts[1:]
                 research_parts = [item for item in parts[1:] if item != "--hitl"]
                 mode, question, budget = parse_research_request(

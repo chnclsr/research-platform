@@ -13,7 +13,7 @@ from starlette.testclient import TestClient
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.mcp_server import BearerProtectedMCP
 from research_platform.telegram_bot import (
-    TelegramResearchBot, duration_keyboard, parse_research_request,
+    TelegramResearchBot, duration_keyboard, has_explicit_duration, parse_research_request,
 )
 import research_platform.mcp_server as mcp_module
 
@@ -172,6 +172,22 @@ def test_telegram_research_allows_bounded_time_and_source_overrides():
         )
 
 
+def test_telegram_accepts_positional_minutes_after_delivery_mode():
+    mode, question, budget = parse_research_request(
+        ["both", "2", "lung", "cancer", "CT"],
+        default_minutes=20,
+        maximum_minutes=180,
+        default_sources=None,
+        default_rounds=3,
+    )
+    assert mode.value == "both"
+    assert question == "lung cancer CT"
+    assert budget.max_wall_minutes == 2
+    assert has_explicit_duration(["both", "2", "lung", "cancer", "CT"])
+    assert has_explicit_duration(["raw", "--minutes", "4", "question"])
+    assert not has_explicit_duration(["both", "lung", "cancer", "CT"])
+
+
 def test_duration_keyboard_exposes_four_research_modes():
     keyboard = duration_keyboard("REQ1")["inline_keyboard"]
     assert [row[0]["callback_data"] for row in keyboard] == [
@@ -236,6 +252,16 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     assert len(bot.gateway.protocols) == 1
     assert bot.gateway.protocols[0].budget.max_wall_minutes == 30
     assert bot.gateway.protocols[0].budget.max_sources is None
+
+    bot.gateway.protocols.clear()
+    await bot._handle(client, {
+        "from": {"id": 7},
+        "chat": {"id": 11, "type": "private"},
+        "text": "/research both 2 lung cancer detection by CT",
+    })
+    assert len(bot.gateway.protocols) == 1
+    assert bot.gateway.protocols[0].budget.max_wall_minutes == 2
+    assert bot.gateway.protocols[0].primary_question == "lung cancer detection by CT"
 
 
 @pytest.mark.asyncio
