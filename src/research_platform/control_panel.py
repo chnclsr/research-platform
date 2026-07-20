@@ -24,6 +24,8 @@ from .config import get_settings
 from .control_panel_metrics import (
     connector_operations,
     llm_summary,
+    pipeline_flow,
+    pipeline_progress,
     query_branch_summary,
     serialize_event,
     source_funnel,
@@ -217,6 +219,7 @@ async def _run_snapshot(queue: dict[str, Any]) -> dict[str, list[dict[str, Any]]
                 max(0.0, (row.updated_at - row.created_at).total_seconds()), 2,
             ) if row.created_at and row.updated_at else 0.0,
             "queue_position": queue_positions.get(row.id),
+            "progress_percent": pipeline_progress(row.current_stage, row.status),
         })
     return {
         "active": [item for item in serialized if item["status"] in ACTIVE_STATUSES],
@@ -342,7 +345,7 @@ async def build_status() -> dict[str, Any]:
     any_running = any(item["running"] for item in processes.values())
     overall = "running" if core_running else "degraded" if any_running else "stopped"
     return {
-        "version": "0.6.6",
+        "version": "0.6.7",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "overall": overall,
         "processes": processes,
@@ -408,6 +411,13 @@ async def _run_detail(run_id: str) -> dict[str, Any]:
             "coverage": run.coverage or {},
         },
         "timeline": stage_timeline(events, updated or datetime.now(timezone.utc)),
+        "flow": pipeline_flow(
+            events,
+            current_stage=run.current_stage,
+            status=run.status,
+            round_number=run.round_number,
+            now=updated or datetime.now(timezone.utc),
+        ),
         "funnel": source_funnel(events, len(sources)),
         "quality": {**(run.coverage or {}), **latest_quality},
         "query_branches": query_branch_summary(events),
@@ -534,7 +544,7 @@ async def _run_powershell(script: str) -> tuple[int, str]:
 
 app = FastAPI(
     title="Research Platform Control Panel",
-    version="0.6.6",
+    version="0.6.7",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -572,7 +582,7 @@ async def index() -> HTMLResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.6.6"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.6.7"}
 
 
 @app.get("/api/status", dependencies=[Depends(require_control_token)])

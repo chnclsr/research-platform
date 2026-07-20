@@ -38,13 +38,15 @@ def test_control_panel_is_local_management_surface():
     with TestClient(control_panel.app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.6.6"
+        assert health.json()["version"] == "0.6.7"
 
         page = client.get("/")
         assert page.status_code == 200
         assert "Research Platform" in page.text
         assert "Sentinel recall" in page.text
         assert "Connector operasyon görünümü" in page.text
+        assert "Araştırma akışı" in page.text
+        assert "flow-nodes" in page.text
         assert control_panel.CONTROL_TOKEN in page.text
         assert page.headers["x-frame-options"] == "DENY"
 
@@ -100,6 +102,11 @@ async def test_run_detail_exposes_timeline_funnel_and_quality():
         })
     detail = await control_panel._run_detail(run.id)
     assert detail["timeline"][0]["stage"] == "SEARCH"
+    assert detail["flow"]["current_stage"] == "SEARCH"
+    assert any(
+        node["stage"] == "SEARCH" and node["state"] == "active"
+        for node in detail["flow"]["nodes"]
+    )
     assert detail["funnel"]["steps"][0]["value"] == 3
     assert detail["quality"]["sentinel_recall"] == 0.5
     assert detail["query_branches"][0]["connectors"] == ["crossref"]

@@ -1,10 +1,19 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.6`
+Platform sürümü: `v0.6.7`
 
-Belge sürümü: `3.1`
+Belge sürümü: `3.2`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.7 — 2026-07-20
+
+- Run listesinde mevcut LangGraph aşamasını ve yaklaşık pipeline konumunu gösteren kompakt ilerleme çubuğu eklendi.
+- Run detayına 17 düğümlü yatay flow chart eklendi; tamamlanan, aktif, bekleyen, atlanan, duraklatılan ve hatalı düğümler ayrı görünüyor.
+- Her flow düğümü ziyaret sayısını ve aşamada geçirilen toplam süreyi gösteriyor.
+- Coverage recovery döngüsü gerçekleştiğinde `PLAN_RECOVERY → SEARCH` geri dönüşü ayrıca işaretleniyor.
+- Flow chart mobil/dar ekranda yatay kaydırılabilir ve aktif düğüm erişilebilirlik için `aria-current=step` taşıyor.
+- Tam otomatik test sonucu `129 passed`.
 
 ## v0.6.6 — 2026-07-20
 

@@ -1,10 +1,10 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `2.0`
+Belge sürümü: `2.1`
 
-Platform sürümü: `v0.6.2`
+Platform sürümü: `v0.6.7`
 
-Tarih: `2026-07-17`
+Tarih: `2026-07-20`
 
 ## Amaç
 
@@ -28,10 +28,12 @@ edilmemelidir.
 - PostgreSQL ve Redis erişilebilirliği.
 - ARQ queue derinliği, çalışan/bekleyen iş sayısı ve worker heartbeat TTL'i.
 - Ollama erişimi ve bellekte yüklü yerel model.
-- Aktif ve sıradaki araştırmalar: durum, aşama, sıra, tur, kaynak ve iddia sayısı.
+- Aktif ve sıradaki araştırmalar: durum, aşama ilerleme çubuğu, sıra, tur, kaynak ve iddia sayısı.
 - Son 20 terminal araştırma: tamamlandı, eksik tamamlandı, iptal veya hata.
 - Worker, API, MCP, Telegram ve panel loglarının son bölümü.
 - Run bazında pipeline zaman çizelgesi, aşama süreleri, checkpoint ve yapılandırılmış event’ler.
+- Run detayında tamamlanan/aktif/bekleyen düğümleri, ziyaret sayılarını ve recovery geri dönüşünü
+  gösteren yatay LangGraph flow chart.
 - Kaynak hunisi, `accept / reserve / reject` dağılımı ve her eleme aşamasındaki kayıp.
 - Sentinel recall, estimated completeness, relative recall, citation novelty ve reserve false-negative ölçümleri.
 - Query branch başına connector, sonuç, başarı ve gecikme bilgisi.

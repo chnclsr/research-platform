@@ -5,6 +5,89 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+PIPELINE_STAGES = (
+    ("INIT", "Başlangıç"),
+    ("VALIDATE_PROTOCOL", "Protokol"),
+    ("DECOMPOSE", "Ayrıştırma"),
+    ("BUILD_QUERY_BRANCHES", "Sorgu planı"),
+    ("SEARCH", "Arama"),
+    ("ACQUIRE", "Edinim"),
+    ("NORMALIZE", "Normalizasyon"),
+    ("CHUNK_INDEX", "Parçalama ve indeks"),
+    ("RETRIEVE_PASSAGES", "Pasaj retrieval"),
+    ("EXTRACT_EVIDENCE", "Kanıt çıkarımı"),
+    ("ANALYZE_CLAIMS", "İddia analizi"),
+    ("AUDIT", "Audit"),
+    ("CHECK_COVERAGE", "Coverage kontrolü"),
+    ("PLAN_RECOVERY", "Recovery planı"),
+    ("ADVERSARIAL_REVIEW", "Karşı inceleme"),
+    ("SYNTHESIZE_EXPORT", "Sentez ve çıktı"),
+    ("COMPLETE", "Tamamlandı"),
+)
+
+
+def pipeline_progress(current_stage: str, status: str) -> int:
+    if status in {"completed", "completed_incomplete"} or current_stage == "COMPLETE":
+        return 100
+    if status == "queued" or current_stage == "INIT":
+        return 0
+    order = [stage for stage, _ in PIPELINE_STAGES if stage != "PLAN_RECOVERY"]
+    if current_stage not in order:
+        return 0
+    return round(order.index(current_stage) / (len(order) - 1) * 100)
+
+
+def pipeline_flow(
+    events: list[Any],
+    *,
+    current_stage: str,
+    status: str,
+    round_number: int,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    timeline = stage_timeline(events, now)
+    durations: dict[str, float] = defaultdict(float)
+    visits: dict[str, int] = defaultdict(int)
+    for item in timeline:
+        stage = str(item["stage"])
+        durations[stage] += float(item["duration_seconds"])
+        visits[stage] += 1
+    last_observed = str(timeline[-1]["stage"]) if timeline else current_stage
+    effective_stage = (
+        "COMPLETE"
+        if current_stage == "COMPLETE"
+        else last_observed if timeline else current_stage
+    )
+    terminal = status in {"completed", "completed_incomplete", "failed", "cancelled"}
+    nodes = []
+    for stage, label in PIPELINE_STAGES:
+        state = "completed" if visits[stage] else "pending"
+        if stage == "INIT" and not timeline:
+            state = "active" if status in {"queued", "running"} else state
+        if stage == effective_stage and not terminal:
+            state = "paused" if status == "paused" else "active"
+        if stage == last_observed and status in {"failed", "cancelled"}:
+            state = "error"
+        if stage == "COMPLETE" and status in {"completed", "completed_incomplete"}:
+            state = "completed"
+        if terminal and state == "pending":
+            state = "skipped"
+        nodes.append({
+            "stage": stage,
+            "label": label,
+            "state": state,
+            "visits": visits[stage],
+            "duration_seconds": round(durations[stage], 2),
+        })
+    return {
+        "nodes": nodes,
+        "progress_percent": pipeline_progress(effective_stage, status),
+        "current_stage": effective_stage,
+        "round_number": round_number,
+        "has_recovery_loop": bool(visits["PLAN_RECOVERY"]),
+    }
+
+
 def _event_value(event: Any, name: str, default: Any = None) -> Any:
     if isinstance(event, dict):
         return event.get(name, default)

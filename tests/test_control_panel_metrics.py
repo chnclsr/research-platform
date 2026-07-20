@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from research_platform.control_panel_metrics import (
     connector_operations,
     llm_summary,
+    pipeline_flow,
+    pipeline_progress,
     query_branch_summary,
     source_funnel,
     stage_timeline,
@@ -31,6 +33,35 @@ def test_stage_timeline_reports_round_and_duration():
     assert timeline[0]["duration_seconds"] == 12
     assert timeline[1]["duration_seconds"] == 8
     assert timeline[1]["active"] is True
+
+
+def test_pipeline_progress_maps_live_stage_and_terminal_completion():
+    assert pipeline_progress("INIT", "queued") == 0
+    assert 25 <= pipeline_progress("SEARCH", "running") <= 35
+    assert pipeline_progress("COMPLETE", "completed_incomplete") == 100
+
+
+def test_pipeline_flow_marks_completed_active_and_recovery_nodes():
+    rows = [
+        event("stage", {"stage": "VALIDATE_PROTOCOL", "round": 1}, 0),
+        event("stage", {"stage": "SEARCH", "round": 1}, 5),
+        event("stage", {"stage": "PLAN_RECOVERY", "round": 1}, 10),
+        event("stage", {"stage": "SEARCH", "round": 2}, 15),
+        event("stage", {"stage": "ACQUIRE", "round": 2}, 20),
+    ]
+    flow = pipeline_flow(
+        rows,
+        current_stage="ACQUIRE",
+        status="running",
+        round_number=2,
+        now=datetime(2026, 7, 17, tzinfo=timezone.utc) + timedelta(seconds=30),
+    )
+    nodes = {node["stage"]: node for node in flow["nodes"]}
+    assert nodes["SEARCH"]["state"] == "completed"
+    assert nodes["SEARCH"]["visits"] == 2
+    assert nodes["ACQUIRE"]["state"] == "active"
+    assert nodes["SYNTHESIZE_EXPORT"]["state"] == "pending"
+    assert flow["has_recovery_loop"] is True
 
 
 def test_source_funnel_aggregates_filters_and_admission():
