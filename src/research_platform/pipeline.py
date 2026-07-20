@@ -181,6 +181,17 @@ class ResearchPipeline:
             run.id, "stage", {"stage": stage, "round": state.get("round_number", 0)}
         )
 
+    @staticmethod
+    def _collection_seconds_remaining(state: PipelineState) -> float:
+        protocol = ResearchProtocol.model_validate(state["protocol"])
+        started_at = datetime.fromisoformat(
+            state.get("budget_started_at", datetime.now(timezone.utc).isoformat()).replace(
+                "Z", "+00:00"
+            )
+        )
+        elapsed = max(0.0, (datetime.now(timezone.utc) - started_at).total_seconds())
+        return protocol.budget.max_wall_minutes * 60 - elapsed
+
     async def _hitl_response(self, run_id: str, interaction_type: str) -> dict | None:
         run = await self.repo.get_run(run_id)
         if run is None:
@@ -294,7 +305,6 @@ class ResearchPipeline:
             )
             return
         await self.repo.update_run(run_id, status=RunStatus.RUNNING.value, error=None)
-        protocol = ResearchProtocol.model_validate(row.protocol)
         state: PipelineState = {
             "run_id": run_id,
             "protocol": row.protocol,
@@ -309,22 +319,8 @@ class ResearchPipeline:
             state["protocol"] = row.protocol
             state["started_monotonic"] = time.monotonic()
         state.setdefault("budget_started_at", datetime.now(timezone.utc).isoformat())
-        budget_started_at = datetime.fromisoformat(
-            state["budget_started_at"].replace("Z", "+00:00"),
-        )
-        elapsed_seconds = max(
-            0.0,
-            (datetime.now(timezone.utc) - budget_started_at).total_seconds(),
-        )
-        remaining_seconds = max(
-            0.01,
-            protocol.budget.max_wall_minutes * 60 - elapsed_seconds,
-        )
         try:
-            result = await asyncio.wait_for(
-                self.graph.ainvoke(state, {"recursion_limit": 80}),
-                timeout=remaining_seconds,
-            )
+            result = await self.graph.ainvoke(state, {"recursion_limit": 80})
             if result.get("halted"):
                 return
             coverage = CoverageMetrics.model_validate(result.get("coverage", {}))
@@ -337,55 +333,6 @@ class ResearchPipeline:
             )
             await self.repo.event(run_id, "complete", {"status": status.value})
         except PipelineHalted:
-            return
-        except asyncio.TimeoutError:
-            await self.session.rollback()
-            current = await self.repo.get_run(run_id)
-            coverage = CoverageMetrics.model_validate(current.coverage or {})
-            coverage.sufficient = False
-            coverage.reasons = list(dict.fromkeys([*coverage.reasons, "budget_exhausted"]))
-            await self.repo.update_run(
-                run_id,
-                status=RunStatus.COMPLETED_INCOMPLETE.value,
-                current_stage="COMPLETE",
-                coverage=coverage.model_dump(),
-                error=None,
-            )
-            await self.repo.event(
-                run_id,
-                "budget_exhausted",
-                {
-                    "max_wall_minutes": protocol.budget.max_wall_minutes,
-                    "hard_limit": True,
-                },
-            )
-            try:
-                artifacts = await build_exports(
-                    run_id,
-                    protocol,
-                    coverage,
-                    self.repo,
-                    self.store,
-                    self.llm,
-                )
-                await self.repo.event(run_id, "artifacts", {"names": artifacts})
-            except Exception as exc:
-                await self.session.rollback()
-                await self.repo.event(
-                    run_id,
-                    "budget_export_error",
-                    {
-                        "error": f"{type(exc).__name__}: {str(exc)[:500]}",
-                    },
-                )
-            await self.repo.event(
-                run_id,
-                "complete",
-                {
-                    "status": RunStatus.COMPLETED_INCOMPLETE.value,
-                    "reason": "budget_exhausted",
-                },
-            )
             return
         except Exception as exc:
             await self.session.rollback()
@@ -521,6 +468,20 @@ class ResearchPipeline:
 
     async def search(self, state: PipelineState) -> dict:
         await self._boundary(state, "SEARCH")
+        if self._collection_seconds_remaining(state) <= 0:
+            await self.repo.event(
+                state["run_id"],
+                "collection_budget_exhausted",
+                {"stage": "SEARCH", "action": "skip_new_discovery"},
+            )
+            return {
+                "candidates": [],
+                "corpus_documents": [],
+                "branch_result_counts": {},
+                "source_count_before_round": len(
+                    await self.repo.list_sources(state["run_id"])
+                ),
+            }
         return await self._interruptible(
             self._search_node(state),
             state,
@@ -1088,26 +1049,52 @@ class ResearchPipeline:
         tasks = [asyncio.create_task(one(candidate)) for candidate in candidates]
         docs = []
         total = len(tasks)
+        completed = 0
+        cutoff = False
+        remaining = self._collection_seconds_remaining(state)
         try:
-            for completed, task in enumerate(asyncio.as_completed(tasks), 1):
-                document = await task
-                docs.append(document)
-                await self.repo.update_run(state["run_id"], current_stage="ACQUIRE")
-                await self.repo.event(
-                    state["run_id"],
-                    "acquisition_progress",
-                    {
-                        "completed": completed,
-                        "total": total,
-                        "successful": sum(item.success for item in docs),
-                        "last_url": str(document.candidate.url),
-                        "last_method": document.acquisition_method,
-                    },
-                )
+            if remaining <= 0:
+                cutoff = bool(tasks)
+            else:
+                try:
+                    for task in asyncio.as_completed(tasks, timeout=remaining):
+                        document = await task
+                        docs.append(document)
+                        completed += 1
+                        await self.repo.update_run(
+                            state["run_id"], current_stage="ACQUIRE"
+                        )
+                        await self.repo.event(
+                            state["run_id"],
+                            "acquisition_progress",
+                            {
+                                "completed": completed,
+                                "total": total,
+                                "successful": sum(item.success for item in docs),
+                                "last_url": str(document.candidate.url),
+                                "last_method": document.acquisition_method,
+                            },
+                        )
+                except TimeoutError:
+                    cutoff = True
         finally:
             for task in tasks:
                 if not task.done():
                     task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        if cutoff:
+            await self.repo.event(
+                state["run_id"],
+                "collection_budget_exhausted",
+                {
+                    "stage": "ACQUIRE",
+                    "completed": completed,
+                    "total": total,
+                    "successful": sum(item.success for item in docs),
+                    "action": "continue_postprocessing",
+                },
+            )
         docs = [
             *docs,
             *[AcquiredDocument.model_validate(row) for row in state.get("corpus_documents", [])],

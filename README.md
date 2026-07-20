@@ -1,8 +1,8 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.9`
+Platform sürümü: `v0.6.10`
 
-Belge sürümü: `3.3`
+Belge sürümü: `3.4`
 
 Son güncelleme: `2026-07-20`
 
@@ -249,7 +249,7 @@ $env:TESTING="true"
 
 ## İş durumları
 
-`queued → running → completed|completed_incomplete|failed`. Pause ve cancel istekleri düğüm sınırında uygulanır. Coverage eşiği sağlanmadan bütçe biterse sonuç `completed_incomplete` olur ve eksikler coverage/uncertainty raporunda korunur.
+`queued → running → completed|completed_incomplete|failed`. Pause ve cancel istekleri düğüm sınırında uygulanır. `max_wall_minutes` bilgi toplama bütçesidir: süre dolunca yeni search/acquisition durur; tamamlanmış edinimler normalizasyon, kanıt çıkarma, audit ve sentez aşamalarından geçirilerek rapor mutlaka tamamlanır. Coverage eşiği sağlanmadıysa sonuç `completed_incomplete` olur ve eksikler coverage/uncertainty raporunda korunur.
 
 ## Güvenlik notları
 

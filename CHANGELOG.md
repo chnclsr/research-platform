@@ -1,10 +1,22 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.9`
+Platform sürümü: `v0.6.10`
 
-Belge sürümü: `3.4`
+Belge sürümü: `3.5`
 
 Son güncelleme: `2026-07-20`
+
+## v0.6.10 — 2026-07-20
+
+- `max_wall_minutes` global pipeline öldürme süresi olmaktan çıkarılıp bilgi toplama
+  (`SEARCH/ACQUIRE`) bütçesi olarak düzeltildi.
+- Süre dolduğunda tamamlanmış acquisition sonuçları korunur; bekleyen indirmeler iptal edilir
+  ve `NORMALIZE → EVIDENCE → AUDIT → SYNTHESIZE_EXPORT` zinciri sonuna kadar çalışır.
+- Sert `asyncio.wait_for` iptali kaldırılarak timeout sırasında görülen SQLAlchemy transaction
+  kapanma/rollback çakışması giderildi.
+- Worker güvenlik süresi post-processing ve senteze izin verecek şekilde 24 saate çıkarıldı.
+- Telegram başlangıç mesajı sürenin toplama bütçesi olduğunu açıkça belirtir.
+- Tam regresyon paketi `136 passed`.
 
 ## v0.6.9 — 2026-07-20
 

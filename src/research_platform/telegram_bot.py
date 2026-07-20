@@ -166,7 +166,8 @@ class TelegramResearchBot:
             client,
             chat_id,
             f"Run başlatıldı: {run['id']}\nTeslim modu: {protocol.output_mode}\n"
-            f"Bütçe: {budget.max_wall_minutes} dk, "
+            f"Toplama bütçesi: {budget.max_wall_minutes} dk; süre dolunca eldeki "
+            f"kaynakların analizi ve rapor üretimi tamamlanır.\n"
             f"{budget.max_sources or 'süreye bağlı sınırsız'} kaynak, "
             f"{budget.max_rounds} tur\n"
             f"Durum için: /status {run['id']}",

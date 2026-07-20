@@ -297,7 +297,7 @@ async def test_hung_node_has_a_hard_safety_timeout():
 
 
 @pytest.mark.asyncio
-async def test_wall_budget_is_persistent_and_hard_across_worker_restarts(monkeypatch):
+async def test_collection_budget_is_persistent_and_skips_new_discovery_after_restart():
     await create_schema()
     protocol = ResearchProtocol(
         title="Persistent wall budget",
@@ -305,14 +305,6 @@ async def test_wall_budget_is_persistent_and_hard_across_worker_restarts(monkeyp
         budget={"max_wall_minutes": 1},
     )
 
-    class HangingGraph:
-        async def ainvoke(self, state, config):
-            await asyncio.Event().wait()
-
-    async def fake_exports(*args, **kwargs):
-        return []
-
-    monkeypatch.setattr("research_platform.pipeline.build_exports", fake_exports)
     async with SessionLocal() as session, httpx.AsyncClient() as client:
         repo = Repository(session)
         row = await repo.create_run(protocol)
@@ -324,14 +316,82 @@ async def test_wall_budget_is_persistent_and_hard_across_worker_restarts(monkeyp
             ).isoformat(),
         })
         pipeline = ResearchPipeline(get_settings(), session, client)
-        pipeline.graph = HangingGraph()
-        await pipeline.run(row.id)
-        finished = await repo.get_run(row.id)
+        result = await pipeline.search({
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "budget_started_at": (
+                datetime.now(timezone.utc) - timedelta(minutes=2)
+            ).isoformat(),
+        })
         events = await repo.events_after(row.id)
 
-    assert finished.status == RunStatus.COMPLETED_INCOMPLETE.value
-    assert "budget_exhausted" in finished.coverage["reasons"]
-    assert any(event.event_type == "budget_exhausted" for event in events)
+    assert result["candidates"] == []
+    assert any(
+        event.event_type == "collection_budget_exhausted"
+        and event.payload["action"] == "skip_new_discovery"
+        for event in events
+    )
+
+
+@pytest.mark.asyncio
+async def test_acquisition_cutoff_keeps_completed_documents_for_postprocessing():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Graceful collection cutoff",
+        primary_question="Does collection cutoff preserve completed sources?",
+        budget={"max_wall_minutes": 1, "acquisition_concurrency": 2},
+    )
+
+    class TimedAcquisition:
+        async def acquire(self, candidate):
+            await asyncio.sleep(1 if "slow" in str(candidate.url) else 0.01)
+            content = f"Evidence from {candidate.url}"
+            return AcquiredDocument(
+                candidate=candidate,
+                success=True,
+                access_status="open",
+                content=content,
+                content_hash=hashlib.sha256(content.encode()).hexdigest(),
+                acquisition_method="fixture",
+            )
+
+    candidates = [
+        ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.WEB,
+            title="Fast source",
+            url="https://example.com/fast",
+        ),
+        ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.WEB,
+            title="Slow source",
+            url="https://example.com/slow",
+        ),
+    ]
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session)
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.acquisition = TimedAcquisition()
+        result = await pipeline._acquire_node({
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "candidates": [item.model_dump(mode="json") for item in candidates],
+            "budget_started_at": (
+                datetime.now(timezone.utc) - timedelta(seconds=59.7)
+            ).isoformat(),
+        })
+        events = await repo.events_after(row.id)
+
+    assert len(result["documents"]) == 1
+    assert "fast" in result["documents"][0]["candidate"]["url"]
+    assert any(
+        event.event_type == "collection_budget_exhausted"
+        and event.payload["action"] == "continue_postprocessing"
+        and event.payload["completed"] == 1
+        for event in events
+    )
 
 
 @pytest.mark.asyncio

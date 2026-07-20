@@ -121,7 +121,9 @@ class WorkerSettings:
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     max_jobs = 1
-    job_timeout = 60 * 60
+    # Collection has its own budget. Post-processing and final synthesis are
+    # allowed to finish after that cutoff instead of being killed mid-report.
+    job_timeout = 24 * 60 * 60
     keep_result = 60
     health_check_interval = 30
 
