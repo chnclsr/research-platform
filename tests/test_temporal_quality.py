@@ -149,6 +149,7 @@ def test_academic_gate_does_not_use_related_page_links_to_change_the_paper_subje
     protocol = ResearchProtocol(
         title="Recent lung CT studies",
         primary_question="What radiomics methods estimate lung cancer risk from chest CT?",
+        research_mode="focused_answer",
         connectors={"profile": "custom", "included_families": ["academic"]},
     )
     candidate = ConnectorCandidate(
@@ -164,6 +165,32 @@ def test_academic_gate_does_not_use_related_page_links_to_change_the_paper_subje
         ),
     )
     assert document_relevance(document, protocol)[0] is False
+
+
+def test_literature_scan_retains_contextual_academic_source_without_exact_heading_bigram():
+    protocol = ResearchProtocol(
+        title="High recall multimodal radiology scan",
+        primary_question="Multimodal vision-language models in radiology clinical safety",
+        connectors={"profile": "custom", "included_families": ["academic"]},
+    )
+    candidate = ConnectorCandidate(
+        connector_id="arxiv",
+        family=SourceFamily.ACADEMIC,
+        title="External evaluation of medical foundation models",
+        url="https://arxiv.org/abs/2601.00001",
+    )
+    document = AcquiredDocument(
+        candidate=candidate,
+        success=True,
+        content=(
+            "We externally evaluate multimodal foundation models on radiology images and "
+            "reports, including hallucination and clinical safety failure analysis."
+        ),
+    )
+    accepted, score, _ = document_relevance(document, protocol)
+    assert accepted is True
+    assert score >= 0.22
+    assert 0.5 <= candidate.metadata["primary_subject_coverage"] < 0.8
 
 
 def test_required_sentinel_uses_verified_content_match_instead_of_generic_heading_rule():

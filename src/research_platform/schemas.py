@@ -83,6 +83,7 @@ class ResearchBudget(BaseModel):
     max_wall_minutes: int = Field(45, ge=1, le=1440)
     results_per_connector: int = Field(20, ge=1, le=100)
     acquisition_concurrency: int = Field(4, ge=1, le=16)
+    exhaustive_until_budget: bool = True
 
 
 class HitlConfig(BaseModel):
@@ -169,6 +170,7 @@ class ResearchProtocol(BaseModel):
 
     title: str = Field(min_length=3, max_length=300)
     primary_question: str = Field(min_length=5, max_length=5000)
+    research_mode: Literal["literature_scan", "focused_answer"] = "literature_scan"
     sub_questions: list[str] = Field(default_factory=list, max_length=30)
     scope: ResearchScope = Field(default_factory=ResearchScope)
     languages: list[str] = Field(default_factory=lambda: ["tr", "en"], min_length=1)

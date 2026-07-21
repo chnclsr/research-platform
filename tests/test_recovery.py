@@ -6,6 +6,7 @@ from research_platform.db import SessionLocal, create_schema
 from research_platform.recovery import (
     diagnose_gaps,
     initial_missions,
+    literature_scan_probe_missions,
     matches_target_entities,
     mission_signature,
     recovery_missions,
@@ -233,6 +234,26 @@ def test_candidate_selection_reserves_capacity_across_missions():
     ]
     selected = select_mission_balanced_candidates(candidates, missions, 2)
     assert {candidate.title for candidate in selected} == {"A1", "B1"}
+
+
+def test_literature_scan_probe_uses_family_connectors_and_more_acquisition_slots():
+    protocol = ResearchProtocol(
+        title="Exhaustive literature scan",
+        primary_question="Multimodal radiology model clinical validation",
+        connectors={"profile": "custom", "included_families": ["academic", "web"]},
+        family_targets={
+            "academic": {"minimum_sources": 5},
+            "web": {"minimum_sources": 2},
+        },
+        budget={"results_per_connector": 12},
+    )
+    missions = literature_scan_probe_missions(protocol, 2)
+    assert {mission.required_family for mission in missions} == {
+        SourceFamily.ACADEMIC,
+        SourceFamily.WEB,
+    }
+    assert all(mission.acquisition_slots >= 5 for mission in missions)
+    assert all("prospective" in mission.query for mission in missions)
 
 
 @pytest.mark.asyncio

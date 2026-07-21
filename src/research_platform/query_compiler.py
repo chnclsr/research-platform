@@ -11,11 +11,34 @@ _QUESTION_NOISE = re.compile(
     flags=re.IGNORECASE,
 )
 
+_ANCHOR_NOISE = {
+    "between", "compare", "compared", "evidence", "evaluate", "evaluates",
+    "evaluation", "finding", "findings", "from", "latest", "published", "recent",
+    "research", "result", "results", "show", "shows", "study", "studies", "using",
+    "what", "which", "with", "year", "years",
+}
+
 
 def _compact(query: str, limit: int = 18) -> str:
     tokens = re.findall(r"[\w.+:/-]+", query, flags=re.UNICODE)
     useful = [token for token in tokens if not _QUESTION_NOISE.fullmatch(token)]
     return " ".join(list(dict.fromkeys(useful))[:limit])[:500].strip() or query[:500]
+
+
+def _primary_anchors(question: str, limit: int = 8) -> str:
+    """Keep the subject of the main question in every literature-search branch."""
+    tokens = re.findall(r"[\w.+:/-]+", question, flags=re.UNICODE)
+    useful = [
+        token
+        for token in tokens
+        if (
+            len(token) >= 3
+            and not token.isdigit()
+            and not _QUESTION_NOISE.fullmatch(token)
+            and token.lower() not in _ANCHOR_NOISE
+        )
+    ]
+    return " ".join(list(dict.fromkeys(useful))[:limit])[:240].strip()
 
 
 def compile_provider_query(
@@ -31,6 +54,9 @@ def compile_provider_query(
     syntax that the target provider documents and accepts.
     """
     compact = _compact(query)
+    if protocol.research_mode == "literature_scan":
+        primary = _primary_anchors(protocol.primary_question)
+        compact = " ".join(dict.fromkeys(f"{compact} {primary}".split()))
     concept_tail = " ".join(_compact(item, 3) for item in (concepts or [])[:2])
     enriched = " ".join(dict.fromkeys(f"{compact} {concept_tail}".split()))
     if connector_id == "arxiv":
@@ -43,4 +69,8 @@ def compile_provider_query(
         return " ".join(enriched.split()[:10])
     if connector_id in {"gdelt", "agentsearch_news"}:
         return " ".join(enriched.split()[:12])
-    return query[:1000]
+    # General web backends are the least tolerant of long natural-language recovery
+    # prompts. Preserve exact short title searches, otherwise send concise anchors.
+    if '"' in query and len(query) <= 250:
+        return query
+    return " ".join(enriched.split()[:24])[:500]

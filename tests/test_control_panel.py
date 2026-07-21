@@ -38,7 +38,7 @@ def test_control_panel_is_local_management_surface():
     with TestClient(control_panel.app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json()["version"] == "0.6.10"
+        assert health.json()["version"] == "0.7.0"
 
         page = client.get("/")
         assert page.status_code == 200

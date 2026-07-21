@@ -73,6 +73,11 @@ def topic_bigrams(value: str) -> set[str]:
     return {f"{left} {right}" for left, right in zip(ordered, ordered[1:])}
 
 
+def canonical_topic_terms(value: str) -> set[str]:
+    """Collapse hyphen/underscore aliases for stable subject-coverage diagnostics."""
+    return {token.replace("-", "").replace("_", "") for token in topic_terms(value)}
+
+
 def focus_terms(value: str) -> set[str]:
     parts = re.split(r"\b(?:for|regarding|about|için|icin|hakkında|hakkinda)\b", value, flags=re.I)
     if len(parts) < 2:
@@ -323,6 +328,13 @@ def document_relevance(
     normalized_heading = " ".join(heading.lower().replace("-", " ").split())
     heading_terms = topic_terms(heading)
     body_terms = topic_terms(body)
+    subject_phrase = protocol.primary_question.split(":", 1)[0]
+    subject_terms = canonical_topic_terms(subject_phrase)
+    document_subject_terms = canonical_topic_terms(f"{heading} {body}")
+    subject_hits = subject_terms & document_subject_terms
+    subject_coverage = len(subject_hits) / max(1, len(subject_terms))
+    candidate.metadata["primary_subject_hits"] = sorted(subject_hits)
+    candidate.metadata["primary_subject_coverage"] = round(subject_coverage, 4)
     primary_heading_phrases = {
         phrase for phrase in topic_bigrams(protocol.primary_question)
         if phrase in normalized_heading
@@ -366,12 +378,23 @@ def document_relevance(
         or bool(primary_heading_phrases)
         or bool(candidate.metadata.get("sentinel_required"))
     )
-    accepted = (
-        best_score >= 0.35
-        and has_enough_topic
-        and focus_satisfied
-        and academic_heading_satisfied
-    )
+    if protocol.research_mode == "literature_scan":
+        primary_hits = topic_terms(protocol.primary_question) & (heading_terms | body_terms)
+        # A literature inventory keeps plausible contextual studies for the semantic
+        # classifier. Exact heading phrases and the brittle ``focus`` heuristic must not
+        # erase recall before the acquired document can be inspected.
+        accepted = (
+            best_score >= 0.22
+            and has_enough_topic
+            and len(primary_hits) >= 1
+        )
+    else:
+        accepted = (
+            best_score >= 0.35
+            and has_enough_topic
+            and focus_satisfied
+            and academic_heading_satisfied
+        )
     if candidate.metadata.get("sentinel_required"):
         sentinel_terms = topic_terms(candidate.title)
         sentinel_hits = sentinel_terms & body_terms

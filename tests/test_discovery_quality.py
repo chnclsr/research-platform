@@ -24,7 +24,26 @@ def test_query_compiler_is_provider_specific_and_preserves_connector_date_pushdo
     assert "What" not in compiled
     assert "lung" in compiled
     assert "from-pub-date" not in compiled
-    assert compile_provider_query("agentsearch_web", source, protocol()) == source
+    web = compile_provider_query("agentsearch_web", source, protocol())
+    assert "lung" in web
+    assert len(web) <= 500
+
+
+def test_literature_query_branch_inherits_primary_subject_context():
+    research_protocol = ResearchProtocol(
+        title="Context-preserving literature scan",
+        primary_question="Multimodal vision-language models in radiology clinical safety",
+        connectors={"profile": "custom", "included_families": ["academic"]},
+    )
+    compiled = compile_provider_query(
+        "crossref",
+        "prospective trials and real-world workflow outcomes",
+        research_protocol,
+    )
+    compiled_lower = compiled.lower()
+    assert "radiology" in compiled_lower
+    assert "multimodal" in compiled_lower
+    assert "prospective" in compiled_lower
 
 
 def test_low_metadata_result_is_reserved_while_injection_is_hard_rejected():

@@ -1,12 +1,15 @@
 # Research Platform — Agent Gateway
 
-Platform sürümü: `v0.6.10`
+Platform sürümü: `v0.7.0`
 
-Belge sürümü: `3.4`
+Belge sürümü: `4.0`
 
-Son güncelleme: `2026-07-20`
+Son güncelleme: `2026-07-21`
 
 Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
+
+Yüksek-recall literatür tarama modu ve canlı `1 → 34` kaynak doğrulaması:
+`LITERATURE_RECALL_V0.7.0_IMPLEMENTATION_REPORT.md`.
 
 Recall güvencesi ve citation-frontier kalite paketi: `RESEARCH_QUALITY_V0.6.0_IMPLEMENTATION_REPORT.md`.
 
@@ -44,6 +47,8 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 ## Özellikler
 
 - Protokol kontrollü ve bütçeli araştırma işleri.
+- Varsayılan yüksek-recall `literature_scan` modu; `focused_answer` precision alternatifi.
+- Alt sorgularda ana konu bağlamını koruyan connector-aware query compilation.
 - Dokuz kaynak ailesi ve credential-aware connector registry.
 - OpenAlex + Semantic Scholar federated akademik keşfi ve DOI-temelli tekilleştirme.
 - Zotero Local/Web API üzerinden koleksiyon, attachment ve tam-metin corpus aktarımı.
@@ -59,7 +64,9 @@ Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu.
 - Yapısal coverage gap teşhisi, görev-temelli recovery, acquisition öncesi novelty filtresi,
   resmî-domain doğrulaması ve doygunluk kontrollü çok turlu toplama.
 - Claim/evidence ledger, audit ve adversarial review.
-- 14 denetlenebilir çıktı; ham veri, sonuç ve birleşik ZIP teslimatları.
+- Kaynak seçmek yerine bütün kabul edilen literatürü koruyan doğrudan/bağlamsal sınıflama.
+- Her kaynak için “bu kaynak ne söylüyor?” kartı üreten literatür envanteri.
+- 15 denetlenebilir dosya; ham veri, sonuç ve birleşik ZIP teslimatları.
 - Codex ve Claude için MCP araç katmanı.
 - Wi-Fi CIDR allowlist, güçlü bearer token ve yalnız MCP portunu açan ofis sunucusu modu.
 - Allowlist korumalı Telegram araştırma botu.
@@ -250,6 +257,12 @@ $env:TESTING="true"
 ## İş durumları
 
 `queued → running → completed|completed_incomplete|failed`. Pause ve cancel istekleri düğüm sınırında uygulanır. `max_wall_minutes` bilgi toplama bütçesidir: süre dolunca yeni search/acquisition durur; tamamlanmış edinimler normalizasyon, kanıt çıkarma, audit ve sentez aşamalarından geçirilerek rapor mutlaka tamamlanır. Coverage eşiği sağlanmadıysa sonuç `completed_incomplete` olur ve eksikler coverage/uncertainty raporunda korunur.
+
+Varsayılan `research_mode: literature_scan`, coverage erken yeterli görünse bile toplama
+bütçesi varken yeni ve çeşitlendirilmiş sorgu turları yürütür. `max_sources: null` ise kaynak
+sayısı yapay olarak sınırlandırılmaz. Yalnız açıkça alakasız belgeler dışlanır; doğrudan ve
+bağlamsal kaynaklar katalogda, ham pakette ve `15_literature_inventory.md` içinde korunur.
+Kısa ve seçici cevap istenen özel akışlarda `research_mode: focused_answer` kullanılabilir.
 
 ## Güvenlik notları
 

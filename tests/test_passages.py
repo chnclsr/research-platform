@@ -239,3 +239,18 @@ def test_evidence_gate_rejects_navigation_shell_concatenated_with_title():
     )
     assert not valid
     assert reason == "navigation_shell_text"
+
+
+def test_evidence_gate_rejects_preprint_citation_instruction():
+    shell = (
+        "Readers are encouraged to cite this preprint only for review purposes or for "
+        "grant applications and CVs."
+    )
+    valid, reason = evidence_quality_gate(
+        shell,
+        shell,
+        section_path="Current Preprint Settings",
+        entailment_score=0.95,
+    )
+    assert not valid
+    assert reason == "citation_shell_text"

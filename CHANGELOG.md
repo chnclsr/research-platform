@@ -1,10 +1,29 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.6.10`
+Platform sürümü: `v0.7.0`
 
-Belge sürümü: `3.5`
+Belge sürümü: `4.0`
 
-Son güncelleme: `2026-07-20`
+Son güncelleme: `2026-07-21`
+
+## v0.7.0 — 2026-07-21
+
+- Varsayılan araştırma amacı seçici cevap üretiminden yüksek-recall `literature_scan`
+  moduna geçirildi; eski katı davranış `focused_answer` olarak korunmuştur.
+- Bütün alt sorgular ve recovery görevleri ana sorunun konu anchor'larını provider sorgusunda
+  miras alır; genel web sorguları güvenli uzunluğa sıkıştırılır.
+- Bilinmeyen yayın tarihi literatür modunda otomatik dışlama yerine provenance uyarısıdır.
+- Deterministik ve LLM relevance kapıları doğrudan ile bağlamsal literatürü ayırır; yalnız
+  açıkça alakasız merkezî konu nihai corpus dışında bırakılır.
+- Düşük metadata puanlı reserve adayların acquisition kotası genişletildi; query branch ve
+  recovery görevlerine daha fazla edinim slotu verildi.
+- Coverage yeterli görünse veya standart gap sorguları tükense bile süre bütçesi varken
+  sistematik derleme, dış doğrulama, negatif sonuç, guideline ve replication taramaları sürer.
+- `05_source_catalog.csv` literatür rolü, tarih, içerik relevance ve claim sayılarını taşır.
+- Kabul edilen her kaynak için “bu kaynak ne söylüyor?” kartı üreten
+  `15_literature_inventory.md` eklendi; artifact sayısı 18'e yükseldi.
+- Citation talimatı içeren preprint kabuk metinleri evidence olmaktan çıkarıldı.
+- Ruff temiz; tam regresyon paketi `141 passed`.
 
 ## v0.6.10 — 2026-07-20
 

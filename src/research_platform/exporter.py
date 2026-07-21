@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import io
 import json
 import re
@@ -65,8 +66,10 @@ async def build_exports(
     claims = await repo.list_claims(run_id)
     evidence = await repo.list_evidence(run_id)
     evidence_by_claim: dict[str, list[tuple]] = {}
+    evidence_by_source: dict[str, list[tuple]] = {}
     for claim, link, source in evidence:
         evidence_by_claim.setdefault(claim.id, []).append((link, source))
+        evidence_by_source.setdefault(source.id, []).append((claim, link))
 
     reportable = [claim for claim in claims if _is_reportable(claim)]
     excluded = [claim for claim in claims if not _is_reportable(claim)]
@@ -245,16 +248,91 @@ async def build_exports(
     qualified = [claim for claim in reportable if claim.status == "qualified"]
     findings_md = render_findings(supported)
     qualified_md = render_findings(qualified)
+
+    def source_inventory_card(index: int, source: Any) -> str:
+        metadata = source.metadata_json or {}
+        linked = evidence_by_source.get(source.id, [])
+        tier = metadata.get("literature_relevance_tier", "direct")
+        published = (
+            metadata.get("published_at")
+            or metadata.get("publication_year")
+            or metadata.get("year")
+            or "unknown"
+        )
+        publication_type = (
+            metadata.get("subtype")
+            or metadata.get("type")
+            or metadata.get("publication_type")
+            or "unknown"
+        )
+        abstract = metadata.get("abstract") or metadata.get("snippet") or ""
+        if isinstance(abstract, list):
+            abstract = " ".join(str(item) for item in abstract)
+        abstract = html.unescape(re.sub(r"<[^>]+>", " ", str(abstract)))
+        abstract = " ".join(abstract.split())[:700]
+        unique_findings: list[str] = []
+        seen_claims: set[str] = set()
+        for claim, link in linked:
+            if claim.id in seen_claims:
+                continue
+            if not evidence_quality_gate(
+                claim.text,
+                link.quote,
+                section_path=(link.location or {}).get("section_path"),
+                source_title=source.title,
+                entailment_score=link.entailment_score,
+            )[0]:
+                continue
+            seen_claims.add(claim.id)
+            unique_findings.append(
+                f"- `{claim.status}` — {claim.text}  \n"
+                f"  Kanıt: “{link.quote[:350]}”"
+            )
+        finding_text = "\n".join(unique_findings)
+        if not finding_text:
+            finding_text = (
+                f"- Metadata özeti: {abstract}"
+                if abstract
+                else "- Bu kaynaktan doğrulanmış claim çıkarılmadı; kaynak katalog ve ham veri paketinde korundu."
+            )
+        return (
+            f"### {index}. [{source.title}]({source.url})\n\n"
+            f"- Kaynak ailesi: `{source.family}` · Connector: `{source.connector_id}`\n"
+            f"- Literatür rolü: `{tier}` · Yayın tarihi: `{published}` · Tür: `{publication_type}`\n"
+            f"- Kalıcı kimlik: `{source.persistent_id or 'yok'}`\n"
+            f"- Discovery relevance: `{float(metadata.get('relevance_score', 0.0)):.2f}` · "
+            f"İçerik relevance: `{float(metadata.get('content_relevance_score', 0.0)):.2f}`\n\n"
+            f"**Bu kaynak ne söylüyor?**\n\n{finding_text}"
+        )
+
+    literature_inventory_md = (
+        "# Kaynak Bazlı Literatür Envanteri\n\n"
+        f"Toplam korunan kaynak: **{len(sources)}**. Bu dosya yalnız nihai sentezde seçilen "
+        "kaynakları değil, araştırma kapsamında kabul edilen bütün kaynakları listeler. "
+        "`contextual` kaynaklar kesin kanıt sayılmadan literatür haritasında korunur.\n\n"
+        + (
+            "\n\n".join(
+                source_inventory_card(index, source)
+                for index, source in enumerate(sources, 1)
+            )
+            or "Kabul edilen kaynak bulunamadı."
+        )
+        + "\n"
+    )
     report_md = (
         f"# {protocol.title}\n\n"
         f"## Araştırma sorusu\n\n{protocol.primary_question}\n\n"
         f"## Bağımsız kaynaklarla desteklenen bulgular\n\n{findings_md}\n\n"
         f"## Tek kaynaklı / doğrulama gerektiren bulgular\n\n{qualified_md}\n\n"
-        f"## Model sentezi\n\n{_markdown(synthesis.get('report'))}\n"
+        f"## Model sentezi\n\n{_markdown(synthesis.get('report'))}\n\n"
+        f"## Kaynak bazlı literatür dökümü\n\n"
+        f"Araştırmada korunan **{len(sources)}** kaynağın tamamı, her kaynağın rolü ve "
+        "çıkarılan bulgularıyla `15_literature_inventory.md` dosyasında listelenmiştir.\n"
     )
     executive_md = (
         "# Yönetici Özeti\n\n"
-        f"Raporlanabilir iddia: {len(reportable)} · Dışlanan/zayıf iddia: {len(excluded)}\n\n"
+        f"Korunan literatür kaynağı: {len(sources)} · Raporlanabilir iddia: {len(reportable)} "
+        f"· Dışlanan/zayıf iddia: {len(excluded)}\n\n"
         f"{_markdown(synthesis.get('executive_summary'))}\n"
     )
 
@@ -335,7 +413,11 @@ async def build_exports(
     files["05_source_catalog.csv"] = (
         "text/csv",
         _csv_bytes(
-            ["source_id", "family", "connector", "title", "url", "persistent_id", "relevance"],
+            [
+                "source_id", "family", "connector", "title", "url", "persistent_id",
+                "literature_role", "published_at", "discovery_relevance",
+                "content_relevance", "evidence_claims", "reportable_claims",
+            ],
             [
                 [
                     s.id,
@@ -344,7 +426,16 @@ async def build_exports(
                     s.title,
                     s.url,
                     s.persistent_id,
+                    (s.metadata_json or {}).get("literature_relevance_tier", "direct"),
+                    (s.metadata_json or {}).get("published_at"),
                     (s.metadata_json or {}).get("relevance_score", 0),
+                    (s.metadata_json or {}).get("content_relevance_score", 0),
+                    len({claim.id for claim, _ in evidence_by_source.get(s.id, [])}),
+                    len({
+                        claim.id
+                        for claim, _ in evidence_by_source.get(s.id, [])
+                        if _is_reportable(claim)
+                    }),
                 ]
                 for s in sources
             ],
@@ -475,6 +566,10 @@ async def build_exports(
         "application/x-ndjson",
         ("\n".join(raw_passage_lines) + ("\n" if raw_passage_lines else "")).encode("utf-8"),
     )
+    files["15_literature_inventory.md"] = (
+        "text/markdown",
+        literature_inventory_md.encode("utf-8"),
+    )
 
     saved = []
     for name, (media_type, data) in files.items():
@@ -490,6 +585,7 @@ async def build_exports(
         "10_reproducibility_manifest.json",
         "13_raw_sources.jsonl",
         "14_raw_passages.jsonl",
+        "15_literature_inventory.md",
     }
     result_names = set(files) - {"13_raw_sources.jsonl", "14_raw_passages.jsonl"}
     bundle_specs = {

@@ -47,6 +47,7 @@ from .query_compiler import compile_provider_query
 from .recovery import (
     diagnose_gaps,
     initial_missions,
+    literature_scan_probe_missions,
     mission_signature,
     matches_target_entities,
     recovery_missions,
@@ -913,11 +914,16 @@ class ResearchPipeline:
                 candidate.metadata["admission_tier"] = "accept"
         else:
             rank_pool_limit = min(len(novel), max(round_cap * 4, round_cap))
+            reserve_limit = (
+                round_cap
+                if protocol.research_mode == "literature_scan"
+                else max(1, min(5, round_cap // 5))
+            )
             ranked, reserve, rejected = classify_candidate_admission(
                 novel,
                 protocol,
                 rank_pool_limit,
-                reserve_limit=max(1, min(5, round_cap // 5)),
+                reserve_limit=reserve_limit,
             )
         accepted_slots = max(0, round_cap - len(reserve))
         candidates = [
@@ -1113,16 +1119,28 @@ class ResearchPipeline:
         document: AcquiredDocument,
     ) -> tuple[bool, float, str]:
         """Use the local model only after deterministic gates pass."""
-        system_prompt = (
-            "Act as a strict research source admission gate. Decide whether the publication's "
-            "central subject directly helps answer the research question. A mere keyword mention, "
-            "related-article link, comparison cohort, background reference, or adjacent disease is "
-            "not directly relevant. Judge the source itself by its publication/update date; "
-            "a newly published systematic review can be relevant even when it summarizes "
-            "older studies. Return one JSON object with directly_relevant (boolean), "
-            "relevance_score (0..1, where 0 is unrelated and 1 is directly useful), and "
-            "reason (short string)."
-        )
+        if protocol.research_mode == "literature_scan":
+            system_prompt = (
+                "Act as a high-recall literature screening classifier. Retain both directly "
+                "relevant publications and contextually relevant reviews, methods, datasets, "
+                "replications, negative results, safety analyses, guidelines, and critiques. "
+                "Reject only a clearly unrelated central subject; a keyword-only related-article "
+                "link or an adjacent disease with no transferable method is unrelated. Set "
+                "directly_relevant=true for direct OR useful contextual literature. Return one "
+                "JSON object with directly_relevant (boolean), relevance_score (0..1), and reason. "
+                "Begin reason with 'direct:', 'contextual:', or 'unrelated:'."
+            )
+        else:
+            system_prompt = (
+                "Act as a strict research source admission gate. Decide whether the publication's "
+                "central subject directly helps answer the research question. A mere keyword mention, "
+                "related-article link, comparison cohort, background reference, or adjacent disease is "
+                "not directly relevant. Judge the source itself by its publication/update date; "
+                "a newly published systematic review can be relevant even when it summarizes "
+                "older studies. Return one JSON object with directly_relevant (boolean), "
+                "relevance_score (0..1, where 0 is unrelated and 1 is directly useful), and "
+                "reason (short string)."
+            )
         user_prompt = (
             f"QUESTION: {protocol.primary_question}\n"
             f"DATE_SCOPE: {protocol.scope.start_date} to {protocol.scope.end_date}\n"
@@ -1152,7 +1170,11 @@ class ResearchPipeline:
             except Exception as exc:
                 last_error = type(exc).__name__
         strict_delivery = (
-            protocol.output_mode == "raw" or protocol.authority_policy.strict_for_major_claims
+            protocol.research_mode == "focused_answer"
+            and (
+                protocol.output_mode == "raw"
+                or protocol.authority_policy.strict_for_major_claims
+            )
         )
         if strict_delivery:
             return False, 0.0, f"judge_unavailable_fail_closed:{last_error}"
@@ -1206,8 +1228,9 @@ class ResearchPipeline:
             temporal_ok, temporal_reason = temporal_relevance(
                 document.candidate,
                 protocol,
-                reject_unknown=True,
+                reject_unknown=protocol.research_mode == "focused_answer",
             )
+            document.candidate.metadata["temporal_scope_status"] = temporal_reason
             if not temporal_ok:
                 content_rejected.append(
                     {
@@ -1222,7 +1245,9 @@ class ResearchPipeline:
                 protocol,
                 [protocol.primary_question, *state.get("sub_questions", [])],
             )
-            if not relevant:
+            if not relevant and (
+                protocol.research_mode == "focused_answer" or relevance_score < 0.18
+            ):
                 content_rejected.append(
                     {
                         "url": str(document.candidate.url),
@@ -1233,6 +1258,7 @@ class ResearchPipeline:
                     }
                 )
                 continue
+            deterministic_direct = relevant
             if not self.settings.testing and not document.candidate.metadata.get(
                 "sentinel_required"
             ):
@@ -1245,7 +1271,12 @@ class ResearchPipeline:
                     "reason": judge_reason,
                     "model": self.settings.llm_model,
                 }
-                if not judged_relevant or judge_score < 0.45:
+                reject_semantic = (
+                    (not judged_relevant or judge_score < 0.45)
+                    if protocol.research_mode == "focused_answer"
+                    else (not judged_relevant and judge_score < 0.20)
+                )
+                if reject_semantic:
                     content_rejected.append(
                         {
                             "url": str(document.candidate.url),
@@ -1256,6 +1287,40 @@ class ResearchPipeline:
                         }
                     )
                     continue
+                if protocol.research_mode == "literature_scan":
+                    reason_prefix = judge_reason.strip().lower().split(":", 1)[0]
+                    document.candidate.metadata["literature_relevance_tier"] = (
+                        "direct"
+                        if (
+                            judged_relevant
+                            and deterministic_direct
+                            and reason_prefix != "contextual"
+                            and float(
+                                document.candidate.metadata.get(
+                                    "primary_subject_coverage",
+                                    0.0,
+                                )
+                            )
+                            >= 0.80
+                        )
+                        else "contextual"
+                    )
+            if protocol.research_mode == "literature_scan":
+                document.candidate.metadata.setdefault(
+                    "literature_relevance_tier",
+                    (
+                        "direct"
+                        if deterministic_direct
+                        and float(
+                            document.candidate.metadata.get(
+                                "primary_subject_coverage",
+                                0.0,
+                            )
+                        )
+                        >= 0.80
+                        else "contextual"
+                    ),
+                )
             snapshot = document.raw_content or document.content
             if snapshot and document.content_hash:
                 extension = {
@@ -1880,8 +1945,16 @@ class ResearchPipeline:
         source_budget_hit = (
             protocol.budget.max_sources is not None and len(sources) >= protocol.budget.max_sources
         )
-        budget_hit = (
+        literature_budget_mode = (
+            protocol.research_mode == "literature_scan"
+            and protocol.budget.exhaustive_until_budget
+        )
+        round_budget_hit = (
             round_number >= protocol.budget.max_rounds
+            and not literature_budget_mode
+        )
+        budget_hit = (
+            round_budget_hit
             or elapsed >= protocol.budget.max_wall_minutes
             or source_budget_hit
         )
@@ -1899,11 +1972,21 @@ class ResearchPipeline:
             gaps,
             set(state.get("attempted_missions", [])),
         )
-        stop_reason = (
-            "coverage_sufficient"
-            if coverage.sufficient
-            else ("budget_exhausted" if budget_hit or exhausted else "expand")
-        )
+        no_operational_connectors = not state.get("available_connectors", [])
+        if literature_budget_mode:
+            # In inventory mode coverage is a diagnostic, not an early-stop trigger.
+            # Continue trying diversified probes while collection time remains.
+            stop_reason = (
+                "budget_exhausted"
+                if budget_hit or no_operational_connectors
+                else "expand"
+            )
+        else:
+            stop_reason = (
+                "coverage_sufficient"
+                if coverage.sufficient
+                else ("budget_exhausted" if budget_hit or exhausted else "expand")
+            )
         await self.repo.update_run(
             state["run_id"],
             coverage=coverage.model_dump(),
@@ -1950,6 +2033,12 @@ class ResearchPipeline:
         attempted = set(state.get("attempted_missions", []))
         gaps = [CoverageGap.model_validate(item) for item in state.get("gaps", [])]
         missions = recovery_missions(protocol, gaps, attempted)
+        if (
+            protocol.research_mode == "literature_scan"
+            and protocol.budget.exhaustive_until_budget
+            and not missions
+        ):
+            missions = literature_scan_probe_missions(protocol, round_number)
         await self.repo.event(
             state["run_id"],
             "recovery_plan",

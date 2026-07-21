@@ -67,6 +67,15 @@ def evidence_quality_gate(
     ):
         return False, "access_shell_text"
     if re.search(
+        r"\b(?:please\s+)?cite\s+(?:this|the)\s+(?:preprint|paper)|"
+        r"\bcite\s+(?:this|the)\s+(?:preprint|paper)\s+only\s+for\b|"
+        r"\bgrant applications?\s+and\s+cv(?:s)?\b|"
+        r"\bcurrent preprint settings\b",
+        f"{claim_value} {quote_value}",
+        re.IGNORECASE,
+    ):
+        return False, "citation_shell_text"
+    if re.search(
         r"\bskip to (?:main )?content\b|\bskip navigation\b|"
         r"\b(?:arxiv|site) is now an independent nonprofit\b|"
         r"\b(?:sign in|log in|create account|open navigation menu)\b",

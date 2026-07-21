@@ -160,13 +160,60 @@ def initial_missions(
         for family in targeted_families
         for connector in FAMILY_CONNECTORS.get(family, [])
     ))
+    acquisition_slots = 5 if protocol.research_mode == "literature_scan" else 2
     for index, query in enumerate(queries[:8]):
         missions.append(SearchMission(
             branch_id=f"query:{index}",
             query=query,
             connector_ids=connector_ids,
             result_limit=protocol.budget.results_per_connector,
-            acquisition_slots=2,
+            acquisition_slots=acquisition_slots,
+        ))
+    return missions
+
+
+def literature_scan_probe_missions(
+    protocol: ResearchProtocol,
+    round_number: int,
+) -> list[SearchMission]:
+    """Create diversified recall probes when ordinary gap missions are exhausted.
+
+    Literature scans should use their collection budget to try a genuinely different
+    search strategy instead of declaring completion after the same gap query was seen.
+    """
+    strategies = (
+        "systematic review meta-analysis scoping review",
+        "prospective cohort trial external validation multicenter",
+        "negative results limitations failure bias safety",
+        "guideline consensus regulatory real-world implementation",
+        "dataset benchmark replication independent evaluation",
+        "citation review related work references",
+    )
+    strategy = strategies[(max(1, round_number) - 1) % len(strategies)]
+    families = [
+        family
+        for family, target in protocol.family_targets.items()
+        if target.minimum_sources > 0
+    ] or list(protocol.connectors.included_families)
+    missions: list[SearchMission] = []
+    for family in families:
+        connector_ids = FAMILY_CONNECTORS.get(family, [])
+        if protocol.connectors.included_connectors:
+            connector_ids = [
+                connector_id
+                for connector_id in connector_ids
+                if connector_id in protocol.connectors.included_connectors
+            ]
+        if not connector_ids:
+            continue
+        missions.append(SearchMission(
+            branch_id=f"literature:{family.value}:{round_number}",
+            query=f"{protocol.primary_question} {strategy}",
+            connector_ids=connector_ids,
+            required_family=family,
+            result_limit=protocol.budget.results_per_connector,
+            acquisition_slots=min(10, protocol.budget.results_per_connector),
+            novelty_required=True,
         ))
     return missions
 
@@ -361,6 +408,14 @@ def recovery_missions(
                 seed_urls = [sentinel.url] if sentinel.url else []
             else:
                 query = f"{gap.topic} {query_suffix}"
+            acquisition_slots = (
+                min(
+                    protocol.budget.results_per_connector,
+                    max(5, gap.minimum_novel_sources),
+                )
+                if protocol.research_mode == "literature_scan"
+                else min(2, gap.minimum_novel_sources)
+            )
             mission = SearchMission(
                 gap_id=gap.id,
                 branch_id=gap.branch_id or f"gap:{gap.id}",
@@ -377,14 +432,14 @@ def recovery_missions(
                     else gap.required_authority
                 ),
                 result_limit=min(10, protocol.budget.results_per_connector),
-                acquisition_slots=min(2, gap.minimum_novel_sources),
+                acquisition_slots=acquisition_slots,
             )
             signature = mission_signature(mission)
             if signature in attempted_signatures:
                 continue
             missions.append(mission)
             attempted_signatures.add(signature)
-    return missions[:10]
+    return missions[:20] if protocol.research_mode == "literature_scan" else missions[:10]
 
 
 def mission_signature(mission: SearchMission) -> str:

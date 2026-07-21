@@ -168,19 +168,21 @@ async def test_semantic_source_judge_uses_relevance_score(response, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("output_mode", "expected_relevant", "expected_policy"),
+    ("output_mode", "research_mode", "expected_relevant", "expected_policy"),
     [
-        ("raw", False, "fail_closed"),
-        ("both", True, "fail_open"),
+        ("raw", "focused_answer", False, "fail_closed"),
+        ("both", "focused_answer", True, "fail_open"),
+        ("raw", "literature_scan", True, "fail_open"),
     ],
 )
 async def test_semantic_source_judge_retries_and_uses_delivery_failure_policy(
-    output_mode, expected_relevant, expected_policy,
+    output_mode, research_mode, expected_relevant, expected_policy,
 ):
     protocol = ResearchProtocol(
         title="Semantic source failure policy",
         primary_question="Which evidence directly answers the research question?",
         output_mode=output_mode,
+        research_mode=research_mode,
     )
     document = AcquiredDocument(
         candidate=ConnectorCandidate(
@@ -470,6 +472,7 @@ async def test_pipeline_resumes_to_auditable_export():
     protocol = ResearchProtocol(
         title="Pipeline acceptance",
         primary_question="Does the tested method improve measured accuracy?",
+        research_mode="focused_answer",
         connectors={"profile": "custom", "included_families": ["web"]},
         budget={"max_rounds": 2, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
     )
@@ -485,7 +488,13 @@ async def test_pipeline_resumes_to_auditable_export():
         assert completed.sources_count == 1
         assert completed.claims_count >= 1
         artifacts = await repo.list_artifacts(row.id)
-        assert len(artifacts) == 17
+        assert len(artifacts) == 18
+        inventory_artifact = next(
+            a for a in artifacts if a.name == "15_literature_inventory.md"
+        )
+        inventory = await ObjectStore(get_settings()).get(inventory_artifact.object_key)
+        assert "Independent evidence source" in inventory.decode("utf-8")
+        assert "Bu kaynak ne söylüyor?" in inventory.decode("utf-8")
         assert any(a.name == "raw_bundle.zip" for a in artifacts)
         assert any(a.name == "result_bundle.zip" for a in artifacts)
         assert any(a.name == "research_bundle.zip" for a in artifacts)
@@ -494,6 +503,7 @@ async def test_pipeline_resumes_to_auditable_export():
         with zipfile.ZipFile(io.BytesIO(raw_bundle)) as archive:
             assert "13_raw_sources.jsonl" in archive.namelist()
             assert "14_raw_passages.jsonl" in archive.namelist()
+            assert "15_literature_inventory.md" in archive.namelist()
             assert "02_full_research_report.md" not in archive.namelist()
 
 
@@ -503,6 +513,7 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
     protocol = ResearchProtocol(
         title="Connector failure acceptance",
         primary_question="Can connector failures be reported safely?",
+        research_mode="focused_answer",
         connectors={"profile": "custom", "included_families": ["web"]},
         budget={"max_rounds": 1, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
     )

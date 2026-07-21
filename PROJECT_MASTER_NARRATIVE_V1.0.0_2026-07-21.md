@@ -1,7 +1,7 @@
 # Research Platform — Yeni Nesil Yerel Araştırma Altyapısı
 
-- Belge sürümü: `1.0.0`
-- Platform sürümü: `v0.6.10`
+- Belge sürümü: `1.1.0`
+- Platform sürümü: `v0.7.0`
 - Tarih: `2026-07-21`
 - Belge türü: Ana ürün, mimari ve mühendislik anlatısı
 - Çalışma ortamı: Windows ofis sunucusu, RTX 4060 8 GB, Ollama
@@ -377,9 +377,10 @@ Her `both` araştırması aşağıdaki denetlenebilir paketi üretir:
 12. `12_uncertainty_report.md`
 13. `13_raw_sources.jsonl`
 14. `14_raw_passages.jsonl`
-15. `raw_bundle.zip`
-16. `result_bundle.zip`
-17. `research_bundle.zip`
+15. `15_literature_inventory.md`
+16. `raw_bundle.zip`
+17. `result_bundle.zip`
+18. `research_bundle.zip`
 
 Bir üst ajan yalnız raporu değil, raporu oluşturan ham veriyi ve passage zincirini de alabilir.
 Bu, çıktıyı yeniden sentezlenebilir, denetlenebilir ve başka bir modele taşınabilir hale getirir.
@@ -437,6 +438,7 @@ timeline
     2026-07-17 : v0.5 — kontrol paneli, zaman/alaka kalitesi ve otomatik teslimat
                : v0.6 — sentinel, citation frontier, recall ve evidence güvenliği
     2026-07-20 : v0.6.3–0.6.10 — iptal/recovery, süre modları, sınırsız kaynak, flow chart, HITL ve graceful cutoff
+    2026-07-21 : v0.7 — yüksek-recall literature scan ve kaynak-bazlı envanter
 ```
 
 Bu gelişim, bir GitHub reposunu denemek için hazırlanan yerel notebook fikrinden; ofisteki
@@ -490,6 +492,12 @@ kabul etmiş ve doğru biçimde `completed_incomplete` bitmiştir. Bu test:
 - audit edilmiş claim ile bağımsız destekli claim ayrımının panelde daha da görünür olması
   gerektiğini göstermiştir.
 
+Bu teşhis üzerine `v0.7.0` yüksek-recall literatür modu geliştirildi. Aynı sağlık-AI konu
+ailesinde iki dakikalık canlı kabul koşusu 83 acquisition çağrısından 80 başarılı edinim,
+34 korunan kaynak, beş connector ve 34 kaynak kartı üretti. Kaynakların sekizi `direct`, 26'sı
+`contextual` olarak ayrıldı; sistem yine de düşük completeness nedeniyle araştırmayı yanlış
+biçimde “tamamlandı” ilan etmedi.
+
 Bu sonuç projenin değerini azaltmaz; kalite kapılarının pazarlama cevabı üretmek yerine gerçek
 başarısızlığı teşhis edebildiğini gösterir. Yine de dış sunumda “research kalitesinde kusursuz
 olduk” denmemelidir. Daha güçlü ve savunulabilir ifade şudur:
@@ -528,4 +536,3 @@ durum makinesi, güvenlik, operasyon, ekip erişimi ve denetlenebilir teslimatı
 sistemde birleştirmesidir. Proje, “ajan araştırma yaptı” cümlesini “hangi kaynakları, hangi
 sürümle, hangi pasajdan, hangi iddia için, hangi eksiklerle ve kim tarafından kullanılmak
 üzere topladı?” sorusuna cevap verebilen gerçek bir mühendislik ürününe dönüştürmüştür.
-
