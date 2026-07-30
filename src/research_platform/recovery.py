@@ -475,6 +475,15 @@ def select_mission_balanced_candidates(
         for candidate in candidates:
             if candidate.id in selected_ids:
                 continue
+            # Mission diversity must not spend scarce acquisition slots on a
+            # weak title-only match merely because that branch produced no
+            # strong result.  Weak candidates remain available to the global
+            # fill and reserve audit paths.
+            if (
+                "relevance_score" in candidate.metadata
+                and float(candidate.metadata["relevance_score"]) < 0.45
+            ):
+                continue
             if mission.branch_id not in candidate.metadata.get("query_branches", []):
                 continue
             selected.append(candidate)

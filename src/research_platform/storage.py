@@ -51,3 +51,14 @@ class ObjectStore:
             response.close()
             response.release_conn()
 
+    async def delete(self, key: str) -> None:
+        if self.settings.testing:
+            path = self.local_root / key
+            if path.exists():
+                path.unlink()
+            return
+        await asyncio.to_thread(
+            self.client.remove_object,
+            self.settings.minio_bucket,
+            key,
+        )

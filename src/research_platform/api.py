@@ -187,7 +187,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Research Platform API",
-    version="0.7.0",
+    version="0.9.1",
     description="Local-first, multi-source evidence research platform",
     lifespan=lifespan,
 )
@@ -314,14 +314,32 @@ async def resume_research_run(
     run_id: str, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
     row = await _required_run(run_id, repo)
-    if row.status != RunStatus.PAUSED.value:
+    resumable_statuses = {RunStatus.PAUSED.value, RunStatus.FAILED.value}
+    if row.status not in resumable_statuses:
         raise HTTPException(status_code=409, detail=f"Cannot resume run in {row.status}")
+    if row.status == RunStatus.FAILED.value and await repo.latest_checkpoint(run_id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Failed run has no checkpoint to resume from",
+        )
     if row.interaction:
         raise HTTPException(status_code=409, detail="Respond to the pending HITL interaction first")
     redis = await _connect_redis(request.app, attempts=3)
     if redis is None:
         raise HTTPException(status_code=503, detail="Redis queue unavailable")
-    row = await repo.update_run(run_id, status=RunStatus.QUEUED.value)
+    previous_status = row.status
+    previous_error = row.error
+    row = await repo.update_run(
+        run_id,
+        status=RunStatus.QUEUED.value,
+        error=None,
+    )
+    if previous_status == RunStatus.FAILED.value:
+        await repo.event(
+            run_id,
+            "failed_run_retry_requested",
+            {"previous_error": previous_error},
+        )
     try:
         queued = await redis.enqueue_job("execute_research_run", run_id)
         if queued is None:
@@ -329,7 +347,7 @@ async def resume_research_run(
     except Exception as exc:
         await repo.update_run(
             run_id,
-            status=RunStatus.PAUSED.value,
+            status=previous_status,
             error=f"Redis resume enqueue failed: {type(exc).__name__}: {exc}",
         )
         raise HTTPException(

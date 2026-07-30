@@ -325,3 +325,43 @@ async def test_repository_merges_provider_snapshots_by_doi_and_saves_relations()
             "openalex", "semantic_scholar",
         }
         assert len(relations) == 2
+@pytest.mark.asyncio
+async def test_openalex_remains_enabled_without_api_key() -> None:
+    settings = Settings(openalex_api_key=None)
+    async with httpx.AsyncClient() as client:
+        health = await OpenAlexConnector(settings, client).health()
+    assert health.enabled is True
+    assert health.healthy is True
+    assert health.requires_credentials is False
+    assert health.missing_credentials == []
+
+
+@pytest.mark.asyncio
+async def test_acquisition_preserves_scholarly_abstract_when_full_text_is_blocked() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, request=request)
+
+    candidate = ConnectorCandidate(
+        connector_id="openalex",
+        family=SourceFamily.ACADEMIC,
+        title="Externally validated CT model",
+        url="https://example.org/blocked",
+        snippet=(
+            "This multicentre study externally validated an artificial intelligence model "
+            "for lung cancer risk estimation from low-dose computed tomography. "
+            "The abstract reports the cohort, comparator, discrimination metrics, and "
+            "limitations in a form suitable for literature mapping. "
+        ),
+        persistent_id="10.1000/blocked",
+        authors=["Ada Researcher"],
+        metadata={},
+    )
+    settings = Settings(_env_file=None, testing=True)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        document = await AcquisitionService(settings, client).acquire(candidate)
+
+    assert document.success is True
+    assert document.acquisition_method == "scholarly_metadata"
+    assert document.candidate.metadata["content_scope"] == "abstract_and_metadata"
+    assert "multicentre study" in document.content
+    assert document.strategies_tried == ["direct", "scholarly_metadata"]

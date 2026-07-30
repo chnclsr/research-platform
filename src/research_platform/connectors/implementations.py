@@ -58,7 +58,9 @@ class AgentSearchConnector(SourceConnector):
 class OpenAlexConnector(SourceConnector):
     id = "openalex"
     family = SourceFamily.ACADEMIC
-    requires_credentials = ("openalex_api_key",)
+    # OpenAlex supports unauthenticated requests.  An API key raises the
+    # available credit budget but must not disable the connector when absent.
+    requires_credentials = ()
     capabilities = ("search", "metadata", "citations", "versions")
 
     def __init__(self, *args, work_type: str | None = None, **kwargs):
@@ -77,13 +79,14 @@ class OpenAlexConnector(SourceConnector):
         params = {
             "search": query,
             "per-page": min(limit, 100),
-            "api_key": self.settings.openalex_api_key,
             "select": (
                 "id,doi,display_name,publication_year,publication_date,type,authorships,"
                 "primary_location,best_oa_location,locations,abstract_inverted_index,"
                 "cited_by_count,referenced_works,related_works,is_retracted"
             ),
         }
+        if self.settings.openalex_api_key:
+            params["api_key"] = self.settings.openalex_api_key
         if self.settings.openalex_mailto:
             params["mailto"] = self.settings.openalex_mailto
         filters = []
@@ -100,7 +103,14 @@ class OpenAlexConnector(SourceConnector):
         output = []
         for row in response.json().get("results", []):
             primary = row.get("primary_location") or {}
-            url = primary.get("landing_page_url") or row.get("doi") or row.get("id")
+            best_oa = row.get("best_oa_location") or {}
+            url = (
+                best_oa.get("pdf_url")
+                or best_oa.get("landing_page_url")
+                or primary.get("landing_page_url")
+                or row.get("doi")
+                or row.get("id")
+            )
             authors = [
                 a.get("author", {}).get("display_name", "")
                 for a in row.get("authorships", []) if a.get("author")
@@ -148,10 +158,11 @@ class OpenAlexConnector(SourceConnector):
             return []
         relation_limit = min(20, self.settings.semantic_scholar_citation_limit)
         params_base = {
-            "api_key": self.settings.openalex_api_key,
             "per-page": max(1, relation_limit),
             "select": "id,doi,display_name,publication_date,abstract_inverted_index",
         }
+        if self.settings.openalex_api_key:
+            params_base["api_key"] = self.settings.openalex_api_key
         if self.settings.openalex_mailto:
             params_base["mailto"] = self.settings.openalex_mailto
         responses: list[tuple[str, list[dict[str, Any]]]] = []

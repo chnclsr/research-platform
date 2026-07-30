@@ -1,150 +1,230 @@
-# Research Platform — Agent Gateway
+# Research Platform
 
-Platform sürümü: `v0.7.0`
+> A local-first evidence engine for AI agents and office teams.
 
-Belge sürümü: `4.0`
+**Platform version:** `0.9.1`
 
-Son güncelleme: `2026-07-21`
+**Document version:** `6.0`
 
-Bilgi toplama katmanının güncel özeti: `COLLECTION_ARCHITECTURE_REPORT.md`.
+**Last updated:** `2026-07-30`
 
-Yüksek-recall literatür tarama modu ve canlı `1 → 34` kaynak doğrulaması:
-`LITERATURE_RECALL_V0.7.0_IMPLEMENTATION_REPORT.md`.
+Research Platform turns a single office workstation into a shared, auditable research
+service. Codex, Claude, Telegram users, and the built-in operations console can all submit
+work to the same evidence pipeline and request the result, the raw research corpus, or both.
 
-Recall güvencesi ve citation-frontier kalite paketi: `RESEARCH_QUALITY_V0.6.0_IMPLEMENTATION_REPORT.md`.
+The current deployment runs its language, embedding, and figure-understanding workloads
+locally on one **NVIDIA RTX 4060 with 8 GB VRAM**. It does not try to replace a stronger
+general-purpose agent. It gives that agent a durable research back end: broad discovery,
+source acquisition, provenance, passage-level evidence, coverage diagnostics, and
+reproducible deliverables.
 
-Zamansal kapsam ve kaynak kalitesi düzeltmeleri:
-`TEMPORAL_AND_RELEVANCE_QUALITY_REPORT.md`.
+## What we built
 
-Codex, Claude ve Telegram erişim mimarisi: `AGENT_GATEWAY_ARCHITECTURE_REPORT.md`.
+- A multi-round LangGraph research runtime with PostgreSQL checkpoints.
+- A registry of **27 connectors across 9 source families**.
+- High-recall literature scanning with query branching, citation-frontier expansion, and
+  coverage-driven recovery.
+- Structure-aware parsing and hybrid passage retrieval instead of truncating long documents.
+- Claim-to-passage links with source version, location, quotation, direction, and confidence.
+- Separate supporting, conflicting, and uncertain evidence.
+- Local thematic synthesis designed for small language models.
+- Auditable Markdown and Word reports, evidence matrices, source catalogs, literature
+  inventories, bibliography, coverage reports, and reproducibility manifests.
+- Source-figure intelligence: the agent can inspect figures found in papers, explain them,
+  and place useful source excerpts into the relevant Word-report section with provenance.
+- A shared MCP gateway for Codex and Claude, a Telegram interface, and an office operations
+  console.
+- `raw`, `result`, and `both` delivery contracts for downstream agents.
 
-Ofis ağı kurulumu ve ekip istemci adımları: `OFFICE_TEAM_SETUP.md`.
+## One workstation, an office-wide research service
 
-Ofis sunucusu canlı uygulama ve doğrulama sonuçları:
-`OFFICE_SERVER_IMPLEMENTATION_REPORT.md`.
+```mermaid
+flowchart LR
+    subgraph Clients
+        C["Codex"]
+        CL["Claude"]
+        T["Telegram"]
+        UI["Operations console"]
+    end
 
-Yerel kontrol paneli kullanımı: `CONTROL_PANEL_GUIDE.md`.
+    subgraph Gateway
+        MCP["Authenticated MCP"]
+        API["FastAPI + SSE"]
+    end
 
-Kontrol paneli operasyon merkezi uygulama raporu:
-`CONTROL_PANEL_V0.6.1_IMPLEMENTATION_REPORT.md`.
+    subgraph Research
+        Q["Redis / ARQ queue"]
+        LG["LangGraph research worker"]
+        D["Discovery + acquisition"]
+        E["Evidence + coverage + audit"]
+        S["Synthesis + Word export"]
+    end
 
-Coverage recovery uygulaması ve canlı doğrulaması:
-`COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md`.
+    subgraph State
+        PG["PostgreSQL + pgvector"]
+        M["MinIO artifacts"]
+        O["Ollama on RTX 4060"]
+    end
 
-Güncel Qwen 4B nesil karşılaştırması: `QWEN_4B_GENERATION_BENCHMARK_REPORT.md`.
+    C --> MCP
+    CL --> MCP
+    T --> API
+    UI --> API
+    MCP --> API --> Q --> LG
+    LG --> D --> E --> S
+    LG <--> PG
+    D --> M
+    E --> O
+    S --> O
+    S --> M
+```
 
-Nanbeige4.1-3B RTX 4060 kalite tavanı: `NANBEIGE41_3B_BENCHMARK_REPORT.md`.
+The network-facing MCP and control surfaces are authenticated and CIDR-restricted. Database,
+object-storage, and model services remain private to the host.
 
-Model çıktılarının puansız ve vaka-temelli değerlendirme yöntemi:
-`QUALITATIVE_MODEL_EVALUATION_METHODOLOGY.md`.
+## Research lifecycle
 
-Tarihsel 4B–9B donanım karşılaştırması: `MODEL_HARDWARE_OPTIMIZED_BENCHMARK_REPORT.md`.
+```text
+VALIDATE → DECOMPOSE → BUILD QUERY BRANCHES → SEARCH → ACQUIRE
+         → NORMALIZE → RETRIEVE PASSAGES → EXTRACT EVIDENCE
+         → ANALYZE CLAIMS → CHECK COVERAGE
+               ├─ gaps remain: EXPAND QUERIES → SEARCH
+               └─ sufficient/budget reached: AUDIT → ADVERSARIAL REVIEW
+                                             → SYNTHESIZE → EXPORT
+```
 
-İlk sabit-ayar karşılaştırması: `MODEL_HARD_BENCHMARK_REPORT.md`.
+Collection does not stop merely because one plausible source was found. In
+`literature_scan` mode, accepted direct and contextual sources remain in the corpus and
+literature inventory. If `max_sources` is left empty, time and saturation—not an arbitrary
+source count—govern collection.
 
-Yerel çalışan, çok kaynaklı ve kanıt merkezli derin araştırma platformu. LangGraph araştırma döngüsünü; AgentSearch keşfi; Crawl4AI ise zor sayfalarda içerik edinmeyi yürütür. PostgreSQL araştırma durumu ve kanıt ilişkilerini, MinIO ham/üretilmiş dosyaları, Redis iş kuyruğunu saklar.
+`max_wall_minutes` is a **collection budget**, not a report-kill switch. Once the budget is
+reached, the platform stops starting new searches and acquisitions, then completes
+normalization, evidence extraction, audit, synthesis, and export from everything already
+collected.
 
-## Özellikler
+## Source coverage
 
-- Protokol kontrollü ve bütçeli araştırma işleri.
-- Varsayılan yüksek-recall `literature_scan` modu; `focused_answer` precision alternatifi.
-- Alt sorgularda ana konu bağlamını koruyan connector-aware query compilation.
-- Dokuz kaynak ailesi ve credential-aware connector registry.
-- OpenAlex + Semantic Scholar federated akademik keşfi ve DOI-temelli tekilleştirme.
-- Zotero Local/Web API üzerinden koleksiyon, attachment ve tam-metin corpus aktarımı.
-- PostgreSQL citation graph, provider snapshot ve incremental Zotero sync cursor kayıtları.
-- PaperQA2 için varsayılan kapalı, opsiyonel shadow evidence backend'i.
-- PostgreSQL düğüm checkpoint'leriyle pause/resume/cancel.
-- URL/redirect SSRF koruması ve ayrı Crawl4AI browser container'ı.
-- Uzun belgelerde yapı-duyarlı passage üretimi; bölüm ve özgün karakter konumu korunur.
-- Alt soru bazlı hybrid lexical+dense retrieval, passage reranking ve komşu bağlam.
-- `embeddinggemma:300m-qat-q4_0` ile yerel embedding; model yoksa lexical fallback.
-- Passage seviyesinde claim extraction ve claim–quote entailment doğrulaması.
-- Kaynak sürümü, SHA-256, acquisition zinciri ve provenance.
-- Yapısal coverage gap teşhisi, görev-temelli recovery, acquisition öncesi novelty filtresi,
-  resmî-domain doğrulaması ve doygunluk kontrollü çok turlu toplama.
-- Claim/evidence ledger, audit ve adversarial review.
-- Kaynak seçmek yerine bütün kabul edilen literatürü koruyan doğrudan/bağlamsal sınıflama.
-- Her kaynak için “bu kaynak ne söylüyor?” kartı üreten literatür envanteri.
-- 15 denetlenebilir dosya; ham veri, sonuç ve birleşik ZIP teslimatları.
-- Codex ve Claude için MCP araç katmanı.
-- Wi-Fi CIDR allowlist, güçlü bearer token ve yalnız MCP portunu açan ofis sunucusu modu.
-- Allowlist korumalı Telegram araştırma botu.
-- Servis, kuyruk, aktif run ve log yönetimi için ofis CIDR allowlist korumalı kontrol paneli.
-- Ollama varsayılanı ve OpenAI-compatible alternatif.
-- Ollama JSON çağrılarında yapılandırılabilir thinking, context ve output sınırları.
-- Langflow için dört sabit kontrol bileşeni.
+| Family | Connectors |
+|---|---|
+| General web | AgentSearch / SearXNG |
+| Academic | OpenAlex, Semantic Scholar, Crossref, arXiv, Europe PMC, Zotero Local, Zotero Web |
+| Books and theses | Open Library, OpenAlex dissertations |
+| Patents and standards | EPO OPS, IETF Datatracker, trusted standards-domain search |
+| Official and legal | Federal Register, EUR-Lex, configurable official registries |
+| News and archives | GDELT, Internet Archive CDX, AgentSearch News |
+| Code and data | GitHub, Hugging Face, Zenodo, DataCite |
+| Company sources | SEC EDGAR, verified company domains |
+| Grey literature | Zenodo Grey, institutional repositories |
 
-Paywall aşma, shadow-library erişimi, port tarama veya exploit çalıştırma bilerek desteklenmez.
+Credential-dependent connectors remain visible in capability and health reporting but are
+disabled when a key is unavailable. Their absence does not crash the run.
 
-## Ön koşullar
+## Showcase research
 
-- Windows 10/11 ve Docker Desktop
-- Ollama 0.31+; `qwen3:4b-instruct-2507-q4_K_M`
-- Çalışan AgentSearch: varsayılan `http://localhost:3939`
-- En az 12 GB boş RAM ve 10 GB disk önerilir
+Three English, end-to-end runs demonstrate the product on medical AI, energy policy, and
+industrial robotics. Together they retained **75 source records**, extracted **204 claims**,
+and produced passage-audited reports plus Word deliverables.
 
-## Hızlı kurulum
+| Research case | Rounds | Sources | Claims | Examples |
+|---|---:|---:|---:|---|
+| Multimodal AI in radiology, 2024–2026 | 4 | 37 | 106 | [Markdown report](showcase/radiology/02_full_research_report.md) · [Word report](showcase/radiology/16_research_report.docx) · [Theme map](showcase/radiology/16b_theme_evidence_map.png) |
+| Small modular reactors: cost, schedule, and regulation | 7 | 9 | 40 | [Markdown report](showcase/small-modular-reactors/02_full_research_report.md) · [Word report](showcase/small-modular-reactors/16_research_report.docx) · [Theme map](showcase/small-modular-reactors/16b_theme_evidence_map.png) |
+| Humanoid robots in production: evidence vs expectations | 13 | 29 | 58 | [Markdown report](showcase/humanoid-robots/02_full_research_report.md) · [Word report](showcase/humanoid-robots/16_research_report.docx) · [Theme map](showcase/humanoid-robots/16b_theme_evidence_map.png) |
 
-Önce mevcut AgentSearch'i başlatın. Ardından PowerShell'de:
+![Radiology theme-to-evidence map](showcase/radiology/16b_theme_evidence_map.png)
+
+These examples are intentionally not presented as “perfect scores.” All three reached full
+claim-audit coverage, but the strict stopping policy classified them as
+`completed_incomplete` when family, branch, or estimated-completeness gates remained unmet.
+The reports are still delivered, and the unresolved gaps remain visible. See the
+[showcase guide](showcase/README.md) for exact run metadata and interpretation.
+
+## Auditable output contract
+
+A complete run can produce:
+
+1. Executive summary
+2. Full research report
+3. Evidence matrix
+4. Claim ledger
+5. Source catalog
+6. Contradiction map
+7. Coverage report
+8. BibTeX bibliography
+9. Search protocol
+10. Reproducibility manifest
+11. Audit report
+12. Uncertainty report
+13. Raw sources
+14. Raw passages
+15. Literature inventory
+16. Research report in Word
+17. Figure observations and selected source-figure excerpts
+18. Raw, result-only, and combined bundles
+
+The exact artifact count varies when a run contains no usable figures or a particular
+optional output has no data.
+
+## Local model stack
+
+The validated office deployment uses:
+
+- `qwen3:4b-instruct-2507-q4_K_M` for research reasoning and structured extraction.
+- `embeddinggemma:300m-qat-q4_0` for local dense retrieval.
+- `qwen3.5:4b` for source-figure inspection.
+
+Lexical retrieval remains available when the embedding model is unavailable. The provider
+interface also supports an OpenAI-compatible remote model, while Ollama remains the default.
+
+## Quick start
+
+### Requirements
+
+- Windows 10/11
+- Python 3.11+
+- Docker Desktop
+- Ollama
+- A running AgentSearch service, by default at `http://localhost:3939`
+
+Install the local Ollama models, then run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\setup_windows.ps1
 ```
 
-Docker Hub sertifika doğrulaması başarısız olursa kurulum otomatik olarak PostgreSQL/Redis/MinIO'yu Docker'da, API ve worker'ı `.venv` içinde çalıştıran native fallback'e geçer. Bu mod için portlar yalnız loopback üzerinde `5433`, `6380` ve `9000` olarak açılır. Native süreçleri durdurmak için `scripts\stop_native.ps1` kullanılır.
+Before first use, copy the relevant example environment file and replace `API_TOKEN`,
+`MINIO_SECRET_KEY`, and any connector credentials. Never commit a populated `.env` file.
 
-İlk çalıştırmadan önce `.env` içindeki `API_TOKEN` ve `MINIO_SECRET_KEY` değerlerini değiştirin. Servisler:
+Main local endpoints:
 
-- API/OpenAPI: `http://localhost:8000/docs`
-- Langflow: `http://localhost:7860`
-- MinIO Console: `http://localhost:9001`
-- MCP Gateway: `http://localhost:8010/mcp`
-- Kontrol Paneli: yerel `http://127.0.0.1:8020`, ofis ağı `http://<sunucu-ip>:8020`
+- API and OpenAPI: `http://127.0.0.1:8000/docs`
+- MCP gateway: `http://127.0.0.1:8010/mcp`
+- Operations console: `http://127.0.0.1:8020`
+- Langflow: `http://127.0.0.1:7860`
+- MinIO console: `http://127.0.0.1:9001`
 
-## Ofis ağına açma
+For office-network deployment, follow [OFFICE_TEAM_SETUP.md](OFFICE_TEAM_SETUP.md).
 
-API ve veri servislerini dışarı açmadan kimlik doğrulamalı MCP gateway'i ve CIDR korumalı kontrol
-panelini mevcut Wi-Fi ağına bağlamak için:
+## Agent access
 
-```powershell
-.\scripts\initialize_office_server.ps1
-.\scripts\start_office_server.ps1
-.\scripts\office_server_status.ps1
-```
+The MCP tool layer lets Codex and Claude:
 
-Windows Firewall kuralı yönetici yetkisiyle bir kez eklenir:
+- start a research run;
+- inspect progress, sources, claims, and coverage;
+- pause, resume, cancel, or answer HITL checkpoints;
+- retrieve only the synthesized result, only the relevant raw corpus, or both.
 
-```powershell
-.\scripts\configure_office_firewall.ps1
-```
+Example client configurations are available in
+[`examples/codex_mcp_config.toml`](examples/codex_mcp_config.toml) and
+[`examples/claude_mcp.json`](examples/claude_mcp.json). Tokens must come from the
+`RESEARCH_MCP_TOKEN` environment variable, not a committed configuration file.
 
-Ekip istemci kurulumu, otomatik başlatma ve Telegram allowlist akışı
-`OFFICE_TEAM_SETUP.md` belgesindedir.
-
-## Agent Gateway
-
-Üç teslimat modu desteklenir:
-
-- `raw`: kaynak sürümleri, provenance ve passage verileri.
-- `result`: yerel sentez, claim ledger, evidence matrix ve audit raporları.
-- `both`: ham veri ve sonuçların birlikte bulunduğu denetlenebilir paket.
-
-Codex için örnek ayar `examples/codex_mcp_config.toml`, Claude için örnek ayar
-`examples/claude_mcp.json` dosyasındadır. MCP token'ı yapılandırma dosyasına açık metin olarak
-yazılmamalı, `RESEARCH_MCP_TOKEN` ortam değişkeninden okunmalıdır.
-
-Telegram botu yalnız allowlist yapılandırıldıktan sonra başlatılır:
-
-```powershell
-docker compose --profile telegram up -d telegram-bot
-```
-
-Bot komutları:
+Telegram commands:
 
 ```text
-/research [raw|result|both] [dakika] [--hitl] <soru>
+/research [raw|result|both] [minutes] [--hitl] <question>
 /status <run_id>
 /get <run_id> [raw|result|both]
 /pause <run_id>
@@ -152,124 +232,46 @@ Bot komutları:
 /cancel <run_id>
 ```
 
-## Human-in-the-loop (HITL)
+## Human-in-the-loop
 
-Bir run için dört checkpoint bağımsız olarak açılabilir: `planning_questions`,
-`plan_review`, `source_review` ve `outline_review`. Checkpoint geldiğinde durum
-`awaiting_input` olur. Beş dakika içinde yanıt gelmezse worker belleği tutulmaz;
-state PostgreSQL'de korunarak durum `paused` olur. Aynı interaction daha sonra
-yanıtlandığında araştırma yeniden kuyruğa alınır ve kullanıcı bekleme süresi çalışma
-bütçesinden düşülmez.
+Four optional checkpoints can be enabled independently:
 
-API protokol örneği:
+- planning questions;
+- plan review;
+- source review;
+- outline review.
 
-```json
-"hitl": {
-  "planning_questions": true,
-  "plan_review": true,
-  "source_review": true,
-  "outline_review": true
-}
-```
+Waiting for a human does not consume the research budget. State is persisted in PostgreSQL,
+so the worker does not need to remain occupied while a run is paused.
 
-Yanıt uç noktası `POST /v1/research-runs/{id}/respond` olup gövdede güncel
-`interaction_id` ve checkpoint türüne uygun `response` ister. Telegram'da bütün
-checkpoint'leri açmak için `/research --hitl <soru>`; bağlı Codex/Claude için MCP
-`start_research` HITL bayrakları ve `respond_to_research_checkpoint` aracı kullanılır.
-
-Telegram'da süre hem `/research both --minutes 2 <soru>` hem de kısa biçimde
-`/research both 2 <soru>` olarak verilebilir. Süre yazılmazsa bot seçim menüsünü gösterir.
-
-## API ile araştırma başlatma
-
-```powershell
-$token = (Get-Content .env | Select-String '^API_TOKEN=').ToString().Split('=',2)[1]
-$protocol = Get-Content .\examples\protocol_core.yaml -Raw
-# YAML'ı uygulamada JSON'a dönüştürün veya Swagger UI üzerinden protokolü gönderin.
-Invoke-RestMethod http://localhost:8000/v1/connectors `
-  -Headers @{ Authorization = "Bearer $token" }
-```
-
-Örnek JSON isteği:
-
-```json
-{
-  "protocol": {
-    "title": "Kaynak güvenilirliği araştırması",
-    "primary_question": "Araştırma ajanlarında kaynak güvenilirliği nasıl ölçülür?",
-    "languages": ["tr", "en"],
-    "report_language": "tr",
-    "connectors": {
-      "profile": "core",
-      "included_families": ["web", "academic", "official_legal", "code_data"]
-    }
-  }
-}
-```
-
-## Connector profilleri
-
-`core`: web, academic, official/legal ve code/data. `all`: bütün aileler. EPO OPS gibi credential isteyen connector'lar anahtar yoksa `/v1/connectors` sonucunda disabled görünür; araştırmayı durdurmaz.
-
-Akademik connector'lar:
-
-- `openalex`: Güncel API anahtarı gerektirir; DOI, abstract, OA location, version ve
-  reference metadata sağlar.
-- `semantic_scholar`: Anahtarsız çalışabilir; üretim için API key ve 1 RPS başlangıç
-  profili önerilir.
-- `zotero_local`: Zotero masaüstünün `localhost:23119/api` arayüzünü kullanır.
-- `zotero_web`: `ZOTERO_USER_ID` veya `ZOTERO_GROUP_ID`; özel kütüphane için API key ister.
-
-Zotero corpus aktarımı:
-
-```powershell
-Invoke-RestMethod http://localhost:8000/v1/zotero/sync `
-  -Method Post `
-  -Headers @{ Authorization = "Bearer $token" } `
-  -ContentType "application/json" `
-  -Body '{"mode":"local","collections":[],"tags":["high-priority"],"limit":100}'
-```
-
-PaperQA2 kurulumu opsiyoneldir:
-
-```powershell
-.\.venv\Scripts\pip.exe install -e ".[academic]"
-```
-
-`PAPERQA2_ENABLED=true` ve `PAPERQA2_SHADOW_MODE=true` olduğunda sonuçları native
-pipeline'ın yerine geçmeden `paperqa2_shadow` audit event'i olarak kaydeder.
-
-## Geliştirme
+## Development
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\pip.exe install -e ".[dev]"
 $env:TESTING="true"
-.\.venv\Scripts\pytest.exe -q
+.\.venv\Scripts\ruff.exe check .
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Şema geliştirme ortamında API açılışında oluşturulur. Dağıtım migration'ı:
+Run migrations with:
 
 ```powershell
 .\.venv\Scripts\alembic.exe upgrade head
 ```
 
-## İş durumları
+For the current engineering rationale and milestone narrative, read
+[docs/PRODUCT_OVERVIEW.md](docs/PRODUCT_OVERVIEW.md). Detailed implementation reports remain
+in the repository as the project’s engineering notebook.
 
-`queued → running → completed|completed_incomplete|failed`. Pause ve cancel istekleri düğüm sınırında uygulanır. `max_wall_minutes` bilgi toplama bütçesidir: süre dolunca yeni search/acquisition durur; tamamlanmış edinimler normalizasyon, kanıt çıkarma, audit ve sentez aşamalarından geçirilerek rapor mutlaka tamamlanır. Coverage eşiği sağlanmadıysa sonuç `completed_incomplete` olur ve eksikler coverage/uncertainty raporunda korunur.
+## Safety boundaries
 
-Varsayılan `research_mode: literature_scan`, coverage erken yeterli görünse bile toplama
-bütçesi varken yeni ve çeşitlendirilmiş sorgu turları yürütür. `max_sources: null` ise kaynak
-sayısı yapay olarak sınırlandırılmaz. Yalnız açıkça alakasız belgeler dışlanır; doğrudan ve
-bağlamsal kaynaklar katalogda, ham pakette ve `15_literature_inventory.md` içinde korunur.
-Kısa ve seçici cevap istenen özel akışlarda `research_mode: focused_answer` kullanılabilir.
+The platform deliberately does **not** implement:
 
-## Güvenlik notları
+- paywall bypassing;
+- shadow-library access;
+- active cyberattacks, exploitation, or port scanning;
+- arbitrary instructions found inside acquired web content.
 
-- API yalnız loopback'e publish edilir ve bearer token ister.
-- Ofis modunda yalnız MCP portu Wi-Fi IP'sinde dinler; bearer token ve CIDR allowlist zorunludur.
-- Acquisition yalnız standart portlardaki HTTP/HTTPS hedeflerini kabul eder.
-- DNS ve her redirect sonrasında public-IP kontrolü yapılır.
-- Crawl4AI düşük yetkili, read-only container'da çalışır.
-- Kaynak metni güvenilmeyen veri olarak prompt'a alınır.
-- Üretimde `.env`, MinIO ve connector anahtarlarını repoya eklemeyin.
+Acquisition permits HTTP/HTTPS only, validates DNS and redirects against private-address
+access, applies content limits, records provenance, and treats source text as untrusted data.

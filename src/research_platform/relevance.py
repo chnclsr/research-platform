@@ -14,6 +14,7 @@ STOPWORDS = {
     "from", "gibi", "how", "ile", "into", "its", "local", "nelerdir", "nedir", "olan",
     "olarak", "has", "have", "that", "the", "their", "this", "use", "used", "uses", "what", "when", "where",
     "which", "who", "why", "with", "icin", "için", "ve", "veya",
+    "ağustos", "arasında", "hangi", "kadar", "temmuz", "yayımlanan",
 }
 
 GENERIC_RESEARCH_TERMS = {
@@ -33,6 +34,25 @@ TERM_ALIASES = {
     "sunucuları": {"server", "servers"},
     "kimlik": {"identity", "authentication", "authorization"},
     "doğrulama": {"authentication", "verification", "validation"},
+    "akciğer": {"lung", "pulmonary"},
+    "akciger": {"lung", "pulmonary"},
+    "kanser": {"cancer"},
+    "kanseri": {"cancer"},
+    "toraks": {"thoracic", "chest"},
+    "görüntü": {"image", "imaging"},
+    "görüntüleri": {"image", "imaging"},
+    "görüntülerinden": {"image", "imaging"},
+    "goruntulerinden": {"image", "imaging"},
+    "yapay": {"artificial"},
+    "zekâ": {"intelligence", "ai"},
+    "zeka": {"intelligence", "ai"},
+    "bt": {"ct", "computed", "tomography"},
+    "nodül": {"nodule", "nodular"},
+    "nodul": {"nodule", "nodular"},
+    "malignite": {"malignancy", "malignant"},
+    "saptama": {"detection"},
+    "tarama": {"screening"},
+    "tahmini": {"prediction", "predictive"},
 }
 
 UNTRUSTED_DISCOVERY_PATTERN = re.compile(
@@ -46,10 +66,10 @@ UNTRUSTED_DISCOVERY_PATTERN = re.compile(
 def terms(value: str) -> set[str]:
     result: set[str] = set()
     for token in re.findall(r"[a-zA-ZÀ-ž0-9][a-zA-ZÀ-ž0-9_-]+", value.lower()):
-        if len(token) >= 3 and token not in STOPWORDS:
+        if (len(token) >= 3 or token in {"ai", "bt", "ct"}) and token not in STOPWORDS:
             result.add(token)
             collapsed = token.replace("-", "").replace("_", "")
-            if len(collapsed) >= 3:
+            if len(collapsed) >= 3 or collapsed in {"ai", "bt", "ct"}:
                 result.add(collapsed)
             if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
                 result.add(token[:-1])

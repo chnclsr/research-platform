@@ -1,0 +1,83 @@
+title: 'Showcase 3 — Humanoid Robots in Production: Evidence versus Expectations (English
+  A/B)'
+primary_question: Investigate real-world use of humanoid robots in automotive manufacturing,
+  logistics, and general production from 1 January 2024 through 30 July 2026. Distinguish
+  pilot announcements and demonstrations from verified production integration. Examine
+  vision-language-action models, teleoperation, sim-to-real transfer, task success
+  rate, cycle time, payload, safety, failures, comparison with human workers, and
+  economic viability on a source-by-source basis. Verify claims by Figure, Agility
+  Robotics, Apptronik, Tesla, 1X, and similar companies using independent reporting,
+  academic studies, partners, customers, or official records. Include relevant open-source
+  code, datasets, and benchmarks. Produce a visual, auditable Word report that clearly
+  separates hype from verified evidence, includes counterevidence, and uses useful
+  source figures with model interpretation.
+research_mode: literature_scan
+sub_questions: []
+scope:
+  start_date: null
+  end_date: null
+  geography: []
+  domains: []
+languages:
+- en
+report_language: en
+connectors:
+  profile: core
+  included_families:
+  - web
+  - academic
+  - official_legal
+  - code_data
+  excluded_connectors: []
+  included_connectors: []
+  required_connectors: []
+  trusted_domains: []
+  zotero_collections: []
+  zotero_tags: []
+  citation_depth: 1
+evidence_policy:
+  minimum_independent_sources: 2
+  primary_source_preference: true
+  counterevidence_required: true
+authority_policy:
+  minimum_authority: any
+  strict_for_major_claims: false
+  discovery_sources_may_be_non_authoritative: true
+family_targets:
+  web:
+    minimum_sources: 1
+    weight: 1.0
+  academic:
+    minimum_sources: 1
+    weight: 1.0
+  code_data:
+    minimum_sources: 1
+    weight: 1.0
+  official_legal:
+    minimum_sources: 1
+    weight: 1.0
+sentinel_sources: []
+stopping_criteria:
+  minimum_source_coverage: 0.8
+  minimum_query_branch_coverage: 0.9
+  minimum_claim_audit_coverage: 0.95
+  maximum_new_source_rate: 0.05
+  unresolved_major_claim_limit: 5
+  saturation_rounds: 2
+  minimum_sentinel_recall: 1.0
+  minimum_estimated_completeness: 0.75
+  maximum_reserve_false_negative_rate: 0.1
+  maximum_citation_frontier_novelty: 0.05
+budget:
+  max_rounds: 4
+  max_sources: null
+  max_wall_minutes: 35
+  results_per_connector: 20
+  acquisition_concurrency: 4
+  exhaustive_until_budget: true
+output_mode: both
+hitl:
+  planning_questions: false
+  plan_review: false
+  source_review: false
+  outline_review: false

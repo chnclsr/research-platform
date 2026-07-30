@@ -13,9 +13,12 @@ import yaml
 
 from .llm import LLMProvider
 from .evidence_quality import evidence_quality_gate
+from .figure_analysis import FigurePipelineResult, analyze_run_figures
 from .repository import Repository
+from .report_synthesis import build_synthesis_package
 from .schemas import CoverageMetrics, ResearchProtocol
 from .storage import ObjectStore
+from .word_report import build_word_report
 
 
 def _csv_bytes(headers: list[str], rows: list[list[Any]]) -> bytes:
@@ -73,7 +76,6 @@ async def build_exports(
 
     reportable = [claim for claim in claims if _is_reportable(claim)]
     excluded = [claim for claim in claims if not _is_reportable(claim)]
-    context_lines = []
     ordered_reportable = sorted(
         reportable,
         key=lambda claim: (
@@ -83,136 +85,52 @@ async def build_exports(
         ),
         reverse=True,
     )
-    context_char_budget = max(
-        8000,
-        min(
-            50000,
-            int(
-                getattr(
-                    getattr(llm, "settings", None),
-                    "llm_context_tokens",
-                    8192,
-                )
-                * 2.5
-            ),
-        ),
-    )
-    for claim in ordered_reportable[:60]:
-        links = [
-            (link, source)
-            for link, source in evidence_by_claim.get(claim.id, [])
-            if evidence_quality_gate(
-                claim.text,
-                link.quote,
-                section_path=(link.location or {}).get("section_path"),
-                source_title=source.title,
-                entailment_score=link.entailment_score,
-            )[0]
-        ]
-        refs = ", ".join(f"{source.title} ({source.url})" for _, source in links)
-        quotes = " | ".join(link.quote[:600] for link, _ in links)
-        candidate_context = (
-            f"CLAIM: {claim.text}\nSTATUS: {claim.status}\n"
-            f"QUESTION_RELEVANCE: {claim.audit.get('question_relevance', 0)}\n"
-            f"SOURCES: {refs}\nVERIFIED_QUOTES: {quotes}"
-        )
-        if len("\n\n".join([*context_lines, candidate_context])) > context_char_budget:
-            break
-        context_lines.append(candidate_context)
     language_is_turkish = protocol.report_language.lower().startswith("tr")
-    deterministic_synthesis = {
-        "executive_summary": (
-            f"Kanıt denetimini geçen {len(reportable)} iddia vardır; bunların "
-            f"{sum(claim.status == 'supported' for claim in reportable)} tanesi bağımsız "
-            "kaynaklarla desteklenmiştir. Ayrıntılı ve kaynaklı bulgular raporun ilgili "
-            "bölümlerindedir."
-            if language_is_turkish
-            else f"{len(reportable)} claims passed evidence audit; "
-            f"{sum(claim.status == 'supported' for claim in reportable)} have independent support. "
-            "See the sourced findings for details."
-        ),
-        "report": (
-            "Model sentezi doğrulanabilirlik kapısını geçemediği için yeni yorum eklenmedi; "
-            "yalnız denetlenmiş bulgular raporlandı."
-            if language_is_turkish
-            else "No additional interpretation was added because model synthesis did not pass the "
-            "grounding gate; only audited findings are reported."
-        ),
-        "uncertainty": (
-            "Bağımsız destek, karşı kanıt ve kapsam eksikleri belirsizlik raporunda gösterilmiştir."
-            if language_is_turkish
-            else "Independent support, counterevidence, and coverage gaps are listed in the uncertainty report."
-        ),
-    }
+    synthesis_package = await build_synthesis_package(
+        llm=llm,
+        question=protocol.primary_question,
+        language=protocol.report_language,
+        sources=sources,
+        reportable_claims=[] if protocol.output_mode == "raw" else ordered_reportable,
+        evidence_by_claim=evidence_by_claim,
+        sub_questions=protocol.sub_questions,
+    )
+    figure_result = FigurePipelineResult()
+    if protocol.output_mode != "raw":
+        figure_result = await analyze_run_figures(
+            run_id=run_id,
+            question=protocol.primary_question,
+            language=protocol.report_language,
+            section_titles=[section.title for section in synthesis_package.sections],
+            sources=sources,
+            repo=repo,
+            store=store,
+            settings=getattr(llm, "settings", None),
+        )
     if protocol.output_mode == "raw":
         synthesis = {
-            "executive_summary": "Ham veri modu seçildi; model sentezi çalıştırılmadı.",
-            "report": "Ham kaynaklar ve pasajlar teslim paketinde sunulmuştur.",
-            "uncertainty": (
-                "İddia çıkarımı, denetim ve sentez ham veri modunda bilinçli olarak atlandı."
-            ),
-        }
-    elif not context_lines:
-        synthesis = {
             "executive_summary": (
-                "Denetim kapısından geçen raporlanabilir iddia bulunamadı. "
-                "Sistem, doğrulanmamış sonuç üretmek yerine araştırmayı eksik olarak teslim etti."
+                "Ham veri modu seçildi; model sentezi çalıştırılmadı."
                 if language_is_turkish
-                else "No reportable claim passed the evidence audit. The system returned an incomplete "
-                "research result instead of generating an unverified conclusion."
+                else "Raw mode was selected; model synthesis was not run."
             ),
             "report": (
-                "Doğrulanmış kanıt bulunmadığından model sentezi çalıştırılmadı."
+                "Ham kaynaklar ve pasajlar teslim paketinde sunulmuştur."
                 if language_is_turkish
-                else "Model synthesis was skipped because no verified evidence was available."
+                else "Raw sources and passages are provided in the delivery bundle."
             ),
             "uncertainty": (
-                "Kaynak ve kapsam eksikleri coverage ve belirsizlik raporlarında listelenmiştir."
+                "İddia çıkarımı, denetim ve sentez ham veri modunda bilinçli olarak atlandı."
                 if language_is_turkish
-                else "Source and coverage gaps are listed in the coverage and uncertainty reports."
+                else "Claim extraction, audit, and synthesis were intentionally skipped in raw mode."
             ),
         }
     else:
-        try:
-            synthesis = await llm.complete_json(
-                "Create concise JSON with executive_summary, report, and uncertainty. Use only the supplied "
-                "claims and VERIFIED_QUOTES, distinguish supported from qualified findings, retain source URLs, "
-                f"write every value in report language '{protocol.report_language}', and never add facts. "
-                "Follow the user's outline guidance when it does not conflict with evidence safety.",
-                f"QUESTION: {protocol.primary_question}\n"
-                f"OUTLINE_GUIDANCE: {outline_guidance or 'Use the default audited structure.'}\n\n"
-                + "\n\n".join(context_lines),
-            )
-            if not isinstance(synthesis, dict):
-                synthesis = {"report": synthesis}
-            synthesis_blob = json.dumps(synthesis, ensure_ascii=False)
-            allowed_urls = {
-                source.url
-                for claim in ordered_reportable
-                for _, source in evidence_by_claim.get(claim.id, [])
-            }
-            output_urls = set(re.findall(r"https?://[^\s)\]>]+", synthesis_blob))
-            english_markers = len(
-                re.findall(
-                    r"\b(?:the|and|with|from|this|study|claim|source|evidence)\b",
-                    synthesis_blob,
-                    flags=re.IGNORECASE,
-                )
-            )
-            turkish_markers = len(
-                re.findall(
-                    r"\b(?:ve|ile|bu|bir|çalışma|iddia|kaynak|kanıt|ancak)\b",
-                    synthesis_blob,
-                    flags=re.IGNORECASE,
-                )
-            )
-            if output_urls - allowed_urls or (
-                language_is_turkish and english_markers > max(2, turkish_markers)
-            ):
-                synthesis = deterministic_synthesis
-        except Exception as exc:
-            synthesis = dict(deterministic_synthesis)
-            synthesis["uncertainty"] += f" LLM synthesis unavailable: {type(exc).__name__}."
+        synthesis = {
+            "executive_summary": synthesis_package.executive_summary,
+            "report": synthesis_package.narrative,
+            "uncertainty": synthesis_package.uncertainty,
+        }
 
     def render_findings(selected_claims: list[Any]) -> str:
         findings = []
@@ -322,18 +240,21 @@ async def build_exports(
     report_md = (
         f"# {protocol.title}\n\n"
         f"## Araştırma sorusu\n\n{protocol.primary_question}\n\n"
-        f"## Bağımsız kaynaklarla desteklenen bulgular\n\n{findings_md}\n\n"
-        f"## Tek kaynaklı / doğrulama gerektiren bulgular\n\n{qualified_md}\n\n"
-        f"## Model sentezi\n\n{_markdown(synthesis.get('report'))}\n\n"
-        f"## Kaynak bazlı literatür dökümü\n\n"
+        f"## Yönetici sentezi\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"## Tematik kanıt sentezi\n\n{_markdown(synthesis.get('report'))}\n\n"
+        f"## Belirsizlikler ve araştırma boşlukları\n\n"
+        f"{_markdown(synthesis.get('uncertainty'))}\n\n"
+        f"## Ek A — Bağımsız kaynaklarla desteklenen atomik bulgular\n\n{findings_md}\n\n"
+        f"## Ek B — Tek kaynaklı / doğrulama gerektiren atomik bulgular\n\n{qualified_md}\n\n"
+        f"## Ek C — Kaynak bazlı literatür dökümü\n\n"
         f"Araştırmada korunan **{len(sources)}** kaynağın tamamı, her kaynağın rolü ve "
         "çıkarılan bulgularıyla `15_literature_inventory.md` dosyasında listelenmiştir.\n"
     )
     executive_md = (
         "# Yönetici Özeti\n\n"
-        f"Korunan literatür kaynağı: {len(sources)} · Raporlanabilir iddia: {len(reportable)} "
-        f"· Dışlanan/zayıf iddia: {len(excluded)}\n\n"
-        f"{_markdown(synthesis.get('executive_summary'))}\n"
+        f"{_markdown(synthesis.get('executive_summary'))}\n\n"
+        "Kaynak kataloğu, atomik claim kayıtları ve retrieval/coverage ölçümleri teslim "
+        "paketinin denetim eklerinde ayrıca korunmuştur.\n"
     )
 
     files: dict[str, tuple[str, bytes]] = {}
@@ -570,6 +491,64 @@ async def build_exports(
         "text/markdown",
         literature_inventory_md.encode("utf-8"),
     )
+    if figure_result.observations:
+        files["17_figure_observations.json"] = (
+            "application/json",
+            json.dumps(
+                figure_result.manifest(),
+                ensure_ascii=False,
+                indent=2,
+            ).encode("utf-8"),
+        )
+    # The DOCX is rendered from audited run state and bounded synthesis
+    # sections. A model-selected source figure may enter as a tightly cropped,
+    # attributed internal-review excerpt; deterministic reconstruction remains
+    # the fallback when a safe crop is unavailable.
+    word_report = build_word_report(
+        run_id=run_id,
+        title=protocol.title,
+        question=protocol.primary_question,
+        language=protocol.report_language,
+        coverage=coverage.model_dump(),
+        sources=sources,
+        claims=claims,
+        reportable_claims=ordered_reportable,
+        evidence_by_claim=evidence_by_claim,
+        executive_summary=str(synthesis.get("executive_summary", "")),
+        narrative=_markdown(synthesis.get("report")),
+        uncertainty=_markdown(synthesis.get("uncertainty")),
+        scope=protocol.scope.model_dump(mode="json"),
+        sub_questions=protocol.sub_questions,
+        connector_ids=protocol.connectors.included_connectors,
+        research_mode=protocol.research_mode,
+        synthesis_package=synthesis_package,
+        figure_observations=figure_result.observations,
+        research_figures=figure_result.generated_figures,
+    )
+    files["16_research_report.docx"] = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        word_report.document,
+    )
+    for figure_name, figure_bytes in word_report.figures.items():
+        files[figure_name] = ("image/png", figure_bytes)
+    for research_figure in figure_result.generated_figures:
+        files[research_figure.name] = ("image/png", research_figure.data)
+
+    existing_artifacts = await repo.list_artifacts(run_id)
+    current_figure_names = {
+        name
+        for name in files
+        if re.fullmatch(r"17[a-z]_source_figure_.*\.png", name)
+    }
+    stale_figures = [
+        artifact
+        for artifact in existing_artifacts
+        if re.fullmatch(r"17[a-z]_source_figure_.*\.png", artifact.name)
+        and artifact.name not in current_figure_names
+    ]
+    for artifact in stale_figures:
+        await store.delete(artifact.object_key)
+    await repo.delete_artifacts(run_id, {artifact.name for artifact in stale_figures})
 
     saved = []
     for name, (media_type, data) in files.items():

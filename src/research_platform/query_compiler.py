@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from .relevance import TERM_ALIASES
 from .schemas import ResearchProtocol
 
 
@@ -41,6 +42,42 @@ def _primary_anchors(question: str, limit: int = 8) -> str:
     return " ".join(list(dict.fromkeys(useful))[:limit])[:240].strip()
 
 
+def _academic_english_anchors(*values: str, limit: int = 16) -> str:
+    """Translate known domain terms before provider truncation.
+
+    Academic APIs work best with concise English concepts.  Keeping translated
+    anchors first prevents a long Turkish question or recovery prompt from
+    consuming the provider's entire lexical budget before its key concepts.
+    """
+    preferred = (
+        "lung", "cancer", "chest", "ct", "imaging", "ai", "nodule",
+        "malignancy", "detection", "screening", "prediction", "validation",
+    )
+    preference = {token: index for index, token in enumerate(preferred)}
+    primary_aliases: list[str] = []
+    secondary_aliases: list[str] = []
+    literal_anchors: list[str] = []
+    for value in values:
+        for token in re.findall(r"[\w.+:/-]+", value.lower(), flags=re.UNICODE):
+            if token.isdigit() or _QUESTION_NOISE.fullmatch(token):
+                continue
+            aliases = TERM_ALIASES.get(token)
+            if aliases:
+                ordered = sorted(
+                    aliases,
+                    key=lambda alias: (preference.get(alias, len(preference)), alias),
+                )
+                primary_aliases.append(ordered[0])
+                secondary_aliases.extend(ordered[1:])
+                continue
+            if token.isascii() and len(token) >= 3 and token not in _ANCHOR_NOISE:
+                literal_anchors.append(token)
+    anchors = list(
+        dict.fromkeys([*primary_aliases, *literal_anchors, *secondary_aliases])
+    )
+    return " ".join(anchors[:limit])
+
+
 def compile_provider_query(
     connector_id: str,
     query: str,
@@ -64,7 +101,12 @@ def compile_provider_query(
         # ArxivConnector owns field/date syntax; pass concise lexical anchors here.
         return " ".join(terms) or compact
     if connector_id in {"crossref", "openalex", "semantic_scholar", "europe_pmc"}:
-        return " ".join(enriched.split()[:16])
+        translated = _academic_english_anchors(
+            protocol.primary_question,
+            query,
+            " ".join(concepts or []),
+        )
+        return translated or " ".join(enriched.split()[:16])
     if connector_id == "github":
         return " ".join(enriched.split()[:10])
     if connector_id in {"gdelt", "agentsearch_news"}:

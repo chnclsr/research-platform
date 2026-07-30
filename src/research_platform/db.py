@@ -92,6 +92,30 @@ class SourceVersionRow(Base):
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class FigureObservationRow(Base):
+    __tablename__ = "figure_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_version_id",
+            "image_hash",
+            "vision_model",
+            name="uq_figure_observation_identity",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    source_id: Mapped[str] = mapped_column(String(26), index=True)
+    source_version_id: Mapped[str] = mapped_column(String(26), index=True)
+    image_hash: Mapped[str] = mapped_column(String(64), index=True)
+    image_key: Mapped[str] = mapped_column(Text)
+    page_number: Mapped[int | None] = mapped_column(Integer)
+    caption: Mapped[str] = mapped_column(Text, default="")
+    vision_model: Mapped[str] = mapped_column(String(160))
+    analysis: Mapped[dict] = mapped_column(json_type(), default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SourceRelationRow(Base):
     __tablename__ = "source_relations"
     __table_args__ = (

@@ -488,7 +488,12 @@ async def test_pipeline_resumes_to_auditable_export():
         assert completed.sources_count == 1
         assert completed.claims_count >= 1
         artifacts = await repo.list_artifacts(row.id)
-        assert len(artifacts) == 18
+        assert len(artifacts) == 21
+        word_artifact = next(a for a in artifacts if a.name == "16_research_report.docx")
+        word_report = await ObjectStore(get_settings()).get(word_artifact.object_key)
+        with zipfile.ZipFile(io.BytesIO(word_report)) as archive:
+            assert "word/document.xml" in archive.namelist()
+            assert any(name.startswith("word/media/") for name in archive.namelist())
         inventory_artifact = next(
             a for a in artifacts if a.name == "15_literature_inventory.md"
         )

@@ -108,6 +108,10 @@ class AcquisitionService:
         if direct and direct.success:
             return direct
 
+        metadata_document = self._scholarly_metadata_document(candidate, tried)
+        if metadata_document is not None:
+            return metadata_document
+
         agent = await self._agentsearch(url, candidate, tried)
         if agent and agent.success:
             return agent
@@ -126,6 +130,56 @@ class AcquisitionService:
         return AcquiredDocument(
             candidate=candidate, success=False, access_status="unavailable",
             strategies_tried=tried, error=error,
+        )
+
+    def _scholarly_metadata_document(
+        self,
+        candidate: ConnectorCandidate,
+        tried: list[str],
+    ) -> AcquiredDocument | None:
+        if candidate.family.value != "academic":
+            return None
+        abstract = candidate.metadata.get("abstract") or candidate.snippet
+        if isinstance(abstract, list):
+            abstract = " ".join(str(item) for item in abstract)
+        abstract = " ".join(str(abstract or "").split())
+        if len(abstract) < 240 or not candidate.title or not candidate.authors:
+            return None
+        tried.append("scholarly_metadata")
+        candidate.metadata["content_scope"] = "abstract_and_metadata"
+        candidate.metadata["full_text_available"] = False
+        content = "\n\n".join(
+            filter(
+                None,
+                [
+                    f"# {candidate.title}",
+                    f"## Abstract\n\n{abstract}",
+                    (
+                        f"## Authors\n\n{', '.join(candidate.authors)}"
+                        if candidate.authors
+                        else ""
+                    ),
+                    (
+                        f"## Publisher\n\n{candidate.publisher}"
+                        if candidate.publisher
+                        else ""
+                    ),
+                    (
+                        f"## Persistent identifier\n\n{candidate.persistent_id}"
+                        if candidate.persistent_id
+                        else ""
+                    ),
+                ],
+            )
+        )
+        return self._document(
+            candidate,
+            content,
+            "scholarly_metadata",
+            tried,
+            "text/plain",
+            document_type="text",
+            final_url=str(candidate.url),
         )
 
     def _document(
