@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import (
@@ -15,6 +15,7 @@ from .db import (
     ConnectorSyncCursorRow,
     EventRow,
     EvidenceRow,
+    FigureObservationRow,
     FrontierRow,
     PassageRow,
     ResearchRunRow,
@@ -732,6 +733,57 @@ class Repository:
         )
         return list(result.tuples())
 
+    async def save_figure_observation(
+        self,
+        *,
+        run_id: str,
+        source_id: str,
+        source_version_id: str,
+        image_hash: str,
+        image_key: str,
+        page_number: int | None,
+        caption: str,
+        vision_model: str,
+        analysis: dict[str, Any],
+    ) -> FigureObservationRow:
+        row = await self.session.scalar(
+            select(FigureObservationRow).where(
+                FigureObservationRow.source_version_id == source_version_id,
+                FigureObservationRow.image_hash == image_hash,
+                FigureObservationRow.vision_model == vision_model,
+            )
+        )
+        if row is None:
+            row = FigureObservationRow(
+                id=new_id(),
+                run_id=run_id,
+                source_id=source_id,
+                source_version_id=source_version_id,
+                image_hash=image_hash,
+                image_key=image_key,
+                page_number=page_number,
+                caption=caption,
+                vision_model=vision_model,
+                analysis=analysis,
+            )
+            self.session.add(row)
+        else:
+            row.image_key = image_key
+            row.page_number = page_number
+            row.caption = caption
+            row.analysis = analysis
+        await self.session.commit()
+        return row
+
+    async def list_figure_observations(self, run_id: str) -> list[FigureObservationRow]:
+        return list(
+            await self.session.scalars(
+                select(FigureObservationRow)
+                .where(FigureObservationRow.run_id == run_id)
+                .order_by(FigureObservationRow.created_at, FigureObservationRow.id)
+            )
+        )
+
     async def save_artifact(
         self, run_id: str, name: str, media_type: str, object_key: str, size_bytes: int
     ) -> ArtifactRow:
@@ -757,3 +809,14 @@ class Repository:
         return list(
             await self.session.scalars(select(ArtifactRow).where(ArtifactRow.run_id == run_id))
         )
+
+    async def delete_artifacts(self, run_id: str, names: set[str]) -> None:
+        if not names:
+            return
+        await self.session.execute(
+            delete(ArtifactRow).where(
+                ArtifactRow.run_id == run_id,
+                ArtifactRow.name.in_(names),
+            )
+        )
+        await self.session.commit()

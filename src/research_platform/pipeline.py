@@ -321,7 +321,19 @@ class ResearchPipeline:
             state["started_monotonic"] = time.monotonic()
         state.setdefault("budget_started_at", datetime.now(timezone.utc).isoformat())
         try:
-            result = await self.graph.ainvoke(state, {"recursion_limit": 80})
+            protocol = ResearchProtocol.model_validate(row.protocol)
+            # A literature scan can intentionally keep expanding until its
+            # wall-clock or source budget is exhausted.  The fixed LangGraph
+            # default previously killed such runs after roughly six rounds,
+            # long before the user-selected duration elapsed.
+            recursion_limit = max(
+                80,
+                min(5000, 80 + protocol.budget.max_wall_minutes * 20),
+            )
+            result = await self.graph.ainvoke(
+                state,
+                {"recursion_limit": recursion_limit},
+            )
             if result.get("halted"):
                 return
             coverage = CoverageMetrics.model_validate(result.get("coverage", {}))
@@ -834,19 +846,38 @@ class ResearchPipeline:
                     self.settings.frontier_max_links_per_document,
                 ),
             )
+            invalid_frontier: list[dict[str, str]] = []
             for item in frontier:
-                candidate = ConnectorCandidate(
-                    connector_id="link_frontier",
-                    family="web",
-                    title=item["url"],
-                    url=item["url"],
-                    snippet="Discovered from an acquired source",
-                    metadata={
-                        **item,
-                        "query_branches": [missions[0].branch_id] if missions else [],
+                try:
+                    candidate = ConnectorCandidate(
+                        connector_id="link_frontier",
+                        family="web",
+                        title=str(item["url"])[:500],
+                        url=item["url"],
+                        snippet="Discovered from an acquired source",
+                        metadata={
+                            **item,
+                            "query_branches": [missions[0].branch_id] if missions else [],
+                        },
+                    )
+                except Exception as exc:
+                    invalid_frontier.append(
+                        {
+                            "url": str(item.get("url", ""))[:500],
+                            "error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                        }
+                    )
+                    continue
+                unique.setdefault(canonicalize_url(str(candidate.url)), candidate)
+            if invalid_frontier:
+                await self.repo.event(
+                    state["run_id"],
+                    "frontier_candidates_rejected",
+                    {
+                        "rejected_count": len(invalid_frontier),
+                        "sample": invalid_frontier[:20],
                     },
                 )
-                unique.setdefault(canonicalize_url(str(candidate.url)), candidate)
         existing = await self.repo.list_sources(state["run_id"])
         novel, novelty_rejected = await self.repo.filter_novel_candidates(
             state["run_id"],
@@ -915,7 +946,7 @@ class ResearchPipeline:
         else:
             rank_pool_limit = min(len(novel), max(round_cap * 4, round_cap))
             reserve_limit = (
-                round_cap
+                min(5, round_cap // 4)
                 if protocol.research_mode == "literature_scan"
                 else max(1, min(5, round_cap // 5))
             )

@@ -12,3 +12,6 @@ logs/
 dist/
 htmlcov/
 .coverage
+outputs/
+reports/
+insti_patch.zip

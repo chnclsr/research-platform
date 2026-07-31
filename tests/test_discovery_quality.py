@@ -4,9 +4,10 @@ from research_platform.discovery_quality import (
     estimated_completeness, relation_to_candidate, sentinel_recall,
 )
 from research_platform.query_compiler import compile_provider_query
-from research_platform.relevance import classify_candidate_admission
+from research_platform.relevance import classify_candidate_admission, topic_terms
+from research_platform.recovery import select_mission_balanced_candidates
 from research_platform.schemas import (
-    ConnectorCandidate, ResearchProtocol, SentinelSource, SourceFamily,
+    ConnectorCandidate, ResearchProtocol, SearchMission, SentinelSource, SourceFamily,
 )
 
 
@@ -27,6 +28,26 @@ def test_query_compiler_is_provider_specific_and_preserves_connector_date_pushdo
     web = compile_provider_query("agentsearch_web", source, protocol())
     assert "lung" in web
     assert len(web) <= 500
+
+
+def test_academic_query_compiler_prioritizes_translated_turkish_medical_anchors():
+    research_protocol = ResearchProtocol(
+        title="Turkish academic query",
+        primary_question=(
+            "Akciğer kanseri için toraks BT görüntülerinden yapay zekâ ile "
+            "nodül malignite tahmini yapan çalışmaları bul."
+        ),
+        connectors={"profile": "custom", "included_families": ["academic"]},
+    )
+    compiled = compile_provider_query(
+        "openalex",
+        "Hangi çalışmalar dış doğrulama kullanıyor?",
+        research_protocol,
+    )
+    assert {"lung", "cancer", "chest", "ct", "imaging", "nodule", "malignancy"} <= set(
+        compiled.split()
+    )
+    assert len(compiled.split()) <= 16
 
 
 def test_literature_query_branch_inherits_primary_subject_context():
@@ -108,3 +129,31 @@ def test_sentinel_recall_matches_persistent_id_and_reports_missing_titles():
     )
     assert recall == 0.5
     assert missing == ["Known B"]
+def test_turkish_medical_terms_expand_to_english_provider_vocabulary() -> None:
+    expanded = topic_terms(
+        "akciger kanseri icin toraks BT goruntulerinden nodul malignite tahmini"
+    )
+    assert {"lung", "cancer", "chest", "ct", "imaging", "nodule", "malignancy"} <= expanded
+
+
+def test_mission_balance_does_not_promote_weak_branch_candidate() -> None:
+    weak = ConnectorCandidate(
+        connector_id="crossref",
+        family=SourceFamily.ACADEMIC,
+        title="Unrelated result",
+        url="https://example.org/weak",
+        metadata={"query_branches": ["query:0"], "relevance_score": 0.25},
+    )
+    strong = ConnectorCandidate(
+        connector_id="openalex",
+        family=SourceFamily.ACADEMIC,
+        title="Lung cancer CT model",
+        url="https://example.org/strong",
+        metadata={"query_branches": ["query:1"], "relevance_score": 0.9},
+    )
+    missions = [
+        SearchMission(query="weak branch", branch_id="query:0", acquisition_slots=1),
+        SearchMission(query="strong branch", branch_id="query:1", acquisition_slots=1),
+    ]
+    selected = select_mission_balanced_candidates([weak, strong], missions, 1)
+    assert selected == [strong]

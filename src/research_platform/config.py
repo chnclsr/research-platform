@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     llm_repeat_penalty: float | None = Field(None, ge=0.0, le=2.0)
     llm_presence_penalty: float | None = Field(None, ge=-2.0, le=2.0)
     embedding_model: str = "embeddinggemma:300m-qat-q4_0"
+    figure_analysis_enabled: bool = True
+    vision_model: str = "qwen3.5:4b"
+    figure_max_candidates: int = Field(8, ge=0, le=40)
+    figure_max_pages_per_source: int = Field(3, ge=1, le=12)
+    figure_min_relevance: float = Field(0.55, ge=0.0, le=1.0)
+    figure_analysis_timeout_s: float = Field(180.0, ge=10.0, le=900.0)
+    figure_source_embedding_enabled: bool = True
+    figure_source_max_exports: int = Field(5, ge=0, le=12)
+    figure_source_min_confidence: float = Field(0.70, ge=0.0, le=1.0)
     passage_target_tokens: int = Field(700, ge=200, le=1800)
     passage_overlap_tokens: int = Field(100, ge=0, le=400)
     passages_per_question: int = Field(8, ge=1, le=30)

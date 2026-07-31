@@ -1,10 +1,106 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.7.0`
+Platform sürümü: `v0.9.1`
 
-Belge sürümü: `4.0`
+Belge sürümü: `5.1`
 
-Son güncelleme: `2026-07-21`
+Son güncelleme: `2026-07-30`
+
+## v0.9.1 — 2026-07-30
+
+- Modelin raporda yorumlamaya değer bulduğu kaynak figürleri, PDF sayfasındaki
+  vektör/raster sınırlarından otomatik olarak kırpılıp ilgili sentez bölümüne
+  yerleştiriliyor.
+- Özgün figür, kaynak caption'ı, `[Sxx]`, sayfa, paper başlığı, URL, hak/lisans
+  uyarısı ve model yorumu tek bir görsel blok halinde sunuluyor.
+- Aynı figür için mevcut yapılandırılmış yorumlama, sınırlılık ve güven puanı
+  korunuyor; görsel artık yorumun yanında gerçekten görülebiliyor.
+- Kaynak figürü güvenli biçimde ayrılamazsa açık değer veya süreç düğümlerinden
+  deterministik rekonstrüksiyon yedek davranış olarak devam ediyor.
+- Çok parçalı dikey akış şemaları component clustering ile tek figür olarak
+  ayrılıyor; aynı sayfadaki iki bağımsız grafik birbirine karıştırılmıyor.
+- Kaynak figürü ekleme varsayılan olarak kurum içi araştırma incelemesi içindir;
+  dış dağıtım öncesi lisans doğrulama uyarısı caption altında gösteriliyor.
+- Canlı doğrulamada dört özgün kaynak figürü Word raporuna yerleştirildi; `6/6`
+  görsel alternatif metinli, erişilebilirlik uyarısı sıfır, test sonucu
+  `155 passed` ve Ruff temiz.
+
+## v0.9.0 — 2026-07-29
+
+- PDF sayfaları ve HTML `figure/img` öğelerinden source/version/hash bağlantılı
+  figure candidate çıkarımı eklendi.
+- Kurulu `qwen3.5:4b` yalnız figure analyst olarak kullanılıyor; ana sentez modeli
+  değişmedi ve iki model RTX 4060 üzerinde sıralı çalışıyor.
+- Vision cevabı figür türü, eksen, seri, açık veri noktaları, süreç adımları,
+  ana bulgu, sınırlılık ve uygun rapor bölümüne normalize ediliyor.
+- Yaklaşık veya açıkça yazılmayan sayılar chart pipeline'ına alınmıyor; bilinmeyen
+  değerlerin LLM tarafından tamamlanması engelleniyor.
+- Kaynağa özgü 1–5 puan ölçekleri klinik duyarlılık, özgüllük veya AUC yüzdesi
+  olarak yorumlanamıyor; hem bulgu hem caption hem limitation deterministik
+  güvenlik uyarısı taşıyor.
+- Açık çubuk değerleri ve görünür akış düğümleri Python/Pillow ile deterministik
+  yeniden çiziliyor; özgün yayın görseli Word raporuna kopyalanmıyor.
+- Yeniden çizilen figürler ilgili tematik sentez bölümünün hemen arkasına caption,
+  `[Sxx]` citation ve erişilebilirlik açıklamasıyla yerleştiriliyor.
+- Bütün vision gözlemleri Word `Ek D` ve `17_figure_observations.json` içinde
+  provenance kaydıyla korunuyor.
+- `figure_observations` tablosu ve `0006_figure_observations` migration'ı eklendi;
+  aynı source image hash/model/schema tekrar analiz edilmiyor.
+- Canlı akciğer görüntüleme run'ında kaynak PDF'deki performans çubuk grafiği ve
+  veri ön işleme akış şeması başarıyla okunup yeniden çizildi.
+- Ruff temiz; regresyon paketi `154 passed`.
+
+## v0.8.0 — 2026-07-29
+
+- Tek ve büyük rapor çağrısı; en fazla beş temaya ayrılan, küçük kanıt paketleriyle
+  çalışan çok aşamalı LLM sentez pipeline'ıyla değiştirildi.
+- Her tematik taslak yalnız izin verilen `[Sxx]` kaynak kimliklerine atıf yapabilir;
+  bilinmeyen kaynak, URL ve bozuk citation biçimi deterministik kapıda reddedilir.
+- Qwen 4B'nin dil veya citation biçimini bozduğu tema taslakları için yeni bilgi
+  eklemeyen çeviri/format onarım çağrısı ve güvenli geri dönüş eklendi.
+- Word raporunun ana gövdesi kaynak envanterinden yönetici sentezi, tematik
+  çalışmalar-arası değerlendirme, ayrışmalar, uygulama anlamı ve sonuç yapısına geçti.
+- Kaynak, claim ve coverage sayaç grafikleri ana gövdeden çıkarıldı; yerlerine
+  araştırma katkı türleri grafiği ile çalışma–sentez teması kanıt matrisi eklendi.
+- Tam kaynak kataloğu, claim register, coverage ve yeniden üretilebilirlik ölçümleri
+  kaybolmadan Word raporunun denetim eklerine taşındı.
+- Markdown yönetici özeti ve tam rapor da sentez-öncelikli düzene geçirildi.
+- Gerçek 16 kaynaklı akciğer görüntüleme araştırması üzerinde yeni DOCX ve iki
+  konu grafiği yeniden üretildi; 149 test ve Ruff kontrolü geçti.
+
+## v0.7.2 — 2026-07-29
+
+- Word teslimatı yayın kalitesinde literatür raporu yapısına yükseltildi: kapak,
+  içindekiler, yönetici değerlendirmesi, kapsam/kanıt sağlığı, kaynaklı ana
+  bulgular, literatür haritası, tam kaynak kataloğu, claim register ve
+  yeniden üretilebilirlik bölümü eklendi.
+- OpenAlex API anahtarı isteğe bağlı hale getirildi; anahtarsız çalışan açık
+  uç nokta artık connector'ı devre dışı bırakmıyor.
+- OpenAlex ediniminde açık PDF/landing page tercih edildi; tam metin
+  erişilemediğinde doğrulanabilir başlık-yazar-özet metadatası
+  `abstract_and_metadata` provenance'ıyla korunuyor.
+- Literatür taramasında reserve adayların bütün acquisition kapasitesini
+  tüketmesi engellendi; reserve payı en fazla yaklaşık yüzde 25 oldu.
+- Zayıf sorgu dallarının düşük ilgili adayları mission balancing ile öne
+  taşıması engellendi ve Türkçe tıbbi terimler İngilizce akademik eş anlamlılarla
+  genişletildi.
+- Süre bütçeli uzun literatür taramalarını erken bitiren sabit LangGraph
+  recursion limiti, protokolün dakika bütçesine göre ölçeklenir hale getirildi.
+- Aşırı uzun veya geçersiz crawler frontier URL'leri bütün run'ı düşürmek yerine
+  audit event'iyle reddediliyor; checkpoint'i olan failed run'lar API üzerinden
+  yeniden kuyruğa alınabiliyor.
+
+## v0.7.1 — 2026-07-29
+
+- Her tamamlanan araştırma artık `16_research_report.docx` artifact'ını üretir.
+- Word raporu LLM'in serbest dosya üretiminden değil; denetlenmiş claim, evidence,
+  source ve coverage kayıtlarından deterministik olarak oluşturulur.
+- DOCX içinde kaynak ailesi ve iddia denetim durumu grafikleri, coverage tablosu,
+  kaynaklı bulgular ve tıklanabilir kaynak kataloğu bulunur.
+- `python-docx` ve Pillow production bağımlılıkları olarak eklendi; iki grafik ayrıca
+  PNG artifact olarak teslim paketine dahil edilir.
+- Çok aşamalı / küçük parçalara bölünmüş LLM rapor planlayıcısı sonraki sürüm için
+  exporter sözleşmesini bozmadan eklenebilecek şekilde ayrıştırıldı.
 
 ## v0.7.0 — 2026-07-21
 
