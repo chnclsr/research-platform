@@ -132,7 +132,11 @@ and produced passage-audited reports plus Word deliverables.
 | Small modular reactors: cost, schedule, and regulation | 7 | 9 | 40 | [Markdown report](showcase/small-modular-reactors/02_full_research_report.md) · [Word report](showcase/small-modular-reactors/16_research_report.docx) · [Theme map](showcase/small-modular-reactors/16b_theme_evidence_map.png) |
 | Humanoid robots in production: evidence vs expectations | 13 | 29 | 58 | [Markdown report](showcase/humanoid-robots/02_full_research_report.md) · [Word report](showcase/humanoid-robots/16_research_report.docx) · [Theme map](showcase/humanoid-robots/16b_theme_evidence_map.png) |
 
-![Radiology theme-to-evidence map](showcase/radiology/16b_theme_evidence_map.png)
+The matrix below comes from a production lung-cancer CT research run. Each row is a retained
+study, each column is a synthesis theme, and each blue cell identifies a direct evidence
+contribution used by that theme.
+
+![Study-to-theme evidence contribution matrix](docs/assets/theme-evidence-map-production-example.png)
 
 These examples are intentionally not presented as “perfect scores.” All three reached full
 claim-audit coverage, but the strict stopping policy classified them as
