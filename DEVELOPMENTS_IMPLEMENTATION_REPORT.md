@@ -18,7 +18,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 3 | Adaptörün compose'a taşınması | `09ea1b6` |
 | 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
 | 5 | Checkpoint temizleme ve boyut koruması | `d55455d` |
-| 6 | MinIO verisinin bind mount'a taşınması | (bu commit) |
+| 6 | MinIO verisinin bind mount'a taşınması | `c5408de` |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
