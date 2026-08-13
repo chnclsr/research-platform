@@ -16,3 +16,4 @@ outputs/
 reports/
 insti_patch.zip
 .codex-docx-review/
+docker-compose.override.yml
