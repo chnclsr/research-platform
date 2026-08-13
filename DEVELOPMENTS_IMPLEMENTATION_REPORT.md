@@ -16,7 +16,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 1 | AgentSearch adaptörü | `fdbfbff` |
 | 2 | NORMALIZE checkpoint boyut hatası | `5f0ac23` |
 | 3 | Adaptörün compose'a taşınması | `09ea1b6` |
-| 4 | Kontrol panelinin Docker uyumluluğu | (bu commit) |
+| 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
 
 ---
 
