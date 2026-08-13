@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `4.0`
+Belge sürümü: `5.0`
 
 Son güncelleme: `2026-08-13`
 
@@ -18,6 +18,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 3 | Adaptörün compose'a taşınması | `09ea1b6` |
 | 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
 | 5 | Checkpoint temizleme ve boyut koruması | `d55455d` |
+| 6 | MinIO verisinin bind mount'a taşınması | (bu commit) |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -385,6 +386,81 @@ checkpoint'te bulunmaz. O koşuda MinIO snapshot'ı ham dosya yerine çıkarılm
 `source_versions.raw_content` boş kalır ve PDF figür analizi çalışmaz. Normal koşular
 etkilenmez. Tam dayanıklılık için snapshot'ın ACQUIRE aşamasında yazılması gerekir; bu,
 yukarıda sayılan çöp snapshot maliyetiyle birlikte gelir.
+
+---
+
+## 6. MinIO verisinin bind mount'a taşınması
+
+### Gerekçe
+
+Ham araştırma verisi (kaynak snapshot'ları, figür görselleri, export çıktıları) sınırsız
+büyüyen tek bileşendir. Ölçüm: 10 kaynaklı 12 dakikalık bir koşu ≈ 45.5 MB MinIO + 9.7 MB
+Postgres, yani kaynak başına ~5.5 MB.
+
+Named volume'ler kalıcıdır ve container'ları şişirmez; oradaki yaygın endişe yersizdir.
+Sorun Windows'a özgüdür: Docker Desktop tüm volume'leri tek bir `docker_data.vhdx`
+dosyasında tutar ve bu dosya büyür ama içinden veri silinse bile **kendiliğinden küçülmez**.
+
+Otomatik retention alternatifi değerlendirildi ve **reddedildi**: ürünün provenance ve
+reproducibility vaadi, kanıt tabanını otomatik silen bir mekanizmayla çelişir. Link rot
+nedeniyle silinen bir snapshot geri getirilemez. Bunun yerine veri, VHDX dışına normal
+dosya sistemine alındı; silinince alan gerçekten geri döner, klasör doğrudan incelenebilir
+ve yedeklenebilir.
+
+Ölçülen bağlam: `docker_data.vhdx` 69.6 GB, C:'de 30.4 GB boş. Ancak `docker system df`
+şişkinliğin **image ve build cache** kaynaklı olduğunu gösterdi (63.5 GB + 9.9 GB); tüm
+volume'ler toplamda yalnız 2.16 GB. Yani bu taşıma acil bir alan sorununu değil, uzun
+vadeli büyüme yönetimini çözer.
+
+### Değişiklik
+
+`minio` servisinin volume tanımı yapılandırılabilir bir host yoluna bağlandı ve
+`minio-data` named volume tanımı kaldırıldı:
+
+```yaml
+    volumes:
+      - ${MINIO_DATA_DIR:-./data/minio}:/data
+```
+
+`MINIO_DATA_DIR` ayarı `.env.example` ve `.env.native.example` dosyalarına eklendi. Asıl
+sunucuda geniş diskteki bir yola işaret ettirilebilir.
+
+Kapsam yalnız MinIO'dur. `postgres-data` named volume'de kaldı: Windows bind mount'larında
+sahiplik/izin sorunları yüzünden postgres sık sık başlamayı reddeder. MinIO'nun container
+içinde **root** (`uid=0`) çalışması, bu riski MinIO tarafında ortadan kaldırır.
+
+### Taşıma
+
+Servisler durduruldu, veri geçici bir container aracılığıyla kopyalandı (named volume
+içeriğine host'tan doğrudan erişim Windows'ta güvenilir değildir), compose düzenlendi ve
+servisler yeniden başlatıldı. Eski named volume doğrulama tamamlanana kadar silinmedi.
+
+### Doğrulama
+
+- **Veri bütünlüğü:** taşıma öncesi ve sonrası nesne envanteri anahtar bazında
+  karşılaştırıldı — 41 nesne, 45.54 MB, **eksik veya fazla anahtar yok**.
+- **Servis sağlığı:** `/health` altı bileşende `ok`, MinIO container'ı `healthy`.
+- **Okuma yolu:** `13_raw_sources.jsonl` API üzerinden indirildi — HTTP 200, 11 527 166
+  bayt, taşıma öncesiyle bayt bayt aynı.
+- **Yazma yolu:** yeni bir koşu (`01KZXNZVKBXKTV4C22DT0WYNYB`) `completed_incomplete` ile
+  tamamlandı: 5 kaynak, 88 iddia, 25 çıktı. Host klasöründe koşuya ait PDF snapshot'ları ve
+  export dizini oluştu; bind mount'un yazılabilir olduğunun doğrudan kanıtı budur.
+- **Performans:** belirgin bir yavaşlama gözlenmedi. Bu kontrollü bir ölçüm değildir —
+  koşular farklı içeriğe sahiptir — ancak drvfs katmanının kullanımı engelleyecek bir
+  maliyet getirmediği görülmüştür.
+- Ruff: başarılı. Tam pytest paketi: `161 passed`.
+
+### Davranış değişikliği
+
+`docker compose down -v` artık MinIO verisini **silmez**; bind mount'lar `-v` ile
+kaldırılmaz. Bu istenen bir korumadır ancak alışkanlık değişikliği gerektirir.
+
+### Yan bulgu
+
+Taşıma sonrası anahtar düzeni tutarsızlığı host klasöründe gözle görünür hale geldi: kaynak
+snapshot'ları bucket kökünde `{run_id}/sources/...` altında, figür ve export çıktıları ise
+`runs/{run_id}/...` altında duruyor. Tek bir önek bir koşunun tüm verisini kapsamıyor. Bu,
+aşağıdaki açık işler arasında kalmaya devam ediyor.
 
 ---
 
