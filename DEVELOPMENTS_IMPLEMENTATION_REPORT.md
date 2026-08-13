@@ -17,7 +17,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 2 | NORMALIZE checkpoint boyut hatası | `5f0ac23` |
 | 3 | Adaptörün compose'a taşınması | `09ea1b6` |
 | 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
-| 5 | Checkpoint temizleme ve boyut koruması | (bu commit) |
+| 5 | Checkpoint temizleme ve boyut koruması | `d55455d` |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
