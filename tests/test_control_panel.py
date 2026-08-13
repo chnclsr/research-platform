@@ -131,3 +131,105 @@ async def test_gpu_snapshot_keeps_row_when_power_draw_is_not_available(monkeypat
     assert rows[0]["name"] == "NVIDIA GeForce RTX 4060"
     assert rows[0]["memory_total_mb"] == 8188
     assert rows[0]["power_draw_w"] is None
+
+
+def test_compose_environment_drops_keys_the_project_env_file_defines(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "DATABASE_URL=postgresql+asyncpg://research:research@postgres:5432/research\n"
+        "# comment=ignored\n"
+        "REDIS_URL=redis://redis:6379/0\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(control_panel, "ROOT", tmp_path)
+    # start_control_panel.ps1 loads the native env file into the panel's own process.
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://research:research@127.0.0.1:5433/research")
+    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6380/0")
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    environment = control_panel._compose_environment()
+
+    # Compose must fall back to the project .env instead of the panel's host addresses.
+    assert "DATABASE_URL" not in environment
+    assert "REDIS_URL" not in environment
+    assert environment["PATH"] == "/usr/bin"
+
+
+class _DeploymentSettings:
+    def __init__(self, deployment: str, telegram_bot_token: str | None = None):
+        self.control_panel_deployment = deployment
+        self.telegram_bot_token = telegram_bot_token
+
+
+@pytest.mark.asyncio
+async def test_docker_deployment_reads_service_state_from_compose(monkeypatch):
+    class Process:
+        returncode = 0
+
+        async def communicate(self):
+            return (
+                b'{"Service":"api","State":"running","Status":"Up 2 hours"}\n'
+                b'{"Service":"mcp-gateway","State":"running","Status":"Up 5 minutes"}\n'
+                b'{"Service":"worker","State":"exited","Status":"Exited (1)"}\n'
+                b'{"Service":"postgres","State":"running","Status":"Up 2 hours"}\n',
+                b"",
+            )
+
+    async def fake_subprocess(*args, **kwargs):
+        assert args[:3] == ("docker", "compose", "ps")
+        return Process()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    monkeypatch.setattr(control_panel, "get_settings", lambda: _DeploymentSettings("docker"))
+
+    processes = await control_panel._service_processes()
+
+    # Compose spells two services differently; the panel keeps its own names.
+    assert processes["api"] == {"running": True, "pid": None, "detail": "Up 2 hours"}
+    assert processes["mcp"] == {"running": True, "pid": None, "detail": "Up 5 minutes"}
+    assert processes["worker"]["running"] is False
+    # telegram-bot never appeared in the compose output, so it stays absent.
+    assert processes["telegram"] == {"running": False, "pid": None, "detail": ""}
+
+
+@pytest.mark.asyncio
+async def test_docker_deployment_start_uses_compose_and_skips_telegram_without_token(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    class Process:
+        returncode = 0
+
+        async def communicate(self):
+            return (b"started", b"")
+
+    async def fake_subprocess(*args, **kwargs):
+        calls.append(args)
+        return Process()
+
+    async def fail_powershell(script: str):
+        raise AssertionError(f"native script {script} must not run in docker deployment")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    monkeypatch.setattr(control_panel, "_run_powershell", fail_powershell)
+    monkeypatch.setattr(control_panel, "get_settings", lambda: _DeploymentSettings("docker"))
+
+    return_code, _ = await control_panel._run_compose_action("start")
+    assert return_code == 0
+    assert calls[0] == ("docker", "compose", "up", "-d")
+
+    calls.clear()
+    monkeypatch.setattr(
+        control_panel, "get_settings", lambda: _DeploymentSettings("docker", "bot-token")
+    )
+    await control_panel._run_compose_action("stop")
+    assert calls[0] == (
+        "docker",
+        "compose",
+        "--profile",
+        "telegram",
+        "stop",
+        "api",
+        "worker",
+        "mcp-gateway",
+        "telegram-bot",
+    )

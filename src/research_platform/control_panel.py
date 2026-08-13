@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import ipaddress
+import json
+import os
+import re
 import secrets
 import socket
 import sys
@@ -51,6 +54,14 @@ SCRIPT_DIR = ROOT / "scripts"
 CONTROL_TOKEN = secrets.token_urlsafe(32)
 MANAGED_SERVICES = ("api", "worker", "mcp", "telegram")
 LOG_SERVICES = {*MANAGED_SERVICES, "control-panel"}
+# The panel's own service names predate the compose file, which spells two of them
+# differently. Keep the panel-facing names so the UI labels and log routes stay stable.
+DOCKER_SERVICES = {
+    "api": "api",
+    "worker": "worker",
+    "mcp": "mcp-gateway",
+    "telegram": "telegram-bot",
+}
 ACTIVE_STATUSES = {
     RunStatus.QUEUED.value,
     RunStatus.RUNNING.value,
@@ -130,7 +141,7 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def _service_processes() -> dict[str, dict[str, Any]]:
+def _native_processes() -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     for service in MANAGED_SERVICES:
         pid_file = LOG_DIR / f"{service}.pid"
@@ -140,8 +151,47 @@ def _service_processes() -> dict[str, dict[str, Any]]:
                 pid = int(pid_file.read_text(encoding="ascii").strip())
             except (OSError, ValueError):
                 pid = None
-        result[service] = {"running": bool(pid and _pid_alive(pid)), "pid": pid}
+        running = bool(pid and _pid_alive(pid))
+        result[service] = {
+            "running": running,
+            "pid": pid,
+            "detail": f"PID {pid}" if running else "",
+        }
     return result
+
+
+async def _docker_processes() -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {
+        service: {"running": False, "pid": None, "detail": ""} for service in MANAGED_SERVICES
+    }
+    return_code, output = await _run_compose("ps", "--format", "json", "--all", log=False)
+    if return_code:
+        return result
+    by_compose_name = {value: key for key, value in DOCKER_SERVICES.items()}
+    # Compose emits one JSON object per line, not a JSON array.
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        service = by_compose_name.get(str(row.get("Service", "")))
+        if not service:
+            continue
+        result[service] = {
+            "running": str(row.get("State", "")) == "running",
+            "pid": None,
+            "detail": str(row.get("Status") or row.get("State") or ""),
+        }
+    return result
+
+
+async def _service_processes() -> dict[str, dict[str, Any]]:
+    if get_settings().control_panel_deployment == "docker":
+        return await _docker_processes()
+    return _native_processes()
 
 
 async def _queue_snapshot() -> dict[str, Any]:
@@ -332,7 +382,7 @@ async def _system_telemetry() -> dict[str, Any]:
 
 
 async def build_status() -> dict[str, Any]:
-    processes = _service_processes()
+    processes = await _service_processes()
     try:
         queue = await asyncio.wait_for(_queue_snapshot(), timeout=4)
     except TimeoutError:
@@ -575,6 +625,67 @@ async def require_control_token(
         raise HTTPException(status_code=403, detail="Invalid control token")
 
 
+def _compose_environment() -> dict[str, str]:
+    """
+    The panel is launched with an office/native env file loaded into its own process
+    environment, so DATABASE_URL and friends point at published host ports. Compose
+    resolves ${VAR} from the shell before the project .env file, so inheriting that
+    environment would push host addresses into the containers and migrations would try
+    to reach postgres on 127.0.0.1:5433. Drop every key the project .env defines and let
+    compose resolve them itself.
+    """
+    environment = dict(os.environ)
+    env_file = ROOT / ".env"
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
+            if match:
+                environment.pop(match.group(1), None)
+    return environment
+
+
+async def _run_compose(*args: str, log: bool = True) -> tuple[int, str]:
+    """Run a docker compose command from the project root and capture its output."""
+    process = await asyncio.create_subprocess_exec(
+        "docker",
+        "compose",
+        *args,
+        cwd=str(ROOT),
+        env=_compose_environment(),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    stdout, _ = await process.communicate()
+    output = stdout.decode("utf-8", errors="replace")
+    if log:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with (LOG_DIR / "control-panel-actions.log").open("ab") as handle:
+            marker = f"\n[{datetime.now(timezone.utc).isoformat()}] docker compose {' '.join(args)}\n"
+            handle.write(marker.encode("utf-8"))
+            handle.write(stdout)
+    return process.returncode or 0, output
+
+
+def _compose_app_services() -> list[str]:
+    """Compose services the panel supervises, mirroring start_native.ps1's telegram rule."""
+    services = [DOCKER_SERVICES[name] for name in ("api", "worker", "mcp")]
+    if get_settings().telegram_bot_token:
+        services.append(DOCKER_SERVICES["telegram"])
+    return services
+
+
+async def _run_compose_action(action: str) -> tuple[int, str]:
+    services = _compose_app_services()
+    # telegram-bot sits behind a compose profile, so "up" only reaches it when a bot
+    # token is configured — the same condition start_native.ps1 applies natively.
+    profile = ["--profile", "telegram"] if get_settings().telegram_bot_token else []
+    if action == "stop":
+        return await _run_compose(*profile, "stop", *services)
+    if action == "restart":
+        return await _run_compose(*profile, "restart", *services)
+    return await _run_compose(*profile, "up", "-d")
+
+
 async def _run_powershell(script: str) -> tuple[int, str]:
     log_path = LOG_DIR / "control-panel-actions.log"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -708,11 +819,17 @@ async def system_action(action: Literal["start", "stop", "restart"]) -> dict[str
                 "last_error": None,
             }
         )
-        script = "stop_native.ps1" if action == "stop" else "start_office_server.ps1"
+        docker = get_settings().control_panel_deployment == "docker"
         try:
-            return_code, output = await _run_powershell(script)
+            if docker:
+                return_code, output = await _run_compose_action(action)
+                failure = output or f"docker compose exit code {return_code}"
+            else:
+                script = "stop_native.ps1" if action == "stop" else "start_office_server.ps1"
+                return_code, output = await _run_powershell(script)
+                failure = output or f"PowerShell exit code {return_code}"
             if return_code:
-                action_state["last_error"] = output or f"PowerShell exit code {return_code}"
+                action_state["last_error"] = failure
                 raise HTTPException(status_code=500, detail=action_state["last_error"])
             return {"ok": True, "action": action, "message": output.strip()}
         finally:
@@ -765,6 +882,15 @@ async def run_respond(run_id: str, body: dict[str, Any]) -> dict[str, Any]:
 async def logs(service: str) -> PlainTextResponse:
     if service not in LOG_SERVICES:
         raise HTTPException(status_code=404, detail="Bilinmeyen servis")
+    # The panel itself always runs natively, so it keeps its file-based logs even when
+    # the services it supervises are containers.
+    if get_settings().control_panel_deployment == "docker" and service in DOCKER_SERVICES:
+        return_code, output = await _run_compose(
+            "logs", "--tail", "400", "--no-color", DOCKER_SERVICES[service], log=False
+        )
+        if return_code:
+            return PlainTextResponse(output or "Container logu alınamadı.")
+        return PlainTextResponse(output or "Log bulunamadı.")
     blocks = []
     for stream in ("stderr", "stdout"):
         path = LOG_DIR / f"{service}.{stream}.log"

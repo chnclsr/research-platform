@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -81,6 +82,9 @@ class Settings(BaseSettings):
     control_panel_host: str = "127.0.0.1"
     control_panel_port: int = Field(8020, ge=1, le=65535)
     control_panel_allowed_networks: list[str] = Field(default_factory=list)
+    # Whether the panel supervises native processes started by the office scripts or
+    # the compose project. Left at "native" so existing office servers keep working.
+    control_panel_deployment: Literal["native", "docker"] = "native"
     research_api_url: str = "http://localhost:8000"
     gateway_download_dir: str = "./data/deliveries"
     mcp_transport: str = "stdio"

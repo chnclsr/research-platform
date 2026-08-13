@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `2.0`
+Belge sürümü: `3.0`
 
 Son güncelleme: `2026-08-13`
 
@@ -16,6 +16,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 1 | AgentSearch adaptörü | `fdbfbff` |
 | 2 | NORMALIZE checkpoint boyut hatası | `5f0ac23` |
 | 3 | Adaptörün compose'a taşınması | `09ea1b6` |
+| 4 | Kontrol panelinin Docker uyumluluğu | (bu commit) |
 
 ---
 
@@ -216,6 +217,84 @@ artefaktıdır; anlamsal fark yoktur. Çalışan `worker` container'ında
 
 ---
 
+## 4. Kontrol panelinin Docker uyumluluğu
+
+### Olay
+
+Panel yalnız native kurulum varsayımıyla yazılmıştı. Docker kurulumunda üç sonucu vardı:
+
+1. Servis durumu `logs/*.pid` dosyalarından okunuyordu. Container kurulumunda bu dosyalar
+   hiç oluşmadığı için panel API, worker, MCP ve Telegram'ı "kapalı" gösteriyor, üstteki
+   genel durum rozeti her şey çalışırken bile `stopped` diyordu.
+2. "Başlat" ve "Yeniden başlat" düğmeleri `start_office_server.ps1` çalıştırıyordu. Bu
+   betik native süreçler başlatır: `research-api.exe` ve `research-mcp.exe` 8000 ile 8010
+   portları Docker container'larında bağlı olduğu için çöker, `research-worker.exe` ise
+   port bağlamadığından **başarıyla başlar** ve aynı ARQ kuyruğunda ikinci bir tüketici
+   olarak GPU için Docker worker'ı ile yarışır.
+3. Log görüntüleyici `logs/<servis>.stderr.log` dosyalarını okuyordu; container logları
+   erişilemezdi.
+
+### Uygulanan çözüm
+
+`CONTROL_PANEL_DEPLOYMENT` ayarı eklendi (`native` | `docker`). Varsayılan `native`'dir,
+böylece mevcut ofis sunucularının davranışı değişmez.
+
+`docker` modunda:
+
+| Panel işlevi | Native | Docker |
+|---|---|---|
+| Servis durumu | `logs/*.pid` + PID canlılık kontrolü | `docker compose ps --format json` |
+| Başlat | `start_office_server.ps1` | `docker compose up -d` |
+| Durdur | `stop_native.ps1` | `docker compose stop api worker mcp-gateway telegram-bot` |
+| Yeniden başlat | `start_office_server.ps1` | `docker compose restart <aynı servisler>` |
+| Log | `logs/<servis>.{stdout,stderr}.log` | `docker compose logs --tail 400 <servis>` |
+
+Panelin kendi servis adları (`api`, `worker`, `mcp`, `telegram`) compose'daki adlarla birebir
+örtüşmediği için `DOCKER_SERVICES` eşlemesi eklendi (`mcp` → `mcp-gateway`,
+`telegram` → `telegram-bot`). Arayüz etiketleri ve log rotaları değişmedi.
+
+`telegram-bot` bir compose profili arkasındadır. Panel bu servisi yalnız
+`TELEGRAM_BOT_TOKEN` tanımlıysa hedefler; bu, `start_native.ps1`'in native tarafta
+uyguladığı koşulun aynısıdır.
+
+Arayüzde çalışan servis için gösterilen metin `PID <n>` yerine artık `detail` alanından
+gelir; native modda `PID <n>`, Docker modunda `Up 26 seconds` gibi container durumudur.
+
+### Ortam sızıntısı hatası
+
+İlk canlı denemede "Başlat" düğmesi `migrate` servisini şu hatayla düşürdü:
+
+```
+ConnectionRefusedError: [Errno 111] Connect call failed ('127.0.0.1', 5433)
+```
+
+Sebep: `start_control_panel.ps1`, panelin **process ortamına** `.env.office` içeriğini
+yükler. O dosya native kurulum için yazıldığından `DATABASE_URL` yayınlanmış host portunu
+(`127.0.0.1:5433`) gösterir. Compose ise `${VAR}` çözümlemesinde kabuk ortamını proje
+`.env` dosyasından **önce** kullanır. Panel `docker compose` çağırınca native adresler
+container'ların içine enjekte oldu ve migration container ağı yerine host'a bağlanmaya
+çalıştı.
+
+Çözüm olarak `_compose_environment()` eklendi: proje `.env` dosyasının tanımladığı her
+anahtar, compose alt sürecine geçirilen ortamdan çıkarılır. Böylece compose bu değerleri
+kendi `.env` dosyasından çözer.
+
+### Doğrulama
+
+- Ruff: başarılı.
+- Tam pytest paketi: `158 passed` (üç yeni test: compose durum ayrıştırma, telegram profil
+  koşulu, ortam sızıntısı koruması).
+- Canlı panel üzerinden `Başlat` → HTTP 200, tüm servisler ayağa kalktı, `migrate` temiz
+  çıktı.
+- Container içinde `DATABASE_URL=postgresql+asyncpg://research:research@postgres:5432/research`
+  doğrulandı; native adres sızmadı.
+- Canlı panel üzerinden `Durdur` → HTTP 200, dört uygulama servisi durdu, veri
+  container'ları ayakta kaldı.
+- `api` container logu panel üzerinden okundu.
+- Panel genel durumu artık `running`; dördü de `Up <süre>` olarak görünüyor.
+
+---
+
 ## Operasyonel notlar
 
 ### `src/` değişiklikleri image rebuild ister
@@ -231,27 +310,25 @@ worker'da yoktu. Doğru komut:
 docker compose up -d --build
 ```
 
-### Kontrol panelinin "Başlat" düğmesi Docker kurulumunda kullanılmamalı
+### Panel Docker kurulumunda `CONTROL_PANEL_DEPLOYMENT=docker` ister
 
-Panel, `system_action` üzerinden `start_office_server.ps1` çalıştırır; bu betik **native**
-kurulum içindir ve `start_native.ps1` ile `research-api.exe`, `research-worker.exe`,
-`research-mcp.exe` süreçlerini başlatır. Docker kurulumunda:
+Bölüm 4'teki düzeltmeden önce panelin "Başlat" düğmesi Docker kurulumunda zararlıydı.
+Ayar `native` (varsayılan) bırakılırsa bu davranış **hâlâ geçerlidir**: panel
+`start_office_server.ps1` çalıştırır, `research-api.exe` ve `research-mcp.exe` port
+çakışmasından çöker, `research-worker.exe` ise sessizce başarılı olup aynı ARQ kuyruğunda
+Docker worker'ı ile GPU için yarışır. PID dosyaları çöken süreçler için de yazıldığından
+panel bunları "çalışıyor" gösterir ve betik en sonda konuyla ilgisiz bir Wi-Fi IP hatası
+fırlatır.
 
-- `research-api.exe` → `127.0.0.1:8000` zaten Docker `api` container'ında bağlı, çöker.
-- `research-mcp.exe` → `127.0.0.1:8010` zaten Docker `mcp-gateway`'de bağlı, çöker.
-- `research-worker.exe` → port bağlamadığı için **başarıyla başlar** ve aynı ARQ kuyruğunda
-  ikinci bir tüketici olarak 8 GB VRAM için Docker worker'ı ile yarışır.
-
-Ayrıca PID dosyaları çöken süreçler için de yazıldığından panel bunları "çalışıyor"
-gösterir. Betik en sonda Wi-Fi IP karşılaştırmasında hata fırlatır; bu hata mesajı gerçek
-sorunla ilgisizdir ve yanlış yönlendirir.
-
-Bu senaryo kurulum sırasında gerçekleşti; başıboş `research-worker.exe` ve
+Bu senaryo kurulum sırasında bir kez gerçekleşti; başıboş `research-worker.exe` ve
 `research-mcp.exe` süreçleri `stop_native.ps1` ile durduruldu.
 
+Docker kurulumunda panelin okuduğu ortam dosyasında (`.env.office`, yoksa
+`.env.native.example`) `CONTROL_PANEL_DEPLOYMENT=docker` bulunmalıdır.
+
 Panelin izleme tarafı (koşu listesi, kuyruk, GPU telemetrisi, HITL kartları, çıktı indirme)
-ve Duraklat / Devam / İptal düğmeleri Research API üzerinden çalıştığı için Docker
-kurulumunda sorunsuzdur.
+ve Duraklat / Devam / İptal düğmeleri Research API üzerinden çalıştığı için her iki modda
+da sorunsuzdur.
 
 ---
 
