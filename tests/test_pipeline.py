@@ -12,7 +12,9 @@ import pytest
 from research_platform.config import get_settings
 from research_platform.db import SessionLocal, create_schema
 from research_platform.pipeline import PipelineHalted, PipelineStageTimeout, ResearchPipeline
-from research_platform.repository import Repository
+from research_platform.repository import (
+    CheckpointTooLarge, Repository, checkpoint_payload,
+)
 from research_platform.schemas import (
     AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SearchMission,
     SourceFamily,
@@ -532,3 +534,44 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
         assert completed.status == RunStatus.COMPLETED_INCOMPLETE.value
         events = await repo.events_after(row.id)
         assert any(event.event_type == "connector_error" for event in events)
+
+
+def test_checkpoint_payload_strips_raw_content_without_touching_live_state():
+    document = {"content": "metin", "raw_content": "BASE64PDF", "source_id": "S1"}
+    state = {"run_id": "R1", "documents": [document], "candidates": [{"url": "https://x"}]}
+
+    persisted = checkpoint_payload(state)
+
+    assert persisted["documents"][0]["raw_content"] == ""
+    # NORMALIZE reads raw_content out of the live state to write the MinIO snapshot and
+    # source_versions, so trimming the persisted copy must not reach back into it.
+    assert document["raw_content"] == "BASE64PDF"
+    assert state["documents"][0]["raw_content"] == "BASE64PDF"
+    assert persisted["candidates"] is state["candidates"]
+    assert persisted["run_id"] == "R1"
+
+
+def test_checkpoint_payload_is_a_noop_without_documents():
+    state = {"run_id": "R1", "candidates": []}
+    assert checkpoint_payload(state) is state
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_refuses_a_state_over_the_size_limit(monkeypatch):
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        run = await repo.create_run(ResearchProtocol(
+            title="Checkpoint size",
+            primary_question="Does the checkpoint guard reject oversized state?",
+        ))
+        monkeypatch.setattr("research_platform.repository.CHECKPOINT_MAX_BYTES", 2048)
+
+        with pytest.raises(CheckpointTooLarge) as excinfo:
+            await repo.checkpoint(run.id, "NORMALIZE", {"passages": ["x" * 4096]})
+
+        message = str(excinfo.value)
+        assert "NORMALIZE" in message
+        assert "passages" in message
+        # The session must stay usable so the pipeline can still record the failure.
+        await repo.event(run.id, "failed", {"error": message[:200]})

@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `3.0`
+Belge sürümü: `4.0`
 
 Son güncelleme: `2026-08-13`
 
@@ -17,6 +17,10 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 2 | NORMALIZE checkpoint boyut hatası | `5f0ac23` |
 | 3 | Adaptörün compose'a taşınması | `09ea1b6` |
 | 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
+| 5 | Checkpoint temizleme ve boyut koruması | (bu commit) |
+
+> **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
+> çözüm 5. bölümdedir.
 
 ---
 
@@ -146,9 +150,12 @@ Checkpoint boyutlarının aşama aşama büyümesi:
 
 ### Veri kaybı
 
-Başarısız `INSERT` transaction'ı geri aldığı için toplanan 68 belgenin tamamı kayboldu.
-Hata sonrası veritabanı durumu: `sources = 0`, `source_versions = 0`, yalnızca ACQUIRE'a
-kadarki 5 checkpoint kaldı.
+Toplanan 68 belgenin hiçbiri kalıcılaşmadı. Hata sonrası veritabanı durumu: `sources = 0`,
+`source_versions = 0`, yalnızca ACQUIRE'a kadarki 5 checkpoint.
+
+*(Düzeltme: bu bölüm önce "transaction geri alındı" diyordu. Gerçekte belgeler hiç
+yazılmamıştı — aşağıdaki nedenle NORMALIZE'ın gövdesi hiç çalışmadı. `save_document`
+zaten belge başına ayrı `commit` yapar, dolayısıyla kaydedilmiş belgeler geri alınmaz.)*
 
 ### Uygulanan düzeltme
 
@@ -190,6 +197,23 @@ pasajları doğrudan ondan üretir.
 - Ruff: başarılı.
 - Tam pytest paketi: `155 passed`, yalnız üçüncü taraf Starlette deprecation uyarısı.
 - Yeniden derlenen worker image'ı içinde düzeltmenin bulunduğu doğrulandı.
+
+### Bu düzeltme raporlanan hatayı çözmüyordu
+
+`_boundary()` checkpoint'i düğümün **başında** yazar ve `normalize()`'ın ilk satırı budur.
+Yani `checkpoint(stage="NORMALIZE")`, NORMALIZE'a *giren* state'i tutar — bu da ACQUIRE'ın
+çıktısıdır. Veritabanı bunu doğruluyor: ACQUIRE checkpoint'inde `candidates` var,
+`documents` yok.
+
+Sıra şuydu: ACQUIRE 68 belgeyi `raw_content` ile state'e koydu → NORMALIZE başladı → ilk iş
+checkpoint → 324 MiB → patladı. **NORMALIZE'ın gövdesi hiç çalışmadı.**
+
+Üç bağımsız kanıt: 5 `stage` olayı ve 5 checkpoint var (altıncısı olay yayınlayamadan öldü),
+MinIO'da hiç bucket yoktu (`store.put()` bir kez bile çalışmamış), `sources = 0`.
+
+Yukarıdaki düzeltme `normalize()` gövdesindedir, yani patlayan checkpoint'ten *sonra*
+çalışır. NORMALIZE sonrası checkpoint'lerin `raw_content` taşımasını engeller — bu yönüyle
+işe yarar — ancak raporlanan çöküşü önlemez. Asıl çözüm 5. bölümdedir.
 
 ---
 
@@ -295,6 +319,75 @@ kendi `.env` dosyasından çözer.
 
 ---
 
+## 5. Checkpoint temizleme ve boyut koruması
+
+### Yaklaşım
+
+İki tamamlayıcı değişiklik `Repository.checkpoint()` içine eklendi.
+
+**Temizleme.** `checkpoint_payload()`, kalıcılaştırılacak state'ten belge `raw_content`
+alanlarını boşaltır. Çağıranın state'i **değiştirilmez**: `_boundary()` state'i `dict(state)`
+ile sığ kopyalar, yani belge sözlükleri paylaşılır. Yerinde değiştirme yapılsaydı bellekteki
+canlı state de silinir, NORMALIZE ham gövdeyi bulamaz ve MinIO snapshot'ı ile
+`source_versions.raw_content` boş kalırdı. Bu yüzden temizleme sözlükleri kopyalayarak
+yapılır ve bunu sabitleyen ayrı bir test vardır.
+
+**Koruma.** `_assert_checkpoint_fits()`, serileştirilmiş state 200 MiB'ı aşarsa
+`CheckpointTooLarge` fırlatır. Kontrol veritabanına dokunmadan **önce** yapılır; sürücü
+kaynaklı bir boyut hatası transaction'ı ve aynı oturumdaki sonraki tüm yazımları — hata
+olayının kendisi dahil — geçersiz kılardı. Hata mesajı aşamayı, boyutu ve en büyük üç state
+anahtarını listeler.
+
+Sınır neden 200 MiB: PostgreSQL jsonb tavanı 256 MiB'dir; aradaki pay, `checkpoint()`
+state'i iki yere birden yazdığı için bırakılmıştır (`run_checkpoints.state` ve
+`research_runs.state`).
+
+### Neden bu yol seçildi
+
+Snapshot'ı ACQUIRE'a taşıyıp state'te yalnız anahtar tutmak da değerlendirildi. Üç maliyeti
+vardı: NORMALIZE elediği belgeleri de diske yazdıracağı için çöp snapshot (belge başına
+25 MB'a kadar), `source_versions.raw_content` kopyasını hiç azaltmaması ve NORMALIZE'a belge
+başına bir MinIO `GET` eklemesi. Ayrıca asıl sorunu — checkpoint'in sınırsız büyüyebilmesini
+— çözmüyordu; yeterince büyük metin toplandığında yalnız `content` alanları da aynı sınırı
+zorlar. Koruma bu ikinci senaryoyu da kapsar.
+
+### Uçtan uca doğrulama
+
+`01KZXHCDRGB3604Q8DVB6P1S6S` numaralı gerçek koşu (`literature_scan`, 12 dakika bütçe,
+İngilizce) `completed_incomplete` ile tamamlandı: 10 kaynak, 130 iddia, 7 tur, 23 çıktı.
+
+| Ölçüm | Önceki koşu | Bu koşu |
+|---|---|---|
+| En büyük checkpoint | ~324 MiB (reddedildi) | 834 kB |
+| NORMALIZE checkpoint | yazılamadı | 671 kB |
+| MinIO ham snapshot | 0 (bucket bile yok) | 10 nesne, 3.2 MB'lık PDF dahil |
+| `source_versions` | 0 | 10 |
+
+Ham veri erişilebilirliği ayrıca doğrulandı:
+
+- `13_raw_sources.jsonl` API üzerinden indirildi: 11.5 MB, 10 kayıt, beşinde ham gövde dolu
+  (888 kB / 744 kB / 1553 kB …).
+- Boş olan beş kayıt `scholarly_metadata` yöntemiyle edinilmiştir; bu yol akademik API'den
+  yalnız üstveri çeker ve zaten hiç ham gövde taşımaz. `direct` ile edinilen beş belgenin
+  **beşinde de** ham gövde doludur.
+- Figür analizi çıktı üretti (`17a_source_figure_excerpt.png`, `17_figure_observations.json`).
+  Bu yol PDF'ler için `version.raw_content` şart koştuğundan, ham PDF baytlarının uçtan uca
+  korunduğunun bağımsız kanıtıdır.
+
+- Ruff: başarılı.
+- Tam pytest paketi: `161 passed` (üç yeni test: canlı state'in korunması, belgesiz state'te
+  işlemsizlik, boyut sınırının açık hata üretmesi ve oturumun kullanılabilir kalması).
+
+### Bilinen sınır
+
+Bir koşu duraklatılıp NORMALIZE checkpoint'inden devam ettirilirse belgelerin ham gövdesi
+checkpoint'te bulunmaz. O koşuda MinIO snapshot'ı ham dosya yerine çıkarılmış metni tutar,
+`source_versions.raw_content` boş kalır ve PDF figür analizi çalışmaz. Normal koşular
+etkilenmez. Tam dayanıklılık için snapshot'ın ACQUIRE aşamasında yazılması gerekir; bu,
+yukarıda sayılan çöp snapshot maliyetiyle birlikte gelir.
+
+---
+
 ## Operasyonel notlar
 
 ### `src/` değişiklikleri image rebuild ister
@@ -334,8 +427,13 @@ da sorunsuzdur.
 
 ## Bilinen açık işler
 
-**Checkpoint boyut koruması.** `Repository.checkpoint()` hâlâ boyut denetimi yapmaz. Bölüm
-2'deki düzeltme baskın etkeni (base64 PDF gövdeleri) ortadan kaldırır, ancak yeterince çok
-sayıda büyük metin belgesi toplandığında yalnızca `content` alanları da 256 MiB sınırını
-zorlayabilir. Kalıcı çözüm, checkpoint yazımına bir koruma eklemek ve sınır aşıldığında
-transaction'ı geri almak yerine toplanan veriyi koruyarak açık bir hata üretmektir.
+**Resume sonrası ham veri.** 5. bölümün sonundaki sınır: NORMALIZE checkpoint'inden devam
+ettirilen koşular ham gövdeyi kaybeder ve o koşuda PDF figür analizi çalışmaz.
+
+**`source_versions.raw_content` kopyası.** Ham gövde hem MinIO'da hem bu TEXT sütununda
+duruyor. Sınır aşımı yaratmaz (TEXT 1 GB'a kadar, TOAST sıkıştırır) ama `postgres-data`
+volume'ünü gereksiz büyütür. Dışa aktarım bu sütunu okuduğu için kaldırmak, `13_raw_sources`
+üretimini MinIO'dan okuyacak şekilde değiştirmeyi gerektirir.
+
+**MinIO anahtar düzeni tutarsız.** Kaynak snapshot'ları `{run_id}/sources/...` altında,
+figür ve export çıktıları `runs/{run_id}/...` altında. Tek bir önek altında toplanmalı.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any
@@ -38,6 +39,57 @@ from .schemas import (
 )
 from .relevance import evidence_entailment
 from .scholarly import candidate_dedupe_key, scholarly_identity, title_fingerprint
+
+
+# PostgreSQL refuses a jsonb value once its elements exceed 256 MiB. Stop below that so
+# the run fails with an actionable error instead of an opaque driver exception that also
+# poisons the session.
+CHECKPOINT_MAX_BYTES = 200 * 1024 * 1024
+
+
+class CheckpointTooLarge(RuntimeError):
+    """Raised when a pipeline state is too large to persist as a checkpoint."""
+
+
+def checkpoint_payload(state: dict[str, Any]) -> dict[str, Any]:
+    """
+    Return the state as it should be persisted, without raw document snapshots.
+
+    ACQUIRE puts every fetched document into the graph state and, for PDFs, raw_content
+    is the entire binary base64-encoded. Persisting that pushes the checkpoint past
+    PostgreSQL's jsonb ceiling.
+
+    The caller's state is never mutated: NORMALIZE still reads raw_content from memory to
+    write the MinIO snapshot and source_versions, so a normal run keeps every raw file.
+    Only a run resumed from this checkpoint sees the field already emptied.
+    """
+    documents = state.get("documents")
+    if not isinstance(documents, list):
+        return state
+    trimmed: list[Any] = []
+    for payload in documents:
+        if isinstance(payload, dict) and payload.get("raw_content"):
+            payload = {**payload, "raw_content": ""}
+        trimmed.append(payload)
+    return {**state, "documents": trimmed}
+
+
+def _assert_checkpoint_fits(run_id: str, stage: str, state: dict[str, Any]) -> None:
+    size = len(json.dumps(state, ensure_ascii=False, default=str).encode("utf-8"))
+    if size <= CHECKPOINT_MAX_BYTES:
+        return
+    largest = sorted(
+        (
+            (len(json.dumps(value, ensure_ascii=False, default=str)), key)
+            for key, value in state.items()
+        ),
+        reverse=True,
+    )[:3]
+    raise CheckpointTooLarge(
+        f"{stage} checkpoint for run {run_id} is {size / 1048576:.0f} MiB, over the "
+        f"{CHECKPOINT_MAX_BYTES / 1048576:.0f} MiB limit. Largest state keys: "
+        + ", ".join(f"{key} {value / 1048576:.0f} MiB" for value, key in largest)
+    )
 
 
 class Repository:
@@ -141,6 +193,10 @@ class Repository:
         )
 
     async def checkpoint(self, run_id: str, stage: str, state: dict[str, Any]) -> None:
+        state = checkpoint_payload(state)
+        # Check before touching the session: a driver-side size error aborts the
+        # transaction and every later write on it, including the failure event.
+        _assert_checkpoint_fits(run_id, stage, state)
         existing = await self.session.scalar(
             select(CheckpointRow).where(
                 CheckpointRow.run_id == run_id, CheckpointRow.stage == stage
