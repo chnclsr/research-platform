@@ -9,7 +9,7 @@ x-app: &app
     DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
     REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-    AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://host.docker.internal:3939}
+    AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
     CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
     OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
   extra_hosts:
@@ -95,6 +95,25 @@ services:
     networks: [research]
     restart: unless-stopped
 
+  # Fronts a plain SearXNG instance (run outside this compose project, default
+  # port 3939) with the /search, /read and /health contract the AgentSearch
+  # connectors expect. Point SEARXNG_URL at a real AgentSearch service instead
+  # and this service can be dropped.
+  agentsearch-adapter:
+    build: .
+    command: ["python", "/app/agentsearch_adapter.py"]
+    environment:
+      SEARXNG_URL: ${SEARXNG_URL:-http://host.docker.internal:3939}
+      ADAPTER_PORT: 3940
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./scripts/agentsearch_adapter.py:/app/agentsearch_adapter.py:ro
+    ports:
+      - "127.0.0.1:3940:3940"
+    networks: [research]
+    restart: unless-stopped
+
   migrate:
     <<: *app
     command: ["alembic", "upgrade", "head"]
@@ -107,7 +126,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-      AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://host.docker.internal:3939}
+      AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
       CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       API_HOST: 0.0.0.0
