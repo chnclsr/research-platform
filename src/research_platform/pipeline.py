@@ -1382,6 +1382,12 @@ class ResearchPipeline:
                 continue
             existing_version_ids.add(version.id)
             payload = document.model_dump(mode="json")
+            # raw_content holds the untouched snapshot, and for PDFs that is the whole
+            # binary base64-encoded (up to max_download_bytes * 4/3 per document). It is
+            # already durable in MinIO and source_versions by this point, and every later
+            # reader takes it from the database, so keeping it in the graph state only
+            # inflates the NORMALIZE checkpoint past PostgreSQL's 256 MB jsonb ceiling.
+            payload["raw_content"] = ""
             payload["source_id"] = source.id
             payload["source_version_id"] = version.id
             saved_docs.append(payload)
