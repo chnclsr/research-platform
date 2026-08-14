@@ -4,7 +4,7 @@ Platform sürümü: `v0.9.1`
 
 Belge sürümü: `6.0`
 
-Son güncelleme: `2026-08-13`
+Son güncelleme: `2026-08-14`
 
 ## Kapsam
 
