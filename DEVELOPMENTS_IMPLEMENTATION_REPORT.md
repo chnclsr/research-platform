@@ -872,13 +872,8 @@ da sorunsuzdur.
 
 ## Bilinen açık işler
 
-**Resume sonrası ham veri.** 5. bölümün sonundaki sınır: NORMALIZE checkpoint'inden devam
-ettirilen koşular ham gövdeyi kaybeder ve o koşuda PDF figür analizi çalışmaz.
+Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her
+madde için ölçümler ve yapılacak iş. Bu raporda bölüm bölüm dağılmış "bilinen sınır"
+notlarının toplandığı yer orası; yeni bir sınır tespit edildiğinde oraya eklenmeli.
 
-**`source_versions.raw_content` kopyası.** Ham gövde hem MinIO'da hem bu TEXT sütununda
-duruyor. Sınır aşımı yaratmaz (TEXT 1 GB'a kadar, TOAST sıkıştırır) ama `postgres-data`
-volume'ünü gereksiz büyütür. Dışa aktarım bu sütunu okuduğu için kaldırmak, `13_raw_sources`
-üretimini MinIO'dan okuyacak şekilde değiştirmeyi gerektirir.
-
-**MinIO anahtar düzeni tutarsız.** Kaynak snapshot'ları `{run_id}/sources/...` altında,
-figür ve export çıktıları `runs/{run_id}/...` altında. Tek bir önek altında toplanmalı.
+Bu bölümü burada çoğaltmıyoruz — iki listenin zamanla birbirinden ayrışması kaçınılmazdı.
