@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `5.0`
+Belge sürümü: `6.0`
 
 Son güncelleme: `2026-08-13`
 
@@ -19,6 +19,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
 | 5 | Checkpoint temizleme ve boyut koruması | `d55455d` |
 | 6 | MinIO verisinin bind mount'a taşınması | `c5408de` |
+| 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | (bu commit) |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -461,6 +462,111 @@ Taşıma sonrası anahtar düzeni tutarsızlığı host klasöründe gözle gör
 snapshot'ları bucket kökünde `{run_id}/sources/...` altında, figür ve export çıktıları ise
 `runs/{run_id}/...` altında duruyor. Tek bir önek bir koşunun tüm verisini kapsamıyor. Bu,
 aşağıdaki açık işler arasında kalmaya devam ediyor.
+
+---
+
+## 7. Teslimat izin hatası ve koşu bazında yerel yedekleme
+
+### Olay
+
+Teslimat uç noktası HTTP 500 dönüyordu:
+
+```
+PermissionError: [Errno 13] Permission denied:
+'/data/deliveries/01KZXNZVKBXKTV4C22DT0WYNYB_result.zip'
+```
+
+`mcp-gateway` ve `telegram-bot` container'ları `uid=10001 (research)` ile çalışıyor, ancak
+`gateway-deliveries` named volume'ünün bağlandığı `/data/deliveries` dizini `root` (uid 0,
+mod 755) sahipliğindeydi.
+
+Kök sebep: `Dockerfile` bu dizini oluşturmuyordu. Docker, image'da bulunmayan bir mount
+noktası için dizini root sahipliğinde yaratır.
+
+`mcp_server.py:292` → `gateway_client.download()` paketi bu dizine yazıp oradan
+streamlediği için, yazamayınca istek çöküyordu. Bu **iki özelliği birden** bozuyordu: MCP
+client teslimat uç noktası (dolayısıyla `scripts/sync-research-reports.ps1` rapor
+eşitleyicisi) ve Telegram'ın `/get` komutu.
+
+### Düzeltme
+
+`Dockerfile`'da mount noktası doğru sahiplikle önceden oluşturuluyor:
+
+```dockerfile
+RUN useradd --create-home --uid 10001 research \
+    && mkdir -p /data/deliveries \
+    && chown -R research:research /data
+USER research
+```
+
+Docker, **boş** bir named volume'ü ilk bağladığında image'daki dizinin sahipliğini kopyalar.
+Mevcut volume root sahipliğinde olduğu için rebuild sonrası bir kez silindi (o sırada boştu,
+veri kaybı yok).
+
+### Yedekleme yaklaşımı
+
+Amaç, araştırma verisinin MinIO'dan bağımsız, geri yüklenebilir bir kopyasını yerelde
+tutmak.
+
+Önce bir yanlış anlaşılma giderildi: 6. bölümdeki bind mount'tan sonra MinIO container'ı
+kullanılıp atılabilir durumda. Container'ın silinmesi, çökmesi, `docker compose down -v`,
+image'ın yeniden derlenmesi veya Docker Desktop'ın kaldırılması veriye zarar vermiyor.
+Bind mount'un **korumadığı** riskler: disk arızası veya makine kaybı, klasörün yanlışlıkla
+silinmesi, MinIO'nun kendi on-disk formatını bozması (bind mount bozulmayı sadakatle
+saklar), fidye yazılımı, API üzerinden koşu silinmesi.
+
+Bunlar için bağımsız formatta ikinci bir kopya gerekiyor. `research_bundle.zip` bunu
+karşılıyor: bir koşunun **tüm** çıktılarını içeriyor ve ham kaynak PDF'leri
+`13_raw_sources.jsonl` içinde base64 olarak dahil (`exporter.py`, `bundle_specs`).
+
+Yeni kod yazılmadı; depoda zaten bulunan `scripts/sync-research-reports.ps1` ve
+`scripts/setup-research-output.ps1` kullanıldı. Yapılandırma `scripts/.env` (gitignore
+kapsamında): `DELIVERY_MODE=both`, `POLL_SECONDS=300` (script varsayılanı 10 saniyedir ve
+canlı teslimat için tasarlanmıştır), `RESEARCH_OUTPUT_DIR` ile hedef klasör.
+
+Kurulum, oturum açılışında `-Loop` ile başlayan bir Scheduled Task kaydeder.
+
+### `-InitializeOnly` tuzağı
+
+`setup-research-output.ps1`, eşitleyiciyi bir kez `-InitializeOnly` ile çalıştırır. Bu,
+**mevcut tamamlanmış koşuları "indirilmiş" sayıp** `downloaded-runs.txt`'ye yazar; yani
+kurulum öncesindeki koşular hiç yedeklenmez. Kurulumdan sonra eşitleyicinin bir kez `-Force`
+ile çalıştırılması gerekir.
+
+İkinci bir incelik: script `Local\ResearchPlatformReportSync` adlı bir mutex kullanır ve
+başka bir örnek çalışıyorsa sessizce çıkar. `-Force` çalıştırmasından önce zamanlanmış
+görev durdurulmalıdır.
+
+### Doğrulama
+
+- **İzin:** `/data/deliveries` artık `10001:10001` sahipliğinde ve container içinden
+  yazılabilir (önce `Permission denied`).
+- **Teslimat uç noktası:** `GET /client/v1/research-runs/{run_id}/delivery/both` → HTTP 200,
+  19 164 832 bayt, geçerli ZIP, 22 dosya (önce HTTP 500).
+- **Yedeğin geri yüklenebilirliği:** ZIP içinden `16_research_report.docx` çıkarıldı —
+  483 505 bayt, doğrudan indirilen referansla birebir aynı, geçerli OOXML
+  (`[Content_Types].xml` ve `word/document.xml` mevcut). `13_raw_sources.jsonl` içindeki üç
+  ham gövde base64'ten çözüldü ve `%PDF` imzasıyla gerçek PDF oldukları doğrulandı. Yani
+  paket MinIO olmadan eksiksiz geri yüklenebiliyor.
+- **Mevcut koşular:** `-Force` sonrası üç tamamlanmış koşu ZIP olarak indi (9.85 / 18.28 /
+  3.82 MB). Başarısız koşu için doğru şekilde yalnız `_status.json` yazıldı.
+- **Otomatik yakalama:** yeni bir koşu 08:31:44'te tamamlandı, zamanlanmış görev onu
+  08:33:21'de yedekledi — hiçbir müdahale olmadan, `POLL_SECONDS` sınırının çok altında.
+  Paket 18 dosya içeriyor ve `16_research_report.docx` geçerli OOXML olarak çıkarılabildi.
+  (Bu koşuda ham gövde yok; dört kaynağın tamamı `scholarly_metadata` yoluyla, yani akademik
+  API'den yalnız üstveri olarak alınmış. Paketin 127 kB olmasının nedeni budur.)
+- Ruff: başarılı. Tam pytest paketi: `161 passed`.
+
+### Sınırlar
+
+- **Aynı disk zayıf korumadır.** Bu kurulum MinIO bozulmasına, container/API sorunlarına ve
+  yanlışlıkla koşu silinmesine karşı korur; disk arızasına veya makine kaybına karşı
+  korumaz. Bu makinede tek disk (C:) bulunuyor; asıl sunucuda `RESEARCH_OUTPUT_DIR` farklı
+  bir sürücüye veya ağ paylaşımına yönlendirilmelidir.
+- **Yalnız tamamlanan koşular yedeklenir.** Devam eden veya `failed` koşular için ZIP
+  üretilmez; verileri `data/minio` bind mount'unda kalır.
+- **Yedek ZIP'leri üçüncü kopyadır.** Ham veri zaten MinIO ve Postgres'te duruyor; bu
+  bilinçli bir dayanıklılık takasıdır.
 
 ---
 
