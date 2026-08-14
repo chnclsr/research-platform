@@ -19,7 +19,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 4 | Kontrol panelinin Docker uyumluluğu | `8bc484c` |
 | 5 | Checkpoint temizleme ve boyut koruması | `d55455d` |
 | 6 | MinIO verisinin bind mount'a taşınması | `c5408de` |
-| 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | (bu commit) |
+| 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | `7caa407` |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
