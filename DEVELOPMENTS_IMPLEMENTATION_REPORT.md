@@ -537,6 +537,35 @@ ile çalıştırılması gerekir.
 başka bir örnek çalışıyorsa sessizce çıkar. `-Force` çalıştırmasından önce zamanlanmış
 görev durdurulmalıdır.
 
+### Yapılandırmayı güvenle güncelleme
+
+`setup-research-output.ps1` hem `.env`'i hem eşitleyici script'ini
+`%LOCALAPPDATA%\ResearchPlatformClient` altına kopyalar ve zamanlanmış görev **kopyayı**
+çalıştırır. Dolayısıyla `scripts/.env`'i düzenlemek tek başına hiçbir şeyi değiştirmez.
+
+Bu ikili yapı bir kusur değil: script'ler bir dağıtılabilir istemci paketi olarak
+tasarlanmıştır (`build_team_access_bundle.ps1`, `install_codex_client.ps1`), o senaryoda
+kaynak paket geçicidir ve kurulu kopyanın bağımsız olması istenir. Sunucunun kendisinde
+depodan çalıştırıldığında sürtünme yaratan da bu varsayım farkıdır.
+
+Görevi doğrudan depodaki script'e bağlamak (tek kaynak) değerlendirildi ve **tercih
+edilmedi**: depo yolu taşıyıcı hale gelir, klasör taşındığında veya branch değiştiğinde
+yedekleme sessizce durur. Bir yedek mekanizması için bu kötü bir takas.
+
+Güncellemenin doğru yolu setup'ı yeniden çalıştırmak **değildir** — o, koşulsuz
+`-InitializeOnly` çağırdığı için henüz yedeklenmemiş koşuları kalıcı olarak kaçırtır.
+Yalnız yapılandırma kopyalanır ve görev yeniden başlatılır:
+
+```powershell
+Copy-Item .\scripts\.env "$env:LOCALAPPDATA\ResearchPlatformClient\.env" -Force
+Restart-ScheduledTask -TaskName "Research Platform Report Sync"
+```
+
+Teşhis notu: `Get-CimInstance Win32_Process | Where-Object CommandLine -like
+"*sync-research-reports*"` sorgusu **kendi komut satırını da** yakalar, çünkü filtre dizesi
+sorgunun kendisinde geçer. Süreç sayarken `$_.ProcessId -eq $PID` ile kendini ayıklamak
+gerekir; aksi halde olmayan ikinci bir örnek görünür.
+
 ### Doğrulama
 
 - **İzin:** `/data/deliveries` artık `10001:10001` sahipliğinde ve container içinden
