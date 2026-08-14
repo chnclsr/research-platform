@@ -1,0 +1,50 @@
+{
+  "pypdf": {
+    "overall": 0.5761101168184151,
+    "nid": 0.8695989085963746,
+    "teds": 0.0,
+    "mhs": 0.0,
+    "nid_adet": 200,
+    "teds_adet": 42,
+    "mhs_adet": 107,
+    "belge": 200,
+    "hata": 0,
+    "sn_belge": 0.0515
+  },
+  "inspector": {
+    "overall": 0.8756901763373888,
+    "nid": 0.9154088280192515,
+    "teds": 0.8141173616435706,
+    "mhs": 0.787774005450317,
+    "nid_adet": 200,
+    "teds_adet": 42,
+    "mhs_adet": 107,
+    "belge": 200,
+    "hata": 0,
+    "sn_belge": 0.0042
+  },
+  "opendataloader": {
+    "overall": 0.8383862395343875,
+    "nid": 0.9134585638088853,
+    "teds": 0.4274319256926878,
+    "mhs": 0.7601148590906185,
+    "nid_adet": 200,
+    "teds_adet": 42,
+    "mhs_adet": 107,
+    "belge": 200,
+    "hata": 0,
+    "sn_belge": 0.3743
+  },
+  "pymupdf4llm": {
+    "overall": 0.8686529284825398,
+    "nid": 0.9069230920679431,
+    "teds": 0.7895628042477043,
+    "mhs": 0.7828730754165772,
+    "nid_adet": 200,
+    "teds_adet": 42,
+    "mhs_adet": 107,
+    "belge": 200,
+    "hata": 0,
+    "sn_belge": 1.6456
+  }
+}
