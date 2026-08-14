@@ -24,6 +24,7 @@ from .config import Settings, get_settings
 from .connectors import build_registry
 from .db import SessionLocal, create_schema, get_session
 from .embeddings import EmbeddingClient
+from .parsers import build_parser_registry
 from .passages import retrieve_passages
 from .repository import Repository
 from .paperqa_adapter import paperqa2_health
@@ -581,6 +582,12 @@ async def list_connectors(request: Request) -> list[dict]:
     health = [h.model_dump(mode="json") for h in await registry.health()]
     health.append(paperqa2_health(get_settings()))
     return health
+
+
+@app.get("/v1/parsers", dependencies=[Depends(authorize)])
+async def list_parsers() -> list[dict]:
+    registry = build_parser_registry()
+    return [health.model_dump(mode="json") for health in registry.health()]
 
 
 @app.get("/v1/zotero/collections", dependencies=[Depends(authorize)])

@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `6.0`
+Belge sürümü: `7.0`
 
 Son güncelleme: `2026-08-14`
 
@@ -20,6 +20,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 5 | Checkpoint temizleme ve boyut koruması | `d55455d` |
 | 6 | MinIO verisinin bind mount'a taşınması | `c5408de` |
 | 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | `7caa407` |
+| 8 | Parser mimarisinin servisleştirilmesi | (bu commit) |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -596,6 +597,121 @@ gerekir; aksi halde olmayan ikinci bir örnek görünür.
   üretilmez; verileri `data/minio` bind mount'unda kalır.
 - **Yedek ZIP'leri üçüncü kopyadır.** Ham veri zaten MinIO ve Postgres'te duruyor; bu
   bilinçli bir dayanıklılık takasıdır.
+
+---
+
+## 8. Parser mimarisinin servisleştirilmesi
+
+### Gerekçe
+
+Ayrıştırma dağınıktı ve genişletilemiyordu: `html_to_markdown` chunking modülünde
+(`passages.py`) durup edinim modülünden çağrılıyordu — katman ihlali; PDF çıkarımı
+`acquisition.py` içinde satır içiydi; JSON/XML için ayrıştırma yoktu. Yeni parser eklemek
+`acquisition.py`'a girmeyi gerektiriyordu, bu da birden fazla katkıcıyla çakışma üretirdi.
+
+Ölçülen kalite sorunları (test edilerek doğrulandı):
+
+| Girdi | Önceki çıktı |
+|---|---|
+| `<table>` satırı | `Reactor Cost (USD/kW) Year` — sütun ayracı yok, hangi sayının hangi sütuna ait olduğu belirsiz |
+| `<pre><code>` bloğu | `def total(rows): s = 0 for r in rows: ...` — girinti ve satır sonları düzleşmiş |
+| Akademik PDF | `pypdf` ile sütun farkındalığı olmadan; iki sütunlu makalelerde metin karışabiliyor |
+
+Ayrıca crawl4ai hem fetcher hem parser'dı: kendi `fit_markdown`'ını döndürdüğü için aynı
+sayfa `direct` ile gelirse bizim ayrıştırıcımızdan, crawl4ai ile gelirse onunkinden
+geçiyordu — çıktı tutarsızdı.
+
+### Mimari
+
+Depoda bu desenin çalışan bir örneği zaten vardı (connector'lar), aynen izlendi:
+
+```
+connectors/base.py       →  parsers/base.py       (DocumentParser ABC, ParsedDocument)
+connectors/registry.py   →  parsers/registry.py   (ParserRegistry, deterministik seçim)
+implementations.py       →  parsers/html.py, parsers/pdf.py, parsers/structured.py
+```
+
+`AcquisitionService.__init__` registry'yi opsiyonel parametre olarak alıyor; `_direct`,
+`_scrapling` ve `_crawl4ai` artık satır içi ayrıştırma yapmıyor. `/v1/parsers` uç noktası
+`/v1/connectors` kalıbıyla kayıtlı parser'ları ve yeteneklerini raporluyor.
+
+### Aşama A — davranış değiştirmeyen taşıma
+
+Mevcut mantık birebir aynı çıktıyı üretecek şekilde taşındı. Kanıt: **161 testin tamamı,
+tek bir test dosyası bile değiştirilmeden geçti.** `passages.py`, `html_to_markdown`'ı
+geriye dönük uyumluluk için yeniden dışa aktarıyor, bu yüzden mevcut import'lar da kırılmadı.
+
+### Aşama B — parser iyileştirmeleri
+
+- **Tablolar:** `td`/`th` işleniyor, çıktı markdown boru ayraçlı. Başlık hücresi yoksa ilk
+  satır başlığa yükseltiliyor. Tablolar ayrıca `ParsedDocument.tables` içinde yapısal
+  olarak da veriliyor.
+- **Kod blokları:** `pre`/`code` içinde boşluk düzleştirme atlanıyor, çıktı ``` çitli.
+- **PDF:** PyMuPDF (`fitz`) `get_text("text", sort=True)` ile okuma sırasına duyarlı
+  çıkarım; kütüphane yoksa `pypdf`'e düşüyor. `# Page N` başlıkları korundu, dolayısıyla
+  pasajların `page_number` alanı bozulmadı.
+- **JSON/XML:** ham metin yerine `anahtar.yolu: değer` satırlarına düzleştirme. Gerekçe:
+  chunk sınırı bir değeri anahtarından ayırabiliyordu; satır başına bir yaprak bunu önlüyor.
+
+### Aşama C — crawl4ai tutarlılığı
+
+crawl4ai'den artık `cleaned_html`/`html` alınıp kendi parser'ımızdan geçiriliyor; kendi
+markdown'ı yalnızca fallback. Böylece üç edinim yolu da aynı yapıyı üretiyor.
+
+### Uygunluk paketi
+
+`tests/test_parsers.py` — katkıcılar bağımsız çalışacağı için sözleşme her parser'ın kendi
+testinde değil ortak pakette. Kimlik/yetenek beyanı, bozuk girdide istisna fırlatmama,
+registry'nin deterministik seçimi, başlık korunumu ve yeni yetenekler kapsanıyor.
+
+**Paket ilk çalıştırmada gerçek bir kırılganlık buldu:** `PdfParser` bozuk veya yanlış
+etiketlenmiş girdide istisna fırlatıyordu. Eskiden bu, `_direct`'in geniş `try/except`'i
+içinde yutuluyordu; parser ayrı bir servis olunca kendi başına sağlam olması gerekiyor.
+Hem belge hem sayfa düzeyinde korumaya alındı — tek bozuk sayfa artık belgenin kalanını
+kaybettirmiyor.
+
+### Doğrulama
+
+- Aşama A: `161 passed`, test dosyalarında değişiklik yok.
+- Aşama A+B+C sonrası: `ruff` temiz, `187 passed` (26 yeni test).
+- `/v1/parsers` çalışan sistemde üç parser'ı listeliyor; PDF parser'ı container içinde
+  `PyMuPDF` backend'ini raporluyor.
+
+**Uçtan uca koşu** (`01KZZWCTFT761V478E2S00SGHC`, `literature_scan`, 12 dakika):
+`completed_incomplete` ile tamamlandı — 7 kaynak, 100 iddia, 7 tur, 27 çıktı. Dört edinim
+yolu da çalıştı: `direct` (2), `crawl4ai` (2), `local_corpus` (3), `scholarly_metadata` (1).
+
+Pasaj konum bilgisi korundu: 377 pasajın 256'sında `page_number` dolu — PDF sayfa
+başlıklarının bozulmadığının kanıtı. PDF çıkarımının gerçekten `fitz` üzerinden geçtiği
+çıktının mekânsal hizalamasından görülüyor (sağa yaslanmış "Revision 2" satırı gibi düzen
+`pypdf` çıktısında oluşmuyor).
+
+### Bilinen sınır: PDF tabloları hâlâ yapısal değil
+
+Doğrulama koşusunda hiçbir kaynakta markdown tablosu oluşmadı. HTML tablo desteği birim
+testleriyle kanıtlı, ancak bu koşuda toplanan HTML kaynaklarında tablo yoktu; asıl tablo
+içeren belge bir PDF'ti (INL ileri reaktör maliyet meta-analizi).
+
+`fitz`'in `get_text("text", sort=True)` çağrısı mekânsal düzeni koruyor ama tabloyu
+**yapısal olarak** çıkarmıyor — sütunlar boşlukla hizalanmış metin olarak geliyor. PyMuPDF
+yeni sürümlerinde `find_tables()` sunuyor; PDF tablolarını `ParsedTable`'a çevirmek ayrı bir
+iş olarak duruyor. Altyapı hazır: `ParsedDocument.tables` alanı ve `to_markdown()` mevcut,
+yalnız PDF parser'ının bunu doldurması gerekiyor.
+
+### Karar bekleyen: LLM'in parser seçimindeki rolü
+
+Görseldeki 4. aşama bilinçli olarak uygulanmadı. Kısıt: `content_hash` ayrıştırılmış
+metinden hesaplanıyor (`acquisition.py`) ve sürüm tekilleştirmesinde kullanılıyor
+(`repository.py`); MinIO anahtarı da bu hash'i içeriyor. Parser seçimi koşudan koşuya
+değişirse aynı URL farklı hash üretir, dedup kırılır ve pasaj offsetleri kayar — bu,
+`10_reproducibility_manifest.json` üreten bir sistemin vaadiyle çelişir.
+
+Registry şu an deterministik seçim yapıyor ve seçim mantığı tek noktada toplandığı için
+karar sonradan uygulanabilir. Seçenekler: (a) deterministik seçim + çoklu tipli çıktı —
+altyapısı bu commit'te hazır, `ParsedDocument.tables` ve `code_blocks` alanları mevcut;
+(b) LLM'in ingestion'da seçmesi — `content_hash`'in ham baytlardan hesaplanmasına geçilmesi
+şart; (c) deterministik varsayılan + provenance'a yazılan override. Ayrıca her seçenekte
+`parse_document(source_version_id, parser_id)` MCP aracı additive olarak eklenebilir.
 
 ---
 

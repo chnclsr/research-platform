@@ -4,11 +4,14 @@ import hashlib
 import math
 import re
 from collections import Counter, defaultdict
-from html.parser import HTMLParser
 from typing import Any
 
+# Re-exported so existing importers keep working; the parser itself now lives in parsers/.
+from .parsers.html import StructuredHTMLParser, html_to_markdown
 from .relevance import terms
 from .schemas import ExtractedClaim, Passage
+
+__all__ = ["StructuredHTMLParser", "html_to_markdown"]
 
 
 INTENT_EXPANSIONS = {
@@ -31,58 +34,6 @@ def expanded_terms(question: str) -> set[str]:
     for token in list(output):
         output.update(INTENT_EXPANSIONS.get(token, set()))
     return output
-
-
-class StructuredHTMLParser(HTMLParser):
-    BLOCKS = {"p", "div", "section", "article", "li", "ul", "ol", "pre", "blockquote", "tr"}
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-        self.ignored_depth = 0
-        self.heading: int | None = None
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        tag = tag.lower()
-        if tag in {"script", "style", "noscript", "svg"}:
-            self.ignored_depth += 1
-        elif self.ignored_depth == 0 and re.fullmatch(r"h[1-6]", tag):
-            self.heading = int(tag[1])
-            self.parts.append("\n")
-        elif self.ignored_depth == 0 and tag in {"br", "hr"}:
-            self.parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        tag = tag.lower()
-        if tag in {"script", "style", "noscript", "svg"} and self.ignored_depth:
-            self.ignored_depth -= 1
-        elif self.ignored_depth == 0 and re.fullmatch(r"h[1-6]", tag):
-            self.parts.append("\n")
-            self.heading = None
-        elif self.ignored_depth == 0 and tag in self.BLOCKS:
-            self.parts.append("\n\n")
-
-    def handle_data(self, data: str) -> None:
-        if self.ignored_depth or not data.strip():
-            return
-        cleaned = re.sub(r"\s+", " ", data).strip()
-        if self.heading is not None and (not self.parts or self.parts[-1].endswith("\n")):
-            self.parts.append(f"{'#' * self.heading} ")
-        elif self.parts and not self.parts[-1].endswith((" ", "\n")):
-            self.parts.append(" ")
-        self.parts.append(cleaned)
-
-    def markdown(self) -> str:
-        text = "".join(self.parts)
-        text = re.sub(r"[ \t]+\n", "\n", text)
-        text = re.sub(r"\n{3,}", "\n\n", text)
-        return text.strip()
-
-
-def html_to_markdown(html: str) -> str:
-    parser = StructuredHTMLParser()
-    parser.feed(html)
-    return parser.markdown()
 
 
 def _sections(content: str) -> list[tuple[str, int, int]]:
