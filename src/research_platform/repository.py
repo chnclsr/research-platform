@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -343,6 +343,11 @@ class Repository:
                     "connector": c.connector_id,
                     "raw_snapshot_key": c.metadata.get("raw_snapshot_key"),
                     "strategies_tried": document.strategies_tried,
+                    # Which parser produced `content`, so an audit can tell whether a run
+                    # used the deterministic pick or a ParserSelection override.
+                    "parser_id": document.parser_id,
+                    "tables": document.tables,
+                    "code_blocks": document.code_blocks,
                     "error": document.error,
                 },
             )
@@ -661,10 +666,15 @@ class Repository:
         *,
         max_links: int,
     ) -> int:
-        source_host = canonicalize_url(source_url).split("/", 3)[2]
+        source_host = urlsplit(canonicalize_url(source_url)).hostname or ""
         added = 0
         for link in list(dict.fromkeys(links))[:max_links]:
             canonical = canonicalize_url(link)
+            # A hostless link (mailto:, javascript:, bare fragment) has no domain to
+            # compare and nothing to crawl; skipping beats aborting the whole run.
+            link_host = urlsplit(canonical).hostname
+            if not link_host:
+                continue
             existing = await self.session.scalar(
                 select(FrontierRow).where(
                     FrontierRow.run_id == run_id,
@@ -673,7 +683,7 @@ class Repository:
             )
             if existing:
                 continue
-            same_domain = canonical.split("/", 3)[2] == source_host
+            same_domain = link_host == source_host
             self.session.add(
                 FrontierRow(
                     id=new_id(),

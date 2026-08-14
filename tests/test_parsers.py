@@ -178,3 +178,21 @@ def test_pdf_parser_reports_which_backend_it_uses():
     available, detail = PdfParser().available()
     assert available
     assert "PyMuPDF" in detail or "pypdf" in detail
+
+
+def test_registry_honours_an_explicit_override():
+    """ParserSelection lets a protocol name a parser without the LLM choosing per run."""
+    registry = build_parser_registry()
+    chosen = registry.select("html", "text/html", b"<html>", {"html": "plain_text"})
+    assert chosen.id == "plain_text"
+
+
+def test_registry_ignores_an_unknown_override_instead_of_failing():
+    registry = build_parser_registry()
+    chosen = registry.select("html", "text/html", b"<html>", {"html": "nope"})
+    assert chosen.id == "html"
+
+
+def test_registry_override_only_applies_to_the_named_document_type():
+    registry = build_parser_registry()
+    assert registry.select("pdf", "application/pdf", b"%PDF", {"html": "plain_text"}).id == "pdf"

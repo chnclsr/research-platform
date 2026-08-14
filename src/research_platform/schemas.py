@@ -95,6 +95,20 @@ class HitlConfig(BaseModel):
     outline_review: bool = False
 
 
+class ParserSelection(BaseModel):
+    """
+    Optional parser overrides for a run.
+
+    The registry picks deterministically from content signals by default, because
+    content_hash is derived from parsed text and drives source-version dedup and MinIO
+    snapshot keys. An override is a deliberate, recorded decision rather than a per-run
+    guess: the chosen parser is written into source_versions.provenance.
+    """
+
+    # document type -> parser id, e.g. {"pdf": "pdf_layout"}
+    overrides: dict[str, str] = Field(default_factory=dict)
+
+
 class ConnectorSelection(BaseModel):
     profile: Literal["core", "all", "custom"] = "core"
     included_families: list[SourceFamily] = Field(default_factory=lambda: CORE_FAMILIES.copy())
@@ -176,6 +190,7 @@ class ResearchProtocol(BaseModel):
     languages: list[str] = Field(default_factory=lambda: ["tr", "en"], min_length=1)
     report_language: str = "tr"
     connectors: ConnectorSelection = Field(default_factory=ConnectorSelection)
+    parsers: ParserSelection = Field(default_factory=ParserSelection)
     evidence_policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
     authority_policy: AuthorityPolicy = Field(default_factory=AuthorityPolicy)
     family_targets: dict[SourceFamily, FamilyTarget] = Field(default_factory=dict)
@@ -384,6 +399,12 @@ class AcquiredDocument(BaseModel):
     redirect_chain: list[str] = Field(default_factory=list)
     outgoing_links: list[str] = Field(default_factory=list)
     acquisition_method: str = "none"
+    parser_id: str = ""
+    # Structure the parser recovered separately from the prose. The same content is also
+    # rendered inline in `content`, so passages stay self-contained; these give consumers
+    # that need the grid rather than the markdown a direct handle.
+    tables: list[dict[str, Any]] = Field(default_factory=list)
+    code_blocks: list[str] = Field(default_factory=list)
     content_hash: str | None = None
     retrieved_at: datetime = Field(default_factory=utcnow)
     strategies_tried: list[str] = Field(default_factory=list)

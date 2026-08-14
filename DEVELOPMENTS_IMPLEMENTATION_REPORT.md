@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `7.0`
+Belge sürümü: `8.0`
 
 Son güncelleme: `2026-08-14`
 
@@ -21,6 +21,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 6 | MinIO verisinin bind mount'a taşınması | `c5408de` |
 | 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | `7caa407` |
 | 8 | Parser mimarisinin servisleştirilmesi | `a58874a` |
+| 9 | Parser seçim kararı: deterministik + açık override | (bu commit) |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -712,6 +713,123 @@ altyapısı bu commit'te hazır, `ParsedDocument.tables` ve `code_blocks` alanla
 (b) LLM'in ingestion'da seçmesi — `content_hash`'in ham baytlardan hesaplanmasına geçilmesi
 şart; (c) deterministik varsayılan + provenance'a yazılan override. Ayrıca her seçenekte
 `parse_document(source_version_id, parser_id)` MCP aracı additive olarak eklenebilir.
+
+---
+
+## 9. Parser seçim kararı: deterministik + açık override
+
+### Karar
+
+8. bölümde açık bırakılan soru — "LLM parser'ı seçsin mi" — **hayır** olarak karara bağlandı.
+Yerine iki şey uygulandı: deterministik seçim + protokolden gelen açık override
+(*Seçenek 3*), ve parser'ların yapısal çıktısının kalıcılaştırılması (*Eklenti A*).
+
+Kararı üç ölçüm belirledi:
+
+| Ölçüm | Değer | Sonuç |
+|---|---|---|
+| LLM çağrısı (son koşu, 75 çağrı) | ort. **10.62 sn**, maks 24.63 | Belge başına seçim çağrısı 68-85 belgede 12-15 dk; `max_wall_minutes` 12 olan koşularda bütçenin tamamı |
+| `content_hash` kaynağı | Ayrıştırılmış metin | Seçim değişkense dedup kırılır, MinIO anahtarları ve pasaj offsetleri kayar |
+| GPU | Tek, 8 GB | Seçime harcanan saniye kanıt çıkarımından çalınır |
+
+LLM'in ingestion'da seçmesi bu üç nedenle reddedildi. Asıl ihtiyaç — "araştırma hedefine
+göre doğru içerik gelsin" — Eklenti A ile determinizm bozulmadan karşılanıyor: LLM zaten
+retrieval aşamasında seçim yapıyor, orada yapmasının ek maliyeti yok.
+
+### Seçenek 3 — açık override
+
+`ParserSelection` şeması `ConnectorSelection` modelinde eklendi ve `ResearchProtocol.parsers`
+alanı olarak bağlandı. Varsayılan boş, yani davranış tamamen deterministik.
+
+```python
+ResearchProtocol(..., parsers={"overrides": {"pdf": "plain_text"}})
+```
+
+`ParserRegistry.select()` opsiyonel `overrides` alıyor; bilinmeyen bir parser id'si koşuyu
+düşürmüyor, deterministik seçime geri dönüyor. Seçilen parser
+`source_versions.provenance.parser_id` alanına yazılıyor — bir denetim, koşunun varsayılanı
+mı yoksa override'ı mı kullandığını görebiliyor.
+
+Tasarım gereği override bir **insan/protokol kararı**, koşu içinde belge başına verilen bir
+tahmin değil. Hash sapması yalnız bilinçli olarak ve kayıtla oluşuyor.
+
+### Eklenti A — yapısal çıktının kalıcılaştırılması
+
+`AcquiredDocument` `parser_id`, `tables` ve `code_blocks` alanlarını taşıyor; bunlar
+`provenance` içinde saklanıyor (JSON sütunu, migration gerekmedi).
+
+Aynı içerik `content` alanında markdown olarak da gömülü kalıyor — pasajlar kendi kendine
+yeterli olsun diye. Kalıcılaştırma, ızgarayı isteyen bir tüketicinin markdown'ı yeniden
+ayrıştırmak zorunda kalmaması için.
+
+Erişilebilir olması için yeni bir çıktı eklendi: **`18_structured_extracts.json`** — kaynak
+başına parser id'si, tablolar (başlık + satır) ve kod blokları. Yalnız yapısal içerik
+bulunan koşularda üretiliyor.
+
+### Doğrulama
+
+- Ruff temiz, **190 test** (3 yeni override testi).
+- Çalışan worker image'ında doğrulandı: varsayılan seçim `html`, `{"html": "plain_text"}`
+  override'ı `plain_text`, bilinmeyen id `html`'e geri dönüyor.
+- Protokol `parsers` alanını kabul ediyor; API'den açılan koşuda varsayılan `{}` geliyor.
+
+**Kararlılık koşusu** (`01M003RY3MS8F4B2F139QFF80J`, düzeltme sonrası): `completed_incomplete`
+— 6 kaynak, 39 iddia, 7 tur, 21 çıktı. Frontier'a 21 bağlantı sorunsuz eklendi; çöken kod
+yolu tam olarak buydu.
+
+`parser_id` beklendiği gibi kaydedildi:
+
+| parser_id | Edinim yolu | Adet |
+|---|---|---|
+| `html` | crawl4ai | 2 |
+| `pdf` | direct | 1 |
+| *(boş)* | local_corpus | 2 |
+| *(boş)* | scholarly_metadata | 1 |
+
+Son iki yol parser'dan geçmiyor (biri yerel corpus, diğeri akademik API üstverisi), bu yüzden
+alan boş — doğru davranış.
+
+### Kararlılık testinde ortaya çıkan mevcut hata
+
+İlk kararlılık koşusu `failed` ile bitti:
+
+```
+File "research_platform/repository.py", line 681, in add_frontier_links
+    same_domain = canonical.split("/", 3)[2] == source_host
+IndexError: list index out of range
+```
+
+**Bu bir regresyon değil.** `git log -L 681,681` o satırın `2907ed7` (HITL checkpoint'leri)
+commit'inden geldiğini gösteriyor; bu bölümdeki değişikliklerden önce var olan gizli bir
+hataydı ve tetiklenmesi toplanan sayfaların bağlantı içeriğine bağlıydı.
+
+Kök sebep: `extract_links()` (`normalization.py`) bağlantıları `http`/`https` şemalarıyla
+sınırlıyor, ancak **crawl4ai yolu bu filtreyi uygulamıyordu**. crawl4ai `mailto:`,
+`javascript:` ve parça bağlantılarını da bildiriyor; bunlar `canonicalize_url()`'den host'suz
+çıkıyor ve `split("/", 3)[2]` indeksi patlıyor. Koşu o anda ne toplamışsa onunla ölüyor.
+
+İki katmanlı düzeltildi:
+
+- **Kök sebep:** crawl4ai bağlantıları da `urlsplit(link).scheme in {"http","https"}` ile
+  süzülüyor, diğer edinim yollarıyla aynı davranış.
+- **Savunma:** `add_frontier_links` artık host karşılaştırmasını dize bölmek yerine
+  `urlsplit(...).hostname` ile yapıyor ve host'suz bağlantıyı koşuyu düşürmek yerine
+  atlıyor.
+
+Regresyon testi eklendi (`tests/test_pipeline.py`): `mailto:` ve `javascript:` bağlantıları
+içeren bir liste artık yalnız iki geçerli bağlantıyı ekliyor ve istisna fırlatmıyor.
+
+### Ertelenen: Eklenti B ve C
+
+**Eklenti B (protokolden yetenek pazarlığı)** — tasarrufu ölçülen 6.7 kat PDF tablo
+maliyetinden geliyor; o maliyet henüz kodda olmadığı için değeri PDF tablo çıkarımı
+eklendikten sonra doğar.
+
+**Eklenti C (`parse_document` MCP aracı)** — yeni bir yetenek açmıyor:
+`read_research_raw_data(dataset="sources")` zaten `raw_content`'i, yani base64 PDF'i
+döndürüyor. Kazandırdığı ergonomi (tek belge hedefleme, bizim parser'ımızın çıktısı) ancak
+tür başına ikinci parser eklendiğinde anlam kazanıyor; bugün tek parser varken çağırmak aynı
+çıktıyı verir. Arkadaşlar rakip parser eklediğinde tekrar değerlendirilecek.
 
 ---
 

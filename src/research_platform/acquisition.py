@@ -7,13 +7,13 @@ import ipaddress
 import socket
 import time
 from collections import defaultdict
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
 
 from .config import Settings
 from .normalization import canonicalize_url, detect_document_type, detect_language
-from .parsers import ParserRegistry, build_parser_registry
+from .parsers import ParsedDocument, ParserRegistry, build_parser_registry
 from .schemas import AcquiredDocument, ConnectorCandidate
 
 
@@ -73,6 +73,8 @@ class AcquisitionService:
         self.settings, self.client = settings, client
         self.limiter = DomainLimiter(settings.domain_delay_s)
         self.parsers = parsers or build_parser_registry()
+        # Filled from the protocol's ParserSelection; empty means fully deterministic.
+        self.parser_overrides: dict[str, str] = {}
 
     async def acquire(self, candidate: ConnectorCandidate) -> AcquiredDocument:
         url = str(candidate.url)
@@ -189,6 +191,7 @@ class AcquisitionService:
         content_type: str, *, raw_content: str = "", document_type: str = "text",
         final_url: str | None = None, redirect_chain: list[str] | None = None,
         outgoing_links: list[str] | None = None, canonical_url: str | None = None,
+        parsed: ParsedDocument | None = None,
     ) -> AcquiredDocument:
         normalized = content.replace("\x00", "").strip()
         restricted = any(marker in normalized.lower() for marker in PAYWALL_MARKERS)
@@ -202,6 +205,9 @@ class AcquisitionService:
             canonical_url=canonical_url or canonicalize_url(final_url or str(candidate.url)),
             final_url=final_url or str(candidate.url), redirect_chain=redirect_chain or [],
             outgoing_links=outgoing_links or [],
+            parser_id=parsed.parser_id if parsed else "",
+            tables=[] if restricted else [t.model_dump(mode="json") for t in parsed.tables] if parsed else [],
+            code_blocks=[] if restricted else (parsed.code_blocks if parsed else []),
             content_hash=hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None,
             strategies_tried=tried.copy(), error="Paywall detected" if restricted else None,
         )
@@ -234,19 +240,19 @@ class AcquisitionService:
                     response.text if document_type != "pdf"
                     else base64.b64encode(response.content).decode("ascii")
                 )
-                parser = self.parsers.select(document_type, ctype, response.content)
+                parser = self.parsers.select(
+                    document_type, ctype, response.content, self.parser_overrides
+                )
                 if parser is None:
                     return None
                 parsed = parser.parse(response.content, url=current, content_type=ctype)
-                text = parsed.text
-                links = parsed.outgoing_links
-                canonical = parsed.canonical_url
-                if len(text.strip()) < 400:
+                if len(parsed.text.strip()) < 400:
                     return None
                 return self._document(
-                    candidate, text, "direct", tried, ctype or "text/plain",
+                    candidate, parsed.text, "direct", tried, ctype or "text/plain",
                     raw_content=raw, document_type=document_type, final_url=current,
-                    redirect_chain=redirects, outgoing_links=links, canonical_url=canonical,
+                    redirect_chain=redirects, outgoing_links=parsed.outgoing_links,
+                    canonical_url=parsed.canonical_url, parsed=parsed,
                 )
             raise ValueError("Too many redirects")
         except Exception:
@@ -293,13 +299,15 @@ class AcquisitionService:
             # come out shaped differently from the direct and scrapling paths.
             rendered = row.get("cleaned_html") or row.get("html") or ""
             markdown = ""
+            parsed: ParsedDocument | None = None
             if isinstance(rendered, str) and rendered.strip():
-                parser = self.parsers.select("html", "text/html", rendered.encode("utf-8", "replace"))
+                payload = rendered.encode("utf-8", "replace")
+                parser = self.parsers.select("html", "text/html", payload, self.parser_overrides)
                 if parser is not None:
-                    parsed = parser.parse(
-                        rendered.encode("utf-8", "replace"), url=url, content_type="text/html"
-                    )
+                    parsed = parser.parse(payload, url=url, content_type="text/html")
                     markdown = parsed.text
+            if not markdown.strip():
+                parsed = None
             if not markdown.strip():
                 markdown = row.get("markdown") or row.get("fit_markdown") or ""
                 if isinstance(markdown, dict):
@@ -309,11 +317,18 @@ class AcquisitionService:
                 link_rows = [*(links_data.get("internal") or []), *(links_data.get("external") or [])]
             else:
                 link_rows = links_data if isinstance(links_data, list) else []
+            # crawl4ai reports mailto:, javascript: and fragment hrefs too. extract_links()
+            # filters those on the other acquisition paths; without the same filter here a
+            # hostless URL reaches the frontier and breaks its same-domain comparison.
             links = [
                 item.get("href") if isinstance(item, dict) else item for item in link_rows
             ]
+            links = [
+                link for link in links
+                if isinstance(link, str) and urlsplit(link).scheme in {"http", "https"}
+            ]
             return self._document(
-                candidate, markdown, "crawl4ai", tried, "text/markdown",
+                candidate, markdown, "crawl4ai", tried, "text/markdown", parsed=parsed,
                 document_type="html", final_url=row.get("url") or url,
                 outgoing_links=[canonicalize_url(link) for link in links if isinstance(link, str)],
             )
@@ -336,16 +351,17 @@ class AcquisitionService:
             if int(getattr(page, "status", 0) or 0) >= 400:
                 return None
             raw = getattr(page, "html_content", None) or str(page)
-            parser = self.parsers.select("html", "text/html", raw.encode("utf-8", "replace"))
+            payload = raw.encode("utf-8", "replace")
+            parser = self.parsers.select("html", "text/html", payload, self.parser_overrides)
             if parser is None:
                 return None
-            parsed = parser.parse(raw.encode("utf-8", "replace"), url=url, content_type="text/html")
+            parsed = parser.parse(payload, url=url, content_type="text/html")
             if len(parsed.text.strip()) < 400:
                 return None
             return self._document(
                 candidate, parsed.text, "scrapling", tried, "text/html", raw_content=raw,
                 document_type="html", final_url=url, outgoing_links=parsed.outgoing_links,
-                canonical_url=parsed.canonical_url,
+                canonical_url=parsed.canonical_url, parsed=parsed,
             )
         except Exception as exc:
             return AcquiredDocument(

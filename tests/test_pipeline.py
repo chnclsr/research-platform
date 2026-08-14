@@ -575,3 +575,35 @@ async def test_checkpoint_refuses_a_state_over_the_size_limit(monkeypatch):
         assert "passages" in message
         # The session must stay usable so the pipeline can still record the failure.
         await repo.event(run.id, "failed", {"error": message[:200]})
+
+
+@pytest.mark.asyncio
+async def test_frontier_skips_hostless_links_instead_of_failing_the_run():
+    """
+    crawl4ai reports mailto:/javascript: hrefs. A hostless URL has no domain to compare,
+    and letting it through used to abort the whole run with IndexError.
+    """
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session)
+        run = await repo.create_run(ResearchProtocol(
+            title="Frontier hostless",
+            primary_question="Does a hostless link abort the frontier?",
+        ))
+        added = await repo.add_frontier_links(
+            run.id,
+            "https://example.org/article",
+            [
+                "mailto:someone@example.org",
+                "javascript:void(0)",
+                "https://example.org/next",
+                "https://other.example/page",
+            ],
+            max_links=10,
+        )
+        assert added == 2
+
+        rows = await repo.list_frontier(run.id) if hasattr(repo, "list_frontier") else None
+        if rows is not None:
+            hosts = {r.canonical_url for r in rows}
+            assert not any(h.startswith(("mailto:", "javascript:")) for h in hosts)

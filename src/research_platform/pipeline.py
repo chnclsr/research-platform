@@ -1064,6 +1064,8 @@ class ResearchPipeline:
 
     async def _acquire_node(self, state: PipelineState) -> dict:
         protocol = ResearchProtocol.model_validate(state["protocol"])
+        # Deterministic selection unless the protocol names a parser for a document type.
+        self.acquisition.parser_overrides = dict(protocol.parsers.overrides)
         candidates = [ConnectorCandidate.model_validate(c) for c in state.get("candidates", [])]
         semaphore = asyncio.Semaphore(protocol.budget.acquisition_concurrency)
         acquisition_metrics: list[dict[str, Any]] = []

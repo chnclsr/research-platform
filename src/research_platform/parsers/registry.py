@@ -26,8 +26,18 @@ class ParserRegistry:
         return self._parsers.get(parser_id)
 
     def select(
-        self, document_type: str, content_type: str = "", content: bytes = b""
+        self,
+        document_type: str,
+        content_type: str = "",
+        content: bytes = b"",
+        overrides: dict[str, str] | None = None,
     ) -> DocumentParser | None:
+        # An override is an explicit, recorded decision (ParserSelection on the protocol);
+        # an unknown id falls back to the deterministic pick rather than failing the run.
+        if overrides:
+            override = self._parsers.get(overrides.get(document_type, ""))
+            if override is not None:
+                return override
         candidates = [
             parser
             for parser in self.parsers
