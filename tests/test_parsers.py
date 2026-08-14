@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from research_platform.parsers import ParsedTable, build_parser_registry
+from research_platform.parsers import (
+    DocumentParser, ParsedDocument, ParsedTable, ParserRegistry, build_parser_registry,
+)
 from research_platform.parsers.html import HtmlParser
 from research_platform.parsers.pdf import PdfParser
 from research_platform.parsers.structured import PlainTextParser
@@ -180,19 +182,39 @@ def test_pdf_parser_reports_which_backend_it_uses():
     assert "PyMuPDF" in detail or "pypdf" in detail
 
 
+class _AlternativeHtmlParser(DocumentParser):
+    """Stands in for a contributed second HTML parser, which is the case overrides exist for."""
+
+    id = "html_alt"
+    document_types = ("html",)
+
+    def parse(self, content: bytes, *, url: str, content_type: str = "") -> ParsedDocument:
+        return ParsedDocument(text="alt", document_type="html", parser_id=self.id)
+
+
+def _two_html_parsers() -> ParserRegistry:
+    return ParserRegistry([HtmlParser(), _AlternativeHtmlParser(), PdfParser()])
+
+
 def test_registry_honours_an_explicit_override():
     """ParserSelection lets a protocol name a parser without the LLM choosing per run."""
-    registry = build_parser_registry()
-    chosen = registry.select("html", "text/html", b"<html>", {"html": "plain_text"})
-    assert chosen.id == "plain_text"
+    registry = _two_html_parsers()
+    assert registry.select("html", "text/html", b"<html>").id == "html"
+    assert registry.select("html", "text/html", b"<html>", {"html": "html_alt"}).id == "html_alt"
 
 
 def test_registry_ignores_an_unknown_override_instead_of_failing():
     registry = build_parser_registry()
-    chosen = registry.select("html", "text/html", b"<html>", {"html": "nope"})
-    assert chosen.id == "html"
+    assert registry.select("html", "text/html", b"<html>", {"html": "nope"}).id == "html"
+
+
+def test_registry_rejects_an_override_that_cannot_handle_the_document_type():
+    """A mismatched override would feed PDF bytes to the HTML parser and emit garbage."""
+    registry = build_parser_registry()
+    chosen = registry.select("pdf", "application/pdf", b"%PDF-1.4", {"pdf": "html"})
+    assert chosen.id == "pdf"
 
 
 def test_registry_override_only_applies_to_the_named_document_type():
-    registry = build_parser_registry()
-    assert registry.select("pdf", "application/pdf", b"%PDF", {"html": "plain_text"}).id == "pdf"
+    registry = _two_html_parsers()
+    assert registry.select("pdf", "application/pdf", b"%PDF", {"html": "html_alt"}).id == "pdf"

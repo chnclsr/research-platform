@@ -32,11 +32,13 @@ class ParserRegistry:
         content: bytes = b"",
         overrides: dict[str, str] | None = None,
     ) -> DocumentParser | None:
-        # An override is an explicit, recorded decision (ParserSelection on the protocol);
-        # an unknown id falls back to the deterministic pick rather than failing the run.
+        # An override is an explicit, recorded decision (ParserSelection on the protocol).
+        # It still has to accept the document: an id that cannot parse this type would
+        # silently emit garbage, so it is treated exactly like an unknown id and falls
+        # back to the deterministic pick rather than failing the run.
         if overrides:
             override = self._parsers.get(overrides.get(document_type, ""))
-            if override is not None:
+            if override is not None and override.can_parse(document_type, content_type, content):
                 return override
         candidates = [
             parser

@@ -745,8 +745,16 @@ alanı olarak bağlandı. Varsayılan boş, yani davranış tamamen deterministi
 ResearchProtocol(..., parsers={"overrides": {"pdf": "plain_text"}})
 ```
 
-`ParserRegistry.select()` opsiyonel `overrides` alıyor; bilinmeyen bir parser id'si koşuyu
-düşürmüyor, deterministik seçime geri dönüyor. Seçilen parser
+`ParserRegistry.select()` opsiyonel `overrides` alıyor. Override iki koşulu birden
+sağlamalı: id kayıtlı olmalı **ve** `can_parse()` o belge türünü kabul etmeli. İkisinden
+biri tutmazsa koşu düşmüyor, deterministik seçime geri dönülüyor.
+
+İkinci koşul sonradan eklendi: ilk sürüm override'ı doğrulamadan döndürüyordu, dolayısıyla
+`{"pdf": "html"}` gibi uyumsuz bir ayar PDF baytlarını HTML parser'ına verip sessizce çöp
+metin üretebiliyordu. Bilinmeyen id güvenle geri dönerken uyumsuz id'nin sessizce bozması
+tutarsızdı; ikisi artık aynı davranıyor.
+
+Seçilen parser
 `source_versions.provenance.parser_id` alanına yazılıyor — bir denetim, koşunun varsayılanı
 mı yoksa override'ı mı kullandığını görebiliyor.
 
