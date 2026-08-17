@@ -43,6 +43,18 @@ değiştirilmeden `400/409` döner. Kabul edilen yanıt `hitl_history` içine ek
   domainlerin belgeleri evidence aşamasına geçirilmez, ham provenance korunur.
 - `outline_review`: rapor yapısını onaylatır veya sentez promptuna yapısal yönlendirme ekler.
 - Beş dakika yanıt gelmezse durum `paused` olur; checkpoint ve state kaybolmaz.
+
+> **Not (2026-08-17):** Son madde artık dar bir istisnayla geçerli. Checkpoint'ler
+> PostgreSQL'in 256 MiB jsonb sınırını aşmamak için belgelerin `raw_content` alanı
+> boşaltılarak yazılıyor; bellekteki state'e dokunulmuyor, dolayısıyla **kesintisiz koşular
+> etkilenmiyor.** Ancak bir koşu checkpoint'ten devam ettirilirse, resume sonrası işlenen
+> belgelerin ham gövdesi geri gelmez: MinIO snapshot'ı ham dosya yerine çıkarılmış metni
+> tutar, `source_versions.raw_content` boş kalır ve o koşuda PDF figür analizi çalışmaz.
+> Sorgular, adaylar, belge üstverisi ve çıkarılmış metin korunmaya devam eder.
+>
+> Gerekçe ve ölçümler için
+> [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](../DEVELOPMENTS_IMPLEMENTATION_REPORT.md)
+> 2. ve 5. bölümler; açık iş olarak [OPEN_ITEMS.md](../OPEN_ITEMS.md) 4. madde.
 - Yanıt sonrası iş tekrar kuyruğa alınır. İnsan bekleme süresi `max_wall_minutes`
   araştırma bütçesine dahil edilmez.
 

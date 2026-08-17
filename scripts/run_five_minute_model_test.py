@@ -682,7 +682,7 @@ async def main() -> None:
         "suite_id": corpus["suite_id"],
         "suite_version": corpus["version"],
         "generated_at": datetime.now(UTC).isoformat(),
-        "protocol": "FIVE_MINUTE_MODEL_TEST_PROTOCOL.md",
+        "protocol": "reports/benchmarks/FIVE_MINUTE_MODEL_TEST_PROTOCOL.md",
         "research_budget_seconds_per_model": RESEARCH_BUDGET_SECONDS,
         "corpus_sha256": hashlib.sha256(args.corpus.read_bytes()).hexdigest(),
         "profiles": [asdict(profile) for profile in selected],

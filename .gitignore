@@ -13,7 +13,6 @@ dist/
 htmlcov/
 .coverage
 outputs/
-reports/
 insti_patch.zip
 .codex-docx-review/
 CLAUDE.md
