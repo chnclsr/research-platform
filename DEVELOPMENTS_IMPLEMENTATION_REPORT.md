@@ -22,7 +22,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | `7caa407` |
 | 8 | Parser mimarisinin servisleştirilmesi | `a58874a` |
 | 9 | Parser seçim kararı: deterministik + açık override | `ec88283` |
-| 10 | Word raporunda kaynak çapraz referansları | (bu commit) |
+| 10 | Word raporunda kaynak çapraz referansları | `63b74ed` |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
