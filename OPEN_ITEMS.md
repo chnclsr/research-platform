@@ -17,7 +17,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 2 | Yedekler kaynakla aynı diskte | Disk arızasında ikisi de gider | **Yüksek** |
 | 3 | PDF tabloları yapısal değil | Sayısal kanıt kaybı | Orta |
 | 4 | Resume sonrası ham veri kaybı | Kesilen koşuda figür analizi çalışmaz | Orta |
-| 5 | `raw_content` çift depolanıyor | Postgres gereksiz büyür | Düşük |
+| 5 | `raw_content` yedekliliği — geri yükleme yolu yok | Yedek var, kurtarma test edilmemiş | Düşük |
 | 6 | MinIO anahtar düzeni tutarsız | Temizlik yazmayı zorlaştırır | Düşük |
 | 7 | Teslimat ZIP'leri hiç temizlenmiyor | Yavaş büyüme | Düşük |
 | 8 | crawl4ai varsayılan ayarlarla | Lazy-load içerik kaçar | Düşük |
@@ -99,18 +99,42 @@ alıyor — geliştirme sırasında her `up -d --build` bunu yapıyor.
 checkpoint'e hiç sokmamak. Alternatif (snapshot'ı ACQUIRE'a taşımak) elenen belgeler için
 çöp snapshot üretir.
 
-## 5. `source_versions.raw_content` çift depolanıyor
+## 5. `source_versions.raw_content` — bilinçli yedeklilik, kaldırılmayacak
 
-**Durum:** Ham gövde hem MinIO'da (`raw_snapshot_key`) hem bu TEXT sütununda.
+**Durum:** Ham gövde iki yerde: MinIO snapshot'ı (`provenance.raw_snapshot_key`) ve bu TEXT
+sütunu. **Bu bir israf değil, tasarım kararıdır** ve öyle kalmalıdır.
 
-**Not:** `raw_snapshot_key` yazılıyor ama **hiçbir yerden okunmuyor** — MinIO snapshot'ları
-şu an salt-yazılır arşiv. Bu maddeyi çözmek onları işlevsel hâle de getirir.
+**Neden:** İki kopya farklı ortamda ve farklı formatta duruyor — MinIO host klasöründe
+(`data/minio`) erasure-coded düzende, Postgres named volume'de (VHDX içinde) base64/metin
+olarak. MinIO kendi on-disk formatını bozarsa (`xl.meta` hasarı) Postgres kopyası
+etkilenmez ve arşiv oradan yeniden üretilebilir.
 
-**Etki:** Sınır aşımı yaratmaz (TEXT 1 GB, TOAST sıkıştırır) ama `postgres-data` gereksiz
-büyür. `13_raw_sources.jsonl` de base64 PDF'leri gömdüğü için büyük koşularda yüzlerce MB.
+Kopya **kayıpsızdır**: HTML `response.text` olarak, PDF base64 olarak saklanıyor; MinIO'daki
+nesne bunun aynen çözülmüş hâli (`pipeline.py`, `snapshot = raw_content or content`).
 
-**Yapılacak:** Export'u `provenance.raw_snapshot_key` üzerinden MinIO'dan **akıtarak**
-üretmek; çıktı sözleşmesi değişmez, yalnız Postgres kopyası gider.
+**Gerekçenin sınırı — önemli:** Bu yedeklilik "MinIO container'ına bir şey olursa" senaryosu
+için değildir. Bind mount'a geçildikten sonra (6. bölüm) container zaten kullanılıp
+atılabilir; silinmesi, çökmesi veya `docker compose down -v` veriyi kaybettirmez. Koruduğu
+gerçek senaryolar: **format bozulması**, klasörün yanlışlıkla silinmesi, fidye yazılımı.
+
+**Kapsamı:** Postgres kopyası yalnız **kaynak snapshot'larını** yedekler. MinIO'daki 235
+nesnenin dağılımı:
+
+| Tür | Nesne | Boyut | Postgres yedeği |
+|---|---|---|---|
+| Kaynak snapshot | 62 | 36.9 MB | ✅ `source_versions.raw_content` |
+| Export çıktısı | 142 | 152.7 MB | ❌ `export_artifacts` yalnız ad/anahtar tutuyor |
+| Figür görseli | 31 | 4.5 MB | ❌ `figure_observations` yalnız `image_key` tutuyor |
+
+Export çıktıları ve figürler koşu bazlı yedek ZIP'lerinde bulunur (2. madde).
+
+**Açık kalan:** Geri yükleme yolu **yok**. Postgres'ten okuyup MinIO'yu dolduran tek satır
+kod bulunmuyor; tüm `store.put` çağrıları ileri yönde. Felaket anında script baskı altında
+yazılmak zorunda kalır ve test edilmemiş bir geri yükleme yolu zayıf garantidir. Yazılması
+hâlinde hedef anahtar tahmin edilmez — `provenance.raw_snapshot_key` 62/62 kayıtta dolu.
+
+**Yan not:** `raw_snapshot_key` yazılıyor ama hiçbir yerden okunmuyor; MinIO snapshot'ları
+şu an salt-yazılır arşiv. Geri yükleme yolu yazılırsa bu alan da işlevsel hâle gelir.
 
 ## 6. MinIO anahtar düzeni tutarsız
 
