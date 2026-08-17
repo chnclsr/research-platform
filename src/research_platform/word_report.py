@@ -305,6 +305,49 @@ def _add_hyperlink(paragraph: Any, label: str, url: str) -> None:
     paragraph._p.append(hyperlink)
 
 
+def source_anchor(label: str) -> str:
+    """Bookmark name for a source label. Word allows letters, digits and underscore only."""
+    return f"src_{re.sub(r'[^A-Za-z0-9_]', '', label)}"[:40]
+
+
+def _add_bookmarked_text(paragraph: Any, label: str, anchor: str, bookmark_id: int) -> None:
+    """Write `label` into `paragraph` and wrap it in a bookmark so links can target it."""
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(bookmark_id))
+    start.set(qn("w:name"), anchor)
+    paragraph._p.append(start)
+    run = paragraph.add_run(label)
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(bookmark_id))
+    paragraph._p.append(end)
+    return run
+
+
+def _add_internal_link(paragraph: Any, label: str, anchor: str) -> None:
+    """
+    Same shape as _add_hyperlink but targets a bookmark in this document.
+
+    An internal link carries `w:anchor` instead of a relationship id, so unlike the external
+    variant it needs no `part.relate_to` call.
+    """
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("w:anchor"), anchor)
+    run = OxmlElement("w:r")
+    properties = OxmlElement("w:rPr")
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), BLUE)
+    properties.append(color)
+    bold = OxmlElement("w:b")
+    properties.append(bold)
+    run.append(properties)
+    text = OxmlElement("w:t")
+    text.text = label
+    text.set(qn("xml:space"), "preserve")
+    run.append(text)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
 def _source_link_label(source: Any, turkish: bool, limit: int = 120) -> str:
     title = _text(getattr(source, "title", ""), limit)
     if title.lower().startswith(("http://", "https://")):
@@ -339,6 +382,7 @@ def _add_figure_interpretation(
     observation: FigureObservation,
     *,
     turkish: bool,
+    linkable: set[str] | None = None,
 ) -> None:
     main_finding = (
         " ".join(observation.main_findings[:2])
@@ -349,15 +393,25 @@ def _add_figure_interpretation(
         return
     callout = document.add_table(rows=1, cols=1)
     label = "Model yorumu" if turkish else "Model interpretation"
-    callout.rows[0].cells[0].text = (
-        f"{label}: {main_finding} [{observation.source_label}]"
-        + (
-            f"\n\nSınır: {limitations}"
-            if turkish and limitations
-            else (f"\n\nLimitation: {limitations}" if limitations else "")
-        )
+    cell = callout.rows[0].cells[0]
+    # Built run by run so the source label can carry a link to the catalog; a plain
+    # cell.text assignment would collapse it into one untargetable run.
+    paragraph = cell.paragraphs[0]
+    paragraph.add_run(f"{label}: {main_finding} ")
+    citation = f"[{observation.source_label}]"
+    if observation.source_label in (linkable or set()):
+        _add_internal_link(paragraph, citation, source_anchor(observation.source_label))
+    else:
+        paragraph.add_run(citation)
+    tail = (
+        f"Sınır: {limitations}"
+        if turkish and limitations
+        else (f"Limitation: {limitations}" if limitations else "")
     )
-    _set_cell_shading(callout.rows[0].cells[0], PALE_BLUE)
+    if tail:
+        cell.add_paragraph()
+        cell.add_paragraph(tail)
+    _set_cell_shading(cell, PALE_BLUE)
     _style_table(callout, [6.5], header_fill=PALE_BLUE, font_size=9.5)
 
 
@@ -526,16 +580,29 @@ def _theme_evidence_map(
     return buffer.getvalue()
 
 
-def _add_cited_paragraph(document: Document, text: str) -> None:
+def _add_cited_paragraph(
+    document: Document, text: str, linkable: set[str] | None = None
+) -> None:
+    """
+    Render synthesis prose, turning `[S03]` citations into links to the source catalog.
+
+    A citation only becomes a link when the label exists in `linkable`. A link to a missing
+    bookmark is silently inert in Word — the reader clicks and nothing happens, which reads
+    worse than plain text.
+    """
+    linkable = linkable or set()
     paragraph = document.add_paragraph()
     for piece in re.split(r"(\[S\d{2,3}\])", _text(text, 12000)):
         if not piece:
             continue
-        run = paragraph.add_run(piece)
         if re.fullmatch(r"\[S\d{2,3}\]", piece):
-            _set_run_font(run, size=10.5, color=BLUE, bold=True)
+            label = piece.strip("[]")
+            if label in linkable:
+                _add_internal_link(paragraph, piece, source_anchor(label))
+                continue
+            _set_run_font(paragraph.add_run(piece), size=10.5, color=BLUE, bold=True)
         else:
-            _set_run_font(run, size=10.5, color=INK)
+            _set_run_font(paragraph.add_run(piece), size=10.5, color=INK)
 
 
 def _figure_matches_section(target: str, section_title: str) -> bool:
@@ -588,6 +655,9 @@ def _build_synthesis_word_report(
     """Render the synthesis-first report; retrieval diagnostics stay in appendices."""
     turkish = _is_turkish(language)
     source_numbers = {source.id: index for index, source in enumerate(sources, 1)}
+    # Labels the source catalog will bookmark. Citations outside this set stay plain text
+    # rather than becoming links that go nowhere.
+    linkable_labels = {f"S{index:02d}" for index in source_numbers.values()}
     evidence_counts, _ = _source_evidence_counts(sources, evidence_by_claim)
     contribution_counts = Counter(profile.contribution for profile in package.study_profiles)
     figures = {
@@ -661,7 +731,7 @@ def _build_synthesis_word_report(
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
     _style_table(lead, [6.5], header_fill=PALE_BLUE, font_size=10.5)
     document.add_heading("Sonuç cümlesi" if turkish else "Bottom line", level=2)
-    _add_cited_paragraph(document, package.conclusion)
+    _add_cited_paragraph(document, package.conclusion, linkable_labels)
 
     document.add_heading(
         "2. Araştırma çerçevesi" if turkish else "2. Research frame",
@@ -763,7 +833,12 @@ def _build_synthesis_word_report(
     source_by_id = {str(source.id): source for source in sources}
     for profile in package.study_profiles:
         row = profile_table.add_row().cells
-        row[0].text = profile.source_label
+        if profile.source_label in linkable_labels:
+            _add_internal_link(
+                row[0].paragraphs[0], profile.source_label, source_anchor(profile.source_label)
+            )
+        else:
+            row[0].text = profile.source_label
         row[1].text = profile.contribution
         row[2].text = profile.evidence_design
         source = source_by_id.get(profile.source_id)
@@ -789,7 +864,7 @@ def _build_synthesis_word_report(
         )
     for index, section in enumerate(package.sections, 1):
         document.add_heading(f"4.{index} {_text(section.title, 240)}", level=2)
-        _add_cited_paragraph(document, section.synthesis)
+        _add_cited_paragraph(document, section.synthesis, linkable_labels)
         comparison_rows = [
             (
                 "Ortak yön" if turkish else "Convergence",
@@ -854,6 +929,7 @@ def _build_synthesis_word_report(
                     document,
                     observation,
                     turkish=turkish,
+                    linkable=linkable_labels,
                 )
         section_observations = [
             observation
@@ -879,6 +955,7 @@ def _build_synthesis_word_report(
                 document,
                 observation,
                 turkish=turkish,
+                linkable=linkable_labels,
             )
 
     document.add_heading(
@@ -887,9 +964,9 @@ def _build_synthesis_word_report(
         else "5. Cross-study assessment and conclusion",
         level=1,
     )
-    _add_cited_paragraph(document, package.cross_study_assessment)
+    _add_cited_paragraph(document, package.cross_study_assessment, linkable_labels)
     document.add_heading("Sonuç" if turkish else "Conclusion", level=2)
-    _add_cited_paragraph(document, package.conclusion)
+    _add_cited_paragraph(document, package.conclusion, linkable_labels)
     document.add_heading(
         "Belirsizlikler ve araştırma boşlukları"
         if turkish
@@ -983,7 +1060,8 @@ def _build_synthesis_word_report(
         cell.text = label
     for index, source in enumerate(sources, 1):
         row = source_table.add_row().cells
-        row[0].text = f"S{index:02d}"
+        label = f"S{index:02d}"
+        _add_bookmarked_text(row[0].paragraphs[0], label, source_anchor(label), index)
         row[1].text = _publication_year(source)
         row[2].text = _publication_type(source, turkish)
         _add_hyperlink(
@@ -1061,7 +1139,14 @@ def _build_synthesis_word_report(
             cell.text = label
         for observation in figure_observations:
             row = observation_table.add_row().cells
-            row[0].text = observation.source_label
+            if observation.source_label in linkable_labels:
+                _add_internal_link(
+                    row[0].paragraphs[0],
+                    observation.source_label,
+                    source_anchor(observation.source_label),
+                )
+            else:
+                row[0].text = observation.source_label
             row[1].text = str(observation.page_number or "—")
             row[2].text = _text(observation.figure_type, 45)
             row[3].text = f"{observation.relevance_score:.2f}"
@@ -1528,7 +1613,8 @@ def build_word_report(
         cell.text = label
     for index, source in enumerate(sources, 1):
         row = source_table.add_row().cells
-        row[0].text = f"S{index:02d}"
+        label = f"S{index:02d}"
+        _add_bookmarked_text(row[0].paragraphs[0], label, source_anchor(label), index)
         row[1].text = _publication_year(source)
         row[2].text = _publication_type(source, turkish)
         title_paragraph = row[3].paragraphs[0]

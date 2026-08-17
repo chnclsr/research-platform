@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.9.1`
 
-Belge sürümü: `8.0`
+Belge sürümü: `9.0`
 
 Son güncelleme: `2026-08-14`
 
@@ -22,6 +22,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 7 | Teslimat izin hatası ve koşu bazında yerel yedekleme | `7caa407` |
 | 8 | Parser mimarisinin servisleştirilmesi | `a58874a` |
 | 9 | Parser seçim kararı: deterministik + açık override | `ec88283` |
+| 10 | Word raporunda kaynak çapraz referansları | (bu commit) |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -838,6 +839,79 @@ eklendikten sonra doğar.
 döndürüyor. Kazandırdığı ergonomi (tek belge hedefleme, bizim parser'ımızın çıktısı) ancak
 tür başına ikinci parser eklendiğinde anlam kazanıyor; bugün tek parser varken çağırmak aynı
 çıktıyı verir. Arkadaşlar rakip parser eklediğinde tekrar değerlendirilecek.
+
+---
+
+## 10. Word raporunda kaynak çapraz referansları
+
+### Gerekçe
+
+Word raporunda kaynaklar `S01`, `S02` … etiketleriyle anılıyor; etiketler sentez
+paragraflarının içinde (`[S03]`), literatür konu haritası tablosunda, figür gözlem
+tablosunda ve figür yorum kutusunda geçiyor. Okuyucu bir iddiayı okurken "S03 hangi
+kaynaktı?" diye sorduğunda raporun sonundaki kataloğa elle kaydırmak zorundaydı.
+
+### Uygulama
+
+Üç yardımcı eklendi (`word_report.py`): `source_anchor()` etiketten yer imi adı üretir
+(`src_S01`); `_add_bookmarked_text()` katalog satırındaki etiketi `w:bookmarkStart` /
+`w:bookmarkEnd` ile sarar; `_add_internal_link()` ise mevcut `_add_hyperlink()`'in ikizidir,
+tek farkı ilişki (`r:id`) yerine `w:anchor` kullanması ve bu yüzden `part.relate_to`
+çağırmamasıdır.
+
+Zemin uygundu: `OxmlElement` ve `qn` zaten import ediliyordu ve `_add_cited_paragraph()`
+sentez metnini `re.split(r"(\[S\d{2,3}\])", ...)` ile parçalayıp her atıfı **ayrı bir run**
+olarak ekliyordu. Yani atıflar zaten izoleydi; yapılan şey o run'ı köprüye çevirmek oldu.
+
+Bağlanan yerler: sentez paragrafları, literatür konu haritası tablosu, figür gözlem tablosu
+ve figür yorum kutusu. Tema kanıt haritası bir PNG olduğu için kapsam dışı.
+
+Figür yorum kutusu tek `cell.text` ataması yerine run run kuruldu — tek atama metni
+hedeflenemeyen tek bir run'a çökertiyordu.
+
+### Sarkan bağlantıya karşı koruma
+
+Geçerli etiket kümesi (`linkable_labels`) kaynak listesinden türetiliyor ve bağlantı yalnız
+etiket o kümedeyse kuruluyor; değilse eskisi gibi düz mavi metin kalıyor. Word'de var
+olmayan bir yer imine bağlantı **sessizce hiçbir şey yapmaz** — kullanıcı tıklar, tepki
+alamaz; bu bağlantı olmamasından kötüdür.
+
+### İki şablon ayrı ayrı
+
+`build_word_report()` `synthesis_package` doluysa `_build_synthesis_word_report()`'a
+yönlendiriyor. İki şablonun **ayrı katalog tabloları** var, dolayısıyla birini düzeltmek
+diğerini düzeltmiyor; ikisi de ayrı ayrı işaretlendi ve ayrı test edildi.
+
+### Doğrulama
+
+- Ruff temiz, **195 test** (5 yeni): bağlantının kurulduğu, ikinci şablonun da kataloğunu
+  işaretlediği ve katalogda karşılığı olmayan bir etiketin (`[S07]`) düz metin kaldığı.
+- **Gerçek koşu çıktısı** (`01M07BF29WP1YAWNVVN4YYR22R`, 4 kaynak): indirilen
+  `16_research_report.docx` açıldı ve `word/document.xml` incelendi —
+
+  | Ölçüm | Sonuç |
+  |---|---|
+  | Yer imi | `src_S01` … `src_S04` (kaynak sayısıyla birebir) |
+  | Benzersiz bağlantı hedefi | `src_S01` … `src_S04` |
+  | Toplam iç bağlantı | 11 |
+  | Sarkan bağlantı | **yok** |
+
+**Not:** OXML doğru olsa bile Word'ün bağlantıyı atlaması teorik olarak mümkün; dosyanın
+Word'de açılıp bir `[S0x]` bağlantısına tıklanarak katalog satırına gittiğinin gözle
+doğrulanması önerilir.
+
+### Kapsam dışı
+
+Markdown raporu (`02_full_research_report.md`) değiştirilmedi. Aynı etkiyi orada kurmak
+başlık slug'ları ve `[S03](#...)` biçimi gerektirir; ayrı bir iş.
+
+### Yan bulgu
+
+`f"S{index:02d}"` etiketi hem `report_synthesis.py` hem `word_report.py` içinde ayrı ayrı
+üretiliyor ve **sıralamanın aynı olduğu varsayılıyor** (ikisi de `enumerate(sources, 1)`).
+Varsayım bugün doğru, ancak sessiz bir bağımlılık. Bağlantılar eklendiği için artık bir
+uyuşmazlık sarkan bağlantı olarak görünür hâle geldi; doğrulamadaki küme farkı kontrolü
+bunu yakalar.
 
 ---
 
