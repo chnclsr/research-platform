@@ -1,10 +1,10 @@
 # `developments` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.9.1`
+Platform sürümü: `v0.10.0`
 
-Belge sürümü: `9.0`
+Belge sürümü: `11.0`
 
-Son güncelleme: `2026-08-14`
+Son güncelleme: `2026-08-18`
 
 ## Kapsam
 
@@ -23,9 +23,15 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 8 | Parser mimarisinin servisleştirilmesi | `a58874a` |
 | 9 | Parser seçim kararı: deterministik + açık override | `ec88283` |
 | 10 | Word raporunda kaynak çapraz referansları | `63b74ed` |
+| 11 | Kullanıcı kimliği ve koşu sahipliği (kendi raporu var) | `3f9a191` … `84cddde` |
+| 12 | Panelden parola değiştirme | commit bekliyor |
+| 13 | Ekip kuyruğunun sansürlü görünürlüğü | commit bekliyor |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
+>
+> **Not:** 13. bölüm, 11. bölümdeki izolasyon kararını bilinçli olarak gevşetir —
+> hangi yönüyle olduğu o bölümde tablo hâlinde yazılıdır.
 
 ---
 
@@ -961,6 +967,195 @@ Bu değişiklik şema göçü içerdiği ve dört servisi kapsadığı için ken
 görüyor. Sahiplik `Repository` katmanında zorlanıyor — panelin hem doğrudan veritabanı hem
 API üzerinden okuduğu için route düzeyinde filtre yetersizdi. Panel yetkileri kullanıcı
 verisi ve kurulum operasyonları olarak ikiye ayrıldı.
+
+---
+
+## 12. Panelden parola değiştirme
+
+Parola yalnız kabuktan değiştirilebiliyordu (`research-admin set-password`), yani her
+değişiklik bir yöneticiye ve sunucuya erişime bağlıydı. Panel ağa açıldıktan ve gerçek
+kullanıcılar geldikten sonra bu pratik bir engel hâline geldi.
+
+`POST /api/account/password` eklendi; Hesabım sekmesinde mevcut parola, yeni parola ve
+tekrar alanlarından oluşan bir kart var.
+
+**Şema değişikliği gerekmedi.** `password_hash` ve `token_version` sütunları
+`0007_user_identity` ile gelmişti ve `identity.set_password()` zaten hem özeti yeniliyor
+hem sürümü artırıyordu; uç bu fonksiyonu çağırıyor, mantığı tekrarlamıyor.
+
+### Mevcut parola neden zorunlu
+
+Uç, mevcut parolayı doğrulamadan çalışsaydı güvenliği artırmak yerine **azaltırdı**. Panel
+düz HTTP üzerinden LAN'a açık; oturum çerezini yakalayan biri, tek istekle ödünç aldığı
+oturumu kalıcı hesap devralmaya çevirebilirdi. Yanlış mevcut parola 403 döner ve giriş
+formuyla aynı hız sınırı deposunu kullanır — aynı adresten kimlik bilgisi denemesi aynı
+sorundur. Denetim satırı `password change failed` olarak ayrı yazılır, yoksa log girişle
+karışır.
+
+Canlı doğrulamada yanlış parola denemesinden sonra `password_hash`'in bit bazında
+değişmediği kontrol edildi.
+
+### Çerez neden yeniden veriliyor
+
+`set_password` `token_version`'ı artırıyor ve bu, kullanıcının **kendi** sekmesindeki
+çerezi de geçersiz kılıyor. Uç bu yüzden yanıtta çerezi yeni sürümle yeniden veriyor.
+Sonuç, insanların beklediği davranış: diğer cihazlardaki oturumlar kapanır, işlemi yapan
+sekme açık kalır. Bu adım atlanırsa parola değiştirmek "kendini dışarı atmak" gibi
+davranır ve kullanıcı ikinci bir kez giriş yapmak zorunda kalır.
+
+### API anahtarları neden iptal edilmiyor
+
+Anahtarlar ayrı kimlik bilgileridir. Parola değişiminde susturulmaları kullanıcı için
+sürpriz olur ve Langflow ile MCP bağlantılarını sessizce bozardı. Bir anahtarın sızdığından
+şüpheleniliyorsa doğru işlem onu tek tek iptal etmektir; panelde ve
+`research-admin revoke-key` ile mümkün.
+
+### Kapsam kararları
+
+Parola karmaşıklık kuralı **konmadı** — tek kural boş olmaması. Yöneticinin başkasının
+parolasını sıfırlaması kabukta kaldı; panelde yönetici ekranı yapılmadı. İkisi de
+kullanıcı kararıdır.
+
+`tests/test_control_panel.py` dört yeni vaka: parola değişiyor ve oturum sürüyor, yanlış
+mevcut parola hiçbir şey değiştirmiyor, diğer cihazlar düşüyor, oturumsuz ve CSRF'siz
+istekler reddediliyor. 226 test geçiyor.
+
+---
+
+## 13. Ekip kuyruğunun sansürlü görünürlüğü
+
+### Sorun: doğru izolasyon, yanlış izlenim
+
+11. bölümdeki izolasyon çalışıyor ama tek GPU'yu paylaşan bir ekipte yanıltıcı bir panel
+üretiyordu. Koşusu `queued`de bekleyen kişi bomboş bir tablo ve hareket etmeyen tek bir
+satır görüyor, sistemin bozuk olduğunu düşünüyordu. Aslında başkasının araştırması
+RTX 4060'ı tutuyordu — ama bunu gösteren hiçbir şey yoktu.
+
+Sonuç, gizliliğin kendisi değil **gizliliğin okunamaması** sorunuydu: beklemenin nedeni
+kullanıcıdan da saklanıyordu.
+
+### v0.10.0 kararının hangi yönü değişti
+
+`reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md` "kullanıcı yalnız kendi
+koşularını görür" diyor. Bu bölüm o kararı **içerik için koruyup varlık için gevşetiyor**:
+
+| | v0.10.0 | Şimdi |
+|---|---|---|
+| Başkasının araştırma başlığı, sorusu, kaynakları, iddiaları | Gizli | **Gizli** |
+| Başkasının koşu kimliği | Gizli | **Gizli** |
+| Başkasının koşusunun **var olduğu** | Gizli | Görünür |
+| Kimin çalıştırdığı, hangi durumda, hangi aşamada, ne süredir | Gizli | Görünür |
+
+Gevşeyen tek şey budur. Koşu detayı, rapor indirme, duraklat/iptal ve HITL yanıtlama
+eskisi gibi yalnız sahibine ve yöneticiye açıktır.
+
+### Neden alan silmek yerine yeni bir tip
+
+İlk akla gelen yol, tam satırı çekip hassas alanları silmekti. Bu yaklaşımın hata biçimi
+sessizdir: unutulan tek alan sızıntıdır ve `research_runs` tablosuna ileride eklenecek bir
+sütun kimse fark etmeden görünür hâle gelir.
+
+Onun yerine `repository.py` içine **taşıyamayacağı için sızdıramayan** bir projeksiyon
+kondu:
+
+```python
+@dataclass(frozen=True)
+class TeamActivity:
+    owner_name: str | None
+    status: str
+    current_stage: str
+    queue_position: int | None
+    elapsed_seconds: float
+```
+
+**Koşu kimliği bilinçli olarak yok.** İki sonucu var: panel satırı yanlışlıkla tıklanabilir
+yapamaz, ve listeyi alan biri onu `/api/runs/<id>` yoklayacak bir kimlik kümesine
+çeviremez. Kuyruk sırası Redis'ten gelen eşlemeyle **metodun içinde** çözülüyor; koşu
+kimliği dönüş sınırını hiç geçmiyor.
+
+### Korumanın nereye konduğu
+
+`Repository`'deki metasınıf `run_id` alan her metodu otomatik koruyor. `list_team_activity`
+tanımı gereği `run_id` almıyor ve başkasının satırlarını okuyor — yani metasınıfın
+kapsamı dışında. Bu boşluğu kapatmak için koruma **döndürülebilecek şeyin biçimine**
+taşındı; `tests/test_run_ownership.py` alan kümesini birebir doğruluyor:
+
+```python
+assert {field.name for field in fields(TeamActivity)} == {
+    "owner_name", "status", "current_stage", "queue_position", "elapsed_seconds",
+}
+```
+
+Alan eklemek bu testi düzenlemeyi, yani birinin "bu alan araştırma hakkında bir şey
+söylüyor mu?" sorusunu sormasını zorunlu kılar.
+
+Panel bu okumayı kendi sorgusunu yazarak değil, `Repository` üzerinden yapıyor. Panelin
+veritabanına iki kapıdan ulaşması 11. bölümün çıkış noktasıydı; sansürün ikinci bir
+kopyasını yazmak, eninde sonunda başlık döndüren kopyayı üretmenin yoludur.
+
+### Üç kenar durum kararı
+
+**Yönetici boş liste alır.** Yöneticinin ana tablosu zaten her koşuyu tam gösteriyor; aynı
+koşunun bir de sansürlü kopyasını basmak bilgi eklemez, karıştırır.
+
+**Sahipsiz koşular listeye girer**, "Bilinmeyen kullanıcı" etiketiyle. Sahipsiz koşu da
+GPU tutar; yükü gizlemek kullanıcıyı tam da bu bölümün düzeltmek istediği biçimde
+yanıltır, üstelik sızacak bir kimliği zaten yoktur. SQL'de bu, `owner_id != :id`
+karşılaştırmasının NULL için `true` değil `NULL` vermesi yüzünden açıkça yazılmak
+zorundadır — düz karşılaştırma tam da bu satırları düşürürdü.
+
+**Yalnız aktif durumlar.** Tamamlanmış koşu beklemeyi açıklamaz.
+
+### Yanında kapatılan bir sızıntı
+
+`_queue_snapshot()` ARQ kuyruğunu okurken `jobs[].run_id` alanında **herkesin** koşu
+kimliğini döndürüyor ve `build_status` bunu olduğu gibi yayınlıyordu. Arayüz bu alanı hiç
+okumuyor. `TeamActivity`'nin özenle vermediği şeyi yan kapıdan dağıtmak tutarsız olurdu;
+`_publishable_queue()` admin olmayanlar için `job_id` ve `run_id` alanlarını düşürüyor.
+Derinlik ve bekleyen sayısı olduğu gibi kalıyor — kuyruk kartının anlamı odur ve zaten
+ekip görünümünün bildirdiği yükün aynısıdır.
+
+Sansür **çıkışta** uygulanıyor: `_run_snapshot` ham kuyruğu kullanıyor, çünkü daha erken
+uygulamak her kullanıcının **kendi** kuyruk sırasını da yok ederdi.
+
+### Arayüz
+
+"Aktif ve sıradaki istekler" tablosu değişmedi; altına "Ekipteki diğer işler" başlıklı
+ikinci bir tablo geldi. Liste boşken bölüm tamamen gizleniyor — tek kişilik kullanımda
+sürekli boş bir tablo durmasın.
+
+Satırlar `renderRuns()` ile değil ayrı bir `renderTeamRuns()` ile basılıyor: mevcut
+fonksiyon satıra `openRun(run.id)` bağlıyor ve duraklat/iptal düğmesi ekliyor. Bu satırlar
+tıklanamaz, `tabIndex` almaz, düğme taşımaz. Başlığın yanında "Başlık ve soru gizlidir;
+yalnız kuyruk yükü gösterilir" notu var — eksik sütunlar açıklanmazsa bozuk görünür.
+
+"Aktif işler" kartının notu ekip listesi doluyken "Ekipte N iş daha" oluyor; kullanıcının
+aradığı asıl sinyal budur.
+
+### Doğrulama
+
+Canlı kurulumda iki geçici hesap ve tek bir `queued` koşu ile denendi. Sıradan kullanıcı
+`/api/status` yanıtında yalnız şunu gördü:
+
+```json
+{"owner_name": "Mesgul Arkadas", "status": "queued",
+ "current_stage": "INIT", "queue_position": null, "elapsed_seconds": 0.0}
+```
+
+Koşu kimliği, başlık ve birincil soru yanıtın **hiçbir yerinde** geçmedi. Aynı koşu
+yönetici için `team` listesinde değil, ana tabloda gerçek başlığıyla göründü. Geçici
+hesaplar ve koşu doğrulamadan sonra silindi.
+
+`tests/test_run_ownership.py` altı, `tests/test_control_panel.py` üç yeni vaka aldı;
+mevcut sahiplik testinin iddiası da güçlendirildi — artık başkasının koşusunun yalnız
+tablolarda değil, **yanıtın tamamında** geçmediğini doğruluyor. 235 test geçiyor.
+
+### Kapsam dışı bırakılanlar
+
+Telegram botu (kullanıcı kararı), API'ye ayrı bir uç (panel dışında tüketicisi yok), ekip
+kuyruğunun geçmişi, başkasının işine müdahale ve görünürlüğü kapatan bir yapılandırma
+bayrağı. Bayrak eklenmedi çünkü açıklanan bilgi kurgusu gereği asgari, boş liste zaten
+gizleniyor ve hiç çalıştırılmayacak bir kod yolu bedava değil.
 
 ---
 

@@ -1,10 +1,10 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `3.0`
+Belge sürümü: `3.2`
 
 Platform sürümü: `v0.10.0`
 
-Tarih: `2026-08-17`
+Tarih: `2026-08-18`
 
 ## Amaç
 
@@ -13,12 +13,15 @@ MCP veya Telegram kapatılsa bile panel açık kalır ve sistem yeniden panel ü
 
 Panel adresleri:
 
-- Sunucu bilgisayarı: `http://127.0.0.1:8020`
-- Ofis ağı: `http://10.0.10.109:8020`
+- Sunucu bilgisayarı: `http://127.0.0.1:1111`
+- Aynı ağdaki ekip bilgisayarları: `http://10.0.10.179:1111`
 
-Panel `0.0.0.0:8020` üzerinde dinler; uygulama katmanı yalnız yapılandırılmış ofis CIDR'ını ve
-loopback istemcilerini kabul eder. Windows Firewall kuralı da yalnız `LocalSubnet` istemcilerine
-8020/TCP izni verir. Panel internet yönlendiricisinde port-forward edilmemelidir.
+Adres ve port sabit değildir; `.env.office` içindeki `CONTROL_PANEL_HOST` ve
+`CONTROL_PANEL_PORT` belirler. Yukarıdakiler bu makinedeki güncel değerlerdir.
+
+Panel `0.0.0.0` üzerinde dinler; uygulama katmanı yalnız yapılandırılmış CIDR'ı ve loopback
+istemcilerini kabul eder. Windows Firewall'da da yalnız `LocalSubnet` istemcilerine izin veren
+bir kural bulunmalıdır. Panel internet yönlendiricisinde port-forward edilmemelidir.
 
 ## Giriş ve yetkiler
 
@@ -34,6 +37,7 @@ Panelde **kayıt formu yoktur.** Hesaplar kabuktan açılır; komutlar ve ekip y
 |---|---|---|
 | Kendi araştırmaları | ✔ | ✔ |
 | **Başkalarının araştırmaları** | ✘ | ✔ |
+| Başkalarının **süren** işleri | sansürlü liste | ✔ tam |
 | Araştırma başlatma, duraklat/devam/iptal | kendi koşularında | tümünde |
 | Rapor indirme | kendi koşularında | tümünde |
 | Kendi API anahtarlarını üretme/iptal | ✔ | ✔ |
@@ -45,6 +49,18 @@ Panelde **kayıt formu yoktur.** Hesaplar kabuktan açılır; komutlar ve ekip y
 `user` rolündeki birine yönetici düğmeleri ve log sekmesi hiç gösterilmez; sunucu tarafında da
 403 döner.
 
+### Ekipteki diğer işler
+
+Tek GPU paylaşıldığı için kullanıcı, **başkalarının süren araştırmalarını sansürlü olarak**
+görür — yoksa kendi koşusu sırada beklerken bomboş bir tablo görür ve sistemi bozuk sanır.
+
+"Ekipteki diğer işler" tablosunda yalnız şunlar vardır: **kimin çalıştırdığı, durum, aşama,
+kuyruk sırası ve geçen süre.** Başlık, araştırma sorusu, kaynaklar, iddialar, coverage ve
+koşu kimliği **görünmez**; satır tıklanamaz ve üzerinde işlem yapılamaz.
+
+Liste boşken bölüm hiç görünmez. Yöneticide de görünmez — onların ana tablosu zaten her
+koşuyu tam gösteriyor.
+
 Ayrımın gerekçesi: bu üç yetki kurulumun tamamını etkiler. Log akışı her kullanıcının koşusunu
 birbirine karıştırır, "Servisleri durdur" başkasının süren araştırmasını keser ve connector testi
 kurulumun kendi kimlik bilgileriyle dışarıya çağrı yapar.
@@ -52,6 +68,15 @@ kurulumun kendi kimlik bilgileriyle dışarıya çağrı yapar.
 ### Hesabım sekmesi
 
 Her kullanıcı kendi hesabını buradan yönetir; yönetici gerekmez.
+
+- **Parola.** Mevcut parola + yeni parola ile değiştirilir. Mevcut parolanın sorulması
+  isteğe bağlı bir adım değil: panel düz HTTP üzerinden ağa açık, dolayısıyla oturum
+  çerezini ele geçiren biri sorulmasaydı hesabı kalıcı olarak devralabilirdi.
+  Değişiklikten sonra **diğer cihazlardaki oturumlar kapanır**, kullanıcının kendi
+  sekmesi açık kalır. API anahtarları etkilenmez — ayrı kimlik bilgileridir ve
+  susturulmaları Langflow/MCP bağlantılarını sessizce bozardı.
+  Parolasını **unutan** kullanıcı için hâlâ yönetici gerekir
+  (`research-admin set-password`), çünkü sıfırlama e-postası yoktur.
 
 - **Telegram bağlantısı.** *Bağlantı kodu al* → **Telegram'da aç** düğmesi ya da bota
   `/baglan <kod>`. Kod 5 dakika geçerli ve tek kullanımlıktır. Bağlandıktan sonra bottan
@@ -82,6 +107,7 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 - ARQ queue derinliği, çalışan/bekleyen iş sayısı ve worker heartbeat TTL'i.
 - Ollama erişimi ve bellekte yüklü yerel model.
 - Aktif ve sıradaki araştırmalar: durum, aşama ilerleme çubuğu, sıra, tur, kaynak ve iddia sayısı.
+- Ekipteki diğer kullanıcıların süren işleri, sansürlü: kim, durum, aşama, sıra ve süre.
 - Son 20 terminal araştırma: tamamlandı, eksik tamamlandı, iptal veya hata.
 - Worker, API, MCP, Telegram ve panel loglarının son bölümü.
 - Run bazında pipeline zaman çizelgesi, aşama süreleri, checkpoint ve yapılandırılmış event’ler.

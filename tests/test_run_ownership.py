@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -17,15 +18,16 @@ from conftest import api_headers, ensure_test_user
 from fastapi.testclient import TestClient
 
 from research_platform.api import app
-from research_platform.auth import Principal
-from research_platform.db import SessionLocal, create_schema
+from research_platform.auth import Principal, hash_secret
+from research_platform.db import SessionLocal, UserRow, create_schema
 from research_platform.repository import (
     _UNGUARDED_RUN_METHODS,
     ActorRequired,
     Repository,
     RunAccessDenied,
+    TeamActivity,
 )
-from research_platform.schemas import ResearchProtocol
+from research_platform.schemas import ResearchProtocol, RunStatus
 
 OWNER_ID = "01OWNER".ljust(26, "0")
 INTRUDER_ID = "01INTRUDER".ljust(26, "0")
@@ -49,6 +51,26 @@ async def _run_owned_by(actor: Principal, title: str = "Owned run") -> str:
         repo = Repository(session, actor=actor)
         row = await repo.create_run(_protocol(title))
         return row.id
+
+
+async def _person(user_id: str, display_name: str) -> Principal:
+    """A real ``users`` row, so the team view has a name to show for their runs."""
+    await create_schema()
+    async with SessionLocal() as session:
+        if await session.get(UserRow, user_id) is None:
+            session.add(
+                UserRow(
+                    id=user_id,
+                    email=f"{user_id.lower()}@example.test",
+                    display_name=display_name,
+                    password_hash=hash_secret("team-test-password"),
+                    role="user",
+                    is_active=True,
+                    token_version=0,
+                )
+            )
+            await session.commit()
+    return Principal.user(user_id)
 
 
 # --------------------------------------------------------------- structural guarantee
@@ -92,6 +114,86 @@ def test_every_run_scoped_method_is_guarded():
 def test_unguarded_allowlist_is_exactly_what_was_reviewed():
     """Opting a method out of the guard has to be a deliberate, visible change."""
     assert _UNGUARDED_RUN_METHODS == {"create_run", "_guard_run"}
+
+
+def test_team_activity_exposes_exactly_the_reviewed_fields():
+    """The redacted queue view is the one read that crosses the ownership boundary.
+
+    It is not guarded by the metaclass -- it takes no run_id and by design returns other
+    people's rows -- so the guarantee has to be structural in a different way: the shape
+    of what it may return. Adding a field forces an edit here, which is the moment to
+    ask whether the new field says anything about the research itself.
+    """
+    assert {field.name for field in fields(TeamActivity)} == {
+        "owner_name",
+        "status",
+        "current_stage",
+        "queue_position",
+        "elapsed_seconds",
+    }
+
+
+# ------------------------------------------------------- redacted cross-owner queue view
+
+
+@pytest.mark.asyncio
+async def test_team_activity_names_the_owner_and_withholds_the_research():
+    watcher = await _person("01TEAMWATCH".ljust(26, "0"), "Watcher")
+    busy = await _person("01TEAMBUSY".ljust(26, "0"), "Ayse Yildiz")
+    run_id = await _run_owned_by(busy, "A title nobody else may read")
+    async with SessionLocal() as session:
+        activity = await Repository(session, actor=watcher).list_team_activity(
+            queue_positions={run_id: 3}
+        )
+
+    entry = next(item for item in activity if item.owner_name == "Ayse Yildiz")
+    assert entry.status == RunStatus.QUEUED.value
+    assert entry.queue_position == 3
+
+    # The whole point: the wait is explained, the research is not.
+    rendered = repr(activity)
+    assert run_id not in rendered
+    assert "A title nobody else may read" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_team_activity_excludes_the_actors_own_runs():
+    """Own runs already appear in full above; a redacted duplicate would only confuse."""
+    solo = await _person("01TEAMSOLO".ljust(26, "0"), "Solo Worker")
+    await _run_owned_by(solo, "Solo run")
+    async with SessionLocal() as session:
+        activity = await Repository(session, actor=solo).list_team_activity()
+    assert all(item.owner_name != "Solo Worker" for item in activity)
+
+
+@pytest.mark.asyncio
+async def test_team_activity_is_empty_for_an_admin():
+    await _run_owned_by(owner, "Something the admin can already read in full")
+    async with SessionLocal() as session:
+        assert await Repository(session, actor=admin).list_team_activity() == []
+
+
+@pytest.mark.asyncio
+async def test_team_activity_drops_finished_runs():
+    """Only work that is still holding or waiting for the GPU explains a wait."""
+    done = await _person("01TEAMDONE".ljust(26, "0"), "Finished Person")
+    run_id = await _run_owned_by(done, "Completed run")
+    async with SessionLocal() as session:
+        await Repository(session, actor=done).update_run(
+            run_id, status=RunStatus.COMPLETED.value
+        )
+        activity = await Repository(session, actor=intruder).list_team_activity()
+    assert all(item.owner_name != "Finished Person" for item in activity)
+
+
+@pytest.mark.asyncio
+async def test_unowned_active_run_still_counts_as_queue_pressure():
+    """An orphaned run occupies the GPU too, and it has no identity left to leak."""
+    run_id = await _run_owned_by(owner, "Soon to be orphaned")
+    async with SessionLocal() as session:
+        await Repository(session, actor=admin).update_run(run_id, owner_id=None)
+        activity = await Repository(session, actor=intruder).list_team_activity()
+    assert any(item.owner_name is None for item in activity)
 
 
 # ----------------------------------------------------------------- reads and listings

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 
 from fastapi import FastAPI, HTTPException
@@ -182,14 +183,83 @@ async def test_panel_run_list_shows_only_the_signed_in_users_runs():
 
     queue = {"jobs": []}
     snapshot = await control_panel._run_snapshot(queue, Principal.user(owner_id))
-    visible = {run["id"] for group in snapshot.values() for run in group}
-    assert mine.id in visible
-    assert theirs.id not in visible
+    assert mine.id in {run["id"] for run in snapshot["active"] + snapshot["recent"]}
+    # Not merely absent from the tables: absent from the payload. The team section now
+    # reports the other user's run, so the assertion has to cover what it says about it.
+    assert theirs.id not in json.dumps(snapshot)
+    assert "Which runs belong to somebody else entirely?" not in json.dumps(snapshot)
 
     # And the panel's detail view refuses the other user's run outright.
     with pytest.raises(HTTPException) as excinfo:
         await control_panel._run_detail(theirs.id, Principal.user(owner_id))
     assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_panel_shows_other_peoples_active_runs_without_their_content():
+    """Isolation without this reads as a broken panel: a queued run and an empty table."""
+    watcher_id = await _account("panel-watcher@example.test", "user")
+    busy_id = await _account("panel-busy@example.test", "user")
+    async with SessionLocal() as session:
+        theirs = await Repository(session, actor=Principal.user(busy_id)).create_run(
+            ResearchProtocol(
+                title="Somebody else's subject",
+                primary_question="What is the other team member actually researching?",
+            )
+        )
+
+    queue = {"jobs": [{"run_id": theirs.id, "position": 2, "running": False}]}
+    snapshot = await control_panel._run_snapshot(queue, Principal.user(watcher_id))
+
+    entry = next(
+        item for item in snapshot["team"] if item["owner_name"] == "panel-busy"
+    )
+    assert entry["status"] == "queued"
+    assert entry["queue_position"] == 2
+    assert set(entry) == {
+        "owner_name",
+        "status",
+        "current_stage",
+        "queue_position",
+        "elapsed_seconds",
+    }
+    assert theirs.id not in json.dumps(snapshot)
+    assert "Somebody else's subject" not in json.dumps(snapshot)
+
+
+@pytest.mark.asyncio
+async def test_admin_gets_no_team_section_because_the_main_table_is_complete():
+    admin_id = await _account("panel-team-admin@example.test", "admin")
+    other_id = await _account("panel-team-other@example.test", "user")
+    async with SessionLocal() as session:
+        await Repository(session, actor=Principal.user(other_id)).create_run(
+            ResearchProtocol(
+                title="Visible to the admin in full",
+                primary_question="Does the admin need a redacted copy of this run?",
+            )
+        )
+
+    snapshot = await control_panel._run_snapshot(
+        {"jobs": []}, Principal.user(admin_id, "admin")
+    )
+    assert snapshot["team"] == []
+    # The run is not hidden from them -- it is in the main table, in full.
+    assert "Visible to the admin in full" in json.dumps(snapshot)
+
+
+def test_queue_listing_hides_run_identifiers_from_non_admins():
+    """The team view is careful about ids; the queue card must not hand them out anyway."""
+    queue = {
+        "available": True,
+        "waiting": 1,
+        "jobs": [{"job_id": "run:abc", "run_id": "abc", "position": 1, "running": True}],
+    }
+    for_user = control_panel._publishable_queue(queue, Principal.user("01USER".ljust(26, "0")))
+    assert for_user["waiting"] == 1
+    assert for_user["jobs"] == [{"position": 1, "running": True}]
+
+    for_admin = control_panel._publishable_queue(queue, Principal.user("01ADM".ljust(26, "0"), "admin"))
+    assert for_admin["jobs"][0]["run_id"] == "abc"
 
 
 @pytest.mark.asyncio
@@ -342,3 +412,101 @@ async def test_docker_deployment_start_uses_compose_and_skips_telegram_without_t
         "mcp-gateway",
         "telegram-bot",
     )
+
+
+# ------------------------------------------------- kullanicinin kendi parolasini degistirmesi
+
+
+def _change_password(client: TestClient, csrf: str, current: str, new: str):
+    return client.post(
+        "/api/account/password",
+        headers={"X-Control-Token": csrf},
+        json={"current_password": current, "new_password": new},
+    )
+
+
+@pytest.mark.asyncio
+async def test_user_changes_own_password_and_stays_signed_in():
+    """The caller keeps working; the database holds the new hash."""
+    await _account("pw-change@example.test", "user")
+    new_password = "yeni-parola-degeri"
+    with TestClient(control_panel.app) as client:
+        csrf = _sign_in(client, "pw-change@example.test")
+        assert _change_password(client, csrf, PANEL_PASSWORD, new_password).status_code == 200
+
+        # The cookie was re-issued with the bumped token_version, so this session lives on.
+        assert client.get("/api/session").status_code == 200
+
+    # Old password no longer works, new one does.
+    with TestClient(control_panel.app) as client:
+        rejected = client.post(
+            "/login",
+            data={"email": "pw-change@example.test", "password": PANEL_PASSWORD},
+            follow_redirects=False,
+        )
+        assert rejected.status_code == 401
+        accepted = client.post(
+            "/login",
+            data={"email": "pw-change@example.test", "password": new_password},
+            follow_redirects=False,
+        )
+        assert accepted.status_code == 303
+
+
+@pytest.mark.asyncio
+async def test_wrong_current_password_is_refused_and_changes_nothing():
+    """Otherwise a borrowed session would become permanent account takeover."""
+    await _account("pw-wrong@example.test", "user")
+    async with SessionLocal() as session:
+        before = (await get_user_by_email(session, "pw-wrong@example.test")).password_hash
+
+    with TestClient(control_panel.app) as client:
+        csrf = _sign_in(client, "pw-wrong@example.test")
+        response = _change_password(client, csrf, "bu-parola-yanlis", "yeni-parola-degeri")
+        assert response.status_code == 403
+
+    async with SessionLocal() as session:
+        user = await get_user_by_email(session, "pw-wrong@example.test")
+        assert user.password_hash == before
+
+    # The account still opens with the original password.
+    with TestClient(control_panel.app) as client:
+        assert _sign_in(client, "pw-wrong@example.test")
+
+
+@pytest.mark.asyncio
+async def test_password_change_signs_out_other_devices():
+    """token_version is bumped, so a cookie issued before the change stops working."""
+    await _account("pw-others@example.test", "user")
+    with TestClient(control_panel.app) as other_device:
+        _sign_in(other_device, "pw-others@example.test")
+        assert other_device.get("/api/session").status_code == 200
+
+        with TestClient(control_panel.app) as changer:
+            csrf = _sign_in(changer, "pw-others@example.test")
+            assert _change_password(
+                changer, csrf, PANEL_PASSWORD, "bambaska-bir-parola"
+            ).status_code == 200
+
+        assert other_device.get("/api/session").status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_password_change_requires_a_session_and_the_csrf_token():
+    await _account("pw-guard@example.test", "user")
+    with TestClient(control_panel.app) as client:
+        # No session at all.
+        assert client.post(
+            "/api/account/password",
+            json={"current_password": PANEL_PASSWORD, "new_password": "x-y-z"},
+        ).status_code == 401
+
+    with TestClient(control_panel.app) as client:
+        csrf = _sign_in(client, "pw-guard@example.test")
+        # Signed in, but the request does not echo the page's token.
+        assert client.post(
+            "/api/account/password",
+            json={"current_password": PANEL_PASSWORD, "new_password": "x-y-z"},
+        ).status_code == 403
+        # Empty new password is refused before anything is written.
+        assert _change_password(client, csrf, PANEL_PASSWORD, "").status_code == 400

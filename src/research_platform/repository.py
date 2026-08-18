@@ -3,12 +3,14 @@ from __future__ import annotations
 import functools
 import inspect
 import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any
 from urllib.parse import urlparse, urlsplit
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import Principal
@@ -28,6 +30,7 @@ from .db import (
     SourceRelationRow,
     SourceRow,
     SourceVersionRow,
+    UserRow,
 )
 from .normalization import canonicalize_url
 from .schemas import (
@@ -128,6 +131,42 @@ class _OwnershipEnforced(type):
             if _takes_run_id(value):
                 namespace[attribute] = _run_scoped(value)
         return super().__new__(mcls, name, bases, namespace, **kwargs)
+
+
+# The states in which a run is still holding, or waiting for, the single GPU. Kept here
+# rather than imported from the control panel because the repository must not depend on a
+# presentation module; the panel's ACTIVE_STATUSES is asserted equal to this in tests.
+ACTIVE_RUN_STATUSES = frozenset(
+    {
+        RunStatus.QUEUED.value,
+        RunStatus.RUNNING.value,
+        RunStatus.PAUSED.value,
+        RunStatus.AWAITING_INPUT.value,
+        RunStatus.CANCEL_REQUESTED.value,
+    }
+)
+
+
+@dataclass(frozen=True)
+class TeamActivity:
+    """Somebody else's in-flight run, reduced to what explains the wait.
+
+    Every field here was argued for individually. That is the point of the type: a
+    redacted view produced by deleting fields from a full row is one forgotten field --
+    or one new column on ``research_runs`` -- away from leaking, whereas this cannot
+    carry what it has no place for.
+
+    There is deliberately **no run id**. Without one the panel cannot make the row
+    clickable by accident, and a caller cannot turn the listing into a set of ids to
+    probe ``/api/runs/<id>`` with. ``owner_name`` is None for a run whose owner row is
+    missing; the label for that case belongs to the presentation layer.
+    """
+
+    owner_name: str | None
+    status: str
+    current_stage: str
+    queue_position: int | None
+    elapsed_seconds: float
 
 
 class CheckpointTooLarge(RuntimeError):
@@ -285,6 +324,66 @@ class Repository(metaclass=_OwnershipEnforced):
             stmt = stmt.where(ResearchRunRow.owner_id == actor.user_id)
         rows = await self.session.scalars(stmt.limit(min(max(1, limit), 200)))
         return list(rows)
+
+    async def list_team_activity(
+        self, *, queue_positions: Mapping[str, int] | None = None
+    ) -> list[TeamActivity]:
+        """Other people's in-flight runs, redacted to status and stage.
+
+        This is the one read that crosses the ownership boundary on purpose. Isolation
+        without it produces a misleading panel: on a single-GPU machine the person whose
+        run sits in ``queued`` sees a still row and an empty table, and concludes the
+        platform is broken rather than busy. What leaks is the *existence* of work and
+        who owns it -- never a title, a question, a count or an id.
+
+        Returns nothing for an admin: their own table already lists every run in full, so
+        a second redacted copy of the same rows would only confuse.
+        """
+        actor = self.require_actor()
+        if actor.is_admin:
+            return []
+        positions = queue_positions or {}
+        rows = await self.session.execute(
+            select(
+                ResearchRunRow.id,
+                ResearchRunRow.status,
+                ResearchRunRow.current_stage,
+                ResearchRunRow.created_at,
+                ResearchRunRow.updated_at,
+                UserRow.display_name,
+            )
+            .outerjoin(UserRow, UserRow.id == ResearchRunRow.owner_id)
+            .where(
+                ResearchRunRow.status.in_(ACTIVE_RUN_STATUSES),
+                # An unowned run is included on purpose. It still occupies the GPU, and
+                # hiding it would understate the queue; it carries no identity to leak.
+                # The NULL has to be spelled out -- ``owner_id != :id`` is NULL, not true,
+                # for a NULL owner, so the plain comparison would drop exactly those rows.
+                or_(
+                    ResearchRunRow.owner_id.is_(None),
+                    ResearchRunRow.owner_id != actor.user_id,
+                ),
+            )
+            .order_by(ResearchRunRow.created_at)
+        )
+        activity = []
+        for run_id, status, stage, created_at, updated_at, display_name in rows:
+            elapsed = (
+                max(0.0, (updated_at - created_at).total_seconds())
+                if created_at and updated_at
+                else 0.0
+            )
+            activity.append(
+                TeamActivity(
+                    owner_name=display_name,
+                    status=status,
+                    current_stage=stage or "INIT",
+                    # Resolved in here so the run id never crosses the return boundary.
+                    queue_position=positions.get(run_id),
+                    elapsed_seconds=round(elapsed, 2),
+                )
+            )
+        return activity
 
     async def apply_source_domain_review(
         self,

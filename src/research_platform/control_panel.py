@@ -9,6 +9,7 @@ import re
 import secrets
 import socket
 import sys
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -18,12 +19,18 @@ import psutil
 import uvicorn
 from arq.constants import default_queue_name, health_check_key_suffix, in_progress_key_prefix
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from redis.asyncio import Redis
 from sqlalchemy import select
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .auth import Principal
+from .auth import Principal, verify_secret
 from .config import get_settings
 from .control_panel_auth import (
     audit,
@@ -60,6 +67,7 @@ from .identity import (
     issue_telegram_link_code,
     list_api_keys,
     revoke_api_key,
+    set_password,
     telegram_ids_for,
     unlink_telegram,
 )
@@ -73,6 +81,7 @@ from .db import (
     SessionLocal,
     SourceRow,
 )
+from .repository import ACTIVE_RUN_STATUSES, Repository
 from .schemas import RunStatus
 
 
@@ -90,13 +99,10 @@ DOCKER_SERVICES = {
     "mcp": "mcp-gateway",
     "telegram": "telegram-bot",
 }
-ACTIVE_STATUSES = {
-    RunStatus.QUEUED.value,
-    RunStatus.RUNNING.value,
-    RunStatus.PAUSED.value,
-    RunStatus.AWAITING_INPUT.value,
-    RunStatus.CANCEL_REQUESTED.value,
-}
+# One definition, shared with the repository's team-activity query. Two copies would
+# drift, and the drift would be invisible: the panel would file a run under "recent"
+# while the queue view still counted it as pressure on the GPU.
+ACTIVE_STATUSES = ACTIVE_RUN_STATUSES
 TERMINAL_STATUSES = {
     RunStatus.CANCELLED.value,
     RunStatus.COMPLETED.value,
@@ -295,6 +301,12 @@ async def _run_snapshot(
         if not principal.is_admin:
             statement = statement.where(ResearchRunRow.owner_id == principal.user_id)
         rows = list(await session.scalars(statement.limit(60)))
+        # The one cross-owner read, taken through the repository rather than repeated as
+        # a query here: the redaction has to have a single implementation or the second
+        # copy is the one that eventually returns a title.
+        team = await Repository(session, actor=principal).list_team_activity(
+            queue_positions=queue_positions
+        )
     serialized = []
     for row in rows:
         protocol = row.protocol or {}
@@ -326,6 +338,7 @@ async def _run_snapshot(
     return {
         "active": [item for item in serialized if item["status"] in ACTIVE_STATUSES],
         "recent": [item for item in serialized if item["status"] in TERMINAL_STATUSES][:20],
+        "team": [asdict(entry) for entry in team],
     }
 
 
@@ -423,6 +436,28 @@ async def _system_telemetry() -> dict[str, Any]:
     }
 
 
+def _publishable_queue(queue: dict[str, Any], principal: Principal) -> dict[str, Any]:
+    """Strip run identifiers out of the ARQ queue listing for non-admins.
+
+    Depth and wait counts are the point of the queue card and stay whole -- they are the
+    same load the team view reports. The per-job ``run_id`` is different: it names other
+    people's runs, the front end never reads it, and leaving it in would hand out
+    uncontrolled exactly what :class:`TeamActivity` is careful to withhold.
+
+    Called on the way out, after ``_run_snapshot`` has used the unredacted queue to
+    resolve positions. Redacting earlier would cost every user their own queue position.
+    """
+    if principal.is_admin:
+        return queue
+    return {
+        **queue,
+        "jobs": [
+            {key: value for key, value in job.items() if key not in ("job_id", "run_id")}
+            for job in queue.get("jobs", [])
+        ],
+    }
+
+
 async def build_status(principal: Principal) -> dict[str, Any]:
     processes = await _service_processes()
     try:
@@ -442,7 +477,7 @@ async def build_status(principal: Principal) -> dict[str, Any]:
         runs = await asyncio.wait_for(_run_snapshot(queue, principal), timeout=4)
         database = "ok"
     except Exception as exc:
-        runs = {"active": [], "recent": []}
+        runs = {"active": [], "recent": [], "team": []}
         database = f"unavailable: {type(exc).__name__}"
     health, telemetry = await asyncio.gather(_external_health(), _system_telemetry())
     core_running = all(processes[name]["running"] for name in ("api", "worker", "mcp"))
@@ -454,7 +489,7 @@ async def build_status(principal: Principal) -> dict[str, Any]:
         "overall": overall,
         "processes": processes,
         "database": database,
-        "queue": queue,
+        "queue": _publishable_queue(queue, principal),
         "runs": runs,
         "health": health,
         "telemetry": telemetry,
@@ -785,6 +820,25 @@ panel_settings = get_settings()
 panel_networks = (
     panel_settings.control_panel_allowed_networks or panel_settings.mcp_allowed_networks
 )
+def _local_addresses() -> list[str]:
+    """This machine's own IPv4 addresses, for the Host header check.
+
+    A browser on the LAN sends ``Host: 10.0.10.179``, which is neither loopback nor the
+    hostname, so TrustedHostMiddleware would reject it before any of the panel's own
+    checks ran. Binding to a LAN address is therefore not enough on its own -- the
+    address has to be trusted as a name too.
+    """
+    addresses: list[str] = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if address not in addresses:
+                addresses.append(address)
+    except socket.gaierror:
+        pass
+    return addresses
+
+
 app.add_middleware(ControlPanelNetworkGuard, allowed_networks=panel_networks)
 app.add_middleware(
     TrustedHostMiddleware,
@@ -795,6 +849,10 @@ app.add_middleware(
         "testserver",
         panel_settings.mcp_host,
         socket.gethostname(),
+        # Explicit entries first (a reverse-proxy hostname, for instance), then the
+        # machine's own addresses so a LAN client reaching it by IP is not turned away.
+        *panel_settings.control_panel_allowed_hosts,
+        *(_local_addresses() if panel_settings.control_panel_host != "127.0.0.1" else []),
     ],
 )
 
@@ -1077,6 +1135,50 @@ async def delete_key(key_id: str, principal: Principal = Depends(require_csrf)) 
     if not revoked:
         raise HTTPException(status_code=404, detail="Anahtar bulunamadı")
     return {"ok": True}
+
+
+@app.post("/api/account/password")
+async def change_password(
+    body: dict[str, Any],
+    request: Request,
+    principal: Principal = Depends(require_csrf),
+) -> Response:
+    """Let a signed-in user replace their own password.
+
+    The current password is required. Without it this endpoint would *reduce* security
+    rather than add convenience: the panel is served over plain HTTP on the LAN, so
+    someone who captured a session cookie could turn a borrowed session into permanent
+    account takeover with one request.
+    """
+    key = client_key(request)
+    wait_seconds = throttled(key)
+    if wait_seconds:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Çok fazla başarısız deneme. {wait_seconds} saniye sonra tekrar deneyin.",
+        )
+    current_password = str(body.get("current_password") or "")
+    new_password = str(body.get("new_password") or "")
+    if not new_password:
+        raise HTTPException(status_code=400, detail="Yeni parola boş olamaz")
+
+    async with SessionLocal() as session:
+        user = await get_user(session, principal.user_id or "")
+        if user is None or not verify_secret(current_password, user.password_hash):
+            record_failure(key)
+            audit.warning("password change failed user=%s from=%s", principal.user_id, key)
+            raise HTTPException(status_code=403, detail="Mevcut parola hatalı")
+        await set_password(session, user, new_password)
+        token_version = user.token_version
+
+    record_success(key, principal.user_id or "")
+    audit.info("password changed user=%s from=%s", principal.user_id, key)
+    response = JSONResponse({"ok": True})
+    # set_password bumps token_version, which invalidates every cookie this user holds --
+    # including the one that just made this request. Re-issuing it keeps the caller signed
+    # in while every other device is signed out, which is the behaviour people expect.
+    issue_session_cookie(response, user.id, token_version)
+    return response
 
 
 @app.get("/api/telegram")

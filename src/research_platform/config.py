@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     control_panel_host: str = "127.0.0.1"
     control_panel_port: int = Field(8020, ge=1, le=65535)
     control_panel_allowed_networks: list[str] = Field(default_factory=list)
+    # Extra names accepted in the Host header -- a reverse-proxy hostname, say. The
+    # machine's own addresses are added automatically when the panel is not on loopback.
+    control_panel_allowed_hosts: list[str] = Field(default_factory=list)
     # Whether the panel supervises native processes started by the office scripts or
     # the compose project. Left at "native" so existing office servers keep working.
     control_panel_deployment: Literal["native", "docker"] = "native"
