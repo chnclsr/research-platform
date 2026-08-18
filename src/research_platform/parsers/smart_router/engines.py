@@ -75,6 +75,8 @@ class EngineResult:
 
     engine: str
     pages: Dict[int, str] = field(default_factory=dict)
+    #: Tables recovered as a grid, not as prose: {"page", "headers", "rows"}.
+    tables: List[dict] = field(default_factory=list)
     ok: bool = True
     error: Optional[str] = None
     degraded: bool = False
@@ -150,9 +152,9 @@ class DoclingEngine:
         runner = self._in_process if in_process else self._bridged
         mode = "in-process" if in_process else "bridged"
         try:
-            produced, error = runner(pdf_path, blocks)
+            produced, tables, error = runner(pdf_path, blocks)
         except Exception as exc:
-            produced, error = {}, f"{type(exc).__name__}: {exc}"
+            produced, tables, error = {}, [], f"{type(exc).__name__}: {exc}"
         finally:
             _AGIR_KAPI.release()
 
@@ -160,6 +162,7 @@ class DoclingEngine:
         return EngineResult(
             engine=self.name,
             pages=produced,
+            tables=tables,
             ok=error is None and not missing,
             error=error or (f"{len(missing)} pages not produced" if missing else None),
             degraded=bool(error) or bool(missing),
@@ -169,12 +172,15 @@ class DoclingEngine:
 
     def _in_process(
         self, pdf_path: str, blocks: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, str], Optional[str]]:
+    ) -> Tuple[Dict[int, str], List[dict], Optional[str]]:
         os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
         from docling.document_converter import DocumentConverter
 
+        from ._docling_worker import _table_grid
+
         converter = DocumentConverter()
         pages: Dict[int, str] = {}
+        tables: List[dict] = []
         for first, last in blocks:
             result = converter.convert(pdf_path, page_range=(first, last))
             for page_no in range(first, last + 1):
@@ -182,11 +188,18 @@ class DoclingEngine:
                     pages[page_no] = result.document.export_to_markdown(page_no=page_no)
                 except Exception:
                     pass
-        return pages, None
+            for table in getattr(result.document, "tables", None) or []:
+                try:
+                    flattened = _table_grid(table)
+                except Exception:
+                    continue
+                if flattened:
+                    tables.append(flattened)
+        return pages, tables, None
 
     def _bridged(
         self, pdf_path: str, blocks: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, str], Optional[str]]:
+    ) -> Tuple[Dict[int, str], List[dict], Optional[str]]:
         # Invoked by file path, not `-m`: importing it as part of the package
         # would pull in registry -> pdf -> pypdf, and the interpreter that has
         # Docling is not required to have the rest of the platform installed.
@@ -206,15 +219,16 @@ class DoclingEngine:
         except subprocess.TimeoutExpired:
             # The process is killed by the time this raises -- that is the whole
             # reason the bridged mode exists.
-            return {}, f"timeout after {self.timeout_s:.0f}s"
+            return {}, [], f"timeout after {self.timeout_s:.0f}s"
 
         payload = _son_isaretli_satir(completed.stdout)
         if payload is None:
             tail = (completed.stderr or completed.stdout or "").strip()[-400:]
-            return {}, f"worker produced no result (exit {completed.returncode}): {tail}"
+            return {}, [], f"worker produced no result (exit {completed.returncode}): {tail}"
         if "error" in payload:
-            return {}, str(payload["error"])
-        return {int(k): v for k, v in (payload.get("pages") or {}).items()}, None
+            return {}, [], str(payload["error"])
+        return ({int(k): v for k, v in (payload.get("pages") or {}).items()},
+                list(payload.get("tables") or []), None)
 
 
 class MinerUEngine:

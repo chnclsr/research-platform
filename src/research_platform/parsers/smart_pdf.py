@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-from .base import DocumentParser, ParsedDocument
+from .base import DocumentParser, ParsedDocument, ParsedTable
 
 try:
     from .smart_router import ROUTER_VERSION, SmartRouterHatti
@@ -77,8 +77,28 @@ class SmartPdfParser(DocumentParser):
             document_type="pdf",
             parser_id=self.id,
             page_count=merged.page_count,
+            tables=self._tables(merged),
             parse_provenance=self._provenance(decision, merged),
         )
+
+    def _tables(self, merged: MergedDocument) -> list[ParsedTable]:
+        """
+        Keep the recovered tables as grids alongside the prose.
+
+        The markdown rendering already carries them inline, so passages stay
+        self-contained; this is for consumers that need to know which number sits
+        in which column, which is exactly what flattening a table into prose
+        destroys. `section_path` matches the page heading so a table can be traced
+        back to where it came from.
+        """
+        return [
+            ParsedTable(
+                section_path=f"Page {table['page']}" if table.get("page") else "",
+                headers=[str(h) for h in table.get("headers") or []],
+                rows=[[str(cell) for cell in row] for row in table.get("rows") or []],
+            )
+            for table in merged.tables
+        ]
 
     def _provenance(self, decision: dict, merged: MergedDocument) -> dict:
         """

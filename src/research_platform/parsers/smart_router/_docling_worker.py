@@ -27,11 +27,43 @@ import sys
 os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
 
+def _table_grid(table) -> dict | None:
+    """
+    Flatten one Docling table into headers and rows.
+
+    Docling exposes a cell grid with row/column indices and a column_header flag,
+    which is more than the markdown rendering keeps: once a table is prose, which
+    number belonged to which column is gone. ParsedTable is where that survives.
+    """
+    grid = getattr(table.data, "grid", None)
+    if not grid:
+        return None
+    matrix = [[(cell.text or "").strip() for cell in row] for row in grid]
+    if not matrix:
+        return None
+
+    # Leading rows Docling marked as column headers; the rest is body.
+    header_depth = 0
+    for row in grid:
+        if any(getattr(cell, "column_header", False) for cell in row):
+            header_depth += 1
+        else:
+            break
+
+    page_no = table.prov[0].page_no if getattr(table, "prov", None) else None
+    return {
+        "page": page_no,
+        "headers": matrix[0] if header_depth else [],
+        "rows": matrix[header_depth:] if header_depth else matrix,
+    }
+
+
 def run(pdf_path: str, blocks: list[list[int]]) -> dict:
     from docling.document_converter import DocumentConverter
 
     converter = DocumentConverter()
     pages: dict[int, str] = {}
+    tables: list[dict] = []
     for first, last in blocks:
         # Consecutive pages go in one call: the same 12 pages cost 18.56s grouped
         # against 29.28s one call at a time.
@@ -43,7 +75,15 @@ def run(pdf_path: str, blocks: list[list[int]]) -> dict:
                 # One unreadable page should not cost us the rest of the block.
                 pages[page_no] = ""
                 print(f"page {page_no} failed: {exc}", file=sys.stderr)
-    return {"pages": pages}
+        for table in getattr(result.document, "tables", None) or []:
+            try:
+                flattened = _table_grid(table)
+            except Exception as exc:
+                print(f"table skipped: {exc}", file=sys.stderr)
+                continue
+            if flattened:
+                tables.append(flattened)
+    return {"pages": pages, "tables": tables}
 
 
 def main(argv: list[str]) -> int:

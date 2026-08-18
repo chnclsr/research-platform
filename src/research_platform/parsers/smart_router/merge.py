@@ -56,6 +56,8 @@ class MergedDocument:
     engine_counts: Dict[str, int] = field(default_factory=dict)
     #: Pages the heavy path was supposed to handle but did not.
     fallback_pages: List[int] = field(default_factory=list)
+    #: Tables the heavy engine recovered as a grid: {"page", "headers", "rows"}.
+    tables: List[dict] = field(default_factory=list)
     degraded: bool = False
     notes: List[str] = field(default_factory=list)
 
@@ -87,10 +89,12 @@ def birlestir(
 
     winner: Dict[int, tuple[str, str]] = {}
     counts: Dict[str, int] = {}
+    tables: List[dict] = []
     notes: List[str] = []
     degraded = False
 
     for result in results:
+        tables.extend(result.tables)
         if result.degraded or not result.ok:
             degraded = True
             if result.error:
@@ -129,6 +133,7 @@ def birlestir(
 
     return MergedDocument(
         pages=merged, engine_counts=counts, fallback_pages=fallbacks,
+        tables=sorted(tables, key=lambda t: (t.get("page") or 0)),
         degraded=degraded, notes=notes,
     )
 
