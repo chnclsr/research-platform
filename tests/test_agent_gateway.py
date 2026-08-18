@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import httpx
@@ -10,12 +11,38 @@ from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
+from research_platform.db import SessionLocal, create_schema
 from research_platform.gateway_client import ResearchGatewayClient
+from research_platform.identity import (
+    create_user,
+    format_link_code,
+    get_user,
+    get_user_by_email,
+    issue_telegram_link_code,
+    link_telegram,
+)
 from research_platform.mcp_server import BearerProtectedMCP
 from research_platform.telegram_bot import (
     TelegramResearchBot, duration_keyboard, has_explicit_duration, parse_research_request,
 )
 import research_platform.mcp_server as mcp_module
+
+
+async def _linked_telegram_user(telegram_user_id: int) -> str:
+    """Create a platform account and bind a Telegram id to it."""
+    await create_schema()
+    email = f"telegram-{telegram_user_id}@example.test"
+    async with SessionLocal() as session:
+        user = await get_user_by_email(session, email)
+        if user is None:
+            user = await create_user(
+                session,
+                email=email,
+                display_name=f"Telegram {telegram_user_id}",
+                password="telegram-test-password",
+            )
+        await link_telegram(session, telegram_user_id=telegram_user_id, user_id=user.id)
+        return user.id
 
 
 def _protected_test_app():
@@ -83,47 +110,44 @@ def test_mcp_gateway_health_and_network_allowlist():
         ).status_code == 403
 
 
-def test_telegram_requires_non_empty_allowlist():
+@pytest.mark.asyncio
+async def test_direct_chats_are_open_because_linking_is_the_real_gate():
+    """The env allow-list no longer decides who may use the bot privately.
+
+    It stood in for an identity the platform did not have. Now that accounts exist, a
+    user who links their own Telegram account is authorized by that link; keeping the
+    list as a second gate would block exactly the people who linked themselves. Whose
+    research a message belongs to is decided by _resolve_actor, not here.
+    """
     bot = object.__new__(TelegramResearchBot)
     bot.allowed_users = set()
     bot.allowed_chats = set()
     bot.allow_group_chats = False
     bot.allow_all_users = False
-    message = {"from": {"id": 10}, "chat": {"id": 20, "type": "private"}}
-    assert not bot._authorized(message)
-    bot.allowed_users = {10}
-    assert bot._authorized(message)
-    bot.allowed_users = set()
-    bot.allowed_chats = {20}
-    assert bot._authorized(message)
+    assert await bot._chat_allowed({"from": {"id": 10}, "chat": {"id": 20, "type": "private"}})
 
 
-def test_telegram_can_authorize_every_member_of_group_without_opening_private_chats():
+@pytest.mark.asyncio
+async def test_group_chats_stay_behind_the_allowlist():
+    """A group has many senders, so the sender is not reliably who the bot acts for."""
     bot = object.__new__(TelegramResearchBot)
     bot.allowed_users = set()
     bot.allowed_chats = set()
+    bot.allow_group_chats = False
+    bot.allow_all_users = False
+    group = {"from": {"id": 999}, "chat": {"id": -100123, "type": "supergroup"}}
+    assert not await bot._chat_allowed(group)
+
     bot.allow_group_chats = True
-    bot.allow_all_users = False
-    assert bot._authorized({
-        "from": {"id": 999},
-        "chat": {"id": -100123, "type": "supergroup"},
-    })
-    assert not bot._authorized({
-        "from": {"id": 999},
-        "chat": {"id": 999, "type": "private"},
-    })
+    # Enabled but with nothing allow-listed is still a refusal.
+    assert not await bot._chat_allowed(group)
 
+    bot.allowed_chats = {-100123}
+    assert await bot._chat_allowed(group)
 
-def test_telegram_can_authorize_all_private_users_when_explicitly_enabled():
-    bot = object.__new__(TelegramResearchBot)
-    bot.allowed_users = set()
     bot.allowed_chats = set()
-    bot.allow_group_chats = False
     bot.allow_all_users = True
-    assert bot._authorized({
-        "from": {"id": 999},
-        "chat": {"id": 999, "type": "private"},
-    })
+    assert await bot._chat_allowed(group)
 
 
 def test_telegram_research_defaults_use_time_without_source_ceiling():
@@ -211,10 +235,21 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     class FakeGateway:
         def __init__(self):
             self.protocols = []
+            self.actors = []
+
+        def for_actor(self, actor_user_id):
+            # The bot binds every call to the platform user behind the Telegram
+            # account, so record which one it resolved.
+            self.actors.append(actor_user_id)
+            return self
 
         async def start(self, protocol):
             self.protocols.append(protocol)
             return {"id": "RUN1"}
+
+    # The bot now needs to know whose research a message creates, so the Telegram
+    # account has to be linked to a platform account first.
+    telegram_owner = await _linked_telegram_user(7)
 
     bot = object.__new__(TelegramResearchBot)
     bot.settings = SimpleNamespace(
@@ -262,6 +297,55 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     assert len(bot.gateway.protocols) == 1
     assert bot.gateway.protocols[0].budget.max_wall_minutes == 2
     assert bot.gateway.protocols[0].primary_question == "lung cancer detection by CT"
+    # Every run it started was attributed to the linked account.
+    assert set(bot.gateway.actors) == {telegram_owner}
+
+
+@pytest.mark.asyncio
+async def test_unlinked_telegram_user_is_told_how_to_get_linked():
+    """Allowed to use the bot is not the same as having an account to own runs."""
+
+    class FakeClient:
+        def __init__(self):
+            self.posts = []
+
+        async def post(self, url, **kwargs):
+            self.posts.append((url, kwargs))
+            return SimpleNamespace()
+
+    class RefusingGateway:
+        def for_actor(self, actor_user_id):
+            raise AssertionError("unlinked user must not reach the API")
+
+        async def start(self, protocol):
+            raise AssertionError("unlinked user must not start a run")
+
+    await create_schema()
+    bot = object.__new__(TelegramResearchBot)
+    bot.settings = SimpleNamespace(
+        telegram_default_max_wall_minutes=20,
+        telegram_max_wall_minutes=180,
+        telegram_default_max_sources=None,
+        telegram_default_max_rounds=3,
+    )
+    bot.bot_url = "https://telegram.test/botTOKEN"
+    bot.gateway = RefusingGateway()
+    bot.allowed_users = set()
+    bot.allowed_chats = set()
+    bot.allow_group_chats = False
+    bot.allow_all_users = True
+    bot.pending_research = {}
+
+    client = FakeClient()
+    await bot._handle(client, {
+        "from": {"id": 999_777},
+        "chat": {"id": 12, "type": "private"},
+        "text": "/research raw bir soru sordum ama hesabim bagli degil",
+    })
+    sent = client.posts[-1][1]["json"]["text"]
+    # Self-service now: the user is pointed at the panel rather than at an administrator.
+    assert "/baglan" in sent
+    assert "panel" in sent.lower()
 
 
 @pytest.mark.asyncio
@@ -321,3 +405,149 @@ def test_authenticated_client_api_lists_status_and_downloads(tmp_path, monkeypat
         assert delivery.status_code == 200
         assert delivery.content == archive.read_bytes()
         assert delivery.headers["content-type"] == "application/zip"
+
+
+# --------------------------------------------------- self-service Telegram linking
+
+
+class _LinkFakeClient:
+    def __init__(self):
+        self.posts = []
+
+    async def post(self, url, **kwargs):
+        self.posts.append((url, kwargs))
+        return SimpleNamespace()
+
+    @property
+    def last_text(self) -> str:
+        return self.posts[-1][1]["json"]["text"]
+
+
+def _link_bot() -> TelegramResearchBot:
+    bot = object.__new__(TelegramResearchBot)
+    bot.settings = SimpleNamespace(
+        telegram_default_max_wall_minutes=20,
+        telegram_max_wall_minutes=180,
+        telegram_default_max_sources=None,
+        telegram_default_max_rounds=3,
+    )
+    bot.bot_url = "https://telegram.test/botTOKEN"
+    bot.gateway = SimpleNamespace()
+    bot.allowed_users = set()
+    bot.allowed_chats = set()
+    bot.allow_group_chats = False
+    bot.allow_all_users = False
+    bot.pending_research = {}
+    return bot
+
+
+async def _account_with_code(email: str, ttl_seconds: int = 300) -> tuple[str, str]:
+    await create_schema()
+    async with SessionLocal() as session:
+        user = await get_user_by_email(session, email)
+        if user is None:
+            user = await create_user(
+                session, email=email, display_name=email, password="link-test-password"
+            )
+        code = await issue_telegram_link_code(
+            session, user_id=user.id, ttl_seconds=ttl_seconds
+        )
+        return user.id, code
+
+
+@pytest.mark.asyncio
+async def test_link_code_binds_the_telegram_account_that_redeems_it():
+    user_id, code = await _account_with_code("link-ok@example.test")
+    bot, client = _link_bot(), _LinkFakeClient()
+
+    await bot._handle(client, {
+        "from": {"id": 555_001},
+        "chat": {"id": 555_001, "type": "private"},
+        "text": f"/baglan {code}",
+    })
+    assert "Bağlandı" in client.last_text
+    assert await bot._resolve_actor(555_001) == user_id
+
+
+@pytest.mark.asyncio
+async def test_link_code_works_as_a_deep_link_start_payload():
+    """The panel's t.me link arrives as "/start <code>", not as /baglan."""
+    user_id, code = await _account_with_code("link-deep@example.test")
+    bot, client = _link_bot(), _LinkFakeClient()
+
+    await bot._handle(client, {
+        "from": {"id": 555_002},
+        "chat": {"id": 555_002, "type": "private"},
+        "text": f"/start {code}",
+    })
+    assert "Bağlandı" in client.last_text
+    assert await bot._resolve_actor(555_002) == user_id
+
+
+@pytest.mark.asyncio
+async def test_link_code_is_single_use():
+    """A leaked code must not let a second Telegram account claim the same user."""
+    user_id, code = await _account_with_code("link-once@example.test")
+    bot, client = _link_bot(), _LinkFakeClient()
+
+    await bot._handle(client, {
+        "from": {"id": 555_010},
+        "chat": {"id": 555_010, "type": "private"},
+        "text": f"/baglan {code}",
+    })
+    assert await bot._resolve_actor(555_010) == user_id
+
+    await bot._handle(client, {
+        "from": {"id": 555_011},
+        "chat": {"id": 555_011, "type": "private"},
+        "text": f"/baglan {code}",
+    })
+    assert "geçersiz" in client.last_text.lower()
+    assert await bot._resolve_actor(555_011) is None
+
+
+@pytest.mark.asyncio
+async def test_expired_link_code_is_refused():
+    user_id, code = await _account_with_code("link-expired@example.test", ttl_seconds=60)
+    async with SessionLocal() as session:
+        user = await get_user(session, user_id)
+        user.telegram_link_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        await session.commit()
+
+    bot, client = _link_bot(), _LinkFakeClient()
+    await bot._handle(client, {
+        "from": {"id": 555_020},
+        "chat": {"id": 555_020, "type": "private"},
+        "text": f"/baglan {code}",
+    })
+    assert "geçersiz" in client.last_text.lower()
+    assert await bot._resolve_actor(555_020) is None
+
+
+@pytest.mark.asyncio
+async def test_wrong_code_reveals_nothing_and_links_nobody():
+    await _account_with_code("link-guess@example.test")
+    bot, client = _link_bot(), _LinkFakeClient()
+
+    await bot._handle(client, {
+        "from": {"id": 555_030},
+        "chat": {"id": 555_030, "type": "private"},
+        "text": "/baglan ZZZZZZ",
+    })
+    assert "geçersiz" in client.last_text.lower()
+    assert await bot._resolve_actor(555_030) is None
+
+
+@pytest.mark.asyncio
+async def test_link_code_accepts_the_formatting_shown_in_the_panel():
+    """The panel renders A3F9K2 as A3F-9K2; typing it back must work."""
+    user_id, code = await _account_with_code("link-format@example.test")
+    bot, client = _link_bot(), _LinkFakeClient()
+
+    await bot._handle(client, {
+        "from": {"id": 555_040},
+        "chat": {"id": 555_040, "type": "private"},
+        "text": f"/baglan {format_link_code(code).lower()}",
+    })
+    assert "Bağlandı" in client.last_text
+    assert await bot._resolve_actor(555_040) == user_id

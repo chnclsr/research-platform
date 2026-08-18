@@ -9,11 +9,14 @@ from pathlib import Path
 import httpx
 
 from .config import get_settings
+from .db import SessionLocal
 from .gateway_client import ResearchGatewayClient
+from .identity import consume_telegram_link_code, principal_from_telegram
 from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 
 
 HELP = """Research Platform komutları:
+/baglan <kod>   — Telegram hesabınızı platform hesabınıza bağlar
 /whoami
 /research [raw|result|both] [dakika|--minutes N] [--hitl] [--sources N] <soru>
 /status <run_id>
@@ -122,16 +125,78 @@ class TelegramResearchBot:
         self.allow_all_users = self.settings.telegram_allow_all_users
         self.pending_research: dict[str, dict] = {}
 
-    def _authorized(self, message: dict) -> bool:
-        user_id = int((message.get("from") or {}).get("id", 0))
+    async def _chat_allowed(self, message: dict) -> bool:
+        """Whether research commands are accepted in this conversation.
+
+        Direct chats are open: whoever is linked acts as themselves, and someone with no
+        link gets told how to get one. Group chats are the exception -- several people
+        share one conversation, so the sender is not reliably the person the bot should
+        act for, and they stay behind the configured allow-list.
+        """
         chat = message.get("chat") or {}
-        chat_id = int(chat.get("id", 0))
+        if chat.get("type") not in {"group", "supergroup"}:
+            return True
+        if not self.allow_group_chats:
+            return False
         if self.allow_all_users:
             return True
-        if self.allow_group_chats and chat.get("type") in {"group", "supergroup"}:
-            return True
+        user_id = int((message.get("from") or {}).get("id", 0))
+        chat_id = int(chat.get("id", 0))
         return bool(self.allowed_users or self.allowed_chats) and (
             user_id in self.allowed_users or chat_id in self.allowed_chats
+        )
+
+    async def _link_account(
+        self, client: httpx.AsyncClient, chat_id: int, telegram_user_id: int, code: str
+    ) -> None:
+        """Redeem a link code issued by the panel."""
+        if not telegram_user_id:
+            await self._send_message(client, chat_id, "Telegram kimliğiniz okunamadı.")
+            return
+        async with SessionLocal() as session:
+            user = await consume_telegram_link_code(
+                session, code=code, telegram_user_id=telegram_user_id
+            )
+        if user is None:
+            await self._send_message(
+                client,
+                chat_id,
+                "Kod geçersiz, süresi dolmuş ya da zaten kullanılmış.\n\n"
+                "Panelden yeni bir kod alın: Ayarlar → Telegram bağlantısı.",
+            )
+            return
+        await self._send_message(
+            client,
+            chat_id,
+            f"Bağlandı: {user.email}\n\n"
+            "Bundan sonra başlattığınız araştırmalar bu hesaba ait olacak ve panelde "
+            "yalnız siz göreceksiniz.\n\nBaşlamak için /research yazın.",
+        )
+
+    async def _resolve_actor(self, telegram_user_id: int) -> str | None:
+        """The platform account this Telegram user acts as, or None if unlinked.
+
+        This is the bot's real gate. :meth:`_chat_allowed` only decides whether the
+        conversation is one where research commands make sense; this decides whose
+        research a message creates and reads. An unlinked sender is told how to link
+        rather than being given a run that belongs to nobody.
+        """
+        if not telegram_user_id:
+            return None
+        async with SessionLocal() as session:
+            principal = await principal_from_telegram(session, telegram_user_id)
+        return principal.user_id if principal else None
+
+    @staticmethod
+    def _link_hint() -> str:
+        return (
+            "Telegram hesabınız bir platform hesabına bağlı değil, bu yüzden "
+            "araştırmanızın sahibi belirlenemiyor.\n\n"
+            "Bağlamak için:\n"
+            "1. Kontrol paneline girin\n"
+            "2. Ayarlar → Telegram bağlantısı → Kod al\n"
+            "3. Buraya /baglan <kod> yazın (ya da paneldeki bağlantıya tıklayın)\n\n"
+            "Panel hesabınız yoksa yöneticinizden hesap açmasını isteyin."
         )
 
     async def _send_message(self, client: httpx.AsyncClient, chat_id: int, text: str) -> None:
@@ -159,8 +224,9 @@ class TelegramResearchBot:
         client: httpx.AsyncClient,
         chat_id: int,
         protocol: ResearchProtocol,
+        gateway: ResearchGatewayClient,
     ) -> None:
-        run = await self.gateway.start(protocol)
+        run = await gateway.start(protocol)
         budget = protocol.budget
         await self._send_message(
             client,
@@ -214,7 +280,7 @@ class TelegramResearchBot:
         chat_id = int(chat.get("id", 0))
         user = callback.get("from") or {}
         auth_message = {"from": user, "chat": chat}
-        if not self._authorized(auth_message):
+        if not await self._chat_allowed(auth_message):
             await client.post(
                 f"{self.bot_url}/answerCallbackQuery",
                 json={
@@ -275,8 +341,12 @@ class TelegramResearchBot:
                 "reply_markup": {"inline_keyboard": []},
             },
         )
+        actor_id = await self._resolve_actor(int(user.get("id", 0)))
+        if actor_id is None:
+            await self._send_message(client, chat_id, self._link_hint(int(user.get("id", 0))))
+            return
         try:
-            await self._start_research(client, chat_id, protocol)
+            await self._start_research(client, chat_id, protocol, self.gateway.for_actor(actor_id))
         except (httpx.HTTPError, ValueError) as exc:
             await self._send_message(
                 client,
@@ -292,25 +362,50 @@ class TelegramResearchBot:
         except ValueError:
             await self._send_message(client, chat_id, HELP)
             return
-        if not parts or parts[0] in {"/start", "/help"}:
+        telegram_user_id = int((message.get("from") or {}).get("id", 0))
+        command = parts[0].split("@", 1)[0].lower() if parts else ""
+
+        # A deep link from the panel arrives as "/start <code>", so /start is only the
+        # plain help screen when it carries no payload.
+        if command == "/start" and len(parts) == 2:
+            await self._link_account(client, chat_id, telegram_user_id, parts[1])
+            return
+        if not parts or command in {"/start", "/help", "/yardim"}:
             await self._send_message(client, chat_id, HELP)
             return
-        command = parts[0].split("@", 1)[0].lower()
         if command == "/whoami":
-            user_id = int((message.get("from") or {}).get("id", 0))
             await self._send_message(
                 client,
                 chat_id,
-                f"Telegram user_id: {user_id}\nTelegram chat_id: {chat_id}",
+                f"Telegram user_id: {telegram_user_id}\nTelegram chat_id: {chat_id}",
             )
             return
-        if not self._authorized(message):
+        if command == "/baglan":
+            if len(parts) != 2:
+                await self._send_message(
+                    client, chat_id, "Kullanım: /baglan <kod>\n\n" + self._link_hint()
+                )
+                return
+            await self._link_account(client, chat_id, telegram_user_id, parts[1])
+            return
+
+        # Being linked to a platform account *is* the authorization. The old
+        # TELEGRAM_ALLOWED_USER_IDS list stood in for an identity the system did not have;
+        # now that it does, the list would only be a second gate that a self-linked user
+        # could not pass. It survives for group chats, where the sender is not
+        # necessarily the person the bot should act for.
+        if not await self._chat_allowed(message):
             await self._send_message(
                 client,
                 chat_id,
-                "Bu bot için araştırma yetkiniz yok. Kimliklerinizi görmek için /whoami yazın.",
+                "Bu sohbette araştırma başlatılamıyor. Botla birebir konuşun.",
             )
             return
+        actor_id = await self._resolve_actor(telegram_user_id)
+        if actor_id is None:
+            await self._send_message(client, chat_id, self._link_hint())
+            return
+        gateway = self.gateway.for_actor(actor_id)
         try:
             if command == "/research":
                 explicit_minutes = has_explicit_duration(parts[1:])
@@ -336,11 +431,11 @@ class TelegramResearchBot:
                     ),
                 )
                 if explicit_minutes:
-                    await self._start_research(client, chat_id, protocol)
+                    await self._start_research(client, chat_id, protocol, gateway)
                 else:
                     await self._offer_duration(client, message, protocol)
             elif command == "/status" and len(parts) == 2:
-                run = await self.gateway.status(parts[1])
+                run = await gateway.status(parts[1])
                 interaction = run.get("interaction") or {}
                 hitl_note = ""
                 if interaction:
@@ -357,7 +452,7 @@ class TelegramResearchBot:
                     f"{hitl_note}",
                 )
             elif command == "/respond" and len(parts) >= 3:
-                run = await self.gateway.status(parts[1])
+                run = await gateway.status(parts[1])
                 interaction = run.get("interaction") or {}
                 interaction_id = interaction.get("interaction_id")
                 interaction_type = interaction.get("type")
@@ -402,7 +497,7 @@ class TelegramResearchBot:
                     }
                 else:
                     raise ValueError("Bilinmeyen checkpoint türü.")
-                updated = await self.gateway.respond(parts[1], interaction_id, payload)
+                updated = await gateway.respond(parts[1], interaction_id, payload)
                 await self._send_message(
                     client,
                     chat_id,
@@ -410,12 +505,12 @@ class TelegramResearchBot:
                 )
             elif command == "/get" and len(parts) in {2, 3}:
                 mode = DeliveryMode(parts[2] if len(parts) == 3 else "both")
-                path = await self.gateway.download(
+                path = await gateway.download(
                     parts[1], mode, Path(self.settings.gateway_download_dir)
                 )
                 await self._send_document(client, chat_id, path)
             elif command in {"/pause", "/resume", "/cancel"} and len(parts) == 2:
-                run = await self.gateway.action(parts[1], command[1:])
+                run = await gateway.action(parts[1], command[1:])
                 await self._send_message(client, chat_id, f"{run['id']}: {run['status']}")
             else:
                 await self._send_message(client, chat_id, HELP)
