@@ -24,7 +24,9 @@ from .base import DocumentParser, ParsedDocument
 
 try:
     from .smart_router import ROUTER_VERSION, SmartRouterHatti
+    from .smart_router.engines import DoclingEngine
     from .smart_router.gate import ESIK_VERSION
+    from .smart_router.merge import MergedDocument, birlestir, sayfa_basliklariyla
 
     _ROUTER_IMPORT_ERROR: str = ""
 except Exception as exc:  # pragma: no cover - exercised only when deps are absent
@@ -80,6 +82,7 @@ class SmartPdfParser(DocumentParser):
             return ParsedDocument(document_type="pdf", parser_id=self.id)
         try:
             decision = SmartRouterHatti().calistir(path, metin_dahil=True)
+            merged = self._run_heavy_pages(path, decision)
         except Exception:
             # A malformed download must not abort acquisition; the caller rejects
             # the document on the resulting empty text instead.
@@ -87,15 +90,40 @@ class SmartPdfParser(DocumentParser):
         finally:
             self._discard(path)
 
-        pages = decision.get("sayfa_metni") or {}
         return ParsedDocument(
-            text="\n\n".join(
-                f"# Page {number}\n\n{_nest_under_page(pages.get(number) or '').strip()}"
-                for number in sorted(pages)
-            ),
+            text=sayfa_basliklariyla(merged),
             document_type="pdf",
             parser_id=self.id,
-            page_count=len(pages),
+            page_count=merged.page_count,
+        )
+
+    def _run_heavy_pages(self, path: str, decision: dict) -> MergedDocument:
+        """
+        Send the flagged pages to the heavy engine and merge what comes back.
+
+        The engine is optional and may be missing, time out, or return nothing for
+        a page. None of those lose the page: it keeps its fast-path text and the
+        merge records that it fell back, so a degraded document stays
+        distinguishable from a clean one.
+        """
+        fast_pages = {int(k): v for k, v in (decision.get("sayfa_metni") or {}).items()}
+        decisions = {
+            int(page["sayfa_no"]): list(page.get("karar_kaynagi") or [])
+            for page in decision.get("sayfalar") or []
+        }
+        heavy = sorted(page for page, reasons in decisions.items() if reasons)
+        if not heavy:
+            return birlestir(fast_pages, decisions=decisions)
+
+        engine = DoclingEngine()
+        usable, _ = engine.available()
+        if not usable:
+            return birlestir(fast_pages, decisions=decisions,
+                             requested={engine.name: heavy})
+        return birlestir(
+            fast_pages, decisions=decisions,
+            results=[engine.extract(path, heavy)],
+            requested={engine.name: heavy},
         )
 
     def _spill_to_disk(self, content: bytes) -> str | None:
