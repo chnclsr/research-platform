@@ -54,10 +54,9 @@ SAYFA NUMARALARI 1-TABANLIDIR (plan E5). inspector'in listeleri zaten
 
 from __future__ import annotations
 
-import re
 import unicodedata as ud
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import pymupdf
 

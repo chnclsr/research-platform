@@ -30,7 +30,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple

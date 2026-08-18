@@ -15,10 +15,27 @@ document again. Two things have to hold afterwards:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
 
 from .engines import EngineResult
+
+# Levels 1-5 shift down one; level 6 has nowhere to go and is left alone.
+_HEADING = re.compile(r"(?m)^(\s{0,3})(#{1,5})(\s+\S)")
+
+
+def nest_under_page(markdown: str) -> str:
+    """
+    Push a page's own headings one level down so `# Page N` stays the only level-1.
+
+    _sections() in passages.py builds a hierarchical section path and drops every
+    ancestor at or above the current heading's level, so a level-1 heading inside a
+    page evicts `Page N` from the path entirely and every passage after it loses its
+    page number -- silently, as page_number=None rather than an error. Demoting the
+    page's own headings keeps them nested underneath the page heading instead.
+    """
+    return _HEADING.sub(r"\1#\2\3", markdown)
 
 
 @dataclass
@@ -123,11 +140,9 @@ def sayfa_basliklariyla(document: MergedDocument) -> str:
     Applied here rather than by each engine: pages come from different engines,
     and the heading has to be applied once, consistently, after they are combined.
     Each page's own headings are pushed a level down so the page heading stays the
-    only level-1 one -- see _nest_under_page in smart_pdf.py for why that matters.
+    only level-1 one -- see nest_under_page above for why that matters.
     """
-    from ..smart_pdf import _nest_under_page
-
     return "\n\n".join(
-        f"# Page {page.page_no}\n\n{_nest_under_page(page.text).strip()}"
+        f"# Page {page.page_no}\n\n{nest_under_page(page.text).strip()}"
         for page in document.pages
     )

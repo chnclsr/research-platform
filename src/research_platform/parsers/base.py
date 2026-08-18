@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -46,6 +48,15 @@ class ParsedDocument(BaseModel):
     outgoing_links: list[str] = Field(default_factory=list)
     canonical_url: str | None = None
     page_count: int | None = None
+    # How this document was parsed, for parsers that do more than run one extractor:
+    # which profile produced it, which engine handled each page, whether anything
+    # degraded. `parser_id` is a single string for the whole document, so a parser
+    # that mixes engines has nowhere else to record that. Free-form on purpose --
+    # it is carried to SourceVersion.provenance, which is a JSON column, so adding
+    # keys here needs no migration. It is NOT part of content_hash: the hash comes
+    # from the parsed text alone, and folding the profile in would make the same
+    # text look like a new version whenever calibration changed.
+    parse_provenance: dict[str, Any] = Field(default_factory=dict)
 
 
 class ParserHealth(BaseModel):

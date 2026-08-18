@@ -86,6 +86,22 @@ def test_pdf_page_numbers_survive_nested_headings():
         )
 
 
+def test_parse_provenance_defaults_to_empty_and_survives_serialisation():
+    """
+    Provenance rides to SourceVersion.provenance, a JSON column, so it has to
+    serialise -- and single-extractor parsers must not be forced to invent one.
+    """
+    plain = PlainTextParser().parse(b"words go here", url="https://e.org")
+    assert plain.parse_provenance == {}
+
+    routed = ParsedDocument(
+        text="x", parser_id="smart_pdf",
+        parse_provenance={"parser_profile": "inspector_v1",
+                          "pages": [{"page": 1, "engine": "docling"}]},
+    )
+    assert routed.model_dump(mode="json")["parse_provenance"]["parser_profile"] == "inspector_v1"
+
+
 def test_registry_selection_is_stable_across_calls():
     """content_hash and passage offsets depend on the same bytes yielding the same parser."""
     registry = build_parser_registry()

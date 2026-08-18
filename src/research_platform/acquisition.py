@@ -206,6 +206,7 @@ class AcquisitionService:
             final_url=final_url or str(candidate.url), redirect_chain=redirect_chain or [],
             outgoing_links=outgoing_links or [],
             parser_id=parsed.parser_id if parsed else "",
+            parse_provenance=parsed.parse_provenance if parsed else {},
             tables=[] if restricted else [t.model_dump(mode="json") for t in parsed.tables] if parsed else [],
             code_blocks=[] if restricted else (parsed.code_blocks if parsed else []),
             content_hash=hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None,
