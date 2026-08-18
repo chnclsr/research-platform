@@ -589,6 +589,8 @@ class Repository(metaclass=_OwnershipEnforced):
                     # Which parser produced `content`, so an audit can tell whether a run
                     # used the deterministic pick or a ParserSelection override.
                     "parser_id": document.parser_id,
+                    # Which engine handled which page, for parsers that mix them.
+                    "parse_provenance": document.parse_provenance,
                     "tables": document.tables,
                     "code_blocks": document.code_blocks,
                     "error": document.error,

@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Router - Sistem Mimarisi & UML Görselleştirmesi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #080c15;
+            --bg-secondary: #0f172a;
+            --bg-card: rgba(15, 23, 42, 0.85);
+            --border: rgba(255, 255, 255, 0.1);
+            --border-hover: rgba(99, 102, 241, 0.5);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-indigo: #6366f1;
+            --accent-emerald: #10b981;
+            --accent-rose: #f43f5e;
+            --gradient: linear-gradient(135deg, #60a5fa, #a855f7);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2.5rem 1.5rem;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 1.15rem;
+            border-radius: 9999px;
+            background: rgba(99, 102, 241, 0.18);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: #a5b4fc;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+        }
+
+        h1 {
+            font-size: 2.75rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.75rem;
+        }
+
+        p.subtitle {
+            color: var(--text-secondary);
+            font-size: 1.15rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .grid {
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 1.25rem;
+            padding: 1.75rem;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.6);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .card-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card-title span.icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.75rem;
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+        }
+
+        .btn-expand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            color: #e0e7ff;
+            padding: 0.5rem 1rem;
+            border-radius: 0.65rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-expand:hover {
+            background: rgba(99, 102, 241, 0.4);
+            border-color: #818cf8;
+            transform: translateY(-1px);
+        }
+
+        .mermaid-wrapper {
+            background: #090e1a;
+            border-radius: 0.85rem;
+            padding: 1.75rem;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            min-height: 280px;
+            position: relative;
+        }
+
+        .mermaid-wrapper svg {
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .zoom-hint {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: rgba(0, 0, 0, 0.65);
+            border: 1px solid var(--border);
+            padding: 0.3rem 0.65rem;
+            border-radius: 0.4rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(3, 7, 18, 0.92);
+            backdrop-filter: blur(14px);
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 1.5rem;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-container {
+            background: #0b1120;
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            border-radius: 1.25rem;
+            width: 96vw;
+            height: 92vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.95);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            background: #0f172a;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .modal-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .zoom-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: #a5b4fc;
+            padding: 0 0.5rem;
+        }
+
+        .ctrl-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border);
+            color: #fff;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 700;
+            transition: all 0.15s ease;
+        }
+
+        .ctrl-btn:hover {
+            background: rgba(99, 102, 241, 0.3);
+            border-color: #818cf8;
+        }
+
+        .btn-close {
+            background: rgba(244, 63, 94, 0.2);
+            border-color: rgba(244, 63, 94, 0.4);
+            color: #fda4af;
+            margin-left: 0.5rem;
+        }
+
+        .btn-close:hover {
+            background: rgba(244, 63, 94, 0.4);
+            border-color: #f43f5e;
+            color: #fff;
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow: auto;
+            padding: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(#1e293b 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .modal-content-zoom {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.15s ease;
+            transform-origin: center center;
+            width: 100%;
+            height: 100%;
+        }
+
+        .modal-content-zoom svg {
+            max-width: 88vw !important;
+            max-height: 76vh !important;
+            width: auto !important;
+            height: auto !important;
+            display: block;
+            margin: auto;
+        }
+
+        /* Interactive Step Blocks */
+        .steps-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .step-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 0.85rem;
+            padding: 1.25rem;
+        }
+
+        .step-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.3rem;
+        }
+
+        .step-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+            margin-bottom: 0.4rem;
+            color: #fff;
+        }
+
+        .step-desc {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+        }
+
+        .tag-pill {
+            display: inline-block;
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 0.4rem;
+            font-weight: 600;
+            margin-top: 0.75rem;
+        }
+
+        .tag-default { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .tag-docling { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+        .tag-minervl { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
+
+        footer {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 3rem;
+            border-top: 1px solid var(--border);
+            padding-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="badge">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                Smart Router v2.0 &bull; Enterprise 14-Metric Edition
+            </div>
+            <h1>Sistem Mimarisi & UML Görselleştirmesi</h1>
+            <p class="subtitle">Diyagramlara tıklayarak veya <strong>"Tam Ekran Büyüt"</strong> butonuna basarak pop-up pencerede net ve orantılı şekilde inceleyebilirsiniz.</p>
+        </header>
+
+        <div class="grid">
+            <!-- 1. FLOWCHART / WORKFLOW DIAGRAM -->
+            <div class="card" id="card-flowchart">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span class="icon">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </span>
+                        1. Uçtan Uca Sistem Çalışma ve Karar Şeması (Flowchart)
+                    </div>
+                    <button class="btn-expand" onclick="openModal('card-flowchart', '1. Uçtan Uca Sistem Çalışma ve Karar Şeması')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 3h6v6m0-6L10 14M9 21H3v-6m0 6l11-11"/></svg>
+                        Tam Ekran Büyüt
+                    </button>
+                </div>
+                <div class="mermaid-wrapper" onclick="openModal('card-flowchart', '1. Uçtan Uca Sistem Çalışma ve Karar Şeması')">
+                    <span class="zoom-hint">🔍 Tıkla ve Büyüt</span>
+                    <div class="mermaid">
+flowchart TD
+    classDef agent fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#fff;
+    classDef router fill:#172554,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef inspector fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef critic fill:#4c0519,stroke:#f43f5e,stroke-width:2px,color:#fff;
+    classDef parser fill:#1e293b,stroke:#94a3b8,stroke-width:2px,color:#fff;
+
+    A[LLM Agent / Pipeline]:::agent -->|1. route_document pdf_path| B[PDFRouter router.py]:::router
+    
+    subgraph Router_Pipeline ["Smart Router Karar Aşamaları"]
+        B -->|2. 17 Yapısal Geometri Metriği Çıkar| B1[Geometri & Font Analizi]
+        B -->|3. Hızlı Okuma İsteği| C[PDFInspectorMock inspector.py]:::inspector
+        C -->|4. Ham Metin inspector_text| B
+        
+        B -->|5. 17 Metrik + Ham Metin Gönder| D[PDFCritic critic.py]:::critic
+        
+        subgraph Critic_Analiz ["Critic: 14 Boyutlu Denetim"]
+            D --> M1[Metin Kayıp: Char Gap, Scanned, Vector]
+            D --> M2[Font: Gibberish, Unicode \ufffd, \u200b]
+            D --> M3[Akış: 2-Sütun Dangling, Broken Lines]
+            D --> M4[Yapı: LaTeX Balance, Markdown Table]
+        end
+        
+        Critic_Analiz -->|6. Kalite Skoru & Fallback Kararı| D_Out[Nihai Karar JSON]
+    end
+
+    D_Out -->|7. JSON Sonucu Döner| B
+    B -->|8. Nihai Yönlendirme| A
+
+    A -.->|Karara Göre Hedef Parser Çağrısı| P_Choice{Hangi Parser?}
+    P_Choice -->|Kalite >= 75 & Sorun Yok| P1[pdf-inspector DEFAULT]:::parser
+    P_Choice -->|Sütun/Tablo/Akış Hatası| P2[docling FALLBACK]:::parser
+    P_Choice -->|OCR / Yoğun Formül / IEEE| P3[miner-VL FALLBACK]:::parser
+                    </div>
+                </div>
+
+                <div class="steps-container">
+                    <div class="step-box">
+                        <div class="step-num">Aşama 1</div>
+                        <div class="step-title">Ajan &rarr; Router</div>
+                        <div class="step-desc">Ajan doğrudan Router'a PDF yolunu verir. Router 17 yapısal özelliği ~10ms içinde çıkarır.</div>
+                        <span class="tag-pill tag-default">Hızlı Yol</span>
+                    </div>
+                    <div class="step-box">
+                        <div class="step-num">Aşama 2</div>
+                        <div class="step-title">Inspector Okuması</div>
+                        <div class="step-desc">Varsayılan motor (pdf-inspector) ham metni okur ve Router'a iletir.</div>
+                        <span class="tag-pill tag-docling">Hafif İşlem</span>
+                    </div>
+                    <div class="step-box">
+                        <div class="step-num">Aşama 3</div>
+                        <div class="step-title">Critic Denetimi</div>
+                        <div class="step-desc">Critic 14 boyutta metin kaybı, bozuk glifler ve sütun atlamalarını test eder.</div>
+                        <span class="tag-pill tag-minervl">14 Metrik</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. SEQUENCE DIAGRAM -->
+            <div class="card" id="card-sequence">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span class="icon">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        </span>
+                        2. Sıralı İletişim Akışı (Sequence Diagram)
+                    </div>
+                    <button class="btn-expand" onclick="openModal('card-sequence', '2. Sıralı İletişim Akışı (Sequence Diagram)')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 3h6v6m0-6L10 14M9 21H3v-6m0 6l11-11"/></svg>
+                        Tam Ekran Büyüt
+                    </button>
+                </div>
+                <div class="mermaid-wrapper" onclick="openModal('card-sequence', '2. Sıralı İletişim Akışı (Sequence Diagram)')">
+                    <span class="zoom-hint">🔍 Tıkla ve Büyüt</span>
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Agent as LLM Agent / Pipeline
+    participant Router as PDFRouter (router.py)
+    participant Inspector as PDFInspectorMock (inspector.py)
+    participant Critic as PDFCritic (critic.py)
+
+    Agent->>Router: route_document(pdf_path)
+    activate Router
+    
+    Note over Router: 1. Adım: 17 Yapısal Geometri Çıkarımı<br/>(Fontlar, Çizimler, BBox, OCR Proxy)
+    Router->>Router: extract_features() & compute_total_score()
+    
+    Note over Router,Inspector: 2. Adım: Hızlı Metin Çekimi
+    Router->>Inspector: extract_text(pdf_path)
+    activate Inspector
+    Inspector-->>Router: inspector_text (Ham Metin)
+    deactivate Inspector
+    
+    Note over Router,Critic: 3. Adım: 14 Boyutlu Kalite & Anomali Değerlendirmesi
+    Router->>Critic: evaluate(router_json, inspector_text)
+    activate Critic
+    
+    Note over Critic: 14 Metrik Hesaplama:<br/>- Char Drop Gap<br/>- \ufffd & \u200b Noise<br/>- 2-Sütun Dangling Cuts<br/>- Header/Footer Bleed<br/>- LaTeX & Tablo Bütünlüğü
+    Critic-->>Router: decision_dict (target_parser, fallback_triggered, reason)
+    deactivate Critic
+    
+    Router-->>Agent: Final Decision JSON
+    deactivate Router
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. UML CLASS DIAGRAM -->
+            <div class="card" id="card-uml">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span class="icon">
+                            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                        </span>
+                        3. Nesne Tabanlı UML Sınıf Diyagramı (Class Diagram)
+                    </div>
+                    <button class="btn-expand" onclick="openModal('card-uml', '3. Nesne Tabanlı UML Sınıf Diyagramı')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 3h6v6m0-6L10 14M9 21H3v-6m0 6l11-11"/></svg>
+                        Tam Ekran Büyüt
+                    </button>
+                </div>
+                <div class="mermaid-wrapper" onclick="openModal('card-uml', '3. Nesne Tabanlı UML Sınıf Diyagramı')">
+                    <span class="zoom-hint">🔍 Tıkla ve Büyüt</span>
+                    <div class="mermaid">
+classDiagram
+    direction TB
+
+    class Agent {
+        +process_document(pdf_path: str)
+    }
+
+    class PDFRouter {
+        +dict feature_weights
+        +extract_features(pdf_path: str) dict
+        +normalize(val: float, min_val: float, max_val: float) float
+        +compute_total_score(features: dict) tuple
+        +route_document(pdf_path: str) DecisionResult
+    }
+
+    class PDFInspectorMock {
+        +extract_text(pdf_path: str)$ str
+    }
+
+    class PDFCritic {
+        +float fallback_threshold
+        +tuple SENTENCE_END_PUNCT
+        +tuple HEADER_PREFIXES
+        +evaluate(router_json: dict, inspector_text: str) DecisionResult
+    }
+
+    class DecisionResult {
+        +str pdf_path
+        +str target_parser
+        +bool fallback_triggered
+        +float quality_score
+        +float structural_score
+        +str critical_issue
+        +str reason
+        +DetailedMetrics detailed_metrics
+        +float elapsed_ms
+    }
+
+    class DetailedMetrics {
+        +float char_drop_ratio
+        +bool is_scanned
+        +bool vector_table_drop
+        +float gibberish_ratio
+        +float unicode_noise_ratio
+        +float dangling_sentence_ratio
+        +float broken_line_ratio
+        +float hyphen_density_per_1k_words
+        +int orphan_artifacts
+        +float orphan_density_per_1k_words
+        +float running_header_leak_ratio
+        +float repetition_loop_ratio
+        +int latex_imbalance
+        +float table_irregularity_ratio
+        +float heading_incoherence_ratio
+    }
+
+    Agent ..> PDFRouter : calls route_document()
+    PDFRouter ..> PDFInspectorMock : queries extract_text()
+    PDFRouter ..> PDFCritic : asks for evaluate()
+    PDFCritic --> DecisionResult : creates
+    DecisionResult *-- DetailedMetrics : contains
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            Smart Router &bull; Enterprise 14-Metric Architecture Visualization &bull; 2026
+        </footer>
+    </div>
+
+    <!-- POP-UP MODAL -->
+    <div class="modal-overlay" id="diagramModal" onclick="closeModalOnBackdrop(event)">
+        <div class="modal-container" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">Diyagram Görünümü</div>
+                <div class="modal-controls">
+                    <span class="zoom-label" id="zoomVal">100%</span>
+                    <button class="ctrl-btn" onclick="zoomIn()" title="Yakınlaştır (+)">+</button>
+                    <button class="ctrl-btn" onclick="zoomOut()" title="Uzaklaştır (-)">−</button>
+                    <button class="ctrl-btn" onclick="resetZoom()" title="Sıfırla">↺</button>
+                    <button class="ctrl-btn btn-close" onclick="closeModal()" title="Kapat (Esc)">✕</button>
+                </div>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <div class="modal-content-zoom" id="modalContent">
+                    <!-- Cloned Mermaid SVG will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                darkMode: true,
+                background: '#090e1a',
+                primaryColor: '#3b82f6',
+                primaryBorderColor: '#60a5fa',
+                primaryTextColor: '#f8fafc',
+                lineColor: '#94a3b8',
+                secondaryColor: '#8b5cf6',
+                tertiaryColor: '#1e293b',
+                fontFamily: 'Outfit, sans-serif'
+            }
+        });
+
+        let currentZoom = 1.0;
+
+        function openModal(cardId, title) {
+            const card = document.getElementById(cardId);
+            // Hata Düzeltme: Kartın başlığındaki küçük simgeyi değil, doğrudan mermaid-wrapper içindeki diyagram SVG'sini seç
+            const svg = card.querySelector('.mermaid-wrapper svg');
+            if (!svg) return;
+
+            document.getElementById('modalTitle').textContent = title;
+            const modalContent = document.getElementById('modalContent');
+            modalContent.innerHTML = '';
+            
+            const clonedSvg = svg.cloneNode(true);
+            clonedSvg.removeAttribute('style');
+            clonedSvg.style.maxWidth = '90vw';
+            clonedSvg.style.maxHeight = '75vh';
+            clonedSvg.style.width = 'auto';
+            clonedSvg.style.height = 'auto';
+            modalContent.appendChild(clonedSvg);
+
+            currentZoom = 1.0;
+            applyZoom();
+
+            const modal = document.getElementById('diagramModal');
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('diagramModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+
+        function closeModalOnBackdrop(e) {
+            if (e.target.classList.contains('modal-overlay')) {
+                closeModal();
+            }
+        }
+
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom + 0.15, 2.5);
+            applyZoom();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom - 0.15, 0.4);
+            applyZoom();
+        }
+
+        function resetZoom() {
+            currentZoom = 1.0;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            const modalContent = document.getElementById('modalContent');
+            modalContent.style.transform = `scale(${currentZoom})`;
+            document.getElementById('zoomVal').textContent = `${Math.round(currentZoom * 100)}%`;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            } else if (e.key === '+' || e.key === '=') {
+                zoomIn();
+            } else if (e.key === '-') {
+                zoomOut();
+            }
+        });
+    </script>
+</body>
+</html>

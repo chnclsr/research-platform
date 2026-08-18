@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import base64
 import hashlib
 import ipaddress
@@ -16,6 +17,8 @@ from .normalization import canonicalize_url, detect_document_type, detect_langua
 from .parsers import ParsedDocument, ParserRegistry, build_parser_registry
 from .schemas import AcquiredDocument, ConnectorCandidate
 
+
+logger = logging.getLogger(__name__)
 
 PAYWALL_MARKERS = (
     "subscribe to continue", "subscription required", "become a subscriber",
@@ -206,6 +209,7 @@ class AcquisitionService:
             final_url=final_url or str(candidate.url), redirect_chain=redirect_chain or [],
             outgoing_links=outgoing_links or [],
             parser_id=parsed.parser_id if parsed else "",
+            parse_provenance=parsed.parse_provenance if parsed else {},
             tables=[] if restricted else [t.model_dump(mode="json") for t in parsed.tables] if parsed else [],
             code_blocks=[] if restricted else (parsed.code_blocks if parsed else []),
             content_hash=hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None,
@@ -245,8 +249,25 @@ class AcquisitionService:
                 )
                 if parser is None:
                     return None
-                parsed = parser.parse(response.content, url=current, content_type=ctype)
+                # Parsers may be expensive -- a page-routed PDF parser runs OCR and
+                # layout models, seconds per page. Called inline it would block the
+                # event loop and stall every other acquisition in flight.
+                parsed = await asyncio.to_thread(
+                    parser.parse, response.content, url=current, content_type=ctype
+                )
                 if len(parsed.text.strip()) < 400:
+                    # A parser that had to degrade -- no OCR engine available for a
+                    # scanned PDF, say -- produces almost nothing, which is
+                    # indistinguishable here from a genuinely empty document. Say so,
+                    # or the document disappears with no trace of why.
+                    provenance = parsed.parse_provenance or {}
+                    if provenance.get("degraded"):
+                        logger.warning(
+                            "dropping %s on the minimum-text check after a degraded "
+                            "parse (parser=%s profile=%s notes=%s)",
+                            current, parsed.parser_id,
+                            provenance.get("parser_profile"), provenance.get("notes"),
+                        )
                     return None
                 return self._document(
                     candidate, parsed.text, "direct", tried, ctype or "text/plain",
@@ -304,7 +325,9 @@ class AcquisitionService:
                 payload = rendered.encode("utf-8", "replace")
                 parser = self.parsers.select("html", "text/html", payload, self.parser_overrides)
                 if parser is not None:
-                    parsed = parser.parse(payload, url=url, content_type="text/html")
+                    parsed = await asyncio.to_thread(
+                        parser.parse, payload, url=url, content_type="text/html"
+                    )
                     markdown = parsed.text
             if not markdown.strip():
                 parsed = None
@@ -355,7 +378,9 @@ class AcquisitionService:
             parser = self.parsers.select("html", "text/html", payload, self.parser_overrides)
             if parser is None:
                 return None
-            parsed = parser.parse(payload, url=url, content_type="text/html")
+            parsed = await asyncio.to_thread(
+                parser.parse, payload, url=url, content_type="text/html"
+            )
             if len(parsed.text.strip()) < 400:
                 return None
             return self._document(
