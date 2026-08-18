@@ -15,11 +15,12 @@ from research_platform.parsers import (
 )
 from research_platform.parsers.html import HtmlParser
 from research_platform.parsers.pdf import PdfParser
+from research_platform.parsers.smart_pdf import SmartPdfParser
 from research_platform.parsers.structured import PlainTextParser
 from research_platform.passages import chunk_document
 
 
-ALL_PARSERS = [HtmlParser(), PdfParser(), PlainTextParser()]
+ALL_PARSERS = [HtmlParser(), PdfParser(), SmartPdfParser(), PlainTextParser()]
 
 
 @pytest.mark.parametrize("parser", ALL_PARSERS, ids=lambda p: p.id)
@@ -52,10 +53,37 @@ def test_parser_reports_its_own_id(parser):
 def test_registry_selects_deterministically_by_document_type():
     registry = build_parser_registry()
     assert registry.select("html", "text/html", b"<html>").id == "html"
-    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "pdf"
+    # smart_pdf outranks pdf on priority; both accept "pdf", the pick stays deterministic.
+    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "smart_pdf"
     for document_type in ("json", "xml", "text"):
         assert registry.select(document_type, "", b"").id == "plain_text"
     assert registry.select("image", "image/png", b"\x89PNG") is None
+
+
+def test_pdf_page_numbers_survive_nested_headings():
+    """
+    A page heading has to outrank whatever headings the page itself contains.
+
+    chunk_document() reads page_number off the section path, and _sections() drops
+    every ancestor at or above a heading's level -- so a heading inside a page can
+    push "Page N" out of the path, and the passages after it lose their page number
+    silently rather than raising. Both parsers that emit page headings depend on
+    this, so the check lives with the contract.
+    """
+    content = "\n\n".join([
+        "# Page 1", "intro " * 40,
+        "## Section A", "body " * 40,
+        "### Subsection B", "body " * 40,
+        "# Page 2", "more " * 40,
+        "## Section C", "body " * 40,
+    ])
+    passages = chunk_document(content, "v1", target_tokens=30, overlap_tokens=5)
+    assert passages, "expected the fixture to produce passages"
+    for passage in passages:
+        expected = 1 if passage.section_path.startswith("Page 1") else 2
+        assert passage.page_number == expected, (
+            f"{passage.section_path!r} lost its page number"
+        )
 
 
 def test_registry_selection_is_stable_across_calls():
@@ -69,7 +97,7 @@ def test_registry_exposes_parsers_by_id():
     registry = build_parser_registry()
     assert registry.get("html") is not None
     assert registry.get("does-not-exist") is None
-    assert {h.id for h in registry.health()} == {"html", "pdf", "plain_text"}
+    assert {h.id for h in registry.health()} == {"html", "pdf", "smart_pdf", "plain_text"}
 
 
 def test_html_parser_keeps_headings_so_chunking_can_build_section_paths():
@@ -212,7 +240,7 @@ def test_registry_rejects_an_override_that_cannot_handle_the_document_type():
     """A mismatched override would feed PDF bytes to the HTML parser and emit garbage."""
     registry = build_parser_registry()
     chosen = registry.select("pdf", "application/pdf", b"%PDF-1.4", {"pdf": "html"})
-    assert chosen.id == "pdf"
+    assert chosen.id == "smart_pdf"
 
 
 def test_registry_override_only_applies_to_the_named_document_type():
