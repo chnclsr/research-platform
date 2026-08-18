@@ -179,7 +179,10 @@ services:
       MCP_ALLOWED_NETWORKS: ${MCP_ALLOWED_NETWORKS:-[]}
       GATEWAY_DOWNLOAD_DIR: /data/deliveries
     ports:
-      - "8010:8010"
+      # Bound to loopback like every other service. This was the one port published on
+      # all interfaces, which put an agent gateway holding a single shared bearer token
+      # on the local network.
+      - "127.0.0.1:8010:8010"
     volumes:
       - gateway-deliveries:/data/deliveries
     depends_on:
