@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "research-platform"
-version = "0.9.1"
+version = "0.10.0"
 description = "Local-first, multi-source evidence research platform"
 requires-python = ">=3.11"
 dependencies = [
@@ -52,6 +52,7 @@ research-worker = "research_platform.worker:run"
 research-mcp = "research_platform.mcp_server:run"
 research-telegram = "research_platform.telegram_bot:run"
 research-control-panel = "research_platform.control_panel:run"
+research-admin = "research_platform.admin_cli:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/research_platform"]

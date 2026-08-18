@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import inspect
 import json
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -8,6 +10,9 @@ from urllib.parse import urlparse, urlsplit
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .auth import Principal
+from .config import get_settings
 
 from .db import (
     ArtifactRow,
@@ -45,6 +50,84 @@ from .scholarly import candidate_dedupe_key, scholarly_identity, title_fingerpri
 # the run fails with an actionable error instead of an opaque driver exception that also
 # poisons the session.
 CHECKPOINT_MAX_BYTES = 200 * 1024 * 1024
+
+
+class ActorRequired(RuntimeError):
+    """A run-scoped operation was attempted without saying who is asking.
+
+    Fail-closed: constructing a ``Repository`` without an actor is not "full access",
+    it is "no run access". Code paths with no network caller -- the worker, the
+    pipeline, cron jobs -- pass ``Principal.system()`` explicitly.
+    """
+
+
+class RunAccessDenied(RuntimeError):
+    """The actor does not own this run and is not an admin.
+
+    Callers facing the network translate this to 404, never 403: a 403 confirms the
+    run exists, which tells one user something about another user's data.
+    """
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(f"Run {run_id} is not accessible to this actor")
+        self.run_id = run_id
+
+
+# Methods that take a ``run_id`` but must not be ownership-checked, each for a reason
+# that had to be argued rather than assumed. Anything not listed here is guarded
+# automatically by _OwnershipEnforced below.
+_UNGUARDED_RUN_METHODS = {
+    # Writes ownership itself; there is no run to check yet.
+    "create_run",
+    # The guard's own lookup -- checking access from inside it would not terminate.
+    "_guard_run",
+}
+
+
+def _takes_run_id(candidate: Any) -> bool:
+    """True for coroutine functions with a ``run_id`` parameter."""
+    if not inspect.iscoroutinefunction(candidate):
+        return False
+    try:
+        return "run_id" in inspect.signature(candidate).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _run_scoped(method):
+    """Wrap a coroutine method so its ``run_id`` is ownership-checked first."""
+    signature = inspect.signature(method)
+
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        bound = signature.bind_partial(self, *args, **kwargs)
+        run_id = bound.arguments.get("run_id")
+        if run_id is not None:
+            await self._guard_run(run_id)
+        return await method(self, *args, **kwargs)
+
+    wrapper.__run_scoped__ = True
+    return wrapper
+
+
+class _OwnershipEnforced(type):
+    """Applies the ownership guard to every run-scoped method at class creation.
+
+    Guarding by hand meant 25 identical two-line preambles, and the failure mode of
+    that approach is silent: method 26 gets added without one and reads another user's
+    data with no error anywhere. Here the rule is applied by construction -- a new
+    method that takes a ``run_id`` is guarded before anyone runs a test, and opting out
+    requires naming it in :data:`_UNGUARDED_RUN_METHODS`, which is itself asserted
+    against an expected set in ``tests/test_run_ownership.py``.
+    """
+
+    def __new__(mcls, name, bases, namespace, **kwargs):
+        for attribute, value in list(namespace.items()):
+            if attribute in _UNGUARDED_RUN_METHODS:
+                continue
+            if _takes_run_id(value):
+                namespace[attribute] = _run_scoped(value)
+        return super().__new__(mcls, name, bases, namespace, **kwargs)
 
 
 class CheckpointTooLarge(RuntimeError):
@@ -92,14 +175,65 @@ def _assert_checkpoint_fits(run_id: str, stage: str, state: dict[str, Any]) -> N
     )
 
 
-class Repository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+class Repository(metaclass=_OwnershipEnforced):
+    """Data access for research runs, scoped to whoever is asking.
 
-    async def create_run(self, protocol: ResearchProtocol) -> ResearchRunRow:
+    ``actor`` is the enforcement point for per-user isolation. It lives here rather
+    than in the route handlers because the control panel reads this data two ways --
+    over the API and straight from the database -- and a filter applied at one of
+    those doors leaves the other one open.
+    """
+
+    def __init__(self, session: AsyncSession, *, actor: Principal | None = None):
+        self.session = session
+        self.actor = actor
+
+    def require_actor(self) -> Principal:
+        if self.actor is None:
+            raise ActorRequired(
+                "This repository has no actor. Pass actor=Principal.system() for "
+                "worker and cron paths, or the request's principal for network paths."
+            )
+        return self.actor
+
+    async def _guard_run(self, run_id: str) -> None:
+        """Raise unless the actor owns this run or is an admin.
+
+        A run with no owner is reachable only by admins. That matters for rows that
+        predate ownership and for any future path that forgets to set one: the
+        omission hides data instead of exposing it.
+        """
+        actor = self.require_actor()
+        if actor.is_admin:
+            return
+        owner_id = await self.session.scalar(
+            select(ResearchRunRow.owner_id).where(ResearchRunRow.id == run_id)
+        )
+        # A missing run and a foreign run are the same answer on purpose; telling them
+        # apart would let a caller probe which run ids exist.
+        if owner_id is None or owner_id != actor.user_id:
+            raise RunAccessDenied(run_id)
+
+    async def create_run(
+        self, protocol: ResearchProtocol, *, owner_id: str | None = None
+    ) -> ResearchRunRow:
+        """Create a run owned by ``owner_id``, defaulting to the acting user.
+
+        The system principal has no user id, so a job with no human caller (the Zotero
+        sync) must name an owner explicitly -- otherwise the run would be created
+        unowned and become invisible to everyone but an admin.
+        """
+        actor = self.require_actor()
+        resolved_owner = owner_id or actor.user_id
+        if resolved_owner is None:
+            raise ActorRequired(
+                "create_run needs an owner: the system principal owns nothing, so "
+                "pass owner_id explicitly (see ZOTERO_SYNC_OWNER_EMAIL)."
+            )
         now = datetime.now(timezone.utc)
         row = ResearchRunRow(
             id=new_id(),
+            owner_id=resolved_owner,
             status=RunStatus.QUEUED.value,
             current_stage="INIT",
             protocol=protocol.model_dump(mode="json"),
@@ -125,6 +259,15 @@ class Repository:
         return await self.session.scalar(stmt)
 
     async def list_runs_by_statuses(self, statuses: set[str]) -> list[ResearchRunRow]:
+        """Every run in the given states, regardless of owner -- system paths only.
+
+        Used by startup reconciliation and the worker, which have to see the whole
+        queue to do their job. Restricted to admin/system so it cannot become a
+        listing endpoint by accident.
+        """
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
         if not statuses:
             return []
         rows = await self.session.scalars(
@@ -135,11 +278,12 @@ class Repository:
         return list(rows)
 
     async def list_runs(self, *, limit: int = 50) -> list[ResearchRunRow]:
-        rows = await self.session.scalars(
-            select(ResearchRunRow)
-            .order_by(ResearchRunRow.created_at.desc())
-            .limit(min(max(1, limit), 200))
-        )
+        """Runs visible to the actor: their own, or all of them for an admin."""
+        actor = self.require_actor()
+        stmt = select(ResearchRunRow).order_by(ResearchRunRow.created_at.desc())
+        if not actor.is_admin:
+            stmt = stmt.where(ResearchRunRow.owner_id == actor.user_id)
+        rows = await self.session.scalars(stmt.limit(min(max(1, limit), 200)))
         return list(rows)
 
     async def apply_source_domain_review(
@@ -564,14 +708,29 @@ class Repository:
         ]
 
     async def list_corpus_passages(self, exclude_run_id: str, limit: int = 3000) -> list[Passage]:
+        """Passages from *other* runs, used to seed a new run from past work.
+
+        This is the one deliberately cross-run read in the repository, which makes it
+        the one place per-user isolation could leak sideways: without scoping, a user's
+        new run would be fed text acquired under someone else's account. With
+        ``CORPUS_SCOPE=owner`` (the default) the pool stays inside the actor's own
+        history; ``global`` restores the shared pool as a documented choice.
+        """
+        actor = self.require_actor()
+        stmt = (
+            select(PassageRow)
+            .join(SourceVersionRow, SourceVersionRow.id == PassageRow.source_version_id)
+            .join(SourceRow, SourceRow.id == SourceVersionRow.source_id)
+            .where(SourceRow.run_id != exclude_run_id)
+        )
+        scope_owner = await self._corpus_scope_owner(exclude_run_id, actor)
+        if scope_owner is not None:
+            stmt = stmt.join(ResearchRunRow, ResearchRunRow.id == SourceRow.run_id).where(
+                ResearchRunRow.owner_id == scope_owner
+            )
         rows = list(
             await self.session.scalars(
-                select(PassageRow)
-                .join(SourceVersionRow, SourceVersionRow.id == PassageRow.source_version_id)
-                .join(SourceRow, SourceRow.id == SourceVersionRow.source_id)
-                .where(SourceRow.run_id != exclude_run_id)
-                .order_by(SourceVersionRow.retrieved_at.desc())
-                .limit(limit)
+                stmt.order_by(SourceVersionRow.retrieved_at.desc()).limit(limit)
             )
         )
         return [
@@ -592,6 +751,27 @@ class Repository:
             )
             for row in rows
         ]
+
+    async def _corpus_scope_owner(self, exclude_run_id: str, actor: Principal) -> str | None:
+        """Whose corpus this read may draw on, or None for the unrestricted pool.
+
+        The scope follows the *run being built*, not the caller. That distinction
+        matters: the pipeline executes runs under the system principal, so scoping by
+        the caller would hand every user's text to every run. Scoping by the run's
+        owner keeps a user's research fed by their own history no matter which
+        internal component is doing the work.
+        """
+        if get_settings().corpus_scope == "global":
+            return None
+        if exclude_run_id:
+            return await self.session.scalar(
+                select(ResearchRunRow.owner_id).where(ResearchRunRow.id == exclude_run_id)
+            )
+        # No run context: an admin searching the corpus directly sees everything they
+        # could already see run by run; anyone else is held to their own history.
+        if actor.is_admin:
+            return None
+        return actor.user_id
 
     async def corpus_documents(self, version_ids: list[str]) -> list[AcquiredDocument]:
         if not version_ids:

@@ -12,6 +12,7 @@ from research_platform.config import get_settings
 from research_platform.db import SessionLocal, SourceRow, create_schema
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.pipeline import PipelineHalted, ResearchPipeline
+from conftest import acting_principal
 from research_platform.repository import Repository
 from research_platform.schemas import HitlConfig, ResearchProtocol, RunStatus, new_id
 from research_platform.worker import expire_hitl_interactions
@@ -37,7 +38,7 @@ async def test_pipeline_checkpoint_waits_and_reuses_response():
         hitl=HitlConfig(plan_review=True),
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         state = {"run_id": row.id, "protocol": row.protocol, "queries": ["evidence"]}
@@ -74,7 +75,7 @@ async def test_expired_hitl_interaction_becomes_paused():
         hitl=HitlConfig(planning_questions=True),
     )
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.update_run(
             row.id,
@@ -88,7 +89,7 @@ async def test_expired_hitl_interaction_becomes_paused():
         )
     await expire_hitl_interactions({})
     async with SessionLocal() as session:
-        row = await Repository(session).get_run(row.id)
+        row = await Repository(session, actor=acting_principal()).get_run(row.id)
         assert row.status == RunStatus.PAUSED.value
         assert row.interaction["interaction_id"] == "int-test"
 
@@ -97,7 +98,7 @@ async def test_expired_hitl_interaction_becomes_paused():
 async def test_source_review_marks_excluded_domain_without_deleting_provenance():
     await create_schema()
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         run = await repo.create_run(
             ResearchProtocol(
                 title="Source review",

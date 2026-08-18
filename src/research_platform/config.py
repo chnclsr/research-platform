@@ -79,12 +79,27 @@ class Settings(BaseSettings):
     api_token: str = "change-me-local-token"
     api_host: str = "127.0.0.1"
     api_port: int = Field(8000, ge=1, le=65535)
+    # Signs panel session cookies. Left unset it is generated per process, which logs
+    # everyone out on restart -- fine for a single workstation, wrong for a shared
+    # deployment, so a real value belongs in the environment file there.
+    session_secret: str | None = None
+    session_max_age_seconds: int = Field(12 * 3600, ge=300)
+    # Presented by trusted intermediaries (the panel, the Telegram bot) that
+    # authenticate their own users and then declare who they act for via X-Actor-User.
+    service_token: str | None = None
+    # Passages from finished runs feed later ones. "owner" keeps that pool inside a
+    # single user's own history; "global" restores the previous cross-user behaviour
+    # as a deliberate, documented choice.
+    corpus_scope: Literal["owner", "global"] = "owner"
     control_panel_host: str = "127.0.0.1"
     control_panel_port: int = Field(8020, ge=1, le=65535)
     control_panel_allowed_networks: list[str] = Field(default_factory=list)
     # Whether the panel supervises native processes started by the office scripts or
     # the compose project. Left at "native" so existing office servers keep working.
     control_panel_deployment: Literal["native", "docker"] = "native"
+    # Set when the panel is served over TLS, so the session cookie can carry Secure.
+    # Left false on a plain-HTTP workstation, where Secure would make it unusable.
+    control_panel_https: bool = False
     research_api_url: str = "http://localhost:8000"
     gateway_download_dir: str = "./data/deliveries"
     mcp_transport: str = "stdio"
@@ -95,6 +110,12 @@ class Settings(BaseSettings):
     mcp_allowed_networks: list[str] = Field(default_factory=list)
     telegram_bot_token: str | None = None
     telegram_api_url: str = "https://api.telegram.org"
+    # Used to build the t.me deep link the panel shows, without the leading @. Left unset
+    # the panel falls back to showing the code for the user to type.
+    telegram_bot_username: str | None = None
+    telegram_link_code_ttl_seconds: int = Field(300, ge=60, le=3600)
+    # Kept for group chats and as an optional extra restriction. It no longer decides who
+    # may use the bot in a direct chat -- being linked to an account does.
     telegram_allowed_user_ids: list[int] = Field(default_factory=list)
     telegram_allowed_chat_ids: list[int] = Field(default_factory=list)
     telegram_allow_group_chats: bool = False

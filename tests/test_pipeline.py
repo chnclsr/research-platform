@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
+from conftest import acting_principal
 from research_platform.config import get_settings
 from research_platform.db import SessionLocal, create_schema
 from research_platform.pipeline import PipelineHalted, PipelineStageTimeout, ResearchPipeline
@@ -216,7 +217,7 @@ async def test_pipeline_preserves_cancellation_before_worker_start():
         primary_question="Does a cancelled queued run remain cancelled?",
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.update_run(row.id, status=RunStatus.CANCEL_REQUESTED.value)
         pipeline = ResearchPipeline(get_settings(), session, client)
@@ -239,7 +240,7 @@ async def test_in_node_cancellation_interrupts_hung_io_promptly():
         "search_stage_timeout_s": 1.0,
     })
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.update_run(row.id, status=RunStatus.RUNNING.value)
         pipeline = ResearchPipeline(settings, session, client)
@@ -250,7 +251,7 @@ async def test_in_node_cancellation_interrupts_hung_io_promptly():
         async def request_cancel():
             await asyncio.sleep(0.03)
             async with SessionLocal() as control_session:
-                await Repository(control_session).update_run(
+                await Repository(control_session, actor=acting_principal()).update_run(
                     row.id, status=RunStatus.CANCEL_REQUESTED.value,
                 )
 
@@ -283,7 +284,7 @@ async def test_hung_node_has_a_hard_safety_timeout():
     )
     settings = get_settings().model_copy(update={"pipeline_control_poll_s": 0.01})
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(settings, session, client)
 
@@ -310,7 +311,7 @@ async def test_collection_budget_is_persistent_and_skips_new_discovery_after_res
     )
 
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.checkpoint(row.id, "VALIDATE_PROTOCOL", {
             "run_id": row.id,
@@ -374,7 +375,7 @@ async def test_acquisition_cutoff_keeps_completed_documents_for_postprocessing()
         ),
     ]
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.acquisition = TimedAcquisition()
@@ -412,7 +413,7 @@ async def test_search_expands_citation_frontier_to_requested_depth():
         budget={"max_sources": 10, "results_per_connector": 4},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = CitationRegistry()
@@ -456,7 +457,7 @@ async def test_public_semantic_scholar_fanout_is_limited_per_round():
         for index in range(5)
     ]
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = registry
@@ -479,7 +480,7 @@ async def test_pipeline_resumes_to_auditable_export():
         budget={"max_rounds": 2, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = DummyRegistry()
@@ -525,7 +526,7 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
         budget={"max_rounds": 1, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = FailingRegistry()
@@ -560,7 +561,7 @@ def test_checkpoint_payload_is_a_noop_without_documents():
 async def test_checkpoint_refuses_a_state_over_the_size_limit(monkeypatch):
     await create_schema()
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         run = await repo.create_run(ResearchProtocol(
             title="Checkpoint size",
             primary_question="Does the checkpoint guard reject oversized state?",
@@ -585,7 +586,7 @@ async def test_frontier_skips_hostless_links_instead_of_failing_the_run():
     """
     await create_schema()
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         run = await repo.create_run(ResearchProtocol(
             title="Frontier hostless",
             primary_question="Does a hostless link abort the frontier?",

@@ -12,6 +12,7 @@ from research_platform.recovery import (
     recovery_missions,
     select_mission_balanced_candidates,
 )
+from conftest import acting_principal
 from research_platform.repository import Repository
 from research_platform.schemas import (
     AcquiredDocument,
@@ -45,13 +46,13 @@ async def test_repository_refreshes_run_status_changed_by_another_session():
     await create_schema()
     protocol = official_protocol()
     async with SessionLocal() as worker_session:
-        worker_repo = Repository(worker_session)
+        worker_repo = Repository(worker_session, actor=acting_principal())
         run = await worker_repo.create_run(protocol)
         cached = await worker_repo.get_run(run.id)
         assert cached.status == RunStatus.QUEUED.value
 
         async with SessionLocal() as api_session:
-            api_repo = Repository(api_session)
+            api_repo = Repository(api_session, actor=acting_principal())
             await api_repo.update_run(run.id, status=RunStatus.CANCEL_REQUESTED.value)
 
         refreshed = await worker_repo.get_run(run.id)
@@ -261,7 +262,7 @@ async def test_novelty_filter_enriches_existing_source_without_reacquisition():
     await create_schema()
     protocol = official_protocol()
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         run = await repo.create_run(protocol)
         original = ConnectorCandidate(
             connector_id="agentsearch_web",

@@ -3,7 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import AsyncIterator
 
-from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -24,6 +33,10 @@ class ResearchRunRow(Base):
     __tablename__ = "research_runs"
 
     id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    # Who may see this run. Every creation path must supply one; reads are filtered by
+    # it in the repository layer, not at the route, because the control panel reaches
+    # this table both through the API and directly.
+    owner_id: Mapped[str | None] = mapped_column(String(26), index=True, nullable=True)
     status: Mapped[str] = mapped_column(String(40), index=True)
     current_stage: Mapped[str] = mapped_column(String(80), default="INIT")
     protocol: Mapped[dict] = mapped_column(json_type())
@@ -226,6 +239,65 @@ class ArtifactRow(Base):
     object_key: Mapped[str] = mapped_column(Text)
     size_bytes: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserRow(Base):
+    """A person who can sign in to the panel and own research runs.
+
+    Accounts are deactivated (``is_active=False``), never deleted -- a deleted row would
+    leave its runs owned by an id nobody holds. Following the rest of this schema, the
+    identity tables carry no ForeignKey constraints; ownership is enforced in the
+    repository layer, and a dangling ``owner_id`` fails closed (invisible to everyone
+    but an admin) rather than opening access.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(20), default="user")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Bumping this invalidates every session cookie the user holds, which is the
+    # revocation path for a lost device without keeping a server-side session table.
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A pending Telegram link code, hashed. One per user by construction: issuing a new
+    # code overwrites the old one and consuming it clears both columns, so single use
+    # does not depend on the consuming code remembering to enforce it.
+    telegram_link_code_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    telegram_link_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ApiKeyRow(Base):
+    """A per-user credential for the surfaces that cannot hold a session cookie."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(26), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    # Stored in the clear and indexed so verification is one indexed lookup rather
+    # than a scan that hashes every row.
+    prefix: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    secret_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TelegramIdentityRow(Base):
+    """Maps a Telegram account to a platform user so bot-started runs get an owner."""
+
+    __tablename__ = "telegram_identities"
+
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(26), index=True)
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 settings = get_settings()

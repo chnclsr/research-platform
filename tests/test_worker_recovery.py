@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from research_platform.db import SessionLocal, create_schema
+from conftest import acting_principal
 from research_platform.repository import Repository
 from research_platform.schemas import ResearchProtocol, RunStatus
 from research_platform.worker import _recover_interrupted_jobs
@@ -33,7 +34,7 @@ async def test_worker_startup_recovers_orphans_and_finalizes_pending_cancel():
         primary_question="Can interrupted jobs resume safely?",
     )
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         running = await repo.create_run(protocol)
         await repo.update_run(
             running.id,
@@ -51,7 +52,7 @@ async def test_worker_startup_recovers_orphans_and_finalizes_pending_cancel():
     await _recover_interrupted_jobs({"redis": redis})
 
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         recovered = await repo.get_run(running.id)
         cancelled = await repo.get_run(cancelling.id)
         recovery_events = await repo.events_after(running.id)

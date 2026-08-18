@@ -9,16 +9,37 @@ from .schemas import DeliveryMode, ResearchProtocol
 
 
 class ResearchGatewayClient:
+    """HTTP client for the research API, optionally acting for a specific user.
+
+    ``actor_user_id`` turns the shared service credential into a per-user call: the
+    API accepts the header only alongside a valid service token, so a gateway can
+    authenticate its own users (a Telegram account, an MCP session) and still have
+    the platform apply that user's ownership rules.
+    """
+
     def __init__(
         self,
         base_url: str,
         api_token: str,
         *,
         timeout_s: float = 60.0,
+        actor_user_id: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {api_token}"}
+        if actor_user_id:
+            self.headers["X-Actor-User"] = actor_user_id
         self.timeout_s = timeout_s
+
+    def for_actor(self, actor_user_id: str) -> "ResearchGatewayClient":
+        """A copy of this client bound to one user, leaving the original untouched."""
+        clone = ResearchGatewayClient(
+            self.base_url,
+            "",
+            timeout_s=self.timeout_s,
+        )
+        clone.headers = {**self.headers, "X-Actor-User": actor_user_id}
+        return clone
 
     async def start(self, protocol: ResearchProtocol) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:

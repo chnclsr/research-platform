@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .acquisition import AcquisitionService
+from .auth import Principal
 from .config import Settings
 from .connectors import build_registry
 from .embeddings import EmbeddingClient
@@ -18,10 +19,18 @@ from .schemas import (
 
 class ZoteroSyncService:
     def __init__(
-        self, settings: Settings, session: AsyncSession, client: httpx.AsyncClient,
+        self,
+        settings: Settings,
+        session: AsyncSession,
+        client: httpx.AsyncClient,
+        *,
+        actor: Principal,
     ):
         self.settings = settings
-        self.repo = Repository(session)
+        # A sync creates a run, so it needs a real user to own it. This service is only
+        # ever reached through the API, which always has a request principal -- there
+        # is no scheduled Zotero job that would arrive without one.
+        self.repo = Repository(session, actor=actor)
         self.registry = build_registry(settings, client)
         self.acquisition = AcquisitionService(settings, client)
         self.embeddings = EmbeddingClient(settings, client)

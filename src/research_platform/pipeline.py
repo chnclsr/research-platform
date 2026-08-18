@@ -54,6 +54,7 @@ from .recovery import (
     resolve_official_entities,
     select_mission_balanced_candidates,
 )
+from .auth import Principal
 from .repository import Repository
 from .scholarly import candidate_dedupe_key
 from .schemas import (
@@ -118,7 +119,10 @@ class ResearchPipeline:
     def __init__(self, settings: Settings, session: AsyncSession, client: httpx.AsyncClient):
         self.settings = settings
         self.session = session
-        self.repo = Repository(session)
+        # The pipeline executes runs on behalf of whoever owns them, so it needs
+        # access to any run in the queue. Corpus reads are still scoped to the
+        # run's owner -- see Repository._corpus_scope_owner.
+        self.repo = Repository(session, actor=Principal.system())
         self.client = client
         self.registry = build_registry(settings, client)
         self.acquisition = AcquisitionService(settings, client)
@@ -255,7 +259,7 @@ class ResearchPipeline:
             if remaining <= 0:
                 task.cancel()
                 async with SessionLocal() as control_session:
-                    await Repository(control_session).event(
+                    await Repository(control_session, actor=Principal.system()).event(
                         state["run_id"],
                         "stage_timeout",
                         {"stage": stage, "timeout_seconds": timeout_s},
@@ -270,7 +274,7 @@ class ResearchPipeline:
             # The node may be using the pipeline session at the same moment. A
             # dedicated control session avoids concurrent AsyncSession access.
             async with SessionLocal() as control_session:
-                control_repo = Repository(control_session)
+                control_repo = Repository(control_session, actor=Principal.system())
                 run = await control_repo.get_run(state["run_id"])
                 if run is None:
                     task.cancel()
