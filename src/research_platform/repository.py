@@ -597,6 +597,18 @@ class Repository(metaclass=_OwnershipEnforced):
                 },
             )
             self.session.add(version)
+        else:
+            # Same text, but not necessarily the same route to it: a parser can be
+            # reconfigured, an engine can drop out or be added, and the extracted
+            # text still come out byte-identical. Reusing the version is right --
+            # content_hash is what identifies it -- but leaving the old parse
+            # provenance in place would have an audit read the wrong parser, engine
+            # and threshold versions for this fetch. Only the parse-side keys are
+            # refreshed; the rest describes the original fetch and still holds.
+            refreshed = dict(version.provenance or {})
+            refreshed["parser_id"] = document.parser_id
+            refreshed["parse_provenance"] = document.parse_provenance
+            version.provenance = refreshed
         await self.save_source_relations(
             run_id, source.id, c.metadata.get("citation_relations", [])
         )

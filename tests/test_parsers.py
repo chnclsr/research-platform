@@ -124,6 +124,33 @@ def test_parsers_are_safe_to_share_across_threads():
         assert concurrent == sequential, f"{parser.id} is not safe to share"
 
 
+def test_merge_does_not_quarantine_a_page_for_having_produced_a_table():
+    """
+    The output check must not undo the routing it protects.
+
+    Scoring both versions with the composite quality score reversed the decision on
+    real pages: a fast path that emitted no table scored 92.4 with
+    table_irregularity 0.000, while the engine that actually read the table scored
+    85.3 with 0.368 -- penalised for having produced one. The comparison has to
+    stay blind to signals that only fire once content exists.
+    """
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+    from research_platform.parsers.smart_pdf import SmartPdfParser
+
+    fast = {1: "Table 1. Distribution of the sample."}
+    heavy = EngineResult(engine="docling", pages={1: (
+        "Table 1. Distribution of the sample.\n\n"
+        "| Variable | N | % |\n| --- | --- | --- |\n| Male | 40 | 31.3 |\n"
+    )})
+    merged = birlestir(
+        fast, results=[heavy], requested={"docling": [1]},
+        score=SmartPdfParser()._page_scorer(),
+    )
+    assert merged.quarantined_pages == []
+    assert merged.pages[0].engine == "docling"
+
+
 def test_registry_selection_is_stable_across_calls():
     """content_hash and passage offsets depend on the same bytes yielding the same parser."""
     registry = build_parser_registry()

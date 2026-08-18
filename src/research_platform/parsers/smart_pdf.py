@@ -16,14 +16,17 @@ merged rather than by each engine.
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 
 from .base import DocumentParser, ParsedDocument, ParsedTable
 
+logger = logging.getLogger(__name__)
+
 try:
-    from .smart_router import ROUTER_VERSION, SmartRouterHatti
-    from .smart_router.engines import ENGINE_VERSION, DoclingEngine
+    from .smart_router import PDFCritic, ROUTER_VERSION, SmartRouterHatti
+    from .smart_router.engines import ENGINE_VERSION, DoclingEngine, MinerUEngine
     from .smart_router.gate import ESIK_VERSION
     from .smart_router.merge import MergedDocument, birlestir, sayfa_basliklariyla
 
@@ -51,24 +54,47 @@ class SmartPdfParser(DocumentParser):
     priority = 10
 
     def available(self) -> tuple[bool, str]:
+        """
+        Report the heavy path too, not just whether the router imports.
+
+        Reporting only the router made health() useless for the case that matters
+        most: with no OCR engine a scanned PDF yields 68 characters and acquisition
+        discards it on the 400-character check, while health still said
+        "configured". Not a regression -- the plain pdf parser produces the same 68
+        characters on that document -- but an operator had no way to see it coming.
+
+        Still True when the engine is missing: the fast path handles text PDFs on
+        its own, and returning False would disable page routing altogether rather
+        than degrade it. The detail string is where the difference shows.
+        """
         if SmartRouterHatti is None:
             return False, f"smart_router unavailable ({_ROUTER_IMPORT_ERROR})"
-        return True, "smart_router"
+        engine_ready, engine_detail = DoclingEngine().available()
+        if engine_ready:
+            return True, f"smart_router, heavy path via {engine_detail}"
+        return True, (
+            f"smart_router, TEXT ONLY -- no heavy engine ({engine_detail}); "
+            "scanned PDFs will not survive acquisition"
+        )
 
     def parse(self, content: bytes, *, url: str, content_type: str = "") -> ParsedDocument:
         if SmartRouterHatti is None:
-            return ParsedDocument(document_type="pdf", parser_id=self.id)
+            return self._empty("smart_router unavailable", _ROUTER_IMPORT_ERROR)
 
         path = self._spill_to_disk(content)
         if path is None:
-            return ParsedDocument(document_type="pdf", parser_id=self.id)
+            return self._empty("could not write the document to a temp file", "")
         try:
             decision = SmartRouterHatti().calistir(path, metin_dahil=True)
             merged = self._run_heavy_pages(path, decision)
-        except Exception:
-            # A malformed download must not abort acquisition; the caller rejects
-            # the document on the resulting empty text instead.
-            return ParsedDocument(document_type="pdf", parser_id=self.id)
+        except Exception as exc:
+            # A truncated or mislabelled download must not abort acquisition -- the
+            # caller rejects the document on the resulting empty text instead. But
+            # the same catch hides genuine bugs, and an empty result is
+            # indistinguishable from a corrupt file, so say what happened in both
+            # the log and the provenance rather than returning silence.
+            logger.exception("smart_pdf failed to parse %s", url)
+            return self._empty("parse raised", f"{type(exc).__name__}: {exc}")
         finally:
             self._discard(path)
 
@@ -100,6 +126,24 @@ class SmartPdfParser(DocumentParser):
             for table in merged.tables
         ]
 
+    def _empty(self, reason: str, detail: str) -> ParsedDocument:
+        """
+        An empty result that still says why it is empty.
+
+        Acquisition turns a short parse into a dropped document, so an empty
+        ParsedDocument with no explanation is a source disappearing with no trail.
+        """
+        return ParsedDocument(
+            document_type="pdf",
+            parser_id=self.id,
+            parse_provenance={
+                "parser_profile": "smart_pdf_failed",
+                "router_version": ROUTER_VERSION,
+                "degraded": True,
+                "notes": [reason] + ([detail] if detail else []),
+            },
+        )
+
     def _provenance(self, decision: dict, merged: MergedDocument) -> dict:
         """
         Record how this document was parsed, page by page.
@@ -125,6 +169,7 @@ class SmartPdfParser(DocumentParser):
             "notes": merged.notes,
             "engine_counts": merged.engine_counts,
             "fallback_pages": merged.fallback_pages,
+            "quarantined_pages": merged.quarantined_pages,
             "pages": [
                 {"page": page.page_no, "engine": page.engine,
                  "decision": page.decision, "fell_back": page.fell_back}
@@ -150,16 +195,68 @@ class SmartPdfParser(DocumentParser):
         if not heavy:
             return birlestir(fast_pages, decisions=decisions)
 
-        engine = DoclingEngine()
-        usable, _ = engine.available()
-        if not usable:
-            return birlestir(fast_pages, decisions=decisions,
-                             requested={engine.name: heavy})
+        results = []
+        requested: dict[str, list[int]] = {}
+        outstanding = list(heavy)
+        # Ordered fallback rather than one hard-coded engine: if the first cannot
+        # run or misses pages, the next gets what is left. MinerU currently reports
+        # itself unavailable, so in practice this is Docling alone -- but the shape
+        # is here so wiring MinerU up is a change in one place, not a rewrite.
+        for engine in (DoclingEngine(), MinerUEngine()):
+            if not outstanding:
+                break
+            usable, _ = engine.available()
+            requested[engine.name] = list(outstanding)
+            if not usable:
+                continue
+            result = engine.extract(path, outstanding)
+            results.append(result)
+            outstanding = [p for p in outstanding if p not in result.pages]
+
         return birlestir(
-            fast_pages, decisions=decisions,
-            results=[engine.extract(path, heavy)],
-            requested={engine.name: heavy},
+            fast_pages, decisions=decisions, results=results, requested=requested,
+            score=self._page_scorer(),
         )
+
+    def _page_scorer(self):
+        """
+        Grade a page on corruption alone -- the only thing comparable across engines.
+
+        The obvious implementation, scoring both versions with the composite quality
+        score and keeping the higher, systematically reverses the routing it is
+        meant to protect. Measured on turkce_makale page 3: the fast path scored
+        92.4 with table_irregularity 0.000 over 3,485 characters, Docling scored
+        85.3 with table_irregularity 0.368 over 18,215. The fast path won because it
+        had emitted no table at all -- nothing to be irregular about -- while the
+        engine that actually read the table was penalised for having produced one.
+        That check would have discarded exactly the pages routing exists to rescue.
+
+        So the comparison is narrowed to signals that mean the same thing whichever
+        engine produced the text: gibberish and broken encoding.
+
+        WHAT THIS DOES NOT CATCH. The failure that motivated the check -- Docling
+        turning "unidirectionality constraint by using a masked language model"
+        into "unidi-eat i, a inn otlinnolns guage model" -- is not detected by any
+        of the twelve page metrics; measured, all twelve read identically on the
+        two strings. They were built for layout and extraction faults, not for OCR
+        producing plausible-looking wrong words. And that observation was on a
+        scanned page, where the fast path has no text at all, so no comparison
+        against it is possible even in principle. Catching that class of error
+        needs a lexical check this pipeline does not have yet.
+
+        What the check does buy: a heavy engine that returns encoding-corrupt or
+        empty text for a page we already had clean text for no longer overwrites it.
+        """
+        critic = PDFCritic()
+
+        def score(text: str):
+            metrics = critic.sayfa_metrikleri(text)
+            corruption = metrics["gibberish_ratio"] * 100.0
+            if metrics["unicode_bozuk"]:
+                corruption += 20.0
+            return 100.0 - corruption
+
+        return score
 
     def _spill_to_disk(self, content: bytes) -> str | None:
         """

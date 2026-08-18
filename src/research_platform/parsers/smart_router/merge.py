@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 from .engines import EngineResult
 
@@ -58,6 +58,9 @@ class MergedDocument:
     fallback_pages: List[int] = field(default_factory=list)
     #: Tables the heavy engine recovered as a grid: {"page", "headers", "rows"}.
     tables: List[dict] = field(default_factory=list)
+    #: Pages where the heavy engine produced text but scored no better than the
+    #: fast path, so the fast text was kept.
+    quarantined_pages: List[int] = field(default_factory=list)
     degraded: bool = False
     notes: List[str] = field(default_factory=list)
 
@@ -73,6 +76,7 @@ def birlestir(
     results: Sequence[EngineResult] = (),
     decisions: Optional[Dict[int, List[str]]] = None,
     requested: Optional[Dict[str, Sequence[int]]] = None,
+    score: Optional[Callable[[str], Optional[float]]] = None,
 ) -> MergedDocument:
     """
     Merge fast-path text with heavy-engine output, page by page.
@@ -83,6 +87,11 @@ def birlestir(
     `requested` maps engine name to the pages it was asked about, which is how a
     page that was routed to a heavy engine but came back empty is told apart from
     one that was never routed there at all.
+
+    `score` grades one page of text, higher being better. When given, a heavy
+    engine's page only replaces the fast one if it does not score worse -- the
+    output check the pipeline was missing. Without it every non-empty heavy page
+    wins, which is the old behaviour.
     """
     decisions = decisions or {}
     requested = requested or {}
@@ -93,6 +102,7 @@ def birlestir(
     notes: List[str] = []
     degraded = False
 
+    quarantined: List[int] = []
     for result in results:
         tables.extend(result.tables)
         if result.degraded or not result.ok:
@@ -102,8 +112,24 @@ def birlestir(
         for page_no, text in result.pages.items():
             # An engine that returns an empty page has not improved on the fast
             # path, and overwriting with it would lose text we already had.
-            if text and text.strip():
-                winner[int(page_no)] = (text, result.engine)
+            if not (text and text.strip()):
+                continue
+            page_no = int(page_no)
+            if not _is_improvement(score, fast_pages.get(page_no, ""), text):
+                # Being expensive does not make output better. Docling was once
+                # observed turning "unidirectionality constraint by using a masked
+                # language model" into "unidi-eat i, a inn otlinnolns guage model"
+                # on a scanned page -- overwriting blindly would have shipped that.
+                quarantined.append(page_no)
+                continue
+            winner[page_no] = (text, result.engine)
+
+    if quarantined:
+        degraded = True
+        notes.append(
+            f"{len(quarantined)} pages kept fast-path text: the heavy engine scored "
+            f"lower ({sorted(quarantined)})"
+        )
 
     asked_about: Dict[int, str] = {}
     for engine, pages in requested.items():
@@ -118,7 +144,10 @@ def birlestir(
             fell_back = False
         else:
             text, engine = fast_pages[page_no], fast_engine
-            fell_back = page_no in asked_about
+            # A quarantined page is not a miss: the engine answered and we chose
+            # the fast text. Counting it in both places would report one page twice
+            # and read as a failure rather than a decision.
+            fell_back = page_no in asked_about and page_no not in quarantined
             if fell_back:
                 fallbacks.append(page_no)
         counts[engine] = counts.get(engine, 0) + 1
@@ -134,8 +163,30 @@ def birlestir(
     return MergedDocument(
         pages=merged, engine_counts=counts, fallback_pages=fallbacks,
         tables=sorted(tables, key=lambda t: (t.get("page") or 0)),
+        quarantined_pages=sorted(quarantined),
         degraded=degraded, notes=notes,
     )
+
+
+def _is_improvement(
+    score: Optional[Callable[[str], Optional[float]]], fast: str, heavy: str
+) -> bool:
+    """
+    Is the heavy engine's version at least as good as the one we already had?
+
+    Unscoreable either way (no scorer, empty fast text, a grader that returns
+    None) means we cannot tell, and the heavy page wins by default -- it was
+    requested for a reason. Only a measured drop keeps the fast text.
+    """
+    if score is None or not fast.strip():
+        return True
+    try:
+        fast_score, heavy_score = score(fast), score(heavy)
+    except Exception:
+        return True
+    if fast_score is None or heavy_score is None:
+        return True
+    return heavy_score >= fast_score
 
 
 def sayfa_basliklariyla(document: MergedDocument) -> str:
