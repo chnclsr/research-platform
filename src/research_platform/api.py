@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -16,16 +17,19 @@ from arq.constants import (
 )
 from arq.connections import RedisSettings, create_pool
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from .auth import API_KEY_SCHEME, AuthError, Principal
 from .config import Settings, get_settings
 from .connectors import build_registry
 from .db import SessionLocal, create_schema, get_session
 from .embeddings import EmbeddingClient
+from .identity import principal_from_api_key, principal_from_user_id
+from .parsers import build_parser_registry
 from .passages import retrieve_passages
-from .repository import Repository
+from .repository import ActorRequired, Repository, RunAccessDenied
 from .paperqa_adapter import paperqa2_health
 from .schemas import (
     ArtifactView,
@@ -135,7 +139,8 @@ async def _reconcile_interrupted_runs(app: FastAPI) -> None:
         )
 
     async with SessionLocal() as session:
-        repo = Repository(session)
+        # Startup reconciliation sweeps the whole queue regardless of who owns what.
+        repo = Repository(session, actor=Principal.system())
         cancelled = await repo.list_runs_by_statuses({RunStatus.CANCEL_REQUESTED.value})
         for row in cancelled:
             await repo.update_run(row.id, status=RunStatus.CANCELLED.value)
@@ -187,24 +192,83 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Research Platform API",
-    version="0.9.1",
+    version="0.10.0",
     description="Local-first, multi-source evidence research platform",
     lifespan=lifespan,
 )
 
 
-async def authorize(
-    authorization: str | None = Header(None), settings: Settings = Depends(get_settings)
-) -> None:
-    if settings.testing:
-        return
-    expected = f"Bearer {settings.api_token}"
-    if authorization != expected:
-        raise HTTPException(status_code=401, detail="Invalid bearer token")
+async def resolve_principal(
+    authorization: str | None = Header(None),
+    x_actor_user: str | None = Header(None),
+    settings: Settings = Depends(get_settings),
+    session: AsyncSession = Depends(get_session),
+) -> Principal:
+    """Turn the presented credential into the identity the request acts as.
+
+    Three credentials are accepted, in the order a caller is likely to hold one:
+
+    1. A per-user API key (``rp_<prefix>.<secret>``) -- scripts, MCP, Langflow.
+    2. The service token plus ``X-Actor-User`` -- the panel and the Telegram bot,
+       which authenticate their own users and then say who they are acting for. The
+       header alone proves nothing; it is only read once the service token verifies.
+    3. The legacy shared ``API_TOKEN``, which now maps to an admin-less system
+       principal so existing internal callers keep working during the migration.
+
+    Unlike the token check this replaces, there is no ``settings.testing`` bypass:
+    ownership has to hold under test or the tests prove nothing about it.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer credential")
+    presented = authorization[len("Bearer ") :].strip()
+
+    if presented.startswith(f"{API_KEY_SCHEME}_"):
+        try:
+            return await principal_from_api_key(session, presented)
+        except AuthError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    service_token = settings.service_token or settings.api_token
+    if not secrets.compare_digest(presented, service_token):
+        raise HTTPException(status_code=401, detail="Invalid bearer credential")
+
+    if x_actor_user:
+        try:
+            return await principal_from_user_id(session, x_actor_user)
+        except AuthError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return Principal.system()
 
 
-async def repository(session: AsyncSession = Depends(get_session)) -> Repository:
-    return Repository(session)
+async def require_admin(principal: Principal = Depends(resolve_principal)) -> Principal:
+    if not principal.is_admin:
+        raise HTTPException(status_code=403, detail="Administrator role required")
+    return principal
+
+
+async def repository(
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
+) -> Repository:
+    return Repository(session, actor=principal)
+
+
+@app.exception_handler(RunAccessDenied)
+async def _handle_run_access_denied(_: Request, __: RunAccessDenied) -> JSONResponse:
+    """A run the caller cannot see reads as missing.
+
+    Handled centrally rather than per route: with more than a dozen run-scoped
+    endpoints, a per-handler try/except is one forgotten block away from leaking a
+    403 that confirms the run exists.
+    """
+    return JSONResponse(status_code=404, content={"detail": "Research run not found"})
+
+
+@app.exception_handler(ActorRequired)
+async def _handle_actor_required(_: Request, exc: ActorRequired) -> JSONResponse:
+    """A repository reached a run-scoped read with no actor -- our bug, not the caller's."""
+    logger.error("Repository used without an actor: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal authorization error"})
 
 
 @app.get("/health")
@@ -239,7 +303,7 @@ async def health(request: Request) -> dict:
     return {"status": "healthy" if required_ok else "degraded", "checks": checks}
 
 
-@app.post("/v1/research-runs", response_model=RunView, dependencies=[Depends(authorize)])
+@app.post("/v1/research-runs", response_model=RunView, dependencies=[Depends(resolve_principal)])
 async def create_research_run(
     body: ResearchRunCreate, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
@@ -247,7 +311,16 @@ async def create_research_run(
     redis = await _connect_redis(request.app, attempts=3)
     if redis is None and not settings.testing:
         raise HTTPException(status_code=503, detail="Redis queue unavailable; run was not created")
-    row = await repo.create_run(body.protocol)
+    try:
+        row = await repo.create_run(body.protocol)
+    except ActorRequired as exc:
+        # The shared service token identifies a service, not a person, and a run with
+        # no owner would be invisible to everyone but an admin. Callers using the
+        # service token must name the user they are acting for.
+        raise HTTPException(
+            status_code=400,
+            detail="This credential cannot own a run; use a user API key or send X-Actor-User",
+        ) from exc
     if redis is not None:
         try:
             queued = await redis.enqueue_job(
@@ -284,12 +357,12 @@ async def _required_run(run_id: str, repo: Repository) -> object:
     return row
 
 
-@app.get("/v1/research-runs/{run_id}", response_model=RunView, dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs/{run_id}", response_model=RunView, dependencies=[Depends(resolve_principal)])
 async def get_research_run(run_id: str, repo: Repository = Depends(repository)) -> RunView:
     return repo.run_view(await _required_run(run_id, repo))
 
 
-@app.get("/v1/research-runs", response_model=list[RunView], dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs", response_model=list[RunView], dependencies=[Depends(resolve_principal)])
 async def list_research_runs(
     limit: int = 50,
     repo: Repository = Depends(repository),
@@ -298,7 +371,7 @@ async def list_research_runs(
 
 
 @app.post(
-    "/v1/research-runs/{run_id}/pause", response_model=RunView, dependencies=[Depends(authorize)]
+    "/v1/research-runs/{run_id}/pause", response_model=RunView, dependencies=[Depends(resolve_principal)]
 )
 async def pause_research_run(run_id: str, repo: Repository = Depends(repository)) -> RunView:
     row = await _required_run(run_id, repo)
@@ -308,7 +381,7 @@ async def pause_research_run(run_id: str, repo: Repository = Depends(repository)
 
 
 @app.post(
-    "/v1/research-runs/{run_id}/resume", response_model=RunView, dependencies=[Depends(authorize)]
+    "/v1/research-runs/{run_id}/resume", response_model=RunView, dependencies=[Depends(resolve_principal)]
 )
 async def resume_research_run(
     run_id: str, request: Request, repo: Repository = Depends(repository)
@@ -360,7 +433,7 @@ async def resume_research_run(
 @app.post(
     "/v1/research-runs/{run_id}/respond",
     response_model=RunView,
-    dependencies=[Depends(authorize)],
+    dependencies=[Depends(resolve_principal)],
 )
 async def respond_to_hitl(
     run_id: str,
@@ -425,7 +498,7 @@ async def respond_to_hitl(
 
 
 @app.post(
-    "/v1/research-runs/{run_id}/cancel", response_model=RunView, dependencies=[Depends(authorize)]
+    "/v1/research-runs/{run_id}/cancel", response_model=RunView, dependencies=[Depends(resolve_principal)]
 )
 async def cancel_research_run(run_id: str, repo: Repository = Depends(repository)) -> RunView:
     row = await _required_run(run_id, repo)
@@ -453,7 +526,7 @@ async def cancel_research_run(run_id: str, repo: Repository = Depends(repository
     return repo.run_view(row)
 
 
-@app.get("/v1/research-runs/{run_id}/events", dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs/{run_id}/events", dependencies=[Depends(resolve_principal)])
 async def stream_events(run_id: str, repo: Repository = Depends(repository)) -> EventSourceResponse:
     await _required_run(run_id, repo)
 
@@ -487,7 +560,7 @@ async def stream_events(run_id: str, repo: Repository = Depends(repository)) -> 
     return EventSourceResponse(generator())
 
 
-@app.get("/v1/research-runs/{run_id}/sources", dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs/{run_id}/sources", dependencies=[Depends(resolve_principal)])
 async def list_sources(run_id: str, repo: Repository = Depends(repository)) -> list[dict]:
     await _required_run(run_id, repo)
     return [
@@ -503,7 +576,7 @@ async def list_sources(run_id: str, repo: Repository = Depends(repository)) -> l
     ]
 
 
-@app.get("/v1/research-runs/{run_id}/claims", dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs/{run_id}/claims", dependencies=[Depends(resolve_principal)])
 async def list_claims(run_id: str, repo: Repository = Depends(repository)) -> list[dict]:
     await _required_run(run_id, repo)
     return [
@@ -519,7 +592,7 @@ async def list_claims(run_id: str, repo: Repository = Depends(repository)) -> li
     ]
 
 
-@app.get("/v1/research-runs/{run_id}/coverage", dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs/{run_id}/coverage", dependencies=[Depends(resolve_principal)])
 async def get_coverage(run_id: str, repo: Repository = Depends(repository)) -> dict:
     return (await _required_run(run_id, repo)).coverage
 
@@ -527,7 +600,7 @@ async def get_coverage(run_id: str, repo: Repository = Depends(repository)) -> d
 @app.get(
     "/v1/research-runs/{run_id}/artifacts",
     response_model=list[ArtifactView],
-    dependencies=[Depends(authorize)],
+    dependencies=[Depends(resolve_principal)],
 )
 async def list_artifacts(run_id: str, repo: Repository = Depends(repository)) -> list[ArtifactView]:
     await _required_run(run_id, repo)
@@ -542,7 +615,7 @@ async def list_artifacts(run_id: str, repo: Repository = Depends(repository)) ->
     ]
 
 
-@app.get("/v1/research-runs/{run_id}/artifacts/{name}", dependencies=[Depends(authorize)])
+@app.get("/v1/research-runs/{run_id}/artifacts/{name}", dependencies=[Depends(resolve_principal)])
 async def download_artifact(
     run_id: str, name: str, repo: Repository = Depends(repository)
 ) -> Response:
@@ -560,7 +633,7 @@ async def download_artifact(
 
 @app.get(
     "/v1/research-runs/{run_id}/delivery/{mode}",
-    dependencies=[Depends(authorize)],
+    dependencies=[Depends(resolve_principal)],
 )
 async def download_delivery(
     run_id: str,
@@ -575,7 +648,7 @@ async def download_delivery(
     return await download_artifact(run_id, bundle_by_mode[mode], repo)
 
 
-@app.get("/v1/connectors", dependencies=[Depends(authorize)])
+@app.get("/v1/connectors", dependencies=[Depends(resolve_principal)])
 async def list_connectors(request: Request) -> list[dict]:
     registry = build_registry(get_settings(), request.app.state.http)
     health = [h.model_dump(mode="json") for h in await registry.health()]
@@ -583,7 +656,13 @@ async def list_connectors(request: Request) -> list[dict]:
     return health
 
 
-@app.get("/v1/zotero/collections", dependencies=[Depends(authorize)])
+@app.get("/v1/parsers", dependencies=[Depends(resolve_principal)])
+async def list_parsers() -> list[dict]:
+    registry = build_parser_registry()
+    return [health.model_dump(mode="json") for health in registry.health()]
+
+
+@app.get("/v1/zotero/collections", dependencies=[Depends(resolve_principal)])
 async def list_zotero_collections(mode: str, request: Request) -> list[dict]:
     if mode not in {"local", "web"}:
         raise HTTPException(status_code=422, detail="mode must be local or web")
@@ -597,22 +676,30 @@ async def list_zotero_collections(mode: str, request: Request) -> list[dict]:
 @app.post(
     "/v1/zotero/sync",
     response_model=ZoteroSyncResult,
-    dependencies=[Depends(authorize)],
+    dependencies=[Depends(resolve_principal)],
 )
 async def sync_zotero(
     body: ZoteroSyncRequest,
     request: Request,
     session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(resolve_principal),
 ) -> ZoteroSyncResult:
     try:
-        return await ZoteroSyncService(get_settings(), session, request.app.state.http).sync(body)
+        return await ZoteroSyncService(
+            get_settings(), session, request.app.state.http, actor=principal
+        ).sync(body)
+    except ActorRequired as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="This credential cannot own a run; use a user API key or send X-Actor-User",
+        ) from exc
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get(
     "/v1/research-runs/{run_id}/citation-graph",
-    dependencies=[Depends(authorize)],
+    dependencies=[Depends(resolve_principal)],
 )
 async def citation_graph(run_id: str, repo: Repository = Depends(repository)) -> dict:
     await _required_run(run_id, repo)
@@ -644,7 +731,7 @@ async def citation_graph(run_id: str, repo: Repository = Depends(repository)) ->
 
 @app.get(
     "/v1/research-runs/{run_id}/academic-coverage",
-    dependencies=[Depends(authorize)],
+    dependencies=[Depends(resolve_principal)],
 )
 async def academic_coverage(run_id: str, repo: Repository = Depends(repository)) -> dict:
     await _required_run(run_id, repo)
@@ -677,7 +764,7 @@ async def academic_coverage(run_id: str, repo: Repository = Depends(repository))
     }
 
 
-@app.post("/v1/corpus/search", dependencies=[Depends(authorize)])
+@app.post("/v1/corpus/search", dependencies=[Depends(resolve_principal)])
 async def search_local_corpus(
     body: CorpusSearchRequest,
     request: Request,
@@ -714,7 +801,7 @@ async def search_local_corpus(
     ]
 
 
-@app.post("/v1/connectors/{connector_id}/test", dependencies=[Depends(authorize)])
+@app.post("/v1/connectors/{connector_id}/test", dependencies=[Depends(resolve_principal)])
 async def test_connector(connector_id: str, request: Request) -> dict:
     registry = build_registry(get_settings(), request.app.state.http)
     connector = registry.get(connector_id)

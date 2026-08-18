@@ -491,6 +491,28 @@ async def build_exports(
         "text/markdown",
         literature_inventory_md.encode("utf-8"),
     )
+    # Tables and code the parsers recovered as structure. They are already rendered inline
+    # in the passage text; this artifact exists so a consumer that wants the grid rather
+    # than the markdown does not have to re-parse the prose.
+    structured_extracts = [
+        {
+            "source_id": source.id,
+            "source_version_id": version.id,
+            "url": source.url,
+            "title": source.title,
+            "parser_id": (version.provenance or {}).get("parser_id", ""),
+            "tables": (version.provenance or {}).get("tables", []),
+            "code_blocks": (version.provenance or {}).get("code_blocks", []),
+        }
+        for source, version in versions
+        if (version.provenance or {}).get("tables")
+        or (version.provenance or {}).get("code_blocks")
+    ]
+    if structured_extracts:
+        files["18_structured_extracts.json"] = (
+            "application/json",
+            json.dumps(structured_extracts, ensure_ascii=False, indent=2).encode("utf-8"),
+        )
     if figure_result.observations:
         files["17_figure_observations.json"] = (
             "application/json",

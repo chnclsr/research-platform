@@ -38,6 +38,16 @@ BM25 rank + vector rank → RRF → relevance/kalite/çeşitlilik reranker
 evidence-ready passage ve /v1/corpus/search API
 ```
 
+> **Not (2026-08-17):** Yukarıdaki edinim zinciri v0.3.0 dönemini yansıtır ve o günden beri
+> iki adım eklenmiştir. Güncel sıra: Zotero inline fulltext / metadata (yalnız `zotero_*`
+> connector'ları) → `direct` → `scholarly_metadata` (yalnız akademik aile; yeterli uzunlukta
+> özet varsa tam metin denenmeden kısa devre yapar) → AgentSearch `/read` → Crawl4AI →
+> Scrapling. `scholarly_metadata` adımı v0.9.1 ile eklenmiştir.
+>
+> Ayrıştırma da artık `parsers/` paketindeki kayıt defteri üzerinden yapılır; ayrıntı için
+> [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](../DEVELOPMENTS_IMPLEMENTATION_REPORT.md) 8. ve
+> 9. bölümler.
+
 ## Akademik katman
 
 - OpenAlex DOI, abstract, OA location, version ve reference metadata sağlar.

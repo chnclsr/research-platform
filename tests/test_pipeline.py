@@ -9,10 +9,13 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 
+from conftest import acting_principal
 from research_platform.config import get_settings
 from research_platform.db import SessionLocal, create_schema
 from research_platform.pipeline import PipelineHalted, PipelineStageTimeout, ResearchPipeline
-from research_platform.repository import Repository
+from research_platform.repository import (
+    CheckpointTooLarge, Repository, checkpoint_payload,
+)
 from research_platform.schemas import (
     AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SearchMission,
     SourceFamily,
@@ -214,7 +217,7 @@ async def test_pipeline_preserves_cancellation_before_worker_start():
         primary_question="Does a cancelled queued run remain cancelled?",
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.update_run(row.id, status=RunStatus.CANCEL_REQUESTED.value)
         pipeline = ResearchPipeline(get_settings(), session, client)
@@ -237,7 +240,7 @@ async def test_in_node_cancellation_interrupts_hung_io_promptly():
         "search_stage_timeout_s": 1.0,
     })
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.update_run(row.id, status=RunStatus.RUNNING.value)
         pipeline = ResearchPipeline(settings, session, client)
@@ -248,7 +251,7 @@ async def test_in_node_cancellation_interrupts_hung_io_promptly():
         async def request_cancel():
             await asyncio.sleep(0.03)
             async with SessionLocal() as control_session:
-                await Repository(control_session).update_run(
+                await Repository(control_session, actor=acting_principal()).update_run(
                     row.id, status=RunStatus.CANCEL_REQUESTED.value,
                 )
 
@@ -281,7 +284,7 @@ async def test_hung_node_has_a_hard_safety_timeout():
     )
     settings = get_settings().model_copy(update={"pipeline_control_poll_s": 0.01})
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(settings, session, client)
 
@@ -308,7 +311,7 @@ async def test_collection_budget_is_persistent_and_skips_new_discovery_after_res
     )
 
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         await repo.checkpoint(row.id, "VALIDATE_PROTOCOL", {
             "run_id": row.id,
@@ -372,7 +375,7 @@ async def test_acquisition_cutoff_keeps_completed_documents_for_postprocessing()
         ),
     ]
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.acquisition = TimedAcquisition()
@@ -410,7 +413,7 @@ async def test_search_expands_citation_frontier_to_requested_depth():
         budget={"max_sources": 10, "results_per_connector": 4},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = CitationRegistry()
@@ -454,7 +457,7 @@ async def test_public_semantic_scholar_fanout_is_limited_per_round():
         for index in range(5)
     ]
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = registry
@@ -477,7 +480,7 @@ async def test_pipeline_resumes_to_auditable_export():
         budget={"max_rounds": 2, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = DummyRegistry()
@@ -523,7 +526,7 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
         budget={"max_rounds": 1, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         row = await repo.create_run(protocol)
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.registry = FailingRegistry()
@@ -532,3 +535,76 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
         assert completed.status == RunStatus.COMPLETED_INCOMPLETE.value
         events = await repo.events_after(row.id)
         assert any(event.event_type == "connector_error" for event in events)
+
+
+def test_checkpoint_payload_strips_raw_content_without_touching_live_state():
+    document = {"content": "metin", "raw_content": "BASE64PDF", "source_id": "S1"}
+    state = {"run_id": "R1", "documents": [document], "candidates": [{"url": "https://x"}]}
+
+    persisted = checkpoint_payload(state)
+
+    assert persisted["documents"][0]["raw_content"] == ""
+    # NORMALIZE reads raw_content out of the live state to write the MinIO snapshot and
+    # source_versions, so trimming the persisted copy must not reach back into it.
+    assert document["raw_content"] == "BASE64PDF"
+    assert state["documents"][0]["raw_content"] == "BASE64PDF"
+    assert persisted["candidates"] is state["candidates"]
+    assert persisted["run_id"] == "R1"
+
+
+def test_checkpoint_payload_is_a_noop_without_documents():
+    state = {"run_id": "R1", "candidates": []}
+    assert checkpoint_payload(state) is state
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_refuses_a_state_over_the_size_limit(monkeypatch):
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run = await repo.create_run(ResearchProtocol(
+            title="Checkpoint size",
+            primary_question="Does the checkpoint guard reject oversized state?",
+        ))
+        monkeypatch.setattr("research_platform.repository.CHECKPOINT_MAX_BYTES", 2048)
+
+        with pytest.raises(CheckpointTooLarge) as excinfo:
+            await repo.checkpoint(run.id, "NORMALIZE", {"passages": ["x" * 4096]})
+
+        message = str(excinfo.value)
+        assert "NORMALIZE" in message
+        assert "passages" in message
+        # The session must stay usable so the pipeline can still record the failure.
+        await repo.event(run.id, "failed", {"error": message[:200]})
+
+
+@pytest.mark.asyncio
+async def test_frontier_skips_hostless_links_instead_of_failing_the_run():
+    """
+    crawl4ai reports mailto:/javascript: hrefs. A hostless URL has no domain to compare,
+    and letting it through used to abort the whole run with IndexError.
+    """
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run = await repo.create_run(ResearchProtocol(
+            title="Frontier hostless",
+            primary_question="Does a hostless link abort the frontier?",
+        ))
+        added = await repo.add_frontier_links(
+            run.id,
+            "https://example.org/article",
+            [
+                "mailto:someone@example.org",
+                "javascript:void(0)",
+                "https://example.org/next",
+                "https://other.example/page",
+            ],
+            max_links=10,
+        )
+        assert added == 2
+
+        rows = await repo.list_frontier(run.id) if hasattr(repo, "list_frontier") else None
+        if rows is not None:
+            hosts = {r.canonical_url for r in rows}
+            assert not any(h.startswith(("mailto:", "javascript:")) for h in hosts)

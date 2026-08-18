@@ -14,6 +14,7 @@ from arq.connections import RedisSettings
 from .config import get_settings
 from .db import SessionLocal, create_schema
 from .pipeline import ResearchPipeline
+from .auth import Principal
 from .repository import Repository
 from .schemas import RunStatus
 from datetime import datetime, timezone
@@ -33,7 +34,7 @@ async def _recover_interrupted_jobs(ctx: dict) -> None:
         )
 
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=Principal.system())
         cancel_rows = await repo.list_runs_by_statuses({RunStatus.CANCEL_REQUESTED.value})
         for row in cancel_rows:
             await discard(row.id)
@@ -92,7 +93,7 @@ async def execute_research_run(ctx: dict, run_id: str) -> None:
 async def expire_hitl_interactions(ctx: dict) -> None:
     """Release worker resources while preserving unanswered HITL state."""
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=Principal.system())
         rows = await repo.list_runs_by_statuses({RunStatus.AWAITING_INPUT.value})
         now = datetime.now(timezone.utc)
         for row in rows:

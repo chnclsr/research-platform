@@ -199,7 +199,21 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```
 
 Before first use, copy the relevant example environment file and replace `API_TOKEN`,
-`MINIO_SECRET_KEY`, and any connector credentials. Never commit a populated `.env` file.
+`SERVICE_TOKEN`, `SESSION_SECRET`, `MINIO_SECRET_KEY`, and any connector credentials.
+Never commit a populated `.env` file.
+
+### Create the first account
+
+The operations console requires a sign-in and shows each person only their own research.
+There is no sign-up form, so the first account is created from the shell:
+
+```powershell
+docker compose exec api research-admin bootstrap you@example.com
+```
+
+This also assigns any pre-existing runs to that account, and refuses to run a second time
+once an account exists. Adding people, roles, API keys and offboarding are covered in
+[OFFICE_TEAM_SETUP.md](OFFICE_TEAM_SETUP.md#hesap-yönetimi).
 
 Main local endpoints:
 
@@ -224,6 +238,11 @@ Example client configurations are available in
 [`examples/codex_mcp_config.toml`](examples/codex_mcp_config.toml) and
 [`examples/claude_mcp.json`](examples/claude_mcp.json). Tokens must come from the
 `RESEARCH_MCP_TOKEN` environment variable, not a committed configuration file.
+
+Agents act as a person, not as the installation. Issue each user their own API key —
+from the console, or with `research-admin issue-key <email> --name <label>` — and use it
+as the bearer credential. Runs the agent starts are owned by that user and are invisible
+to everyone else; a revoked key stops working immediately.
 
 Telegram commands:
 
@@ -279,3 +298,11 @@ The platform deliberately does **not** implement:
 
 Acquisition permits HTTP/HTTPS only, validates DNS and redirects against private-address
 access, applies content limits, records provenance, and treats source text as untrusted data.
+
+Research is private to the person who started it. Ownership is enforced in the data layer
+rather than at the routes, because the console reads this data both through the API and
+directly from the database — a filter on one door would leave the other open. A run
+belonging to someone else reads as missing, never as forbidden, so run ids cannot be probed
+for existence. Corpus reuse across runs is scoped to the owner's own history by default
+(`CORPUS_SCOPE`). Administrators can see every run and are the only ones who can start or
+stop the stack, read service logs, or test connectors.

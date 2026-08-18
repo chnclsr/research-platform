@@ -145,14 +145,307 @@ coverage, saturation veya tur kriteriyle durur. Örnek kullanıcı limiti:
 ## Yerel kontrol paneli
 
 Sunucu bilgisayarındaki servis, kuyruk, aktif run ve log yönetimi bağımsız panelden yapılır.
-Sunucuda `http://127.0.0.1:8020`, aynı ofis ağındaki ekip bilgisayarlarında
-`http://10.0.10.109:8020` kullanılır. Panel yalnız yapılandırılmış ofis CIDR'ını kabul eder; kullanım
-ve güvenlik ayrıntıları `CONTROL_PANEL_GUIDE.md` belgesindedir.
+Adres ve port `.env.office` içindeki `CONTROL_PANEL_HOST` / `CONTROL_PANEL_PORT` ile
+belirlenir; bu makinede sunucuda `http://127.0.0.1:1111`, aynı ağdaki ekip
+bilgisayarlarında `http://10.0.10.179:1111`. Panel yalnız `CONTROL_PANEL_ALLOWED_NETWORKS`
+ile verilen CIDR'ı kabul eder; kullanım ve güvenlik ayrıntıları `CONTROL_PANEL_GUIDE.md`
+belgesindedir.
 
-## Erişim anahtarı yönetimi
+Panelde bir de **"Ekipteki diğer işler"** bölümü var: kullanıcı, başkalarının süren
+araştırmalarını *sansürlü* görür — kim, hangi durumda, hangi aşamada, ne süredir. Başlık,
+araştırma sorusu ve içerik görünmez. Amacı, tek GPU sırada beklerken kimsenin "sistem
+bozuk" sanmaması. Ayrıntı `CONTROL_PANEL_GUIDE.md` içindedir.
 
-- `TEAM_ACCESS.txt` yalnız yetkili ekip üyeleriyle güvenli kanaldan paylaşılmalıdır.
-- Bir ekip üyesi ayrılırsa `initialize_office_server.ps1 -Force` ile token döndürülmeli ve bütün
-  istemciler yeniden yapılandırılmalıdır.
-- Token Git’e, Telegram grubuna veya normal e-postaya yazılmamalıdır.
+## Hesap yönetimi
+
+v0.10.0'dan itibaren her kişinin kendi hesabı var ve **yalnız kendi araştırmalarını görüyor.**
+Başkalarının süren işlerinden gördüğü tek şey yukarıda anlatılan sansürlü kuyruk satırıdır.
+Panelde kayıt formu yoktur — hesaplar aşağıdaki komutlarla açılır.
+
+### Komutlar nereden çalıştırılır
+
+Hepsi `research-admin` aracının alt komutlarıdır ve aynı veritabanına yazarlar. İki yol var:
+
+```powershell
+# Docker kurulumunda (bu makinede geçerli olan)
+docker compose exec api research-admin <komut> ...
+
+# Panel host üzerinde .venv'den çalıştığı için oradan da olur
+.\.venv\Scripts\research-admin.exe <komut> ...
+```
+
+Aşağıdaki örneklerde Docker biçimi kullanılıyor. Komutlar depo kökünden çalıştırılır.
+
+---
+
+### Mevcut kişilere bakma
+
+```powershell
+docker compose exec api research-admin list-users
+```
+
+```
+E-POSTA                   ROL    DURUM   KOSU  ID
+kirtekefurkan@gmail.com   admin  aktif      9  01M07V15RGHN6QM4606BA0YT2F
+calisircihan21@gmail.com  user   aktif      0  01M0812V17YV030WGJFEY5MC2P
+```
+
+| Sütun | Anlamı |
+|---|---|
+| `E-POSTA` | Girişte kullanılan kimlik |
+| `ROL` | `user` ya da `admin` |
+| `DURUM` | `aktif` girebilir, `kapali` giremez |
+| `KOSU` | O kişiye ait araştırma sayısı |
+| `ID` | Diğer komutlarda değil, yalnız veritabanı sorgularında gerekir |
+
+Sahipsiz koşu varsa listenin altında ayrıca belirtilir; bunlar yalnız yöneticilere görünür.
+
+Daha fazla sütun gerekiyorsa (`token_version`, `last_login_at`) doğrudan veritabanına bakın:
+
+```powershell
+docker compose exec -T postgres psql -U research -d research -c "select email, display_name, role, is_active, token_version, last_login_at from users order by created_at;"
+```
+
+`token_version`, o kişinin oturumlarının kaç kez düşürüldüğünü gösterir — her parola
+değişiminde ve her hesap kapatmada bir artar. Parola özetleri hiçbir komutta gösterilmez.
+
+---
+
+### Kişi ekleme
+
+```powershell
+docker compose exec api research-admin create-user ali@ornek.com --display-name "Ali Yilmaz"
+```
+
+Parola **sorulur**; `--password` ile komut satırına yazmayın, kabuk geçmişine ve süreç
+listesine düşer. Doğrudan yönetici olarak açmak için `--role admin` ekleyin.
+
+Sonra kişiye e-postasını ve geçici parolayı güvenli bir kanaldan iletin. Kişi panele girip
+**Hesabım → Parola** ile kendi parolasını koyar. Bu ikinci adım önemli: aksi hâlde geçici
+parola sizde kalmaya devam eder.
+
+> **Sıfırdan kurulumda ilk hesap.** Hiç hesap yokken `create-user` yerine `bootstrap`
+> kullanılır; ilk yöneticiyi açar **ve** o ana kadarki sahipsiz koşuları ona devreder.
+> Bir hesap varken ikinci kez çalışmayı reddeder, yani canlı sistemde yönetici basmanın
+> yolu değildir.
+>
+> ```powershell
+> docker compose exec api research-admin bootstrap yonetici@ornek.com
+> ```
+
+Kişi giriş yaptığı anda kendi araştırmasını başlatabilir ve yalnız onları görür.
+Panel adresi bu makinede **`http://10.0.10.179:1111`**.
+
+---
+
+### Yetki ayarlama
+
+```powershell
+docker compose exec api research-admin set-role ali@ornek.com admin   # yönetici yap
+docker compose exec api research-admin set-role ali@ornek.com user    # geri al
+```
+
+İki rol var ve fark, kullanıcı verisiyle kurulum operasyonları arasındadır:
+
+| | `user` | `admin` |
+|---|---|---|
+| Kendi araştırmaları | ✔ | ✔ |
+| **Başkalarının araştırmaları** | ✘ | ✔ |
+| Kendi API anahtarları, Telegram bağlantısı, parolası | ✔ | ✔ |
+| **Servisleri başlat / durdur** | ✘ | ✔ |
+| **Servis logları** | ✘ | ✔ |
+| **Connector testi** | ✘ | ✔ |
+
+Sıradan kullanıcıya yönetici düğmeleri ve log sekmesi panelde hiç gösterilmez; sunucu
+tarafında da reddedilir. Gerekçe: log akışı herkesin koşusunu karıştırır, "Servisleri durdur"
+başkasının süren araştırmasını keser.
+
+Rol değişikliği açık oturumu düşürmez; kişi bir sonraki sayfa yenilemesinde yeni yetkisini
+görür.
+
+---
+
+### Kişi çıkarma
+
+```powershell
+docker compose exec api research-admin deactivate ali@ornek.com
+```
+
+Bu tek komut üç kapıyı birden kapatır: panel oturumu **anında** düşer, API anahtarları
+kullanılamaz hâle gelir, Telegram erişimi kesilir. Diğer ekip üyeleri etkilenmez — eski
+paylaşılan token düzeninde herkesin yeniden yapılandırılması gerekiyordu, artık gerekmiyor.
+
+Geri açmak için:
+
+```powershell
+docker compose exec api research-admin activate ali@ornek.com
+```
+
+Hesap yeniden açılsa bile **eski oturum çerezleri geçersiz kalır**; kişi yeniden giriş yapar.
+
+Son aktif yöneticiyi kapatmak reddedilir — kimsenin içeri giremediği bir kuruluma düşmemek
+için. Önce başka birini `set-role ... admin` yapın.
+
+#### Hesap silme neden yok
+
+`deactivate` hesabı kapatır, **silmez**. Silme komutu bilinçli olarak yazılmadı: koşular
+`owner_id` ile hesaba bağlı ve satır silinirse o koşular sahipsiz kalır — yalnız
+yöneticilere görünür hâle gelir ve provenance kaydındaki "bu araştırmayı kim başlattı"
+bilgisi kaybolur.
+
+Bir hesabı gerçekten silmeniz gerekiyorsa (yanlışlıkla açılmış, hiç koşusu olmayan bir test
+hesabı gibi) önce koşularının olmadığını doğrulayın, sonra doğrudan veritabanından silin:
+
+```powershell
+# 1. Koşusu var mı? list-users'daki KOSU sütunu 0 olmalı.
+docker compose exec api research-admin list-users
+
+# 2. Koşusu varsa önce devredin
+docker compose exec api research-admin assign-runs veli@ornek.com --from-email ali@ornek.com
+
+# 3. Sil
+docker compose exec -T postgres psql -U research -d research -c "delete from api_keys where user_id = (select id from users where email='ali@ornek.com'); delete from telegram_identities where user_id = (select id from users where email='ali@ornek.com'); delete from users where email='ali@ornek.com';"
+```
+
+Üç tabloyu da temizlemek gerekir; kimlik tablolarında ForeignKey yoktur, dolayısıyla
+yalnız `users` satırını silmek arkada anahtar ve Telegram eşlemesi bırakır.
+
+Normal işleyişte **`deactivate` tercih edilmelidir.**
+
+---
+
+### Parola
+
+Parolasını **bilen** kullanıcının yöneticiye ihtiyacı yoktur: panelde **Hesabım → Parola**.
+
+Parolasını **unutan** için sıfırlama e-postası yoktur, bir yönetici koyar:
+
+```powershell
+docker compose exec api research-admin set-password ali@ornek.com
+```
+
+Her iki yol da o kişinin tüm açık oturumlarını düşürür.
+
+---
+
+### API anahtarları
+
+Betik, Langflow ve MCP erişimi için. Kişi bunları panelden kendisi üretip iptal edebilir;
+aşağıdakiler yönetici tarafı içindir.
+
+```powershell
+docker compose exec api research-admin issue-key ali@ornek.com --name langflow
+docker compose exec api research-admin list-keys                      # hepsi
+docker compose exec api research-admin list-keys --email ali@ornek.com # tek kişi
+docker compose exec api research-admin revoke-key 01M07V1VQR6EFX2YVRBDN7387D
+```
+
+Anahtar üretildiği anda **bir kez** gösterilir ve geri alınamaz; kaybedilirse iptal edip
+yenisi üretilir. `revoke-key` `list-keys` çıktısındaki anahtar kimliğini alır, e-postayı
+değil. İptal edilen anahtar anında çalışmaz olur.
+
+---
+
+### Telegram
+
+Normalde **kişi kendisi bağlar**, sizin bir şey yapmanız gerekmez:
+
+1. Panele girer → **Hesabım** → *Bağlantı kodu al*
+2. **Telegram'da aç** düğmesine tıklar, ya da bota `/baglan M3H-QES` yazar
+3. Bot "Bağlandı: ali@ornek.com" der
+
+Kod 5 dakika geçerli ve **tek kullanımlıktır**: kod sızarsa başkası kendi Telegram hesabını
+o kişinin platform hesabına bağlayıp onun adına araştırma başlatabilirdi.
+
+Elle bağlamak gerekirse (kişi bota `/whoami` yazıp kendi ID'sini söyler) ve eşlemeleri
+görmek için:
+
+```powershell
+docker compose exec api research-admin link-telegram ali@ornek.com 123456789
+docker compose exec api research-admin list-telegram
+```
+
+---
+
+### Koşuların sahipliği
+
+```powershell
+# Bir kişinin tüm koşularını başkasına devret (ayrılan biri için)
+docker compose exec api research-admin assign-runs veli@ornek.com --from-email ali@ornek.com
+
+# Sahipsiz kalan koşuların tümü
+docker compose exec api research-admin assign-runs veli@ornek.com --orphaned
+
+# Tek tek belirli koşular
+docker compose exec api research-admin assign-runs veli@ornek.com --run-id 01M07BF29WP1YAWNVVN4YYR22R
+```
+
+Üç seçenekten biri zorunludur; hiçbiri verilmezse komut ne yapacağını sormadan reddeder.
+
+---
+
+### Komutların tamamı
+
+| Komut | İş |
+|---|---|
+| `list-users` | Hesaplar, roller, durum ve koşu sayıları |
+| `bootstrap <e-posta> [--display-name] [--password]` | İlk yöneticiyi açar ve sahipsiz koşuları devreder. Hesap varken çalışmaz |
+| `create-user <e-posta> [--display-name] [--role user\|admin] [--password]` | Hesap açar |
+| `set-role <e-posta> user\|admin` | Rol atar |
+| `deactivate <e-posta>` | Hesabı kapatır; son aktif yöneticiyi reddeder |
+| `activate <e-posta>` | Hesabı yeniden açar |
+| `set-password <e-posta> [--password]` | Parola koyar, açık oturumları düşürür |
+| `issue-key <e-posta> [--name <etiket>]` | API anahtarı üretir (bir kez gösterilir) |
+| `list-keys [--email <e-posta>]` | Anahtarları ve son kullanım tarihlerini listeler |
+| `revoke-key <anahtar_id>` | Anahtarı iptal eder |
+| `link-telegram <e-posta> <telegram_id>` | Telegram hesabını elle bağlar |
+| `list-telegram` | Mevcut eşlemeler |
+| `assign-runs <e-posta> --from-email\|--orphaned\|--run-id` | Koşuların sahibini değiştirir |
+
+**Hesap silme komutu yoktur** — gerekçesi ve elle silme yolu yukarıdaki "Hesap silme neden
+yok" başlığındadır.
+
+`--password` her yerde isteğe bağlıdır ve verilmezse gizli olarak sorulur; tercih edilen
+yol sormaktır.
+
+### Sık karşılaşılanlar
+
+**Parolamı değiştirmek istiyorum.** Mevcut parolanı biliyorsan yöneticiye gerek yok:
+panelde **Hesabım → Parola**. Değişiklik diğer cihazlardaki oturumlarını kapatır, kendi
+sekmen açık kalır.
+
+**Parolamı unuttum.** Sıfırlama e-postası yok; bir yönetici `set-password` çalıştırır.
+
+**Yönetici parolasını kaybettik.** Komutlar veritabanına erişebilen herkes tarafından
+çalıştırılabilir — sunucuda `docker compose exec api research-admin set-password <e-posta>`.
+
+**Herkes sürekli çıkışa zorlanıyor.** `.env.office` içinde `SESSION_SECRET` boştur. Doldurup paneli
+yeniden başlatın.
+
+**Kişi kendi koşusunu göremiyor.** Koşu başka bir kanaldan (Telegram, Langflow) başlatılmış ve o
+kanal onun hesabına bağlı değil olabilir. `list-users` koşu sayılarını gösterir; `assign-runs`
+ile düzeltilir.
+
+**Bot "hesabınız bağlı değil" diyor.** Kişi henüz Telegram'ını bağlamamış. Panelden kod alıp
+`/baglan <kod>` yazması yeterli; `list-telegram` kimin bağlı olduğunu gösterir.
+
+**Bot `/baglan` komutunu tanımıyor.** Bot container'ı eski kodda. `telegram-bot` servisi
+`profiles: ["telegram"]` arkasında olduğu için düz `docker compose up -d --build` ona
+dokunmaz. Doğrusu:
+
+```powershell
+docker compose --profile telegram up -d --build telegram-bot
+```
+
+**Telegram izin listesi ne oldu?** `TELEGRAM_ALLOWED_USER_IDS` artık birebir sohbetlerde
+kullanılmıyor. Kimliğin olmadığı dönemde kimliğin yerine konmuş bir vekildi; gerçek kimlik
+gelince yalnız engel olurdu — kişi kendini bağlar, sonra liste onu reddederdi. Yalnız **grup
+sohbetlerinde** geçerliliğini koruyor, çünkü grupta mesajı gönderen kişi ile botun adına
+hareket etmesi gereken kişi aynı olmayabilir.
+
+### Değişmeyenler
+
+- `.env.office` ve `.env` Git'te değildir; bu makineye özgüdür.
+- `SERVICE_TOKEN` ve `SESSION_SECRET` Git'e, Telegram grubuna veya normal e-postaya yazılmamalıdır.
 - Ağ değişirse `.env.office` yeniden üretilmeli ve firewall kuralı güncellenmelidir.
+- Ofis CIDR sınırı kaldırılmamalıdır: panel düz HTTP üzerinden çalışırken oturum çerezi ağda açıktır.

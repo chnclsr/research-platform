@@ -11,6 +11,7 @@ from research_platform.connectors.implementations import (
 )
 from research_platform.connectors.zotero import ZoteroConnector
 from research_platform.db import SessionLocal, create_schema
+from conftest import acting_principal
 from research_platform.repository import Repository
 from research_platform.schemas import (
     AcquiredDocument, ConnectorCandidate, ResearchProtocol, ResearchScope, SourceFamily,
@@ -290,7 +291,7 @@ async def test_zotero_metadata_only_item_is_preserved_without_public_url_fetch()
 async def test_repository_merges_provider_snapshots_by_doi_and_saves_relations():
     await create_schema()
     async with SessionLocal() as session:
-        repo = Repository(session)
+        repo = Repository(session, actor=acting_principal())
         run = await repo.create_run(ResearchProtocol(
             title="Academic dedupe",
             primary_question="Does provider deduplication preserve provenance?",

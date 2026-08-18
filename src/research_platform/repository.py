@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import functools
+import inspect
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from .auth import Principal
+from .config import get_settings
 
 from .db import (
     ArtifactRow,
@@ -22,6 +30,7 @@ from .db import (
     SourceRelationRow,
     SourceRow,
     SourceVersionRow,
+    UserRow,
 )
 from .normalization import canonicalize_url
 from .schemas import (
@@ -40,14 +49,230 @@ from .relevance import evidence_entailment
 from .scholarly import candidate_dedupe_key, scholarly_identity, title_fingerprint
 
 
-class Repository:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+# PostgreSQL refuses a jsonb value once its elements exceed 256 MiB. Stop below that so
+# the run fails with an actionable error instead of an opaque driver exception that also
+# poisons the session.
+CHECKPOINT_MAX_BYTES = 200 * 1024 * 1024
 
-    async def create_run(self, protocol: ResearchProtocol) -> ResearchRunRow:
+
+class ActorRequired(RuntimeError):
+    """A run-scoped operation was attempted without saying who is asking.
+
+    Fail-closed: constructing a ``Repository`` without an actor is not "full access",
+    it is "no run access". Code paths with no network caller -- the worker, the
+    pipeline, cron jobs -- pass ``Principal.system()`` explicitly.
+    """
+
+
+class RunAccessDenied(RuntimeError):
+    """The actor does not own this run and is not an admin.
+
+    Callers facing the network translate this to 404, never 403: a 403 confirms the
+    run exists, which tells one user something about another user's data.
+    """
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(f"Run {run_id} is not accessible to this actor")
+        self.run_id = run_id
+
+
+# Methods that take a ``run_id`` but must not be ownership-checked, each for a reason
+# that had to be argued rather than assumed. Anything not listed here is guarded
+# automatically by _OwnershipEnforced below.
+_UNGUARDED_RUN_METHODS = {
+    # Writes ownership itself; there is no run to check yet.
+    "create_run",
+    # The guard's own lookup -- checking access from inside it would not terminate.
+    "_guard_run",
+}
+
+
+def _takes_run_id(candidate: Any) -> bool:
+    """True for coroutine functions with a ``run_id`` parameter."""
+    if not inspect.iscoroutinefunction(candidate):
+        return False
+    try:
+        return "run_id" in inspect.signature(candidate).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _run_scoped(method):
+    """Wrap a coroutine method so its ``run_id`` is ownership-checked first."""
+    signature = inspect.signature(method)
+
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        bound = signature.bind_partial(self, *args, **kwargs)
+        run_id = bound.arguments.get("run_id")
+        if run_id is not None:
+            await self._guard_run(run_id)
+        return await method(self, *args, **kwargs)
+
+    wrapper.__run_scoped__ = True
+    return wrapper
+
+
+class _OwnershipEnforced(type):
+    """Applies the ownership guard to every run-scoped method at class creation.
+
+    Guarding by hand meant 25 identical two-line preambles, and the failure mode of
+    that approach is silent: method 26 gets added without one and reads another user's
+    data with no error anywhere. Here the rule is applied by construction -- a new
+    method that takes a ``run_id`` is guarded before anyone runs a test, and opting out
+    requires naming it in :data:`_UNGUARDED_RUN_METHODS`, which is itself asserted
+    against an expected set in ``tests/test_run_ownership.py``.
+    """
+
+    def __new__(mcls, name, bases, namespace, **kwargs):
+        for attribute, value in list(namespace.items()):
+            if attribute in _UNGUARDED_RUN_METHODS:
+                continue
+            if _takes_run_id(value):
+                namespace[attribute] = _run_scoped(value)
+        return super().__new__(mcls, name, bases, namespace, **kwargs)
+
+
+# The states in which a run is still holding, or waiting for, the single GPU. Kept here
+# rather than imported from the control panel because the repository must not depend on a
+# presentation module; the panel's ACTIVE_STATUSES is asserted equal to this in tests.
+ACTIVE_RUN_STATUSES = frozenset(
+    {
+        RunStatus.QUEUED.value,
+        RunStatus.RUNNING.value,
+        RunStatus.PAUSED.value,
+        RunStatus.AWAITING_INPUT.value,
+        RunStatus.CANCEL_REQUESTED.value,
+    }
+)
+
+
+@dataclass(frozen=True)
+class TeamActivity:
+    """Somebody else's in-flight run, reduced to what explains the wait.
+
+    Every field here was argued for individually. That is the point of the type: a
+    redacted view produced by deleting fields from a full row is one forgotten field --
+    or one new column on ``research_runs`` -- away from leaking, whereas this cannot
+    carry what it has no place for.
+
+    There is deliberately **no run id**. Without one the panel cannot make the row
+    clickable by accident, and a caller cannot turn the listing into a set of ids to
+    probe ``/api/runs/<id>`` with. ``owner_name`` is None for a run whose owner row is
+    missing; the label for that case belongs to the presentation layer.
+    """
+
+    owner_name: str | None
+    status: str
+    current_stage: str
+    queue_position: int | None
+    elapsed_seconds: float
+
+
+class CheckpointTooLarge(RuntimeError):
+    """Raised when a pipeline state is too large to persist as a checkpoint."""
+
+
+def checkpoint_payload(state: dict[str, Any]) -> dict[str, Any]:
+    """
+    Return the state as it should be persisted, without raw document snapshots.
+
+    ACQUIRE puts every fetched document into the graph state and, for PDFs, raw_content
+    is the entire binary base64-encoded. Persisting that pushes the checkpoint past
+    PostgreSQL's jsonb ceiling.
+
+    The caller's state is never mutated: NORMALIZE still reads raw_content from memory to
+    write the MinIO snapshot and source_versions, so a normal run keeps every raw file.
+    Only a run resumed from this checkpoint sees the field already emptied.
+    """
+    documents = state.get("documents")
+    if not isinstance(documents, list):
+        return state
+    trimmed: list[Any] = []
+    for payload in documents:
+        if isinstance(payload, dict) and payload.get("raw_content"):
+            payload = {**payload, "raw_content": ""}
+        trimmed.append(payload)
+    return {**state, "documents": trimmed}
+
+
+def _assert_checkpoint_fits(run_id: str, stage: str, state: dict[str, Any]) -> None:
+    size = len(json.dumps(state, ensure_ascii=False, default=str).encode("utf-8"))
+    if size <= CHECKPOINT_MAX_BYTES:
+        return
+    largest = sorted(
+        (
+            (len(json.dumps(value, ensure_ascii=False, default=str)), key)
+            for key, value in state.items()
+        ),
+        reverse=True,
+    )[:3]
+    raise CheckpointTooLarge(
+        f"{stage} checkpoint for run {run_id} is {size / 1048576:.0f} MiB, over the "
+        f"{CHECKPOINT_MAX_BYTES / 1048576:.0f} MiB limit. Largest state keys: "
+        + ", ".join(f"{key} {value / 1048576:.0f} MiB" for value, key in largest)
+    )
+
+
+class Repository(metaclass=_OwnershipEnforced):
+    """Data access for research runs, scoped to whoever is asking.
+
+    ``actor`` is the enforcement point for per-user isolation. It lives here rather
+    than in the route handlers because the control panel reads this data two ways --
+    over the API and straight from the database -- and a filter applied at one of
+    those doors leaves the other one open.
+    """
+
+    def __init__(self, session: AsyncSession, *, actor: Principal | None = None):
+        self.session = session
+        self.actor = actor
+
+    def require_actor(self) -> Principal:
+        if self.actor is None:
+            raise ActorRequired(
+                "This repository has no actor. Pass actor=Principal.system() for "
+                "worker and cron paths, or the request's principal for network paths."
+            )
+        return self.actor
+
+    async def _guard_run(self, run_id: str) -> None:
+        """Raise unless the actor owns this run or is an admin.
+
+        A run with no owner is reachable only by admins. That matters for rows that
+        predate ownership and for any future path that forgets to set one: the
+        omission hides data instead of exposing it.
+        """
+        actor = self.require_actor()
+        if actor.is_admin:
+            return
+        owner_id = await self.session.scalar(
+            select(ResearchRunRow.owner_id).where(ResearchRunRow.id == run_id)
+        )
+        # A missing run and a foreign run are the same answer on purpose; telling them
+        # apart would let a caller probe which run ids exist.
+        if owner_id is None or owner_id != actor.user_id:
+            raise RunAccessDenied(run_id)
+
+    async def create_run(
+        self, protocol: ResearchProtocol, *, owner_id: str | None = None
+    ) -> ResearchRunRow:
+        """Create a run owned by ``owner_id``, defaulting to the acting user.
+
+        The system principal has no user id, so a job with no human caller (the Zotero
+        sync) must name an owner explicitly -- otherwise the run would be created
+        unowned and become invisible to everyone but an admin.
+        """
+        actor = self.require_actor()
+        resolved_owner = owner_id or actor.user_id
+        if resolved_owner is None:
+            raise ActorRequired(
+                "create_run needs an owner: the system principal owns nothing, so "
+                "pass owner_id explicitly (see ZOTERO_SYNC_OWNER_EMAIL)."
+            )
         now = datetime.now(timezone.utc)
         row = ResearchRunRow(
             id=new_id(),
+            owner_id=resolved_owner,
             status=RunStatus.QUEUED.value,
             current_stage="INIT",
             protocol=protocol.model_dump(mode="json"),
@@ -73,6 +298,15 @@ class Repository:
         return await self.session.scalar(stmt)
 
     async def list_runs_by_statuses(self, statuses: set[str]) -> list[ResearchRunRow]:
+        """Every run in the given states, regardless of owner -- system paths only.
+
+        Used by startup reconciliation and the worker, which have to see the whole
+        queue to do their job. Restricted to admin/system so it cannot become a
+        listing endpoint by accident.
+        """
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
         if not statuses:
             return []
         rows = await self.session.scalars(
@@ -83,12 +317,73 @@ class Repository:
         return list(rows)
 
     async def list_runs(self, *, limit: int = 50) -> list[ResearchRunRow]:
-        rows = await self.session.scalars(
-            select(ResearchRunRow)
-            .order_by(ResearchRunRow.created_at.desc())
-            .limit(min(max(1, limit), 200))
-        )
+        """Runs visible to the actor: their own, or all of them for an admin."""
+        actor = self.require_actor()
+        stmt = select(ResearchRunRow).order_by(ResearchRunRow.created_at.desc())
+        if not actor.is_admin:
+            stmt = stmt.where(ResearchRunRow.owner_id == actor.user_id)
+        rows = await self.session.scalars(stmt.limit(min(max(1, limit), 200)))
         return list(rows)
+
+    async def list_team_activity(
+        self, *, queue_positions: Mapping[str, int] | None = None
+    ) -> list[TeamActivity]:
+        """Other people's in-flight runs, redacted to status and stage.
+
+        This is the one read that crosses the ownership boundary on purpose. Isolation
+        without it produces a misleading panel: on a single-GPU machine the person whose
+        run sits in ``queued`` sees a still row and an empty table, and concludes the
+        platform is broken rather than busy. What leaks is the *existence* of work and
+        who owns it -- never a title, a question, a count or an id.
+
+        Returns nothing for an admin: their own table already lists every run in full, so
+        a second redacted copy of the same rows would only confuse.
+        """
+        actor = self.require_actor()
+        if actor.is_admin:
+            return []
+        positions = queue_positions or {}
+        rows = await self.session.execute(
+            select(
+                ResearchRunRow.id,
+                ResearchRunRow.status,
+                ResearchRunRow.current_stage,
+                ResearchRunRow.created_at,
+                ResearchRunRow.updated_at,
+                UserRow.display_name,
+            )
+            .outerjoin(UserRow, UserRow.id == ResearchRunRow.owner_id)
+            .where(
+                ResearchRunRow.status.in_(ACTIVE_RUN_STATUSES),
+                # An unowned run is included on purpose. It still occupies the GPU, and
+                # hiding it would understate the queue; it carries no identity to leak.
+                # The NULL has to be spelled out -- ``owner_id != :id`` is NULL, not true,
+                # for a NULL owner, so the plain comparison would drop exactly those rows.
+                or_(
+                    ResearchRunRow.owner_id.is_(None),
+                    ResearchRunRow.owner_id != actor.user_id,
+                ),
+            )
+            .order_by(ResearchRunRow.created_at)
+        )
+        activity = []
+        for run_id, status, stage, created_at, updated_at, display_name in rows:
+            elapsed = (
+                max(0.0, (updated_at - created_at).total_seconds())
+                if created_at and updated_at
+                else 0.0
+            )
+            activity.append(
+                TeamActivity(
+                    owner_name=display_name,
+                    status=status,
+                    current_stage=stage or "INIT",
+                    # Resolved in here so the run id never crosses the return boundary.
+                    queue_position=positions.get(run_id),
+                    elapsed_seconds=round(elapsed, 2),
+                )
+            )
+        return activity
 
     async def apply_source_domain_review(
         self,
@@ -141,6 +436,10 @@ class Repository:
         )
 
     async def checkpoint(self, run_id: str, stage: str, state: dict[str, Any]) -> None:
+        state = checkpoint_payload(state)
+        # Check before touching the session: a driver-side size error aborts the
+        # transaction and every later write on it, including the failure event.
+        _assert_checkpoint_fits(run_id, stage, state)
         existing = await self.session.scalar(
             select(CheckpointRow).where(
                 CheckpointRow.run_id == run_id, CheckpointRow.stage == stage
@@ -287,6 +586,11 @@ class Repository:
                     "connector": c.connector_id,
                     "raw_snapshot_key": c.metadata.get("raw_snapshot_key"),
                     "strategies_tried": document.strategies_tried,
+                    # Which parser produced `content`, so an audit can tell whether a run
+                    # used the deterministic pick or a ParserSelection override.
+                    "parser_id": document.parser_id,
+                    "tables": document.tables,
+                    "code_blocks": document.code_blocks,
                     "error": document.error,
                 },
             )
@@ -503,14 +807,29 @@ class Repository:
         ]
 
     async def list_corpus_passages(self, exclude_run_id: str, limit: int = 3000) -> list[Passage]:
+        """Passages from *other* runs, used to seed a new run from past work.
+
+        This is the one deliberately cross-run read in the repository, which makes it
+        the one place per-user isolation could leak sideways: without scoping, a user's
+        new run would be fed text acquired under someone else's account. With
+        ``CORPUS_SCOPE=owner`` (the default) the pool stays inside the actor's own
+        history; ``global`` restores the shared pool as a documented choice.
+        """
+        actor = self.require_actor()
+        stmt = (
+            select(PassageRow)
+            .join(SourceVersionRow, SourceVersionRow.id == PassageRow.source_version_id)
+            .join(SourceRow, SourceRow.id == SourceVersionRow.source_id)
+            .where(SourceRow.run_id != exclude_run_id)
+        )
+        scope_owner = await self._corpus_scope_owner(exclude_run_id, actor)
+        if scope_owner is not None:
+            stmt = stmt.join(ResearchRunRow, ResearchRunRow.id == SourceRow.run_id).where(
+                ResearchRunRow.owner_id == scope_owner
+            )
         rows = list(
             await self.session.scalars(
-                select(PassageRow)
-                .join(SourceVersionRow, SourceVersionRow.id == PassageRow.source_version_id)
-                .join(SourceRow, SourceRow.id == SourceVersionRow.source_id)
-                .where(SourceRow.run_id != exclude_run_id)
-                .order_by(SourceVersionRow.retrieved_at.desc())
-                .limit(limit)
+                stmt.order_by(SourceVersionRow.retrieved_at.desc()).limit(limit)
             )
         )
         return [
@@ -531,6 +850,27 @@ class Repository:
             )
             for row in rows
         ]
+
+    async def _corpus_scope_owner(self, exclude_run_id: str, actor: Principal) -> str | None:
+        """Whose corpus this read may draw on, or None for the unrestricted pool.
+
+        The scope follows the *run being built*, not the caller. That distinction
+        matters: the pipeline executes runs under the system principal, so scoping by
+        the caller would hand every user's text to every run. Scoping by the run's
+        owner keeps a user's research fed by their own history no matter which
+        internal component is doing the work.
+        """
+        if get_settings().corpus_scope == "global":
+            return None
+        if exclude_run_id:
+            return await self.session.scalar(
+                select(ResearchRunRow.owner_id).where(ResearchRunRow.id == exclude_run_id)
+            )
+        # No run context: an admin searching the corpus directly sees everything they
+        # could already see run by run; anyone else is held to their own history.
+        if actor.is_admin:
+            return None
+        return actor.user_id
 
     async def corpus_documents(self, version_ids: list[str]) -> list[AcquiredDocument]:
         if not version_ids:
@@ -605,10 +945,15 @@ class Repository:
         *,
         max_links: int,
     ) -> int:
-        source_host = canonicalize_url(source_url).split("/", 3)[2]
+        source_host = urlsplit(canonicalize_url(source_url)).hostname or ""
         added = 0
         for link in list(dict.fromkeys(links))[:max_links]:
             canonical = canonicalize_url(link)
+            # A hostless link (mailto:, javascript:, bare fragment) has no domain to
+            # compare and nothing to crawl; skipping beats aborting the whole run.
+            link_host = urlsplit(canonical).hostname
+            if not link_host:
+                continue
             existing = await self.session.scalar(
                 select(FrontierRow).where(
                     FrontierRow.run_id == run_id,
@@ -617,7 +962,7 @@ class Repository:
             )
             if existing:
                 continue
-            same_domain = canonical.split("/", 3)[2] == source_host
+            same_domain = link_host == source_host
             self.session.add(
                 FrontierRow(
                     id=new_id(),

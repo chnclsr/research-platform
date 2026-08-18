@@ -9,9 +9,15 @@ x-app: &app
     DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
     REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-    AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://host.docker.internal:3939}
+    AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
     CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
     OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    # Identity settings. SERVICE_TOKEN is what the panel and the bot present when they
+    # act for a user; SESSION_SECRET keeps panel logins alive across a restart.
+    SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+    SESSION_SECRET: ${SESSION_SECRET:-}
+    CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}
+    TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   depends_on:
@@ -66,7 +72,10 @@ services:
       - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
     volumes:
-      - minio-data:/data
+      # Raw snapshots and export artifacts are the only unbounded-growth data here. A host
+      # path keeps them out of the Docker disk image, which never shrinks once grown, and
+      # lets a deployment point them at a larger disk.
+      - ${MINIO_DATA_DIR:-./data/minio}:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 5s
@@ -95,6 +104,25 @@ services:
     networks: [research]
     restart: unless-stopped
 
+  # Fronts a plain SearXNG instance (run outside this compose project, default
+  # port 3939) with the /search, /read and /health contract the AgentSearch
+  # connectors expect. Point SEARXNG_URL at a real AgentSearch service instead
+  # and this service can be dropped.
+  agentsearch-adapter:
+    build: .
+    command: ["python", "/app/agentsearch_adapter.py"]
+    environment:
+      SEARXNG_URL: ${SEARXNG_URL:-http://host.docker.internal:3939}
+      ADAPTER_PORT: 3940
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./scripts/agentsearch_adapter.py:/app/agentsearch_adapter.py:ro
+    ports:
+      - "127.0.0.1:3940:3940"
+    networks: [research]
+    restart: unless-stopped
+
   migrate:
     <<: *app
     command: ["alembic", "upgrade", "head"]
@@ -107,9 +135,12 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-      AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://host.docker.internal:3939}
+      AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
       CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}
       API_HOST: 0.0.0.0
       API_PORT: 8000
     depends_on:
@@ -149,6 +180,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
       RESEARCH_API_URL: http://api:8000
       API_TOKEN: ${API_TOKEN:-change-me-local-token}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8010
@@ -157,7 +191,10 @@ services:
       MCP_ALLOWED_NETWORKS: ${MCP_ALLOWED_NETWORKS:-[]}
       GATEWAY_DOWNLOAD_DIR: /data/deliveries
     ports:
-      - "8010:8010"
+      # Bound to loopback like every other service. This was the one port published on
+      # all interfaces, which put an agent gateway holding a single shared bearer token
+      # on the local network.
+      - "127.0.0.1:8010:8010"
     volumes:
       - gateway-deliveries:/data/deliveries
     depends_on:
@@ -173,7 +210,11 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
       RESEARCH_API_URL: http://api:8000
       API_TOKEN: ${API_TOKEN:-change-me-local-token}
+      # The bot resolves a Telegram account to a platform user and then acts for that
+      # user against the API, which requires the service credential.
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-[]}
       TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS:-[]}
       GATEWAY_DOWNLOAD_DIR: /data/deliveries
@@ -191,7 +232,6 @@ networks:
 volumes:
   postgres-data:
   redis-data:
-  minio-data:
   langflow-data:
   crawl4ai-browser-cache:
   gateway-deliveries:

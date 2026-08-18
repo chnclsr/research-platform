@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 from types import SimpleNamespace
 
@@ -157,3 +158,107 @@ def test_word_report_is_a_sourced_docx_with_embedded_figures() -> None:
     assert "Model interpretation" in text
     assert "verify rights before distribution" in text
     assert len(document.tables) >= 3
+
+
+def _anchors_and_bookmarks(document_bytes: bytes) -> tuple[set[str], set[str]]:
+    """Extract internal link targets and bookmark names from a .docx payload."""
+    with zipfile.ZipFile(io.BytesIO(document_bytes)) as archive:
+        xml = archive.read("word/document.xml").decode("utf-8")
+    anchors = set(re.findall(r'w:anchor="([^"]+)"', xml))
+    bookmarks = set(re.findall(r'w:bookmarkStart[^>]*w:name="([^"]+)"', xml))
+    return anchors, bookmarks
+
+
+def _minimal_report_inputs() -> dict:
+    source = SimpleNamespace(
+        id="source-1",
+        title="Independent clinical source",
+        family="academic",
+        url="https://example.org/clinical",
+    )
+    claim = SimpleNamespace(
+        id="claim-1",
+        text="The method improved the measured outcome.",
+        status="supported",
+        audit={"question_relevance": 0.91},
+    )
+    evidence = SimpleNamespace(quote="The measured outcome improved by ten percent.")
+    return {
+        "run_id": "01LINKTEST",
+        "title": "Source cross-reference",
+        "question": "Does the method improve the measured outcome?",
+        "language": "en",
+        "coverage": {
+            "source_family_coverage": 1.0,
+            "query_branch_coverage": 0.9,
+            "claim_audit_coverage": 1.0,
+            "estimated_completeness": 0.8,
+            "unresolved_major_claims": 0,
+        },
+        "sources": [source],
+        "claims": [claim],
+        "reportable_claims": [claim],
+        "evidence_by_claim": {claim.id: [(evidence, source)]},
+        "executive_summary": "One audited claim is supported by an independent source.",
+        "narrative": "The result is reported only within the available evidence.",
+        "uncertainty": "Replication and external validation remain necessary.",
+    }
+
+
+def test_synthesis_report_links_citations_to_the_source_catalog() -> None:
+    """A reader clicking [S01] in the prose should land on that row of the catalog."""
+    package = SynthesisPackage(
+        executive_summary="The outcome improved [S01].",
+        sections=[
+            SynthesisSection(
+                title="Measured outcome",
+                synthesis="The measured outcome improved in the available study [S01].",
+                consensus="One study reports improvement [S01].",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        study_profiles=[
+            StudyProfile(
+                source_id="source-1",
+                source_label="S01",
+                title="Independent clinical source",
+                contribution="Detection / diagnosis",
+                evidence_design="Observational",
+            )
+        ],
+        cross_study_assessment="Only one study is available [S01].",
+        conclusion="Replication remains necessary [S01].",
+        uncertainty="Single-study evidence [S01].",
+        generated_by_llm=True,
+    )
+    report = build_word_report(**_minimal_report_inputs(), synthesis_package=package)
+    anchors, bookmarks = _anchors_and_bookmarks(report.document)
+
+    assert "src_S01" in bookmarks, "catalog row must be bookmarked"
+    assert "src_S01" in anchors, "citations must link to it"
+
+
+def test_focused_answer_report_also_bookmarks_its_catalog() -> None:
+    """The two templates build separate catalogs; fixing one does not fix the other."""
+    report = build_word_report(**_minimal_report_inputs(), synthesis_package=None)
+    _, bookmarks = _anchors_and_bookmarks(report.document)
+    assert "src_S01" in bookmarks
+
+
+def test_report_has_no_links_pointing_at_missing_bookmarks() -> None:
+    """A link to an undefined bookmark is silently inert in Word — worse than plain text."""
+    package = SynthesisPackage(
+        executive_summary="Two labels appear but only one source exists [S01] [S07].",
+        sections=[],
+        study_profiles=[],
+        cross_study_assessment="",
+        conclusion="Unknown label [S07] must stay plain text.",
+        uncertainty="",
+        generated_by_llm=True,
+    )
+    report = build_word_report(**_minimal_report_inputs(), synthesis_package=package)
+    anchors, bookmarks = _anchors_and_bookmarks(report.document)
+
+    assert anchors - bookmarks == set(), f"dangling anchors: {anchors - bookmarks}"
+    assert "src_S07" not in anchors, "a label with no catalog row must not become a link"
