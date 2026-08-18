@@ -36,7 +36,7 @@ CONTROL_PANEL_HTML = r"""<!doctype html>
     .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:780px}th{padding:9px 12px;text-align:left;background:#0d131b;color:var(--muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase}td{padding:11px 12px;border-top:1px solid #202c38;vertical-align:middle}tbody tr{transition:.12s}tbody tr.clickable{cursor:pointer}tbody tr:hover{background:#ffffff04}
     .run-title{max-width:430px}.run-title strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mono{font:11px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted)}
     .badge{display:inline-flex;align-items:center;border-radius:99px;padding:4px 8px;background:#263342;color:#cbd5df;font-size:11px;font-weight:750}.badge.running,.badge.completed{background:#15352a;color:#75e4b7}.badge.queued,.badge.paused,.badge.awaiting_input{background:#372c17;color:#ffd27c}.badge.failed,.badge.cancelled,.badge.cancel_requested{background:#3c1f26;color:#ff9aa4}.badge.completed_incomplete{background:#30294b;color:#cabdff}.badge.reserve{background:#3a2e19;color:#ffd27c}.badge.reject{background:#3c1f26;color:#ff9aa4}.badge.accept{background:#15352a;color:#75e4b7}
-    .row-actions{display:flex;justify-content:flex-end;gap:5px}.empty{padding:34px 16px;text-align:center;color:var(--muted)}
+    .pad{padding:16px}.codebox{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:11px;background:#0d131b}.codebox .code{font:22px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.16em;color:var(--green);font-weight:700}.codebox .secret{font:12px ui-monospace,Consolas,monospace;word-break:break-all;color:var(--amber)}.row-actions{display:flex;justify-content:flex-end;gap:5px}.empty{padding:34px 16px;text-align:center;color:var(--muted)}
     .metric-bar{height:7px;border-radius:99px;background:#202b36;overflow:hidden}.metric-bar span{display:block;height:100%;border-radius:inherit;background:var(--blue);transition:.3s width}.metric-bar.good span{background:var(--green)}.metric-bar.warn span{background:var(--amber)}.metric-bar.bad span{background:var(--red)}
     .resource-grid{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:16px}.resource{border:1px solid var(--line);border-radius:11px;background:var(--surface2);padding:14px}.resource .metric-bar{margin-top:12px}.resource-value{font-size:20px;font-weight:760;margin:8px 0 2px}
     .connector-status{display:flex;align-items:center;gap:7px}.connector-detail{max-width:360px;color:var(--muted);font-size:12px}.rate{font-weight:760}.rate.good{color:var(--green)}.rate.warn{color:var(--amber)}.rate.bad{color:var(--red)}
@@ -61,7 +61,13 @@ CONTROL_PANEL_HTML = r"""<!doctype html>
 <main class="shell">
   <header>
     <div><div class="eyebrow">Local research operations</div><h1>Araştırma Operasyon Merkezi</h1><p class="sub">Servis sağlığı, kaynak recall’ı ve araştırma kararları tek görünümde.</p></div>
-    <div class="actions"><button class="btn primary system-action" data-action="start">Başlat</button><button class="btn system-action" data-action="restart">Yeniden başlat</button><button class="btn danger system-action" data-action="stop">Servisleri durdur</button></div>
+    <div class="actions">
+      <span id="session-badge" class="service" title="Oturum"><strong id="session-name">…</strong><span id="session-role" class="note"></span></span>
+      <button class="btn primary system-action admin-only" data-action="start" hidden>Başlat</button>
+      <button class="btn system-action admin-only" data-action="restart" hidden>Yeniden başlat</button>
+      <button class="btn danger system-action admin-only" data-action="stop" hidden>Servisleri durdur</button>
+      <button id="logout" class="btn">Çıkış</button>
+    </div>
   </header>
   <div class="summary">
     <div class="card"><span class="label">Sistem</span><span class="value signal"><i id="overall-dot" class="dot"></i><span id="overall">Yükleniyor</span></span><span id="overall-note" class="note">Durum alınıyor…</span></div>
@@ -71,7 +77,7 @@ CONTROL_PANEL_HTML = r"""<!doctype html>
     <div class="card"><span class="label">Yerel model</span><span id="model" class="value" style="font-size:16px">—</span><span id="model-note" class="note">Ollama kontrol ediliyor</span></div>
   </div>
   <div id="services" class="service-strip"></div>
-  <nav class="tabs" aria-label="Panel bölümleri"><button class="tab active" data-view="overview">Araştırmalar</button><button class="tab" data-view="connectors">Connector’lar</button><button class="tab" data-view="system">Donanım</button><button class="tab" data-view="logs">Loglar</button></nav>
+  <nav class="tabs" aria-label="Panel bölümleri"><button class="tab active" data-view="overview">Araştırmalar</button><button class="tab" data-view="connectors">Connector’lar</button><button class="tab" data-view="system">Donanım</button><button class="tab admin-only" data-view="logs" hidden>Loglar</button><button class="tab" data-view="account">Hesabım</button></nav>
 
   <div id="view-overview" class="view active">
     <section class="panel"><div class="panel-head"><h2>Aktif ve sıradaki istekler</h2><span id="active-label" class="count">0 iş</span></div><div class="table-wrap"><table><thead><tr><th>Araştırma</th><th>Durum</th><th>Aşama</th><th>Sıra</th><th>Tur</th><th>Kaynak / İddia</th><th>Coverage</th><th>Süre</th><th></th></tr></thead><tbody id="active-runs"></tbody></table><div id="active-empty" class="empty">Aktif iş yok.</div></div></section>
@@ -83,6 +89,17 @@ CONTROL_PANEL_HTML = r"""<!doctype html>
   <div id="view-system" class="view"><section class="panel"><div class="panel-head"><h2>Donanım ve model telemetrisi</h2><span class="count">Dört saniyede bir güncellenir</span></div><div id="resources" class="resource-grid"></div></section><section class="panel"><div class="panel-head"><h2>GPU ayrıntıları</h2><span class="count">NVIDIA SMI</span></div><div class="table-wrap"><table><thead><tr><th>GPU</th><th>Kullanım</th><th>VRAM</th><th>Sıcaklık</th><th>Güç</th></tr></thead><tbody id="gpu-rows"></tbody></table><div id="gpu-empty" class="empty">NVIDIA GPU verisi bulunamadı.</div></div></section></div>
 
   <div id="view-logs" class="view"><section class="panel"><div class="panel-head"><h2>Servis logları</h2><span class="count">Son 24 KB · token ve credential değerleri gösterilmez</span></div><div class="log-tools"><div id="log-tabs" class="chips"></div></div><pre id="logs">Bir servis seç.</pre></section></div>
+  <div id="view-account" class="view"><div class="grid-2">
+    <section class="panel"><div class="panel-head"><h2>Telegram bağlantısı</h2><span class="count">Bottan başlattığınız araştırmalar hesabınıza ait olur</span></div>
+      <div class="pad"><div id="tg-state" class="note">Yükleniyor…</div>
+        <div class="inline-actions" style="margin-top:12px"><button id="tg-link" class="btn primary">Bağlantı kodu al</button><button id="tg-unlink" class="btn danger" hidden>Bağlantıyı kaldır</button></div>
+        <div id="tg-code" hidden></div>
+      </div></section>
+    <section class="panel"><div class="panel-head"><h2>API anahtarları</h2><span class="count">Betik, Langflow ve MCP erişimi</span></div>
+      <div class="pad"><div class="inline-actions"><input id="key-name" placeholder="Anahtar adı (örn. langflow)" style="flex:1;min-width:150px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface2);color:var(--text)"><button id="key-create" class="btn primary">Üret</button></div>
+        <div id="key-new" hidden></div><div id="key-list" style="margin-top:14px"></div>
+      </div></section>
+  </div></div>
   <div class="footer"><span>Yalnız izinli ofis ağından erişilebilir · v0.7.0</span><span id="last-update">—</span></div>
 </main>
 
@@ -102,7 +119,15 @@ const duration=s=>{s=Number(s||0);if(s<60)return`${Math.round(s)} sn`;if(s<3600)
 const bytes=n=>{n=Number(n||0);return n>1048576?`${(n/1048576).toFixed(1)} MB`:n>1024?`${(n/1024).toFixed(1)} KB`:`${n} B`};
 const pct=v=>`${Math.round(Number(v||0)*100)}%`;
 function toast(message,error=false){const t=el('toast');t.textContent=message;t.className=`toast show${error?' error':''}`;clearTimeout(t.timer);t.timer=setTimeout(()=>t.className='toast',4200)}
-async function api(path,options={}){const response=await fetch(path,{...options,headers:{...headers,...(options.headers||{})}});const type=response.headers.get('content-type')||'';const data=type.includes('json')?await response.json():await response.text();if(!response.ok)throw new Error(data.detail||data||`HTTP ${response.status}`);return data}
+async function api(path,options={}){const response=await fetch(path,{...options,headers:{...headers,...(options.headers||{})}});
+// An expired or revoked session must land on the sign-in page rather than leaving the
+// panel polling forever against 401s.
+if(response.status===401){location.href='/login';throw new Error('Oturum sona erdi.')}
+const type=response.headers.get('content-type')||'';const data=type.includes('json')?await response.json():await response.text();if(!response.ok)throw new Error(data.detail||data||`HTTP ${response.status}`);return data}
+// Log tabs and the system buttons are administrator-only server-side; hiding them for
+// everyone else keeps the UI honest instead of offering controls that return 403.
+async function loadSession(){try{const s=await api('/api/session');el('session-name').textContent=s.display_name||s.email||'—';el('session-role').textContent=s.is_admin?'yönetici':'kullanıcı';if(s.is_admin){document.querySelectorAll('.admin-only').forEach(b=>b.hidden=false);el('log-panel')?.removeAttribute('hidden')}else{el('log-panel')?.setAttribute('hidden','')}return s}catch(e){return null}}
+async function logout(){const form=document.createElement('form');form.method='post';form.action='/logout';document.body.append(form);form.submit()}
 function badge(status){return h('span',`badge ${status}`,labels[status]||status||'—')}
 function textCell(value,className=''){return h('td',className,value??'—')}
 function runTitle(run){const td=h('td','run-title');td.append(h('strong','',run.question||run.title),h('span','mono',run.id));return td}
@@ -140,10 +165,125 @@ async function downloadArtifact(runId,name,button){button.disabled=true;try{cons
 async function systemAction(action){if(action==='stop'&&!confirm('API, worker, MCP ve Telegram servisleri durdurulsun mu? Panel açık kalacak.'))return;document.querySelectorAll('.system-action').forEach(b=>b.disabled=true);toast(`${action} işlemi başladı…`);try{await api(`/api/system/${action}`,{method:'POST'});toast('Sistem işlemi tamamlandı.')}catch(e){toast(e.message,true)}finally{await refresh();document.querySelectorAll('.system-action').forEach(b=>b.disabled=false)}}
 async function runAction(id,action){try{await api(`/api/runs/${id}/${action}`,{method:'POST'});toast(`${id}: ${action} kaydedildi.`);await refresh();if(currentRunId===id)await openRun(id)}catch(e){toast(e.message,true)}}
 async function showLog(service){document.querySelectorAll('#log-tabs button').forEach(b=>b.classList.toggle('primary',b.dataset.service===service));el('logs').textContent='Yükleniyor…';try{el('logs').textContent=await api(`/api/logs/${service}`)}catch(e){el('logs').textContent=e.message}}
-function switchView(view){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));if(view==='connectors')loadConnectors()}
+function switchView(view){document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));if(view==='connectors')loadConnectors();if(view==='account'){loadTelegram();loadKeys()}}
 for(const service of ['worker','api','mcp','telegram','control-panel']){const b=h('button','btn small',serviceLabels[service]||'Panel');b.dataset.service=service;b.onclick=()=>showLog(service);el('log-tabs').append(b)}
 document.querySelectorAll('.system-action').forEach(b=>b.onclick=()=>systemAction(b.dataset.action));document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>switchView(b.dataset.view));el('refresh-connectors').onclick=loadConnectors;el('drawer-close').onclick=closeRun;el('drawer-refresh').onclick=()=>currentRunId&&openRun(currentRunId);el('drawer-backdrop').onclick=e=>{if(e.target===el('drawer-backdrop'))closeRun()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeRun()});
-showLog('worker');refresh();setInterval(refresh,4000);
+
+// --- Hesabım: Telegram bağlantısı ve API anahtarları ---
+async function loadTelegram(){
+  const box=el('tg-state');
+  try{
+    const s=await api('/api/telegram');
+    const linked=(s.linked||[]).length>0;
+    box.textContent=linked
+      ? `Bağlı — Telegram ID ${s.linked.join(', ')}`
+      : 'Bağlı değil. Bottan araştırma başlatabilmek için hesabınızı bağlayın.';
+    el('tg-unlink').hidden=!linked;
+    el('tg-link').textContent=linked?'Yeni kod al':'Bağlantı kodu al';
+  }catch(e){box.textContent=e.message}
+}
+async function telegramCode(){
+  const target=el('tg-code');
+  try{
+    const r=await api('/api/telegram/link-code',{method:'POST'});
+    const dk=r.deep_link
+      ? `<a class="btn primary" href="${r.deep_link}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;margin-top:10px">Telegram'da aç</a>`
+      : `<div class="note" style="margin-top:10px">Derin bağlantı için TELEGRAM_BOT_USERNAME ayarlanmalı.</div>`;
+    target.innerHTML=`<div class="codebox"><div class="label">Bağlantı kodu</div>
+      <div class="code">${r.code}</div>
+      <div class="note" style="margin-top:8px">Bota şunu yazın: <code>${r.command}</code></div>
+      ${dk}
+      <div class="note" style="margin-top:10px">Kod ${Math.round(r.expires_in_seconds/60)} dakika geçerli ve yalnız bir kez kullanılabilir.</div></div>`;
+    target.hidden=false;
+  }catch(e){toast(e.message,true)}
+}
+async function telegramUnlink(){
+  if(!confirm('Telegram bağlantısı kaldırılsın mı? Bottan araştırma başlatamazsınız.'))return;
+  try{await api('/api/telegram',{method:'DELETE'});toast('Bağlantı kaldırıldı.');el('tg-code').hidden=true;await loadTelegram()}
+  catch(e){toast(e.message,true)}
+}
+async function loadKeys(){
+  const box=el('key-list');
+  try{
+    const keys=await api('/api/keys');
+    if(!keys.length){box.innerHTML='<div class="note">Henüz anahtar yok.</div>';return}
+    box.innerHTML='';
+    for(const k of keys){
+      const row=h('div','service');
+      row.style.cssText='justify-content:space-between;width:100%;border-radius:9px;margin-bottom:6px';
+      row.innerHTML=`<span><strong>${k.name}</strong> <span class="mono">${k.prefix}…</span></span>`;
+      const del=h('button','btn small danger','İptal et');
+      del.onclick=async()=>{if(!confirm(`"${k.name}" anahtarı iptal edilsin mi?`))return;
+        try{await api(`/api/keys/${k.id}`,{method:'DELETE'});toast('Anahtar iptal edildi.');await loadKeys()}catch(e){toast(e.message,true)}};
+      row.append(del);box.append(row);
+    }
+  }catch(e){box.textContent=e.message}
+}
+async function createKey(){
+  const name=el('key-name').value.trim()||'panel';
+  try{
+    const r=await api('/api/keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    el('key-new').innerHTML=`<div class="codebox"><div class="label">${r.name} — bir daha gösterilmeyecek</div>
+      <div class="secret">${r.key}</div></div>`;
+    el('key-new').hidden=false;el('key-name').value='';await loadKeys();
+  }catch(e){toast(e.message,true)}
+}
+el('tg-link').onclick=telegramCode;el('tg-unlink').onclick=telegramUnlink;el('key-create').onclick=createKey;
+el('logout').onclick=logout;
+loadSession().then(s=>{if(s&&s.is_admin)showLog('worker')});refresh();setInterval(refresh,4000);
 </script>
+</body>
+</html>"""
+
+
+# Rendered with __ERROR__ replaced by a message or an empty string. Kept deliberately
+# plain: the sign-in page is the one surface an unauthenticated caller can reach, so it
+# loads no data and exposes no state beyond whether a submission failed.
+LOGIN_HTML = r"""<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Research Platform · Giriş</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090d12;--surface:#10161f;--surface2:#151e29;--line:#273442;
+      --text:#edf3f8;--muted:#8d9dad;--green:#43d49b;--red:#ff707d;--blue:#68a8ff}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+      background:var(--bg);color:var(--text);
+      font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;padding:24px}
+    .card{width:100%;max-width:380px;border:1px solid var(--line);background:var(--surface);
+      border-radius:13px;padding:28px}
+    .eyebrow{color:var(--blue);font-size:11px;font-weight:800;letter-spacing:.14em;
+      text-transform:uppercase}
+    h1{font-size:23px;line-height:1.15;letter-spacing:-.03em;margin:6px 0 4px}
+    .sub{margin:0 0 22px;color:var(--muted);font-size:13px}
+    label{display:block;color:var(--muted);font-size:11px;font-weight:750;
+      letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+    input{width:100%;margin-bottom:16px;padding:10px 12px;border:1px solid var(--line);
+      border-radius:9px;background:var(--surface2);color:var(--text);font:inherit}
+    input:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
+    button{width:100%;padding:11px;border:1px solid var(--green);border-radius:9px;
+      background:var(--green);color:#06140e;font:inherit;font-weight:800;cursor:pointer}
+    button:hover{filter:brightness(1.07)}
+    .error{margin-bottom:16px;padding:10px 12px;border:1px solid #67343d;border-radius:9px;
+      background:#2a171d;color:#ff9ba5;font-size:13px}
+    .foot{margin:18px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <div class="eyebrow">Research Platform</div>
+    <h1>Operasyon Merkezi</h1>
+    <p class="sub">Devam etmek için hesabınızla giriş yapın.</p>
+    __ERROR__
+    <label for="email">E-posta</label>
+    <input id="email" name="email" type="email" autocomplete="username" required autofocus>
+    <label for="password">Parola</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Giriş yap</button>
+    <p class="foot">Hesabınız yoksa yöneticinize başvurun.
+      Hesaplar <code>research-admin</code> komutuyla oluşturulur.</p>
+  </form>
 </body>
 </html>"""

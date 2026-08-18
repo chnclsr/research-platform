@@ -17,13 +17,30 @@ import httpx
 import psutil
 import uvicorn
 from arq.constants import default_queue_name, health_check_key_suffix, in_progress_key_prefix
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from redis.asyncio import Redis
 from sqlalchemy import select
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .auth import Principal
 from .config import get_settings
+from .control_panel_auth import (
+    audit,
+    clear_session_cookie,
+    client_key,
+    csrf_token,
+    issue_session_cookie,
+    login_redirect,
+    optional_principal,
+    record_failure,
+    record_success,
+    require_admin,
+    require_admin_csrf,
+    require_csrf,
+    require_user,
+    throttled,
+)
 from .control_panel_metrics import (
     connector_operations,
     llm_summary,
@@ -34,7 +51,18 @@ from .control_panel_metrics import (
     source_funnel,
     stage_timeline,
 )
-from .control_panel_ui import CONTROL_PANEL_HTML
+from .control_panel_ui import CONTROL_PANEL_HTML, LOGIN_HTML
+from .identity import (
+    authenticate,
+    format_link_code,
+    get_user,
+    issue_api_key,
+    issue_telegram_link_code,
+    list_api_keys,
+    revoke_api_key,
+    telegram_ids_for,
+    unlink_telegram,
+)
 from .db import (
     ArtifactRow,
     CheckpointRow,
@@ -241,18 +269,32 @@ async def _queue_snapshot() -> dict[str, Any]:
         await redis.aclose()
 
 
-async def _run_snapshot(queue: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+def _may_see(run: ResearchRunRow, principal: Principal) -> bool:
+    """Admins see every run; everyone else sees the ones they own.
+
+    A run with no owner is admin-only, so rows that predate ownership -- or any future
+    path that forgets to set one -- hide instead of leaking.
+    """
+    if principal.is_admin:
+        return True
+    return run.owner_id is not None and run.owner_id == principal.user_id
+
+
+async def _run_snapshot(
+    queue: dict[str, Any], principal: Principal
+) -> dict[str, list[dict[str, Any]]]:
     queue_positions = {
         item["run_id"]: item["position"]
         for item in queue["jobs"]
         if item["run_id"] and not item["running"]
     }
     async with SessionLocal() as session:
-        rows = list(
-            await session.scalars(
-                select(ResearchRunRow).order_by(ResearchRunRow.created_at.desc()).limit(60)
-            )
-        )
+        # Straight to the database rather than through the API, so the ownership filter
+        # has to be applied here too -- this is the second door the panel reads through.
+        statement = select(ResearchRunRow).order_by(ResearchRunRow.created_at.desc())
+        if not principal.is_admin:
+            statement = statement.where(ResearchRunRow.owner_id == principal.user_id)
+        rows = list(await session.scalars(statement.limit(60)))
     serialized = []
     for row in rows:
         protocol = row.protocol or {}
@@ -381,7 +423,7 @@ async def _system_telemetry() -> dict[str, Any]:
     }
 
 
-async def build_status() -> dict[str, Any]:
+async def build_status(principal: Principal) -> dict[str, Any]:
     processes = await _service_processes()
     try:
         queue = await asyncio.wait_for(_queue_snapshot(), timeout=4)
@@ -397,7 +439,7 @@ async def build_status() -> dict[str, Any]:
             "error": "Redis status timeout",
         }
     try:
-        runs = await asyncio.wait_for(_run_snapshot(queue), timeout=4)
+        runs = await asyncio.wait_for(_run_snapshot(queue, principal), timeout=4)
         database = "ok"
     except Exception as exc:
         runs = {"active": [], "recent": []}
@@ -420,10 +462,12 @@ async def build_status() -> dict[str, Any]:
     }
 
 
-async def _run_detail(run_id: str) -> dict[str, Any]:
+async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
     async with SessionLocal() as session:
         run = await session.get(ResearchRunRow, run_id)
-        if run is None:
+        # A run belonging to someone else reads as missing, exactly as it does over the
+        # API. A distinct 403 here would confirm the id exists to a caller probing.
+        if run is None or not _may_see(run, principal):
             raise HTTPException(status_code=404, detail="Araştırma bulunamadı")
         events = list(
             await session.scalars(
@@ -618,11 +662,32 @@ async def _connector_snapshot() -> list[dict[str, Any]]:
     return output
 
 
-async def require_control_token(
-    x_control_token: str | None = Header(default=None),
-) -> None:
-    if not x_control_token or not secrets.compare_digest(x_control_token, CONTROL_TOKEN):
-        raise HTTPException(status_code=403, detail="Invalid control token")
+async def _api_request(
+    method: str,
+    path: str,
+    principal: Principal,
+    *,
+    timeout: float = 15,
+    json_body: dict[str, Any] | None = None,
+) -> httpx.Response:
+    """Call the research API as the signed-in user.
+
+    The panel holds a service credential, not the user's, so it names who it is acting
+    for. The API only honours that header once the service token itself verifies --
+    see resolve_principal in api.py.
+    """
+    settings = get_settings()
+    headers = {
+        "Authorization": f"Bearer {settings.service_token or settings.api_token}",
+        "X-Actor-User": principal.user_id or "",
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.request(
+            method,
+            f"{settings.research_api_url.rstrip('/')}{path}",
+            headers=headers,
+            json=json_body,
+        )
 
 
 def _compose_environment() -> dict[str, str]:
@@ -734,9 +799,7 @@ app.add_middleware(
 )
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index() -> HTMLResponse:
-    response = HTMLResponse(CONTROL_PANEL_HTML.replace("__CONTROL_TOKEN__", CONTROL_TOKEN))
+def _secure_headers(response: Response) -> Response:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
@@ -746,35 +809,112 @@ async def index() -> HTMLResponse:
     return response
 
 
+@app.get("/", response_class=HTMLResponse)
+async def index(principal: Principal | None = Depends(optional_principal)):
+    if principal is None:
+        return login_redirect()
+    # The CSRF token is derived from the session, so the page a user is served can only
+    # drive actions as that user.
+    page = CONTROL_PANEL_HTML.replace("__CONTROL_TOKEN__", csrf_token(principal))
+    return _secure_headers(HTMLResponse(page))
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(principal: Principal | None = Depends(optional_principal)):
+    if principal is not None:
+        return RedirectResponse(url="/", status_code=303)
+    return _secure_headers(HTMLResponse(LOGIN_HTML.replace("__ERROR__", "")))
+
+
+@app.post("/login")
+async def login_submit(request: Request):
+    key = client_key(request)
+    wait_seconds = throttled(key)
+    if wait_seconds:
+        return _secure_headers(
+            HTMLResponse(
+                LOGIN_HTML.replace(
+                    "__ERROR__",
+                    f'<div class="error">Çok fazla başarısız deneme. '
+                    f"{wait_seconds} saniye sonra tekrar deneyin.</div>",
+                ),
+                status_code=429,
+            )
+        )
+    form = await request.form()
+    email = str(form.get("email") or "")
+    password = str(form.get("password") or "")
+    async with SessionLocal() as session:
+        user = await authenticate(session, email, password)
+        if user is None:
+            record_failure(key, email)
+            # One message for a wrong password, an unknown address and a disabled
+            # account alike, so the form cannot be used to enumerate accounts.
+            return _secure_headers(
+                HTMLResponse(
+                    LOGIN_HTML.replace(
+                        "__ERROR__",
+                        '<div class="error">E-posta veya parola hatalı.</div>',
+                    ),
+                    status_code=401,
+                )
+            )
+        record_success(key, user.id)
+        response = RedirectResponse(url="/", status_code=303)
+        issue_session_cookie(response, user.id, user.token_version)
+        return response
+
+
+@app.post("/logout")
+async def logout() -> RedirectResponse:
+    response = RedirectResponse(url="/login", status_code=303)
+    clear_session_cookie(response)
+    return response
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.7.0"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.10.0"}
 
 
-@app.get("/api/status", dependencies=[Depends(require_control_token)])
-async def status() -> dict[str, Any]:
-    return await build_status()
+@app.get("/api/session")
+async def session_info(principal: Principal = Depends(require_user)) -> dict[str, Any]:
+    """Who the panel thinks you are -- drives the header badge and admin-only controls."""
+    async with SessionLocal() as session:
+        user = await get_user(session, principal.user_id or "")
+    return {
+        "user_id": principal.user_id,
+        "email": user.email if user else None,
+        "display_name": user.display_name if user else None,
+        "role": principal.role,
+        "is_admin": principal.is_admin,
+    }
 
 
-@app.get("/api/runs/{run_id}/detail", dependencies=[Depends(require_control_token)])
-async def run_detail(run_id: str) -> dict[str, Any]:
-    return await _run_detail(run_id)
+@app.get("/api/status")
+async def status(principal: Principal = Depends(require_user)) -> dict[str, Any]:
+    return await build_status(principal)
 
 
-@app.get("/api/connectors", dependencies=[Depends(require_control_token)])
-async def connectors() -> list[dict[str, Any]]:
+@app.get("/api/runs/{run_id}/detail")
+async def run_detail(run_id: str, principal: Principal = Depends(require_user)) -> dict[str, Any]:
+    return await _run_detail(run_id, principal)
+
+
+@app.get("/api/connectors")
+async def connectors(_: Principal = Depends(require_user)) -> list[dict[str, Any]]:
     return await _connector_snapshot()
 
 
-@app.post("/api/connectors/{connector_id}/test", dependencies=[Depends(require_control_token)])
-async def connector_test(connector_id: str) -> dict[str, Any]:
-    settings = get_settings()
+@app.post("/api/connectors/{connector_id}/test")
+async def connector_test(
+    connector_id: str, principal: Principal = Depends(require_admin_csrf)
+) -> dict[str, Any]:
+    """Reaches out to a third-party service with the installation's credentials."""
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post(
-                f"{settings.research_api_url.rstrip('/')}/v1/connectors/{connector_id}/test",
-                headers={"Authorization": f"Bearer {settings.api_token}"},
-            )
+        response = await _api_request(
+            "POST", f"/v1/connectors/{connector_id}/test", principal, timeout=45
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
     if not response.is_success:
@@ -782,19 +922,18 @@ async def connector_test(connector_id: str) -> dict[str, Any]:
     return response.json()
 
 
-@app.get(
-    "/api/runs/{run_id}/artifacts/{artifact_name}",
-    dependencies=[Depends(require_control_token)],
-)
-async def artifact_download(run_id: str, artifact_name: str) -> Response:
-    settings = get_settings()
+@app.get("/api/runs/{run_id}/artifacts/{artifact_name}")
+async def artifact_download(
+    run_id: str, artifact_name: str, principal: Principal = Depends(require_user)
+) -> Response:
+    """Report downloads carry the acting user, so the API applies the ownership check."""
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.get(
-                f"{settings.research_api_url.rstrip('/')}/v1/research-runs/"
-                f"{run_id}/artifacts/{artifact_name}",
-                headers={"Authorization": f"Bearer {settings.api_token}"},
-            )
+        response = await _api_request(
+            "GET",
+            f"/v1/research-runs/{run_id}/artifacts/{artifact_name}",
+            principal,
+            timeout=120,
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail="Artifact indirilemedi") from exc
     if not response.is_success:
@@ -806,8 +945,16 @@ async def artifact_download(run_id: str, artifact_name: str) -> Response:
     )
 
 
-@app.post("/api/system/{action}", dependencies=[Depends(require_control_token)])
-async def system_action(action: Literal["start", "stop", "restart"]) -> dict[str, Any]:
+@app.post("/api/system/{action}")
+async def system_action(
+    action: Literal["start", "stop", "restart"],
+    _: Principal = Depends(require_admin_csrf),
+) -> dict[str, Any]:
+    """Starts and stops the whole stack, so it is an administrator action.
+
+    Before sessions existed this sat behind the same token as everything else, which
+    would have meant any signed-in user could stop the worker mid-run.
+    """
     if action_lock.locked():
         raise HTTPException(status_code=409, detail="Başka bir sistem işlemi devam ediyor")
     async with action_lock:
@@ -836,18 +983,16 @@ async def system_action(action: Literal["start", "stop", "restart"]) -> dict[str
             action_state.update({"busy": False, "action": None})
 
 
-@app.post("/api/runs/{run_id}/{action}", dependencies=[Depends(require_control_token)])
+@app.post("/api/runs/{run_id}/{action}")
 async def run_action(
     run_id: str,
     action: Literal["pause", "resume", "cancel"],
+    principal: Principal = Depends(require_csrf),
 ) -> dict[str, Any]:
-    settings = get_settings()
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(
-                f"{settings.research_api_url.rstrip('/')}/v1/research-runs/{run_id}/{action}",
-                headers={"Authorization": f"Bearer {settings.api_token}"},
-            )
+        response = await _api_request(
+            "POST", f"/v1/research-runs/{run_id}/{action}", principal, timeout=10
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
     if not response.is_success:
@@ -856,16 +1001,14 @@ async def run_action(
     return response.json()
 
 
-@app.post("/api/runs/{run_id}/respond", dependencies=[Depends(require_control_token)])
-async def run_respond(run_id: str, body: dict[str, Any]) -> dict[str, Any]:
-    settings = get_settings()
+@app.post("/api/runs/{run_id}/respond")
+async def run_respond(
+    run_id: str, body: dict[str, Any], principal: Principal = Depends(require_csrf)
+) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(
-                f"{settings.research_api_url.rstrip('/')}/v1/research-runs/{run_id}/respond",
-                headers={"Authorization": f"Bearer {settings.api_token}"},
-                json=body,
-            )
+        response = await _api_request(
+            "POST", f"/v1/research-runs/{run_id}/respond", principal, timeout=10, json_body=body
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
     if not response.is_success:
@@ -874,12 +1017,116 @@ async def run_respond(run_id: str, body: dict[str, Any]) -> dict[str, Any]:
     return response.json()
 
 
-@app.get(
-    "/api/logs/{service}",
-    response_class=PlainTextResponse,
-    dependencies=[Depends(require_control_token)],
-)
-async def logs(service: str) -> PlainTextResponse:
+@app.post("/api/runs")
+async def create_run(
+    body: dict[str, Any], principal: Principal = Depends(require_csrf)
+) -> dict[str, Any]:
+    """Start a research run owned by the signed-in user.
+
+    The panel had no way to start a run before -- they arrived through the API, the
+    bot or Langflow. That left the panel unable to answer "whose run is this?" for
+    anything it displayed. Creating them here makes the session user the owner
+    directly, which is the cleanest binding of the four surfaces.
+    """
+    try:
+        response = await _api_request(
+            "POST", "/v1/research-runs", principal, timeout=30, json_body=body
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
+    if not response.is_success:
+        detail = response.json().get("detail", response.text[:500])
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
+
+
+@app.get("/api/keys")
+async def list_keys(principal: Principal = Depends(require_user)) -> list[dict[str, Any]]:
+    """API keys let a user reach the platform from scripts, MCP and Langflow as themselves."""
+    async with SessionLocal() as session:
+        rows = await list_api_keys(session, principal.user_id or "")
+    return [
+        {
+            "id": row.id,
+            "name": row.name,
+            "prefix": row.prefix,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "last_used_at": row.last_used_at.isoformat() if row.last_used_at else None,
+        }
+        for row in rows
+    ]
+
+
+@app.post("/api/keys")
+async def create_key(
+    body: dict[str, Any], principal: Principal = Depends(require_csrf)
+) -> dict[str, Any]:
+    async with SessionLocal() as session:
+        full_key, row = await issue_api_key(
+            session, user_id=principal.user_id or "", name=str(body.get("name") or "panel")
+        )
+    audit.info("api key issued user=%s prefix=%s", principal.user_id, row.prefix)
+    # The only time the secret is ever readable. It is not recoverable afterwards.
+    return {"id": row.id, "name": row.name, "prefix": row.prefix, "key": full_key}
+
+
+@app.delete("/api/keys/{key_id}")
+async def delete_key(key_id: str, principal: Principal = Depends(require_csrf)) -> dict[str, Any]:
+    async with SessionLocal() as session:
+        revoked = await revoke_api_key(session, user_id=principal.user_id or "", key_id=key_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Anahtar bulunamadı")
+    return {"ok": True}
+
+
+@app.get("/api/telegram")
+async def telegram_status(principal: Principal = Depends(require_user)) -> dict[str, Any]:
+    async with SessionLocal() as session:
+        linked = await telegram_ids_for(session, principal.user_id or "")
+    return {"linked": linked, "bot_username": get_settings().telegram_bot_username}
+
+
+@app.post("/api/telegram/link-code")
+async def telegram_link_code(principal: Principal = Depends(require_csrf)) -> dict[str, Any]:
+    """Issue a one-time code the user redeems from their own Telegram account.
+
+    Replaces asking an administrator to run ``research-admin link-telegram``: holding a
+    panel session already proves who they are, so the code just carries that proof across
+    to Telegram. Single use and short-lived, because a leaked code would let someone bind
+    *their* Telegram account to this user and act as them.
+    """
+    settings = get_settings()
+    async with SessionLocal() as session:
+        code = await issue_telegram_link_code(
+            session,
+            user_id=principal.user_id or "",
+            ttl_seconds=settings.telegram_link_code_ttl_seconds,
+        )
+    audit.info("telegram link code issued user=%s", principal.user_id)
+    deep_link = (
+        f"https://t.me/{settings.telegram_bot_username}?start={code}"
+        if settings.telegram_bot_username
+        else None
+    )
+    return {
+        "code": format_link_code(code),
+        "command": f"/baglan {code}",
+        "deep_link": deep_link,
+        "expires_in_seconds": settings.telegram_link_code_ttl_seconds,
+    }
+
+
+@app.delete("/api/telegram")
+async def telegram_unlink(principal: Principal = Depends(require_csrf)) -> dict[str, Any]:
+    async with SessionLocal() as session:
+        removed = await unlink_telegram(session, user_id=principal.user_id or "")
+    audit.info("telegram unlinked user=%s removed=%s", principal.user_id, removed)
+    return {"ok": True, "removed": removed}
+
+
+@app.get("/api/logs/{service}", response_class=PlainTextResponse)
+async def logs(service: str, _: Principal = Depends(require_admin)) -> PlainTextResponse:
+    """Service logs mix every user's runs together, so they stay administrator-only."""
     if service not in LOG_SERVICES:
         raise HTTPException(status_code=404, detail="Bilinmeyen servis")
     # The panel itself always runs natively, so it keeps its file-based logs even when
