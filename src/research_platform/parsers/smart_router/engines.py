@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -44,6 +45,20 @@ VARSAYILAN_ZAMAN_ASIMI_SN = 900.0
 
 #: Names an interpreter that has Docling, for when this one does not.
 KOPRU_ENV = "SMART_ROUTER_DOCLING_PYTHON"
+
+#: How many heavy extractions may run at once. Each one is a layout model and,
+#: bridged, a whole interpreter; letting acquisition start one per document would
+#: exhaust memory long before it saturated the CPU. A threading primitive rather
+#: than an asyncio one because parse() is synchronous and is called from a worker
+#: thread -- see the to_thread call in acquisition.py.
+ESZAMANLI_AGIR = max(1, int(os.environ.get("SMART_ROUTER_MAX_CONCURRENT_HEAVY", "1")))
+
+_AGIR_KAPI = threading.BoundedSemaphore(ESZAMANLI_AGIR)
+
+#: How long a document may wait for a slot before giving up. Waiting forever turns
+#: a busy queue into a hang; refusing immediately wastes work that would have got a
+#: slot shortly. Fixed, not derived from load -- see the determinism note above.
+KUYRUK_BEKLEME_SN = 300.0
 
 _SONUC_ISARETI = "__SMART_ROUTER_RESULT__"
 
@@ -119,13 +134,27 @@ class DoclingEngine:
                 duration_ms=(time.perf_counter() - started) * 1000,
             )
 
+        # Backpressure: hold here until a slot frees up rather than starting an
+        # unbounded number of models. Callers arrive on worker threads, so blocking
+        # is the intended behaviour -- the event loop is not on this stack.
+        if not _AGIR_KAPI.acquire(timeout=KUYRUK_BEKLEME_SN):
+            return EngineResult(
+                engine=self.name, ok=False, degraded=True, mode="queue-timeout",
+                error=f"no engine slot within {KUYRUK_BEKLEME_SN:.0f}s "
+                      f"({ESZAMANLI_AGIR} concurrent)",
+                duration_ms=(time.perf_counter() - started) * 1000,
+            )
+
         blocks = [docling_page_range(b) for b in ardisik_bloklar(wanted)]
-        runner = self._in_process if _docling_importable() else self._bridged
-        mode = "in-process" if _docling_importable() else "bridged"
+        in_process = _docling_importable()
+        runner = self._in_process if in_process else self._bridged
+        mode = "in-process" if in_process else "bridged"
         try:
             produced, error = runner(pdf_path, blocks)
         except Exception as exc:
             produced, error = {}, f"{type(exc).__name__}: {exc}"
+        finally:
+            _AGIR_KAPI.release()
 
         missing = [p for p in wanted if p not in produced]
         return EngineResult(

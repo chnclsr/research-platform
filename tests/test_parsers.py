@@ -8,6 +8,8 @@ the acquisition pipeline downstream of it breaks.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from research_platform.parsers import (
@@ -100,6 +102,26 @@ def test_parse_provenance_defaults_to_empty_and_survives_serialisation():
                           "pages": [{"page": 1, "engine": "docling"}]},
     )
     assert routed.model_dump(mode="json")["parse_provenance"]["parser_profile"] == "inspector_v1"
+
+
+def test_parsers_are_safe_to_share_across_threads():
+    """
+    Acquisition calls parse() through asyncio.to_thread, so one parser instance can
+    be running several documents at once. Anything cached on the instance -- a temp
+    path, an engine handle -- would make the results depend on the interleaving.
+    """
+    payloads = [
+        b"<html><body><p>" + b"alpha " * 200 + b"</p></body></html>",
+        b"<html><body><p>" + b"beta " * 200 + b"</p></body></html>",
+        b"<html><body><p>" + b"gamma " * 200 + b"</p></body></html>",
+    ]
+    for parser in ALL_PARSERS:
+        sequential = [parser.parse(p, url="https://e.org").text for p in payloads]
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            concurrent = list(pool.map(
+                lambda p: parser.parse(p, url="https://e.org").text, payloads
+            ))
+        assert concurrent == sequential, f"{parser.id} is not safe to share"
 
 
 def test_registry_selection_is_stable_across_calls():
