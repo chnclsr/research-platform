@@ -149,10 +149,133 @@ Sunucuda `http://127.0.0.1:8020`, aynı ofis ağındaki ekip bilgisayarlarında
 `http://10.0.10.109:8020` kullanılır. Panel yalnız yapılandırılmış ofis CIDR'ını kabul eder; kullanım
 ve güvenlik ayrıntıları `CONTROL_PANEL_GUIDE.md` belgesindedir.
 
-## Erişim anahtarı yönetimi
+## Hesap yönetimi
 
-- `TEAM_ACCESS.txt` yalnız yetkili ekip üyeleriyle güvenli kanaldan paylaşılmalıdır.
-- Bir ekip üyesi ayrılırsa `initialize_office_server.ps1 -Force` ile token döndürülmeli ve bütün
-  istemciler yeniden yapılandırılmalıdır.
-- Token Git’e, Telegram grubuna veya normal e-postaya yazılmamalıdır.
+v0.10.0'dan itibaren her kişinin kendi hesabı var ve **yalnız kendi araştırmalarını görüyor.**
+Panelde kayıt formu yoktur; hesaplar aşağıdaki komutlarla açılır. Komutlar sunucu bilgisayarında,
+depo kökünde çalıştırılır.
+
+> Docker kurulumunda komutların önüne `docker compose exec api` gelir. Host `.venv`'inden
+> çalıştırıyorsanız doğrudan `research-admin ...` yazın.
+
+### Yeni kişi ekleme
+
+```powershell
+# 1. Hesabı aç. Parola --password verilmezse gizli olarak sorulur; tercih edilen yol budur,
+#    çünkü komut satırına yazılan parola kabuk geçmişine ve süreç listesine düşer.
+docker compose exec api research-admin create-user ali@ornek.com --display-name "Ali Yilmaz"
+
+# 2. Kişi panele kendi parolasıyla girer: http://10.0.10.109:8020
+```
+
+Bu kadar. Kişi giriş yaptığı anda kendi araştırmalarını başlatabilir ve yalnız onları görür.
+
+**Yönetici yapmak** gerekiyorsa — kurulumu başlatıp durdurabilmesi, logları okuyabilmesi ve
+**herkesin** araştırmalarını görebilmesi demektir:
+
+```powershell
+docker compose exec api research-admin set-role ali@ornek.com admin
+```
+
+**Betik, Langflow veya MCP erişimi** gerekiyorsa kişiye kendi API anahtarını üret. Anahtar yalnız
+bir kez gösterilir:
+
+```powershell
+docker compose exec api research-admin issue-key ali@ornek.com --name langflow
+```
+
+Kişi bu anahtarları panelden de kendisi üretip iptal edebilir; yöneticiye ihtiyaç yoktur.
+
+**Telegram'dan araştırma başlatmak** için senin bir şey yapmana gerek yok — kişi kendisi bağlar:
+
+1. Panele girer → **Hesabım** sekmesi → *Bağlantı kodu al*
+2. **Telegram'da aç** düğmesine tıklar, ya da bota `/baglan M3H-QES` yazar
+3. Bot "Bağlandı: ali@ornek.com" der; bundan sonraki araştırmalar o hesaba ait olur
+
+Kod 5 dakika geçerli ve **tek kullanımlıktır**. Bu önemli: kod sızarsa, başkası kendi Telegram
+hesabını o kişinin platform hesabına bağlayıp onun adına araştırma başlatabilir ve okuyabilirdi.
+Tüketilen kod veritabanından silinir.
+
+Gerekirse hâlâ elle de bağlayabilirsin (kişi bota `/whoami` yazıp kendi ID'sini söyler):
+
+```powershell
+docker compose exec api research-admin link-telegram ali@ornek.com 123456789
+```
+
+`TELEGRAM_BOT_USERNAME` ayarlanmamışsa panel derin bağlantı yerine yalnız kodu gösterir; akış
+yine çalışır, kişi kodu elle yazar.
+
+### Kişi ayrıldığında
+
+Eskiden tek paylaşılan bir token vardı ve biri ayrıldığında token döndürülüp **bütün** istemciler
+yeniden yapılandırılıyordu. Artık gerekmez — yalnız o hesabı kapat:
+
+```powershell
+docker compose exec api research-admin deactivate ali@ornek.com
+```
+
+Bu tek komut: panel oturumunu anında düşürür, API anahtarlarını kullanılamaz hâle getirir ve
+Telegram erişimini keser. Diğer ekip üyeleri etkilenmez.
+
+Hesap silinmez, kapatılır — araştırmaları ve provenance kaydı yerinde kalır. Koşularını devretmek
+isterseniz:
+
+```powershell
+docker compose exec api research-admin assign-runs veli@ornek.com --from-email ali@ornek.com
+```
+
+### Komutların tamamı
+
+| Komut | İş |
+|---|---|
+| `bootstrap <e-posta>` | İlk yöneticiyi açar ve sahipsiz koşuları ona devreder. Hesap varken çalışmaz. |
+| `create-user <e-posta> [--role user\|admin]` | Hesap açar |
+| `list-users` | Hesaplar, roller, durum ve koşu sayıları |
+| `set-password <e-posta>` | Parola değiştirir, açık oturumları düşürür |
+| `set-role <e-posta> user\|admin` | Rol atar |
+| `deactivate <e-posta>` | Hesabı kapatır; son aktif yöneticiyi kapatmayı reddeder |
+| `activate <e-posta>` | Hesabı yeniden açar |
+| `issue-key <e-posta> --name <etiket>` | API anahtarı üretir (bir kez gösterilir) |
+| `list-keys [--email <e-posta>]` | Anahtarları ve son kullanım tarihlerini listeler |
+| `revoke-key <anahtar_id>` | Anahtarı iptal eder |
+| `link-telegram <e-posta> <telegram_id>` | Telegram hesabını elle bağlar (normalde kişi kendisi bağlar) |
+| `list-telegram` | Mevcut eşlemeler |
+| `assign-runs <e-posta> --from-email\|--orphaned\|--run-id` | Koşuların sahibini değiştirir |
+
+### Sık karşılaşılanlar
+
+**Parolamı unuttum.** Sıfırlama e-postası yok; bir yönetici `set-password` çalıştırır.
+
+**Yönetici parolasını kaybettik.** Komutlar veritabanına erişebilen herkes tarafından
+çalıştırılabilir — sunucuda `docker compose exec api research-admin set-password <e-posta>`.
+
+**Herkes sürekli çıkışa zorlanıyor.** `.env.office` içinde `SESSION_SECRET` boştur. Doldurup paneli
+yeniden başlatın.
+
+**Kişi kendi koşusunu göremiyor.** Koşu başka bir kanaldan (Telegram, Langflow) başlatılmış ve o
+kanal onun hesabına bağlı değil olabilir. `list-users` koşu sayılarını gösterir; `assign-runs`
+ile düzeltilir.
+
+**Bot "hesabınız bağlı değil" diyor.** Kişi henüz Telegram'ını bağlamamış. Panelden kod alıp
+`/baglan <kod>` yazması yeterli; `list-telegram` kimin bağlı olduğunu gösterir.
+
+**Bot `/baglan` komutunu tanımıyor.** Bot container'ı eski kodda. `telegram-bot` servisi
+`profiles: ["telegram"]` arkasında olduğu için düz `docker compose up -d --build` ona
+dokunmaz. Doğrusu:
+
+```powershell
+docker compose --profile telegram up -d --build telegram-bot
+```
+
+**Telegram izin listesi ne oldu?** `TELEGRAM_ALLOWED_USER_IDS` artık birebir sohbetlerde
+kullanılmıyor. Kimliğin olmadığı dönemde kimliğin yerine konmuş bir vekildi; gerçek kimlik
+gelince yalnız engel olurdu — kişi kendini bağlar, sonra liste onu reddederdi. Yalnız **grup
+sohbetlerinde** geçerliliğini koruyor, çünkü grupta mesajı gönderen kişi ile botun adına
+hareket etmesi gereken kişi aynı olmayabilir.
+
+### Değişmeyenler
+
+- `.env.office` ve `.env` Git'te değildir; bu makineye özgüdür.
+- `SERVICE_TOKEN` ve `SESSION_SECRET` Git'e, Telegram grubuna veya normal e-postaya yazılmamalıdır.
 - Ağ değişirse `.env.office` yeniden üretilmeli ve firewall kuralı güncellenmelidir.
+- Ofis CIDR sınırı kaldırılmamalıdır: panel düz HTTP üzerinden çalışırken oturum çerezi ağda açıktır.

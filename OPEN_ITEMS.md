@@ -200,6 +200,25 @@ yazılı.
 
 ---
 
+## 13. Yedekleme scripti sahiplik sınırının dışında
+
+`scripts/sync-research-reports.ps1` paylaşılan `API_TOKEN` ile **tüm** koşuların
+`research_bundle.zip` paketini `RESEARCH_OUTPUT_DIR`'e indiriyor. v0.10.0 ile panel ve API
+kullanıcı başına yalıtıldı; bu script yalıtımın dışında kaldı — zamanlanmış görevi çalıştıran
+makinede oturum açan herkes başkalarının raporlarına dosya sistemi üzerinden erişebilir.
+
+Bugün bu bir sorun değil: script tek kullanıcılı bu iş istasyonunda, yöneticinin kendi
+hesabıyla çalışıyor. Panel ekibe açıldığında karar gerekir.
+
+Seçenekler: (a) scripti kullanıcı başına API anahtarı kullanacak biçimde değiştirip
+`RESEARCH_OUTPUT_DIR`'i kullanıcıya göre ayırmak, (b) yedeklemeyi açıkça yönetici işlevi
+sayıp çıktı klasörünü NTFS izinleriyle kısıtlamak.
+
+Ayrıntı: [reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
+"Kalan sınırlar".
+
+---
+
 ## Kapsam dışı bırakılanlar
 
 **Otomatik retention** — provenance/reproducibility vaadiyle çelişiyor (1. maddeye bakınız).

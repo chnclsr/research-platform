@@ -952,6 +952,18 @@ da sorunsuzdur.
 
 ---
 
+## 11. Kullanıcı kimliği ve koşu sahipliği (v0.10.0)
+
+Bu değişiklik şema göçü içerdiği ve dört servisi kapsadığı için kendi raporunu aldı:
+**[reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)**.
+
+Özet: panel artık oturum açmayı gerektiriyor ve her kullanıcı yalnız kendi koşularını
+görüyor. Sahiplik `Repository` katmanında zorlanıyor — panelin hem doğrudan veritabanı hem
+API üzerinden okuduğu için route düzeyinde filtre yetersizdi. Panel yetkileri kullanıcı
+verisi ve kurulum operasyonları olarak ikiye ayrıldı.
+
+---
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her

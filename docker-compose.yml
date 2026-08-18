@@ -12,6 +12,12 @@ x-app: &app
     AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
     CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
     OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    # Identity settings. SERVICE_TOKEN is what the panel and the bot present when they
+    # act for a user; SESSION_SECRET keeps panel logins alive across a restart.
+    SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+    SESSION_SECRET: ${SESSION_SECRET:-}
+    CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}
+    TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   depends_on:
@@ -132,6 +138,9 @@ services:
       AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
       CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}
       API_HOST: 0.0.0.0
       API_PORT: 8000
     depends_on:
@@ -171,6 +180,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
       RESEARCH_API_URL: http://api:8000
       API_TOKEN: ${API_TOKEN:-change-me-local-token}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8010
@@ -198,7 +210,11 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://research:research@postgres:5432/research}
       RESEARCH_API_URL: http://api:8000
       API_TOKEN: ${API_TOKEN:-change-me-local-token}
+      # The bot resolves a Telegram account to a platform user and then acts for that
+      # user against the API, which requires the service credential.
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       TELEGRAM_ALLOWED_USER_IDS: ${TELEGRAM_ALLOWED_USER_IDS:-[]}
       TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS:-[]}
       GATEWAY_DOWNLOAD_DIR: /data/deliveries
