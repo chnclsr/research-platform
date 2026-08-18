@@ -108,7 +108,8 @@ class Settings(BaseSettings):
     mcp_transport: str = "stdio"
     mcp_host: str = "127.0.0.1"
     mcp_port: int = Field(8010, ge=1, le=65535)
-    mcp_bearer_token: str | None = None
+    # MCP_BEARER_TOKEN was removed in v0.10.1. The gateway authenticates callers with their
+    # own API key, so a shared token no longer exists; a leftover line in .env is ignored.
     mcp_allowed_origins: list[str] = Field(default_factory=list)
     mcp_allowed_networks: list[str] = Field(default_factory=list)
     telegram_bot_token: str | None = None

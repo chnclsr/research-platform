@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.10.0`
 
-Belge sürümü: `11.0`
+Belge sürümü: `12.0`
 
 Son güncelleme: `2026-08-18`
 
@@ -24,8 +24,9 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 9 | Parser seçim kararı: deterministik + açık override | `ec88283` |
 | 10 | Word raporunda kaynak çapraz referansları | `63b74ed` |
 | 11 | Kullanıcı kimliği ve koşu sahipliği (kendi raporu var) | `3f9a191` … `84cddde` |
-| 12 | Panelden parola değiştirme | commit bekliyor |
-| 13 | Ekip kuyruğunun sansürlü görünürlüğü | commit bekliyor |
+| 12 | Panelden parola değiştirme | `fc3199d` |
+| 13 | Ekip kuyruğunun sansürlü görünürlüğü | `fc3199d` |
+| 14 | MCP'de kişisel kimlik | commit bekliyor |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -1156,6 +1157,157 @@ Telegram botu (kullanıcı kararı), API'ye ayrı bir uç (panel dışında tük
 kuyruğunun geçmişi, başkasının işine müdahale ve görünürlüğü kapatan bir yapılandırma
 bayrağı. Bayrak eklenmedi çünkü açıklanan bilgi kurgusu gereği asgari, boş liste zaten
 gizleniyor ve hiç çalıştırılmayacak bir kod yolu bedava değil.
+
+---
+
+## 14. MCP'de kişisel kimlik: ajan uçları kullanıcı adına çalışıyor
+
+### Sessizce kırılan şey
+
+11. bölümde `SERVICE_TOKEN` devreye alınırken MCP kapısı fark edilmeden kesildi.
+`api.py` kimlik bilgisini `service_token or api_token` diye çözüyor; `SERVICE_TOKEN`
+tanımlanınca `API_TOKEN` yedeği devre dışı kaldı ve `mcp_server.py` tam da onu
+gönderiyordu.
+
+Belirti yanıltıcıydı: `initialize` ve `tools/list` **200 dönüyor**, araçlar Claude
+Desktop'ta listede görünüyor, yalnız araç *çağrısı* ölüyordu. Yani "bağlantı yok" gibi
+değil, "çalışıyor ama hiçbir şey olmuyor" gibi duruyordu.
+
+Aynı kök neden **yedeklemeyi de durdurmuş**: `sync-research-reports.ps1` de gateway'in
+`/client/v1/` ucundan geçiyor. `sync.log`'daki son başarılı satır `2026-08-14`, sonrası
+hata. Dört gün boyunca hiçbir araştırma paketi yerel yedeğe inmemiş.
+
+### Jetonu düzeltmek yetmezdi
+
+İkinci bir duvar daha vardı. Paylaşılan jeton API'de `Principal.system()`'a eşleniyor,
+onun da `user_id`'si `None`; `create_run` sahipsiz koşuyu reddediyor. Ölçüldü:
+
+```
+SERVICE_TOKEN, aktör yok -> 400
+"This credential cannot own a run; use a user API key or send X-Actor-User"
+```
+
+Bu bir hata değil, 11. bölümün bilinçli kararıydı — sahipsiz koşu yalnız yöneticiye
+görünür olurdu. Dolayısıyla MCP'nin *biri* olarak davranması gerekiyordu.
+
+### Çözüm: gelen kimlik bilgisi kişisel API anahtarı
+
+`BearerProtectedMCP` artık tek bir paylaşılan jetonla `compare_digest` yapmıyor; sunulan
+`rp_<prefix>.<secret>` anahtarını `identity.principal_from_api_key` ile çözüyor. O fonksiyon
+zaten prefix aramasını, scrypt doğrulamasını, iptal kontrolünü, hesabın aktifliğini ve
+`last_used_at` güncellemesini yapıyordu — yeniden yazılmadı.
+
+Bozuk, bilinmeyen, iptal edilmiş ve kapalı hesaba ait anahtar **aynı 401'i** döndürür;
+ayırt etmek hangi anahtar prefix'lerinin var olduğunu sızdırırdı.
+
+### ContextVar: tasarımın can alıcı noktası
+
+Araç fonksiyonları HTTP isteğini görmüyor, dolayısıyla kimliğin middleware'den araca
+taşınması gerekiyordu. Sorun şu ki MCP 1.29 stateless modda aracı **uzun ömürlü** bir task
+group'tan başlatıyor:
+
+```python
+assert self._task_group is not None
+await self._task_group.start(run_stateless_server)
+```
+
+Task group lifespan bağlamında kuruluyor, yani ilk bakışta istek başına durum kaybolur.
+Kaybolmuyor: anyio `start()` çağrısı sırasında **çağıranın** context'ini kopyalıyor ve
+çağıran istek görevidir. Bunu varsaymak yerine, aynı yapıyı birebir kuran bir deneyle
+ölçtüm:
+
+```
+araca ulasan degerler: ['rp_ALICE', 'rp_BOB']
+SONUC: contextvar TASINIYOR
+```
+
+İki isteğin birbirine karışmadığı ayrıca teste bağlandı — sızıntı olsaydı biri diğerinin
+adına araştırma başlatırdı, bu işteki en ciddi başarısızlık biçimi budur.
+
+### Anahtar neden API'ye iletilmiyor
+
+Gateway anahtarı zaten doğruladı. Yukarı akışa olduğu gibi iletmek, API'nin scrypt
+doğrulamasını **tekrar** yapması demekti — her araç çağrısında ~60 ms. Onun yerine
+`SERVICE_TOKEN + X-Actor-User` kullanılıyor; bu, Telegram botunun zaten yaptığı desen ve
+`ResearchGatewayClient.for_actor()` bunun için vardı.
+
+### `/health` kimlik bilgisi istemiyor, ama çevre içinde
+
+Sıra önemli: **ağ ve Origin kontrolleri önce**, sonra `/health`, sonra kimlik doğrulama.
+Çevrenin dışındaki bir çağıran canlılık yanıtı bile alamaz; çevrenin içindeki ops
+betikleri (`office_server_status.ps1`, `start_office_server.ps1`) ise kimlik bilgisi
+olmadan yoklamaya devam eder — canlılık probunun önüne kimlik bilgisi koymak probu
+yalancı yapar.
+
+### `263487f`'in geri alınması
+
+O commit 8010 portunu loopback'e bağlamıştı; gerekçesi "ağda paylaşılan tek bir bearer
+jeton taşıyan ajan kapısı" idi. Paylaşılan jeton kalktığı için gerekçe de kalktı ve port
+LAN'a yeniden açıldı. Ekip bilgisayarlarındaki Claude Code ve Codex kurulumu yeniden
+çalışır durumda.
+
+### Ölçülen bulgu: `MCP_ALLOWED_NETWORKS` bu kurulumda filtre değil
+
+Port açılırken uygulama katmanındaki CIDR kontrolünün gerçekten çalışıp çalışmadığı
+ölçüldü. **Çalışmıyor.** Docker Desktop yayınlanan portta kaynak IP'yi NAT'lıyor;
+`10.0.10.179` üzerinden gelen istek bile container'a şöyle görünüyor:
+
+```
+INFO:  172.20.0.1:52310 - "GET /health HTTP/1.1" 200 OK
+```
+
+Yani her istemci listedeki `172.16.0.0/12` sayesinde geçiyor ve CIDR listesi hiçbir şeyi
+elemiyor. **Gerçek ağ kapısı Windows Firewall'daki "Docker Desktop Backend" kuralıdır.**
+`.env` içine bu bulgu ve `172.16.0.0/12` satırının silinmemesi gerektiği uyarısı yazıldı —
+silinirse bütün MCP istemcileri 403 alır.
+
+Kimlik doğrulamanın kendisi bundan etkilenmiyor: kapıya ulaşan herkes yine geçerli bir
+kişisel anahtar sunmak zorunda. Kaba kuvvet de bir sorun değil — bilinmeyen prefix scrypt'e
+hiç ulaşmadan reddediliyor, dolayısıyla ucuz bir CPU tüketme yolu da yok.
+
+### Doğrulama
+
+Canlı kurulumda ölçülenler:
+
+| Test | Sonuç |
+|---|---|
+| Eski paylaşılan jeton | 401 |
+| Kimlik bilgisi yok | 401 |
+| İptal edilmiş anahtar | 401 (anında) |
+| Kişisel anahtar | 200 |
+| `/health` kimlik bilgisiz | 200 |
+| MCP'den başlatılan koşunun sahibi | `kirtekefurkan@gmail.com` |
+| Başka kullanıcının anahtarıyla o koşuyu okuma | 404 |
+
+Koşu gerçekten başladı (`running`, NORMALIZE aşamasına kadar geldi) ve test bittiğinde
+`control_research` ile iptal edildi. Yedekleme yönetici anahtarına geçirildikten sonra 14
+Ağustos'tan beri biriken üç paket indi.
+
+`tests/test_agent_gateway.py` beş vaka aldı (kişisel anahtar + Origin, her kötü kimlik
+bilgisinin aynı görünmesi, iki anahtarın birbirine karışmaması, kimlik bilgisiz `/health`
+ama kapalı `/mcp`, aktörün doğru geçmesi), `tests/test_run_ownership.py` bir vaka
+(kişisel anahtarla başlatılan koşu sahiplenilir ve başkasına görünmez). 239 test geçiyor.
+
+### İstemci kurulumunda çıkan iki ayrı hata
+
+Gerçek bir istemci bağlanırken iki şey daha ortaya çıktı.
+
+**`install_claude_client.ps1` eskimişti.** Betik `claude mcp add-json` ile `{"type":"http"}`
+gönderiyordu; güncel Claude Code bunu `Invalid configuration: : Invalid input` diyerek
+reddediyor. Belgelenen yol `claude mcp add --transport http ... --header "..."`. Betik buna
+geçirildi. Anahtar yapılandırmaya gömülmüyor — `${RESEARCH_MCP_TOKEN}` olarak yazılıyor ve
+Claude Code çalışma anında ortamdan çözüyor, böylece `~/.claude.json` içinde düz metin
+anahtar durmuyor.
+
+**Ortam değişkeni zamanlaması.** `SetEnvironmentVariable(..., "User")` yalnız *yeni* süreçlere
+yansır; zaten açık bir terminalden çalıştırılan Claude Code değişkeni göremez ve
+`✗ Failed to connect` + "Missing environment variables: RESEARCH_MCP_TOKEN" verir. Bu,
+sunucu tarafı tamamen doğruyken alınan bir hata olduğu için yanıltıcıdır; hem betiğe hem
+`OFFICE_TEAM_SETUP.md`'ye açık uyarı kondu.
+
+**Claude Desktop bu makinede kurulu değil** (`%APPDATA%\Claude` yok). Kurulu olan Claude
+Code CLI'dir ve depodaki kurucu da onu hedefler; Claude Desktop uzak MCP sunucusunu
+uygulama içindeki *Custom connector* akışıyla bağlar. İkisinin farkı belgeye yazıldı.
 
 ---
 

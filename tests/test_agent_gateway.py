@@ -18,8 +18,10 @@ from research_platform.identity import (
     format_link_code,
     get_user,
     get_user_by_email,
+    issue_api_key,
     issue_telegram_link_code,
     link_telegram,
+    revoke_api_key,
 )
 from research_platform.mcp_server import BearerProtectedMCP
 from research_platform.telegram_bot import (
@@ -45,69 +47,146 @@ async def _linked_telegram_user(telegram_user_id: int) -> str:
         return user.id
 
 
+async def _keyed_account(email: str, *, revoked: bool = False, active: bool = True) -> str:
+    """An account with an API key, returning the key as a caller would present it."""
+    await create_schema()
+    async with SessionLocal() as session:
+        user = await get_user_by_email(session, email)
+        if user is None:
+            user = await create_user(
+                session,
+                email=email,
+                display_name=email.split("@")[0],
+                password="gateway-test-password",
+            )
+        key, row = await issue_api_key(session, user_id=user.id, name="mcp-test")
+        if revoked:
+            await revoke_api_key(session, user_id=user.id, key_id=row.id)
+        if not active:
+            user.is_active = False
+            await session.commit()
+        return key
+
+
 def _protected_test_app():
     async def endpoint(request):
-        return JSONResponse({"ok": True})
+        return JSONResponse({"actor": mcp_module._ACTOR.get()})
 
     return BearerProtectedMCP(
         Starlette(routes=[Route("/mcp", endpoint)]),
-        token="secret",
         allowed_origins={"https://office.example"},
     )
 
 
-def test_mcp_gateway_requires_bearer_and_validates_origin():
+@pytest.mark.asyncio
+async def test_mcp_gateway_requires_a_personal_key_and_validates_origin():
+    key = await _keyed_account("mcp-caller@example.test")
     with TestClient(_protected_test_app()) as client:
         assert client.get("/mcp").status_code == 401
-        assert client.get(
-            "/mcp", headers={"Authorization": "Bearer secret"}
-        ).status_code == 200
+        assert client.get("/mcp", headers={"Authorization": f"Bearer {key}"}).status_code == 200
         assert client.get(
             "/mcp",
-            headers={
-                "Authorization": "Bearer secret",
-                "Origin": "https://evil.example",
-            },
+            headers={"Authorization": f"Bearer {key}", "Origin": "https://evil.example"},
         ).status_code == 403
         assert client.get(
             "/mcp",
-            headers={
-                "Authorization": "Bearer secret",
-                "Origin": "https://office.example",
-            },
+            headers={"Authorization": f"Bearer {key}", "Origin": "https://office.example"},
         ).status_code == 200
 
 
-def test_mcp_gateway_health_and_network_allowlist():
+@pytest.mark.asyncio
+async def test_every_bad_credential_looks_identical():
+    """Malformed, unknown, revoked and closed-account keys must be indistinguishable.
+
+    Telling them apart would let a caller learn which key prefixes exist.
+    """
+    revoked = await _keyed_account("mcp-revoked@example.test", revoked=True)
+    closed = await _keyed_account("mcp-closed@example.test", active=False)
+    with TestClient(_protected_test_app()) as client:
+        for label, header in [
+            ("yok", {}),
+            ("bicimsiz", {"Authorization": "Bearer not-a-key"}),
+            ("sema disi", {"Authorization": "Basic rp_abc.def"}),
+            ("bilinmeyen", {"Authorization": "Bearer rp_zzzzzzzz.nosuchsecret"}),
+            ("iptal", {"Authorization": f"Bearer {revoked}"}),
+            ("kapali hesap", {"Authorization": f"Bearer {closed}"}),
+        ]:
+            assert client.get("/mcp", headers=header).status_code == 401, label
+
+
+@pytest.mark.asyncio
+async def test_two_keys_in_a_row_do_not_bleed_into_each_other():
+    """The credential travels through a ContextVar; a leak would let one user act as another.
+
+    This is the failure the whole design turns on, so it is asserted directly rather than
+    inferred from the transport's documentation.
+    """
+    first = await _keyed_account("mcp-first@example.test")
+    second = await _keyed_account("mcp-second@example.test")
+    async with SessionLocal() as session:
+        first_id = (await get_user_by_email(session, "mcp-first@example.test")).id
+        second_id = (await get_user_by_email(session, "mcp-second@example.test")).id
+
+    with TestClient(_protected_test_app()) as client:
+        seen_first = client.get("/mcp", headers={"Authorization": f"Bearer {first}"}).json()
+        seen_second = client.get("/mcp", headers={"Authorization": f"Bearer {second}"}).json()
+    assert seen_first["actor"] == first_id
+    assert seen_second["actor"] == second_id
+    assert first_id != second_id
+
+
+@pytest.mark.asyncio
+async def test_health_needs_no_credential_but_still_respects_the_network_perimeter():
     async def endpoint(request):
         return JSONResponse({"ok": True})
 
     inner = Starlette(routes=[Route("/mcp", endpoint)])
     allowed = BearerProtectedMCP(
         inner,
-        token="secret",
         allowed_origins=set(),
         allowed_networks={"127.0.0.0/8"},
     )
     with TestClient(allowed, client=("127.0.0.1", 50000)) as client:
-        response = client.get(
-            "/health",
-            headers={"Authorization": "Bearer secret"},
-        )
+        # No Authorization header at all: the office start/status scripts poll this to
+        # decide whether the gateway came up.
+        response = client.get("/health")
         assert response.status_code == 200
         assert response.json()["service"] == "research-platform-mcp"
+        # The tool surface behind it is still closed.
+        assert client.get("/mcp").status_code == 401
 
     blocked = BearerProtectedMCP(
         inner,
-        token="secret",
         allowed_origins=set(),
         allowed_networks={"10.0.10.0/24"},
     )
     with TestClient(blocked, client=("127.0.0.1", 50000)) as client:
-        assert client.get(
-            "/health",
-            headers={"Authorization": "Bearer secret"},
-        ).status_code == 403
+        assert client.get("/health").status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_gateway_client_acts_for_the_key_owner():
+    """The API is called with the service credential naming the caller, not with the key."""
+    key = await _keyed_account("mcp-actor@example.test")
+    async with SessionLocal() as session:
+        user_id = (await get_user_by_email(session, "mcp-actor@example.test")).id
+
+    captured: dict[str, str] = {}
+
+    async def endpoint(request):
+        captured.update(mcp_module._client().headers)
+        return JSONResponse({"ok": True})
+
+    protected = BearerProtectedMCP(
+        Starlette(routes=[Route("/mcp", endpoint)]),
+        allowed_origins=set(),
+    )
+    with TestClient(protected) as client:
+        assert client.get("/mcp", headers={"Authorization": f"Bearer {key}"}).status_code == 200
+
+    assert captured["X-Actor-User"] == user_id
+    # The caller's own key must not be forwarded upstream.
+    assert key not in captured["Authorization"]
 
 
 @pytest.mark.asyncio
@@ -374,7 +453,9 @@ async def test_gateway_lists_recent_runs():
     assert route.calls[0].request.url.params["limit"] == "25"
 
 
-def test_authenticated_client_api_lists_status_and_downloads(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_authenticated_client_api_lists_status_and_downloads(tmp_path, monkeypatch):
+    """The download API the backup script uses runs on the same per-user credential."""
     archive = tmp_path / "RUN1_both.zip"
     archive.write_bytes(b"PK\x03\x04test")
 
@@ -388,12 +469,12 @@ def test_authenticated_client_api_lists_status_and_downloads(tmp_path, monkeypat
         async def download(self, run_id, mode, destination):
             return archive
 
+    key = await _keyed_account("mcp-downloader@example.test")
     monkeypatch.setattr(mcp_module, "_client", lambda: FakeGateway())
-    protected = BearerProtectedMCP(
-        Starlette(routes=[]), token="secret", allowed_origins=set()
-    )
-    headers = {"Authorization": "Bearer secret"}
+    protected = BearerProtectedMCP(Starlette(routes=[]), allowed_origins=set())
+    headers = {"Authorization": f"Bearer {key}"}
     with TestClient(protected) as client:
+        assert client.get("/client/v1/research-runs").status_code == 401
         listed = client.get("/client/v1/research-runs?limit=12", headers=headers)
         assert listed.status_code == 200
         assert listed.json() == [{"id": "RUN1", "limit": 12}]

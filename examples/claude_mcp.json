@@ -1,9 +1,9 @@
 {
   "_document": {
-    "version": "1.1",
-    "platform": "v0.5.0",
-    "date": "2026-07-16",
-    "note": "RESEARCH_MCP_TOKEN ortam değişkeninden genişletilir."
+    "version": "2.0",
+    "platform": "v0.10.1",
+    "date": "2026-08-18",
+    "note": "RESEARCH_MCP_TOKEN ortam değişkeninden genişletilir. Değeri artık paylaşılan bir jeton değil, kişinin kendi API anahtarıdır (rp_ ile başlar): panelden Hesabım → API anahtarları, ya da research-admin issue-key <e-posta> --name claude-desktop. Başlattığınız araştırma o hesaba ait olur ve panelde yalnız size görünür."
   },
   "mcpServers": {
     "research-platform": {

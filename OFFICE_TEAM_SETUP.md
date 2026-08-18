@@ -71,6 +71,29 @@ Prize bağlı kullanımda uyku ve hazırda bekletmeyi kapatmak için:
 .\scripts\configure_office_power.ps1
 ```
 
+## Ajan uçları: önce kendi API anahtarınızı alın
+
+**v0.10.1'den itibaren Codex, Claude Code ve Claude Desktop kişiye özel bir API anahtarı
+ister.** Paylaşılan `MCP_BEARER_TOKEN` kaldırıldı: onunla başlatılan araştırmanın *sahibi*
+olmuyordu, dolayısıyla panelde kimsenin listesine düşmüyordu ve API sahipsiz koşuyu
+reddediyordu.
+
+Anahtarı iki yoldan biriyle alırsınız:
+
+```powershell
+# Kişi kendi alır: panelde Hesabım -> API anahtarları -> Yeni anahtar
+# Ya da yönetici verir:
+docker compose exec api research-admin issue-key ali@ornek.com --name claude-desktop
+```
+
+Anahtar `rp_` ile başlar ve **bir kez** gösterilir. Bu anahtarla başlattığınız her
+araştırma sizin hesabınıza ait olur; panelde yalnız siz görürsünüz, ekip yalnız sansürlü
+kuyruk satırını görür.
+
+Anahtarı kaybederseniz iptal edip yenisini alın:
+`research-admin list-keys --email ali@ornek.com`, sonra `revoke-key <anahtar_id>`.
+İptal edilen anahtar **anında** çalışmaz olur.
+
 ## Ekip bilgisayarında Codex
 
 Sunucudaki `scripts/install_codex_client.ps1` dosyasını ekip bilgisayarına kopyalayın:
@@ -79,11 +102,12 @@ Sunucudaki `scripts/install_codex_client.ps1` dosyasını ekip bilgisayarına ko
 .\install_codex_client.ps1
 ```
 
-Script `RESEARCH_MCP_TOKEN` kullanıcı ortam değişkenini ve
+Script anahtarınızı sorar (paketle gelen `.env` herkeste aynı olduğu için oradan bir
+anahtar kabul edilmez), `RESEARCH_MCP_TOKEN` kullanıcı ortam değişkenini ve
 `~/.codex/config.toml` içindeki `mcp_servers.research_platform` kaydını oluşturur. Codex
 uygulaması/CLI/IDE tamamen yeniden başlatılmalıdır.
 
-Paket içindeki `.env` sunucu ve token değerlerini otomatik sağlar. Kurucu ayrıca masaüstünde
+Paket içindeki `.env` sunucu adresini sağlar. Kurucu ayrıca masaüstünde
 `can-sagligi-deep-research` klasörünü açar ve tamamlanan yeni işlerin ham+sonuç ZIP paketlerini
 arka planda bu klasöre indirir. Ayrıntılar `RESEARCH_SETUP.md` belgesindedir.
 
@@ -94,7 +118,43 @@ arka planda bu klasöre indirir. Ayrıntılar `RESEARCH_SETUP.md` belgesindedir.
 ```
 
 Bu kurulum Claude Code’un kullanıcı kapsamına HTTP MCP sunucusunu ekler. Yerel ağdaki sunucuya
-Claude Code’un çalıştığı ekip bilgisayarı bağlanır.
+Claude Code’un çalıştığı ekip bilgisayarı bağlanır. Bu da anahtarınızı sorar.
+
+Elle yapmak isterseniz tek komut:
+
+```powershell
+[Environment]::SetEnvironmentVariable("RESEARCH_MCP_TOKEN", "rp_...", "User")
+claude mcp add --transport http research-platform "http://10.0.10.179:8010/mcp" `
+  --header "Authorization: Bearer `${RESEARCH_MCP_TOKEN}" --scope user
+```
+
+Anahtar yapılandırmaya gömülmez; `${RESEARCH_MCP_TOKEN}` olarak yazılır ve Claude Code
+çalışma anında ortamdan çözer, böylece `~/.claude.json` içinde düz metin anahtar durmaz.
+
+> **En sık takılınan yer:** ortam değişkenini yazdıktan sonra **yeni bir terminal** açın.
+> Zaten açık olan terminaller eski ortam bloğuyla başladıkları için değişkeni görmez ve
+> `claude mcp list` çıktısında `✗ Failed to connect` + "Missing environment variables"
+> uyarısı alırsınız. Doğrulama:
+>
+> ```powershell
+> claude mcp list        # research-platform: ... - ✓ Connected
+> ```
+
+### Claude Desktop
+
+Claude Desktop, Claude Code'dan **ayrı bir üründür** ve yukarıdaki `claude mcp` komutları
+onu yapılandırmaz. Uzak (HTTP) bir MCP sunucusunu Claude Desktop'a bağlamak için uygulama
+içinden **Settings → Connectors → Add custom connector** akışı kullanılır; bu akış
+`http://<sunucu>:8010/mcp` adresini ister. Bağlantı kurulduktan sonra araçlar aynı şekilde
+görünür ve başlattığınız araştırma yine anahtarın sahibine ait olur.
+
+### MCP kapısına neden ulaşılabiliyor
+
+8010 portu tüm arayüzlerde yayınlanır. `MCP_ALLOWED_NETWORKS` ayarı **bu kurulumda gerçek
+bir filtre değildir**: Docker Desktop kaynak IP'yi NAT'ladığı için container her istemciyi
+`172.x` olarak görür. Gerçek ağ kapısı Windows Firewall'daki *Docker Desktop Backend*
+kuralıdır; ağı daraltmak isterseniz oradan yapın. `.env` içindeki `172.16.0.0/12` satırını
+**silmeyin** — silerseniz bütün MCP istemcileri 403 alır.
 
 Bulut ortamında çalışan Codex görevleri veya Claude.ai web oturumları özel `10.x.x.x` Wi‑Fi
 adresine doğrudan ulaşamaz. Bu sürümün hedefi ekip bilgisayarlarında yerel çalışan Codex

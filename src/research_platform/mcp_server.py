@@ -4,8 +4,8 @@ import ipaddress
 import json
 import base64
 import hashlib
+from contextvars import ContextVar
 from pathlib import Path
-import secrets
 from typing import Any, Literal
 from urllib.parse import parse_qs
 
@@ -13,8 +13,11 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 import uvicorn
 
+from .auth import AuthError
 from .config import get_settings
+from .db import SessionLocal
 from .gateway_client import ResearchGatewayClient
+from .identity import principal_from_api_key
 from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 
 
@@ -33,8 +36,33 @@ mcp = FastMCP(
 )
 
 
+# Who the current request is acting as. Tool functions never see the HTTP request, so the
+# credential has to travel out of band: the middleware resolves the presented API key and
+# stores the user id here before dispatching.
+#
+# This is safe because of how MCP 1.x runs a stateless request. The tool body executes in a
+# task started from a *long-lived* task group (``self._task_group.start(...)`` in
+# ``mcp.server.streamable_http_manager``), which looks like it would lose per-request state.
+# It does not: anyio copies the caller's context at ``start()`` time, and the caller is the
+# request task. Verified with a replica of that structure -- two sequential requests with
+# different keys reached the tool as different actors, with no bleed between them.
+_ACTOR: ContextVar[str | None] = ContextVar("mcp_actor_user_id", default=None)
+
+
 def _client() -> ResearchGatewayClient:
-    return ResearchGatewayClient(settings.research_api_url, settings.api_token)
+    """A gateway client bound to whoever presented the key on this request.
+
+    The key is not forwarded to the API. The gateway has already verified it, and
+    re-presenting it would make the API repeat the scrypt check -- about 60 ms on every
+    tool call. Instead this uses the service credential plus ``X-Actor-User``, exactly as
+    the Telegram bot does: a trusted intermediary that authenticated its own user and now
+    names who it is acting for.
+    """
+    client = ResearchGatewayClient(
+        settings.research_api_url, settings.service_token or settings.api_token
+    )
+    actor = _ACTOR.get()
+    return client.for_actor(actor) if actor else client
 
 
 @mcp.tool()
@@ -197,18 +225,14 @@ async def read_research_delivery_chunk(
 
 def run() -> None:
     if settings.mcp_transport == "streamable-http":
-        token = settings.mcp_bearer_token or settings.api_token
-        if not _is_loopback_host(settings.mcp_host):
-            if len(token) < 32 or token.startswith("change-me"):
-                raise RuntimeError(
-                    "Non-loopback MCP requires a random bearer token of at least 32 characters"
-                )
-            if not settings.mcp_allowed_networks:
-                raise RuntimeError("Non-loopback MCP requires MCP_ALLOWED_NETWORKS")
+        # No shared-token strength check any more: there is no shared token. Credentials
+        # are per-user API keys, minted with 24 random bytes and stored hashed, so their
+        # strength is a property of issue_api_key rather than of someone's .env.
+        if not _is_loopback_host(settings.mcp_host) and not settings.mcp_allowed_networks:
+            raise RuntimeError("Non-loopback MCP requires MCP_ALLOWED_NETWORKS")
         uvicorn.run(
             BearerProtectedMCP(
                 mcp.streamable_http_app(),
-                token=token,
                 allowed_origins=set(settings.mcp_allowed_origins),
                 allowed_networks=set(settings.mcp_allowed_networks),
             ),
@@ -220,16 +244,23 @@ def run() -> None:
 
 
 class BearerProtectedMCP:
+    """Authenticates every MCP request as a *person*, not as the gateway.
+
+    Until v0.10.1 this compared the presented bearer against one shared token. That token
+    could start research but could not own it -- the API refuses to create a run with no
+    owner -- so every agent surface broke the moment per-user isolation landed. The
+    credential is now the caller's own API key (``rp_<prefix>.<secret>``), which resolves
+    to a real user whose runs show up in their own panel.
+    """
+
     def __init__(
         self,
         app,
         *,
-        token: str,
         allowed_origins: set[str],
         allowed_networks: set[str] | None = None,
     ) -> None:
         self.app = app
-        self.token = token
         self.allowed_origins = allowed_origins
         self.allowed_networks = tuple(
             ipaddress.ip_network(value, strict=False) for value in (allowed_networks or set())
@@ -241,10 +272,8 @@ class BearerProtectedMCP:
                 key.decode("latin-1").lower(): value.decode("latin-1")
                 for key, value in scope.get("headers", [])
             }
-            supplied = headers.get("authorization", "")
-            if not secrets.compare_digest(supplied, f"Bearer {self.token}"):
-                await self._reject(send, 401, b"Unauthorized")
-                return
+            # Network and Origin first: they are the perimeter, and a caller outside it
+            # gets nothing at all -- not even a liveness answer.
             if self.allowed_networks and not self._client_allowed(scope):
                 await self._reject(send, 403, b"Client network is not allowed")
                 return
@@ -252,6 +281,9 @@ class BearerProtectedMCP:
             if origin and origin not in self.allowed_origins:
                 await self._reject(send, 403, b"Invalid Origin")
                 return
+            # Inside the perimeter, health needs no credential. It carries no data, and the
+            # office start/status scripts poll it to decide whether the gateway came up --
+            # putting a credential in front of a liveness probe only makes the probe lie.
             if scope.get("path") == "/health":
                 await self._json(
                     send,
@@ -259,14 +291,37 @@ class BearerProtectedMCP:
                     {
                         "status": "healthy",
                         "service": "research-platform-mcp",
-                        "version": "0.7.0",
+                        "version": "0.10.1",
                     },
                 )
                 return
+            actor = await self._resolve_actor(headers.get("authorization", ""))
+            if actor is None:
+                await self._reject(send, 401, b"Unauthorized")
+                return
+            _ACTOR.set(actor)
             if scope.get("path", "").startswith("/client/v1/"):
                 await self._client_api(scope, send)
                 return
         await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _resolve_actor(authorization: str) -> str | None:
+        """Return the user id behind the presented API key, or None.
+
+        Every rejection reason -- malformed, unknown, revoked, or belonging to a closed
+        account -- returns None and therefore the same 401. Distinguishing them would let
+        a caller learn which key prefixes exist.
+        """
+        scheme, separator, presented = authorization.partition(" ")
+        if not separator or scheme.lower() != "bearer" or not presented:
+            return None
+        try:
+            async with SessionLocal() as session:
+                principal = await principal_from_api_key(session, presented)
+        except AuthError:
+            return None
+        return principal.user_id
 
     async def _client_api(self, scope, send) -> None:
         if scope.get("method") != "GET":

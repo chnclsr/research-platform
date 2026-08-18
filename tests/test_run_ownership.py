@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from research_platform.api import app
 from research_platform.auth import Principal, hash_secret
 from research_platform.db import SessionLocal, UserRow, create_schema
+from research_platform.identity import issue_api_key
 from research_platform.repository import (
     _UNGUARDED_RUN_METHODS,
     ActorRequired,
@@ -363,3 +364,37 @@ async def test_api_run_listing_is_scoped_to_the_caller():
         ids = {run["id"] for run in listed}
         assert mine in ids
         assert theirs not in ids
+
+
+@pytest.mark.asyncio
+async def test_a_personal_api_key_owns_what_it_starts():
+    """The credential an agent surface presents: a key, resolving to a real owner.
+
+    Before v0.10.1 the MCP gateway held a shared token, which the API maps to the system
+    principal -- and the system principal owns nothing, so starting a run over MCP failed
+    outright. A per-user key makes the run belong to a person.
+    """
+    agent = await _person("01KEYAGENT".ljust(26, "0"), "Agent Caller")
+    async with SessionLocal() as session:
+        key, _ = await issue_api_key(session, user_id=agent.user_id, name="claude-desktop")
+
+    with TestClient(app) as client:
+        created = client.post(
+            "/v1/research-runs",
+            headers={"Authorization": f"Bearer {key}"},
+            json={
+                "protocol": {
+                    "title": "Started through an agent surface",
+                    "primary_question": "Does a personal key produce an owned run?",
+                }
+            },
+        )
+        assert created.status_code == 200, created.text
+        run_id = created.json()["id"]
+
+    async with SessionLocal() as session:
+        # Owned by the key holder...
+        assert await Repository(session, actor=agent).get_run(run_id) is not None
+        # ...and invisible to anybody else.
+        with pytest.raises(RunAccessDenied):
+            await Repository(session, actor=intruder).get_run(run_id)

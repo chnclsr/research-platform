@@ -200,21 +200,24 @@ yazılı.
 
 ---
 
-## 13. Yedekleme scripti sahiplik sınırının dışında
+## 13. Yedekleme çıktısı dosya sistemi düzeyinde ayrılmış değil
 
-`scripts/sync-research-reports.ps1` paylaşılan `API_TOKEN` ile **tüm** koşuların
-`research_bundle.zip` paketini `RESEARCH_OUTPUT_DIR`'e indiriyor. v0.10.0 ile panel ve API
-kullanıcı başına yalıtıldı; bu script yalıtımın dışında kaldı — zamanlanmış görevi çalıştıran
-makinede oturum açan herkes başkalarının raporlarına dosya sistemi üzerinden erişebilir.
+**Kısmen kapandı (v0.10.1).** `scripts/sync-research-reports.ps1` artık paylaşılan jetonla
+değil, **adı belli bir yönetici API anahtarıyla** çalışıyor (`yedekleme-senkron`). Kazanç:
+erişim iz sürülebilir, tek başına iptal edilebilir ve `list-keys` çıktısında son kullanım
+tarihi görünür. Seçenek (b) — "yedeklemeyi açıkça yönetici işlevi saymak" — bilinçli olarak
+seçildi.
 
-Bugün bu bir sorun değil: script tek kullanıcılı bu iş istasyonunda, yöneticinin kendi
-hesabıyla çalışıyor. Panel ekibe açıldığında karar gerekir.
+**Kalan sınır:** yönetici anahtarı olduğu için paketler hâlâ **tüm** koşuları kapsıyor ve
+hepsi tek bir `RESEARCH_OUTPUT_DIR` klasörüne iniyor. Zamanlanmış görevi çalıştıran makinede
+oturum açan biri, başkalarının raporlarına dosya sistemi üzerinden erişebilir.
 
-Seçenekler: (a) scripti kullanıcı başına API anahtarı kullanacak biçimde değiştirip
-`RESEARCH_OUTPUT_DIR`'i kullanıcıya göre ayırmak, (b) yedeklemeyi açıkça yönetici işlevi
-sayıp çıktı klasörünü NTFS izinleriyle kısıtlamak.
+Yapılacak: çıktı klasörünü NTFS izinleriyle yalnız o yöneticiye kısıtlamak. Alternatif olarak
+kişi başına anahtar + kişi başına klasör, ama o zaman başkalarının raporları yerel yedeğe
+hiç inmez — disk arızası senaryosunda (2. madde) kapsam daralır.
 
-Ayrıntı: [reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
+Ayrıntı: kökteki raporun 14. bölümü ve
+[reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 "Kalan sınırlar".
 
 ---
