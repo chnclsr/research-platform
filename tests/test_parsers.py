@@ -62,6 +62,16 @@ def test_registry_selects_deterministically_by_document_type():
     assert registry.select("image", "image/png", b"\x89PNG") is None
 
 
+# CODEX-2026-08-18: The smart parser must decline PDFs when its router import
+# failed, otherwise its priority turns a usable plain parse into empty text.
+def test_registry_falls_back_when_smart_router_is_unavailable(monkeypatch):
+    import research_platform.parsers.smart_pdf as smart_pdf
+
+    monkeypatch.setattr(smart_pdf, "SmartRouterHatti", None)
+    registry = build_parser_registry()
+    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "pdf"
+
+
 def test_pdf_page_numbers_survive_nested_headings():
     """
     A page heading has to outrank whatever headings the page itself contains.
@@ -149,6 +159,23 @@ def test_merge_does_not_quarantine_a_page_for_having_produced_a_table():
     )
     assert merged.quarantined_pages == []
     assert merged.pages[0].engine == "docling"
+
+
+# CODEX-2026-08-18: Structured output must follow the accepted page text.
+def test_merge_drops_tables_from_a_quarantined_heavy_page():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(
+        engine="docling", pages={1: "broken"},
+        tables=[{"page": 1, "headers": ["A"], "rows": [["1"]]}],
+    )
+    merged = birlestir(
+        {1: "clean fast text"}, results=[heavy], requested={"docling": [1]},
+        score=lambda text: 100.0 if "clean" in text else 0.0,
+    )
+    assert merged.quarantined_pages == [1]
+    assert merged.tables == []
 
 
 def test_registry_selection_is_stable_across_calls():

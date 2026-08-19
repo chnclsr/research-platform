@@ -334,6 +334,11 @@ class GirisKapisi:
                         "ortogonal_cizgi": cizim["ortogonal_cizgi"],
                         "bezier_egri": cizim["bezier_egri"],
                         "gorsel_kaplama": round(kaplama, 4),
+                        # CODEX-2026-08-18: C2 threshold sweeps need the raw
+                        # observations, not only the thresholded flags.
+                        "dolu_dikdortgen": cizim["dolu_dikdortgen"],
+                        "izgara_sutun": izgara["izgara_sutun"],
+                        "izgara_satir": izgara["izgara_satir"],
                     },
                 )
         finally:

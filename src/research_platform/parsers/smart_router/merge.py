@@ -98,13 +98,13 @@ def birlestir(
 
     winner: Dict[int, tuple[str, str]] = {}
     counts: Dict[str, int] = {}
-    tables: List[dict] = []
+    table_candidates: List[tuple[str, dict]] = []
     notes: List[str] = []
     degraded = False
 
     quarantined: List[int] = []
     for result in results:
-        tables.extend(result.tables)
+        table_candidates.extend((result.engine, table) for table in result.tables)
         if result.degraded or not result.ok:
             degraded = True
             if result.error:
@@ -159,6 +159,14 @@ def birlestir(
     if fallbacks:
         degraded = True
         notes.append(f"{len(fallbacks)} pages kept fast-path text after a heavy-engine miss")
+
+    # CODEX-2026-08-18: A quarantined heavy page must not leak that engine's
+    # table objects into an otherwise fast-path page.
+    tables = []
+    for engine, table in table_candidates:
+        page = table.get("page")
+        if page is None or winner.get(int(page), ("", ""))[1] == engine:
+            tables.append(table)
 
     return MergedDocument(
         pages=merged, engine_counts=counts, fallback_pages=fallbacks,

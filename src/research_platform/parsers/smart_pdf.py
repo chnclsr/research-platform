@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 try:
     from .smart_router import PDFCritic, ROUTER_VERSION, SmartRouterHatti
-    from .smart_router.engines import ENGINE_VERSION, DoclingEngine, MinerUEngine
+    from .smart_router.engines import (
+        ENGINE_VERSION, DoclingEngine, EngineResult, MinerUEngine,
+    )
     from .smart_router.gate import ESIK_VERSION
     from .smart_router.merge import MergedDocument, birlestir, sayfa_basliklariyla
 
@@ -52,6 +54,14 @@ class SmartPdfParser(DocumentParser):
     # ParserRegistry.select() sorts by (-priority, id), so a tie with PdfParser
     # would hand the document to "pdf" on the alphabetical tiebreak.
     priority = 10
+
+    # CODEX-2026-08-18: Registry selection does not consult health(). If the
+    # router package itself failed to import, decline the document so PdfParser
+    # can handle it instead of selecting this parser and returning an empty body.
+    def can_parse(self, document_type: str, content_type: str, content: bytes) -> bool:
+        return SmartRouterHatti is not None and super().can_parse(
+            document_type, content_type, content
+        )
 
     def available(self) -> tuple[bool, str]:
         """
@@ -208,8 +218,17 @@ class SmartPdfParser(DocumentParser):
             usable, _ = engine.available()
             requested[engine.name] = list(outstanding)
             if not usable:
+                # CODEX-2026-08-18: Keep the concrete availability failure in
+                # per-document provenance; a generic "heavy miss" is not enough.
+                results.append(engine.extract(path, outstanding))
                 continue
-            result = engine.extract(path, outstanding)
+            try:
+                result = engine.extract(path, outstanding)
+            except Exception as exc:
+                result = EngineResult(
+                    engine=engine.name, ok=False, degraded=True,
+                    error=f"{type(exc).__name__}: {exc}", mode="raised",
+                )
             results.append(result)
             outstanding = [p for p in outstanding if p not in result.pages]
 
@@ -272,8 +291,13 @@ class SmartPdfParser(DocumentParser):
             return None
         try:
             handle.write(content)
-        finally:
+        except OSError:
             handle.close()
+            self._discard(handle.name)
+            return None
+        finally:
+            if not handle.closed:
+                handle.close()
         return handle.name
 
     def _discard(self, path: str) -> None:

@@ -211,6 +211,9 @@ class SmartRouterHatti:
                 "has_table": s["has_table"],
                 "has_figure": s["has_figure"],
                 "tablo_guven": bayraklar[no].tablo_guven if no in bayraklar else None,
+                # CODEX-2026-08-18: Preserve raw gate observations so C2 can
+                # replay threshold choices without parsing all PDFs again.
+                "gate_signals": dict(bayraklar[no].kaynak) if no in bayraklar else {},
             })
 
         toplam = len(sayfa_kaydi)
