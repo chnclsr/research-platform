@@ -586,6 +586,239 @@ python research\pdf-parser\scripts\c2_kalibrasyon.py research\pdf-parser\out\c1_
 python -m pytest -q tests\test_parsers.py
 ```
 
+## D. Eşik Profili Kod Dışına Alındı (2026-08-19)
+
+<!-- CLAUDE-2026-08-19: config/smart_router.yaml taşıması ve ölçülen sapma kontrolü. -->
+
+Yönlendirmeyi belirleyen 44 sayı `gate.py`, `critic.py` ve `smart_pdf.py` içinde
+dağınık duruyordu. Bunlar kalibrasyon çıktısıdır — C2 zaten 900 tablo ve 336 route
+adayı tarıyor — ve kalibrasyon çıktısı üç dosyaya elle kopyalanamaz.
+
+**Taşınanlar** (`config/smart_router.yaml`):
+
+| Blok | Değer | Eski yeri |
+|---|---:|---|
+| `kapi` (metin/tablo/şekil) | 11 | `gate.ESIK` |
+| `yonlendirme` | 2 | `gate.sayfa_secici` varsayılanları |
+| `birlestirme.karantina_tolerans` | 1 | **yoktu, yeni** |
+| `birlestirme.corruption` | 2 | `smart_pdf._page_scorer` gömülü |
+| `critic_ceza` | 28 | `critic.SAYFA_CEZA` |
+
+**Taşınmayanlar, bilerek:** `KRITIK_TETIKLEYICI` / `UYARI` kümeleri (sayı değil
+teşhis tanımı), `priority = 10` (registry sözleşmesi), timeout/eşzamanlılık/köprü
+(çıktıyı değil dağıtımı ilgilendirir, `.env`'de kaldı).
+
+**Sürüm artık türetiliyor.** `esik_version` elle yazılan bir sabitti; bu, tanımladığı
+değerlerle uyumsuz kalabilir ve provenance hata vermeden yanlış bilgi verebilirdi.
+Artık **etkin ayarların** sha256'sından üretiliyor:
+`gate_v2_2026-08-18_A10_kalibre_edilmedi` → `gate_v2_kalibre_edilmedi_f671e1af`.
+Birleştirilmiş sonucun hash'lenmesi sayesinde yorum değişikliği yeni sürüm
+uydurmuyor, varsayılanları tekrarlayan bir profil de profilsiz koşuyla aynı sürümü
+alıyor.
+
+**Yokluk güvenli.** Dosya yok, okunamıyor, YAML bozuk, pyyaml kurulu değil, değer
+yanlış tipte veya negatif — her biri yerine geçtiği varsayılana düşüyor, sebebini
+yazıyor ve `parser health()` üzerinden görünüyor. Yazdığım ilk sürüm kendi hatasını
+yakaladı: `yaml.YAMLError` ne `OSError` ne `ValueError` türevi, dar `except` bozuk
+bir profilin bütün PDF hattını çökertmesine izin veriyordu.
+
+**Ölçülen sapma: sıfır.** 9 belge / 261 sayfada yönlendirilen yol, karar nedeni,
+kapı sinyali, kalite skoru, karantina sonucu ve üç metin (fast/heavy/routed) taşıma
+öncesiyle **bayt bayt aynı**. Kapı tespit oranları da birebir yeniden üretildi
+(tablo 0,93/0,55 · şekil 0,99/0,69 · vektörel 0,97/0,48). Yalnız `esik_version`
+değişti, o da taşımanın amacı. Üretim testleri `45 passed` (39 mevcut + 6 yeni).
+
+**Taşırken bulunan tutarsızlık:** aynı iki bozulma sinyali hatta iki farklı
+katsayıyla ölçülüyor — kapı skorunda gibberish ×300 / unicode 10,0, karantina
+karşılaştırmasında ×100 / 20,0. İkisi de artık aynı dosyada; hangisinin doğru
+olduğu D12 kalibrasyon sorusu.
+
+Commit: `cedaf46`.
+
+## E. GPU Ölçümü — Mimarinin Temel Varsayımı Sınandı (2026-08-19)
+
+<!-- CLAUDE-2026-08-19: RTX 4060'lı ikinci makinede Docling hız/determinizm/eşdeğerlik. -->
+
+Bütün sayfa yönlendirme mimarisi tek bir ölçülmüş orana dayanıyordu: kapı
+12 ms/sayfa, Docling 3.618 ms/sayfa → **~300×**. Bu oran GPU'suz bir makinede
+alınmıştı (Intel UHD 770). GPU'lu bir makineye erişilince üç soru ölçüldü.
+
+**Ortam:** PC_6605 · RTX 4060 8 GB · CUDA 13.2 · torch 2.13.0+cu132 ·
+Docling **2.120.3** (bizim koşumuz 2.120.1) · Python 3.12.7.
+
+### E.1 Hız — aynı makinede CPU ve GPU
+
+Karşılaştırma **aynı makinede** yapıldı; farklı makinelerin sayılarını kıyaslamak
+işlemci ve GPU farkını birbirine karıştırırdı.
+
+| Belge | Sayfa | CPU sn | GPU sn | hızlanma |
+|---|---:|---:|---:|---:|
+| turkce_makale | 6 | 17,42 | 6,92 | 2,52× |
+| resnet_2sutun_gorsel | 12 | 16,41 | 7,24 | 2,27× |
+| vgg_tablo_agirlikli | 14 | 40,26 | 9,80 | 4,11× |
+| attention_tablo | 15 | 16,58 | 6,14 | 2,70× |
+| bert_2sutun_dipnot | 16 | 18,99 | 7,46 | 2,54× |
+| sybil_tip_2sutun | 17 | 34,99 | 11,25 | 3,11× |
+| gpt3_uzun_75sayfa | 75 | 165,94 | 59,60 | 2,78× |
+| gpt4_uzun_gorsel | 100 | 67,28 | 19,97 | 3,37× |
+| taranmis_bert_2sutun_dipnot | 6 | 45,38 | 10,01 | 4,53× |
+| **TOPLAM** | **261** | **423,2** | **138,4** | **3,06×** |
+
+**GPU katkısı 3,06×**, 6,8× değil. Yeni makinenin CPU'su tek başına eski
+makinemizden **2,23×** hızlı (1.622 vs 3.618 ms/sayfa); aynı makinede taban
+alınmasaydı GPU'ya haksız yere 6,8× yazılacaktı.
+
+En çok hızlanan iki belge taranmış (4,53×) ve tablo ağırlıklı (4,11×) olanlar —
+GPU'dan en çok OCR ve tablo yapı modeli faydalanıyor.
+
+### E.2 Yönlendirme hâlâ ödüyor mu — evet, ama daha az
+
+| | GPU'da süre |
+|---|---:|
+| Tüm belgeyi Docling'e vermek | 138,4 sn |
+| Yalnız seçilen 147 sayfa (%56) | 82,2 sn |
+| Bunun boşa gideni (34 sayfa) | 14,9 sn |
+| Mükemmel router olsaydı | 67,3 sn |
+| **Yönlendirmenin kazancı** | **56,2 sn = %41** |
+
+Oran **300×'ten 44×'e** düştü (kapı 11,95 ms/sayfa, GPU Docling 530 ms/sayfa —
+kapı ölçümü eski makinede alındığı için bu üst sınır değil kaba bir alt sınır).
+Yönlendirme ölmedi ama **gerekçesi değişti**: baskın gerekçe artık "zaman
+kazandırıyor" değil, "gereksiz ağır çağrıyı ve kalite kaybını engelliyor".
+
+### E.3 Determinizm — geçti
+
+Aynı PDF, GPU'da 3 koşu, çıktı SHA-256'sı **birebir aynı**. Yani GPU inference bu
+hatta tekrarlanabilir ve `content_hash` sözleşmesi tek bir cihazda korunuyor.
+
+Sınır: üç koşu **aynı süreçte, aynı converter nesnesiyle** yapıldı. Süreçler arası
+ve sürücü yeniden başlatması sonrası tekrarlanabilirlik **ölçülmedi**.
+
+### E.4 Eşdeğerlik — GEÇMEDİ, ve asıl bulgu bu
+
+Aynı makine, aynı Docling sürümü, tek fark cihaz:
+
+| | sonuç |
+|---|---|
+| CPU ile GPU çıktısı birebir aynı olan belge | **5 / 9** |
+| Farklı olan | **4 / 9** — sybil_tip_2sutun, gpt3_uzun_75sayfa, gpt4_uzun_gorsel, taranmis_bert |
+
+**GPU çıktısı CPU çıktısına eşdeğer değil.** Bunun sonucu doğrudan üretim
+sözleşmesine dokunuyor: `registry.py` "aynı baytlar her koşuda aynı çıktıyı
+vermeli" diyor ve `content_hash = sha256(metin)` ile belge tekilleştirme, snapshot
+anahtarları ve pasaj offsetleri buna bağlı. Aynı belge bir kez CPU bir kez GPU
+işçisine düşerse **iki farklı content_hash** üretir → yinelenen source version,
+kayan pasaj offsetleri. Yani **cihaz artık sözleşmenin parçası**; provenance'a
+yazılmalı ve bir koşu boyunca sabit kalmalı.
+
+Sayfa düzeyinde, bizim 2.120.1/CPU çıktımıza karşı 261 sayfanın **9'u** farklı:
+resnet(1) · sybil(1) · gpt3(2) · gpt4(2) · taranmis(3). Bunların 8'i cihaz farkının
+kanıtlandığı belgelerde; resnet s.5 tek başına sürüm farkına (2.120.1→2.120.3)
+kalıyor.
+
+İki sayfada fark önemsiz değil:
+- `gpt3` s.50: **1.307 → 465 karakter (−%64)**, bir markdown tablosu tamamen kayboldu.
+- `gpt4` s.33: Devanagari çevriyazılı Marathi satırı büyük ölçüde eridi.
+
+**Bu iki kaybın cihazdan mı sürümden mi geldiği AYRILAMADI** — ölçüm betiği CPU ve
+GPU sayfa çıktısını aynı dizine yazdığı için yeni makinenin CPU sayfa metni
+korunmadı. Belge düzeyi hash'ler cihaz farkını kanıtlıyor ama sayfa düzeyi
+atıf için betik cihaza göre ayrı dizin yazacak şekilde düzeltilip **CPU koşusu
+tekrarlanmalı**.
+
+### E.5 Bu koşudan çıkan işler
+
+1. `gpu_docling_olc.py` cihaza göre ayrı çıktı dizini yazmalı; yeni makinede CPU
+   koşusu tekrarlanıp `gpt3` s.50 ve `gpt4` s.33 kaybı cihaz/sürüm olarak ayrılmalı.
+2. Cihaz (`cpu`/`cuda`) provenance'a yazılmalı — `esik_version` gibi.
+3. Süreçler arası determinizm ölçülmeli (aynı süreçteki tekrar yetmez).
+4. GPU'lu ve GPU'suz işçiler **aynı havuzda karıştırılmamalı**, yoksa dedup bozulur.
+
+Ham çıktı: `out/gpu/` — `gpu_docling_cpu.json`, `gpu_docling_cuda.json`,
+`gpu_docling_cuda_step3_determinizm.json`, `gpu_docling_json_cuda/`, koşu logları.
+
+## F. GPU Bulgusunun Ardından Yapılan Düzeltmeler (2026-08-19)
+
+<!-- CLAUDE-2026-08-19: E bolumundeki olcumlerden dogan dort kod degisikligi. -->
+
+E bölümündeki ölçümler dört somut işi tetikledi; hepsi yapıldı.
+
+### F.1 Cihaz artık provenance'a giriyor
+
+GPU ve CPU çıktısının eşdeğer olmaması, cihazı üretim sözleşmesinin parçası
+yapıyor. Kaynak tahmin değil, Docling'in kendi çözümleyicisi:
+`docling.utils.accelerator_utils.decide_device(AUTO)`.
+
+Zincir: `_docling_worker.cihaz()` → worker JSON çıktısı → `EngineResult.device`
+→ `MergedDocument.engine_devices` → `ParsedDocument.parse_provenance.engine_devices`.
+Hem süreç içi hem köprülü yol raporluyor; Docling kurulu değilse
+`bilinmiyor (ModuleNotFoundError)` yazıyor, sessizce bir varsayılan uydurmuyor.
+
+Bu, operatörün "bu belge hangi hızlandırıcıda ayrıştırıldı" sorusunu
+cevaplayabilmesi ve GPU'lu/GPU'suz işçilerin aynı havuzda karıştırılmadığının
+denetlenebilmesi için gerekli.
+
+### F.2 Kapı artık koordinat üretiyor
+
+Kapı sayfa başına "tablo var/yok" diyordu ama **nerede** olduğunu söylemiyordu.
+Oysa `cluster_drawings()` zaten çağrılıyor ve dikdörtgenleri döndürüyordu;
+yalnız en büyük kaplama oranı hesaplanıp kutular atılıyordu. Raster görsellerin
+bbox'ı da `get_image_bbox` ile zaten hesaplanıyordu.
+
+Artık `gate_signals` içinde `sekil_kume_kutulari` ve `sekil_raster_kutulari`
+duruyor (sayfa başına en büyük 8 kutu, sol-üst orijinli). Ölçülen: 261 sayfanın
+77'sinde küme kutusu, 49'unda raster kutusu var.
+
+Bu tek değişiklik iki işi açıyor: **tablo karantinası** (bölgeyi metin akışından
+çıkarıp işaret koymak) ve **bölge bazlı hibrit** (`inspector.extract_text_in_regions`
+ile "yapı ağır motordan, metin metin katmanından"). İkisi de bbox olmadığı için
+kilitliydi.
+
+Sapma kontrolü: 261 sayfada karar, gerekçe, skor, karantina ve metinlerin
+tamamı değişmedi.
+
+### F.3 Karantina ölü bandı tarandı — uygulanmadı
+
+139 karantina adayı sayfada tarandı:
+
+| tolerans | karantina | bunun berabere olanı | gerçek düşüş |
+|---:|---:|---:|---:|
+| 0,00 | 37 | **16** | 21 |
+| 0,05 | 28 | 7 | 21 |
+| **0,10** | **19** | **0** | **19** |
+| 0,25 | 10 | 0 | 10 |
+| 0,50 | 6 | 0 | 6 |
+| 1,00 | 2 | 0 | 2 |
+
+"Berabere" = `|heavy − fast| < 0,1` puan. Bugünkü `0,0` ayarında karantinaya
+alınan 37 sayfanın **medyan farkı yalnız −0,110**, en küçüğü **−0,0100**. Yani
+kararların yaklaşık yarısı üçüncü ondalıkta veriliyor ve o sayfada Docling'in
+tablo grid'i de düşüyor.
+
+`0,10` bütün berabereleri eliyor ve 19 gerçek düşüşün hepsini tutuyor — takas
+değil, bedava. Tek büyük regresyon (`resnet` s.5, −22,38) `2,0`'a kadar
+yakalanmaya devam ediyor.
+
+**Yine de varsayılan `0,0` bırakıldı:** bu bir davranış değişikliği, 18 sayfanın
+yolunu değiştirir ve önceki ölçümlerin karşılaştırılabilirliğini bozar. C2'nin
+bulduğu eşik adayları da holdout olmadan uygulanmamıştı; aynı kural burada da
+geçerli. Tarama sonucu profil dosyasına yorum olarak yazıldı, uygulamak tek
+satırlık bir değişiklik.
+
+### F.4 Sürüm çelişkisi giderildi
+
+`research_platform.__version__` `0.9.1` idi, `pyproject.toml` `0.10.0`. İkisi
+`0.10.0`'da birleştirildi.
+
+### F.5 Doğrulama
+
+- Üretim testleri: **47 passed** (39 taban + 6 profil + 2 cihaz)
+- C ölçüm testleri: **11 passed**
+- 261 sayfada karar sapması: **0**
+- `esik_version` değişmedi (`gate_v2_kalibre_edilmedi_f671e1af`) — profile yalnız
+  yorum eklendi ve hash **etkin ayarların**, dosya baytlarının değil. Tasarımın
+  amaçlandığı gibi çalıştığının doğrulaması.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production

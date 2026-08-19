@@ -82,6 +82,12 @@ class EngineResult:
     degraded: bool = False
     duration_ms: float = 0.0
     mode: str = ""
+    #: Which accelerator produced this. Measured on an RTX 4060 box: the same PDF
+    #: and the same Docling build give DIFFERENT text on CPU and CUDA -- 4 of 9
+    #: corpus documents, one losing a whole markdown table. content_hash is the
+    #: sha256 of that text, so the device belongs in provenance and two workers on
+    #: different accelerators are not interchangeable.
+    device: str = ""
 
     @property
     def profile_suffix(self) -> str:
@@ -152,9 +158,9 @@ class DoclingEngine:
         runner = self._in_process if in_process else self._bridged
         mode = "in-process" if in_process else "bridged"
         try:
-            produced, tables, error = runner(pdf_path, blocks)
+            produced, tables, error, device = runner(pdf_path, blocks)
         except Exception as exc:
-            produced, tables, error = {}, [], f"{type(exc).__name__}: {exc}"
+            produced, tables, error, device = {}, [], f"{type(exc).__name__}: {exc}", ""
         finally:
             _AGIR_KAPI.release()
 
@@ -168,15 +174,16 @@ class DoclingEngine:
             degraded=bool(error) or bool(missing),
             duration_ms=(time.perf_counter() - started) * 1000,
             mode=mode,
+            device=device,
         )
 
     def _in_process(
         self, pdf_path: str, blocks: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, str], List[dict], Optional[str]]:
+    ) -> Tuple[Dict[int, str], List[dict], Optional[str], str]:
         os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
         from docling.document_converter import DocumentConverter
 
-        from ._docling_worker import _table_grid
+        from ._docling_worker import _table_grid, cihaz
 
         converter = DocumentConverter()
         pages: Dict[int, str] = {}
@@ -195,11 +202,11 @@ class DoclingEngine:
                     continue
                 if flattened:
                     tables.append(flattened)
-        return pages, tables, None
+        return pages, tables, None, cihaz()
 
     def _bridged(
         self, pdf_path: str, blocks: List[Tuple[int, int]]
-    ) -> Tuple[Dict[int, str], List[dict], Optional[str]]:
+    ) -> Tuple[Dict[int, str], List[dict], Optional[str], str]:
         # Invoked by file path, not `-m`: importing it as part of the package
         # would pull in registry -> pdf -> pypdf, and the interpreter that has
         # Docling is not required to have the rest of the platform installed.
@@ -219,16 +226,17 @@ class DoclingEngine:
         except subprocess.TimeoutExpired:
             # The process is killed by the time this raises -- that is the whole
             # reason the bridged mode exists.
-            return {}, [], f"timeout after {self.timeout_s:.0f}s"
+            return {}, [], f"timeout after {self.timeout_s:.0f}s", ""
 
         payload = _son_isaretli_satir(completed.stdout)
         if payload is None:
             tail = (completed.stderr or completed.stdout or "").strip()[-400:]
-            return {}, [], f"worker produced no result (exit {completed.returncode}): {tail}"
+            return {}, [], f"worker produced no result (exit {completed.returncode}): {tail}", ""
         if "error" in payload:
-            return {}, [], str(payload["error"])
+            return {}, [], str(payload["error"]), ""
         return ({int(k): v for k, v in (payload.get("pages") or {}).items()},
-                list(payload.get("tables") or []), None)
+                list(payload.get("tables") or []), None,
+                str(payload.get("device") or ""))
 
 
 class MinerUEngine:

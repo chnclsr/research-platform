@@ -55,6 +55,12 @@ class MergedDocument:
     pages: List[MergedPage] = field(default_factory=list)
     #: Engine name -> how many pages it actually produced.
     engine_counts: Dict[str, int] = field(default_factory=dict)
+    #: Engine name -> the accelerator it ran on. Measured on an RTX 4060 box: the
+    #: same PDF and Docling build give different text on CPU and CUDA (4 of 9
+    #: corpus documents, one losing a whole markdown table). content_hash is the
+    #: sha256 of that text, so which device produced a page belongs with which
+    #: engine produced it.
+    engine_devices: Dict[str, str] = field(default_factory=dict)
     #: Pages the heavy path was supposed to handle but did not.
     fallback_pages: List[int] = field(default_factory=list)
     #: Tables the heavy engine recovered as a grid: {"page", "headers", "rows"}.
@@ -112,7 +118,10 @@ def birlestir(
     degraded = False
 
     quarantined: List[int] = []
+    devices: Dict[str, str] = {}
     for result in results:
+        if result.device:
+            devices[result.engine] = result.device
         table_candidates.extend((result.engine, table) for table in result.tables)
         if result.degraded or not result.ok:
             degraded = True
@@ -178,7 +187,8 @@ def birlestir(
             tables.append(table)
 
     return MergedDocument(
-        pages=merged, engine_counts=counts, fallback_pages=fallbacks,
+        pages=merged, engine_counts=counts, engine_devices=devices,
+        fallback_pages=fallbacks,
         tables=sorted(tables, key=lambda t: (t.get("page") or 0)),
         quarantined_pages=sorted(quarantined),
         degraded=degraded, notes=notes,

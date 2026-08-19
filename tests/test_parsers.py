@@ -431,3 +431,33 @@ def test_merge_dead_band_keeps_a_heavy_page_that_scored_marginally_lower():
                      score=puan, tolerans=0.5)
     assert bant.quarantined_pages == []
     assert bant.pages[0].engine == "docling"
+
+
+# CLAUDE-2026-08-19: Measured on an RTX 4060 box -- the same PDF and the same
+# Docling build produce different text on CPU and CUDA, 4 of 9 corpus documents,
+# one losing a whole markdown table. content_hash is the sha256 of that text, so a
+# document parsed on one device is not interchangeable with the same document
+# parsed on another and provenance has to say which ran.
+def test_merge_carries_the_engine_device_into_provenance():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    merged = birlestir(
+        {1: "fast"},
+        results=[EngineResult(engine="docling", pages={1: "heavy"}, device="cuda")],
+        requested={"docling": [1]},
+    )
+    assert merged.engine_devices == {"docling": "cuda"}
+
+
+def test_merge_reports_no_device_when_the_engine_did_not_name_one():
+    """An unknown device must read as unknown, not as a default one."""
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    merged = birlestir(
+        {1: "fast"},
+        results=[EngineResult(engine="docling", pages={1: "heavy"})],
+        requested={"docling": [1]},
+    )
+    assert merged.engine_devices == {}

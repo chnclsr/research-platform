@@ -73,9 +73,31 @@ yonlendirme:
 # --------------------------------------------------------------------------
 birlestirme:
   # Ağır sayfa yalnız `heavy_skor >= fast_skor - tolerans` ise kabul edilir.
-  # 0.0 = ölü bant yok, bugünkü davranış. Ölçüldü (261 sayfa): 37 karantinanın
-  # 16'sında iki skor arasındaki fark 0,1 puandan küçük, yani karar fiilen
-  # yazı-tura. Kalibrasyondan sonra 0,5 civarı denenmeli.
+  # 0.0 = ölü bant yok, bugünkü davranış ve bugüne kadarki bütün ölçümlerin
+  # varsayımı.
+  #
+  # TARANDI (2026-08-19, 9 belge / 261 sayfa / 139 karantina adayı):
+  #
+  #   tolerans | karantina | bunun berabere olanı | gerçek düşüş
+  #   ---------|-----------|----------------------|-------------
+  #      0.00  |    37     |         16           |     21
+  #      0.05  |    28     |          7           |     21
+  #      0.10  |    19     |          0           |     19
+  #      0.25  |    10     |          0           |     10
+  #      0.50  |     6     |          0           |      6
+  #      1.00  |     2     |          0           |      2
+  #
+  # "Berabere" = |heavy − fast| < 0,1 puan. 0,0'da karantinaya alınan 37 sayfanın
+  # medyan farkı yalnız −0,110; en küçüğü −0,0100. Yani kararların yaklaşık yarısı
+  # üçüncü ondalıkta veriliyor ve o sayfada Docling'in tablo grid'i de düşüyor.
+  #
+  # 0.10 bütün berabereleri eliyor ve 19 gerçek düşüşün hepsini tutuyor — takas
+  # değil, bedava. Tek büyük regresyon (resnet s.5, −22,38) 2,0'a kadar yakalanmaya
+  # devam ediyor.
+  #
+  # YİNE DE 0.0 BIRAKILDI: bu bir davranış değişikliği, 18 sayfanın yolunu değiştirir
+  # ve önceki ölçümlerin karşılaştırılabilirliğini bozar. C2'nin bulduğu eşik adayları
+  # da holdout olmadan uygulanmamıştı; aynı kural burada da geçerli.
   karantina_tolerans: 0.0
 
   # `smart_pdf._page_scorer` — karantina kararının verildiği bozulma skoru.

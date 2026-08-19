@@ -58,6 +58,29 @@ def _table_grid(table) -> dict | None:
     }
 
 
+def cihaz() -> str:
+    """Which accelerator Docling actually resolved to -- asked, not guessed.
+
+    Measured on an RTX 4060 box: the same PDF, same Docling build, produces
+    DIFFERENT text on CPU and on CUDA -- 4 of 9 documents in the corpus, one of
+    them losing an entire markdown table. `content_hash` is the sha256 of that
+    text and dedup, snapshot keys and passage offsets all hang off it, so the
+    device is part of the contract and has to reach provenance. Two workers on
+    different accelerators are not interchangeable.
+
+    Docling's own resolver is the source: AUTO picks CUDA when torch sees it,
+    and inferring that from `torch.cuda.is_available()` here would guess at a
+    decision Docling has already made.
+    """
+    try:
+        from docling.datamodel.pipeline_options import AcceleratorDevice
+        from docling.utils.accelerator_utils import decide_device
+
+        return str(decide_device(AcceleratorDevice.AUTO.value))
+    except Exception as exc:  # pragma: no cover - depends on the docling build
+        return f"bilinmiyor ({type(exc).__name__})"
+
+
 def run(pdf_path: str, blocks: list[list[int]]) -> dict:
     from docling.document_converter import DocumentConverter
 
@@ -83,7 +106,7 @@ def run(pdf_path: str, blocks: list[list[int]]) -> dict:
                 continue
             if flattened:
                 tables.append(flattened)
-    return {"pages": pages, "tables": tables}
+    return {"pages": pages, "tables": tables, "device": cihaz()}
 
 
 def main(argv: list[str]) -> int:

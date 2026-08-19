@@ -190,6 +190,13 @@ class SmartPdfParser(DocumentParser):
             "esik_version": decision.get("esik_version") or ESIK_VERSION,
             "esik_profili": decision.get("esik_profili"),
             "engine_version": ENGINE_VERSION,
+            # Which accelerator the heavy engine ran on. Measured on an RTX 4060
+            # box: the same PDF and Docling build give different text on CPU and
+            # CUDA -- 4 of 9 corpus documents, one losing a whole markdown table.
+            # content_hash is the sha256 of that text, so a document parsed on one
+            # device is not interchangeable with the same document parsed on
+            # another, and an operator has to be able to see which was used.
+            "engine_devices": merged.engine_devices,
             "degraded": merged.degraded,
             "notes": merged.notes,
             "engine_counts": merged.engine_counts,

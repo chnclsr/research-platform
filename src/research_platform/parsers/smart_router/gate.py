@@ -77,6 +77,27 @@ ESIK: Dict[str, float] = dict(AYAR.kapi_esikleri)
 #: kalamaz. Bkz. `ayarlar._surum()`.
 ESIK_VERSION = AYAR.esik_version
 
+#: Sayfa basina kac kutu saklanir. Kutular zaten hesaplaniyordu ve atiliyordu;
+#: hepsini tutmak kapi butcesini degil (8,16 ms/sayfa) provenance boyutunu bozar.
+#: En buyuk birkac tanesi bolge isi icin yeterli, kalani gurultu.
+KUTU_SINIR = 8
+
+
+def _kutu(rect) -> List[float]:
+    """PyMuPDF dikdortgeni -> [x0, y0, x1, y1], sol-ust orijinli, 1 ondalik.
+
+    PyMuPDF sayfa koordinati sol-ust orijinlidir. Docling'in bbox'i olcuye gore
+    BOTTOMLEFT de olabiliyor (olculdu: turkce_makale s.3'te tablo BOTTOMLEFT,
+    hucre TOPLEFT) -- iki kaynagin kutulari karistirilmadan once tabani cevrilmeli.
+    """
+    return [round(rect.x0, 1), round(rect.y0, 1), round(rect.x1, 1), round(rect.y1, 1)]
+
+
+def _en_buyukler(dikdortgenler, alan: float) -> List[Any]:
+    """Alanca en buyuk `KUTU_SINIR` dikdortgen, buyukten kucuge."""
+    return sorted(dikdortgenler, key=lambda r: r.width * r.height,
+                  reverse=True)[:KUTU_SINIR]
+
 
 # --------------------------------------------------------------------------
 # A10 — `critical_issue` KRITIK mi UYARI mi (plan 3.1-3)
@@ -246,10 +267,12 @@ class GirisKapisi:
                 # gercek kaplama 1,0, hatali kodun verdigi 0,05).
                 gorseller = page.get_images(full=True)
                 kaplama = 0.0
+                raster_kutu: List[List[float]] = []
                 for img in gorseller:
                     try:
                         bbox = page.get_image_bbox(img)
                         kaplama += (bbox.width * bbox.height) / alan
+                        raster_kutu.append(_kutu(bbox))
                     except Exception:
                         kaplama += 0.05
 
@@ -264,6 +287,12 @@ class GirisKapisi:
                     kumeler = []
                 en_buyuk_kume = max(
                     ((r.width * r.height) / alan for r in kumeler), default=0.0)
+                # Kutular zaten hesaplandi; eskiden yalniz en buyuk kaplama orani
+                # saklanip atiliyorlardi. Sayfa duzeyinde "tablo var mi" cevabi
+                # verip "nerede" cevabini vermemek tablo karantinasini ve bolge
+                # bazli hibridi (inspector.extract_text_in_regions) imkansiz
+                # kiliyordu; kutular ucuz, en buyuk KUTU_SINIR tanesi tutuluyor.
+                kume_kutu = [_kutu(r) for r in _en_buyukler(kumeler, alan)]
                 kume_var = en_buyuk_kume >= self.esik["kume_kaplama"]
                 raster_var = len(gorseller) > 0
 
@@ -331,6 +360,10 @@ class GirisKapisi:
                         "dolu_dikdortgen": cizim["dolu_dikdortgen"],
                         "izgara_sutun": izgara["izgara_sutun"],
                         "izgara_satir": izgara["izgara_satir"],
+                        # Sayfa duzeyi bayrak nerede oldugunu soylemiyordu; bolge
+                        # bazli is (tablo karantinasi, sekil kirpma) bunlari bekliyor.
+                        "sekil_kume_kutulari": kume_kutu,
+                        "sekil_raster_kutulari": raster_kutu[:KUTU_SINIR],
                     },
                 )
         finally:
