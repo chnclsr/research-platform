@@ -219,6 +219,26 @@ python scripts/resmi_benchmark.py   # 200 belgelik bench (ayrı depo klonu gerek
 Korpus ve taşınabilir JRE bu depoda değil — kurulumu `scripts/fetch_corpus.py`
 ve `BULGULAR.md` içinde anlatılıyor.
 
+## Sayfa yönlendirmeli parser RC1
+
+<!-- CODEX-2026-08-18: A/B production entegrasyonu ve C calibration araçlarının
+GitHub'daki tek giriş noktası. -->
+
+İlk araştırmadan sonra production parser `src/research_platform/parsers/`
+altında sayfa yönlendirmeli hale getirildi. Güncel uçtan uca sonuç ve dürüst
+sınırlamalar `../../reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` dosyasındadır.
+
+C araçları `scripts/c1_*.py`, `scripts/c2_kalibrasyon.py` ve
+`scripts/korpus_*.py`; küçük ölçüm kanıtları `results/c1_rc1/` altındadır.
+Ham corpus ve çalışma çıktıları Git'e girmez.
+
+Varsayılan corpus konumları:
+
+- OCRTurk/DocLayNet/OmniDocBench: repo kökünde `corpus/raw`, gerekirse
+  `KORPUS_RAW` ile değiştirilebilir.
+- OpenDataLoader benchmark: `research/pdf-parser/corpus/opendataloader-bench`,
+  gerekirse `OPENDATALOADER_BENCH` ile değiştirilebilir.
+
 ## Dosyalar
 
 | dosya | içerik |

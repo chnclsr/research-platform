@@ -1,0 +1,207 @@
+{
+  "documents_total": 230,
+  "documents_used": 221,
+  "excluded": 9,
+  "sample_ready": true,
+  "route_target_met": false,
+  "heavy_benefit_positives": 74,
+  "candidate_not_applied": null,
+  "best_tradeoff_not_accepted": {
+    "min_gain": 0.02,
+    "actual_positives": 74,
+    "quality_threshold": 40.0,
+    "table_policy": "all_tables",
+    "fast_rate": 0.461538,
+    "tp": 54,
+    "fp": 65,
+    "fn": 20,
+    "tn": 82,
+    "precision": 0.453782,
+    "recall": 0.72973,
+    "f1": 0.559585,
+    "f2": 0.650602,
+    "positive_rate": 0.538462
+  },
+  "current_baseline": {
+    "tp": 55,
+    "fp": 79,
+    "fn": 19,
+    "tn": 68,
+    "precision": 0.410448,
+    "recall": 0.743243,
+    "f1": 0.528846,
+    "f2": 0.639535,
+    "positive_rate": 0.606335,
+    "fast_rate": 0.393665
+  },
+  "language_breakdown": {
+    "en": {
+      "documents": 49,
+      "heavy_benefit_positives": 6,
+      "mean_utility": {
+        "fast": 0.889773,
+        "heavy": 0.868219,
+        "routed": 0.868654
+      },
+      "current_baseline": {
+        "tp": 3,
+        "fp": 31,
+        "fn": 3,
+        "tn": 12,
+        "precision": 0.088235,
+        "recall": 0.5,
+        "f1": 0.15,
+        "f2": 0.258621,
+        "positive_rate": 0.693878,
+        "fast_rate": 0.306122
+      }
+    },
+    "tr": {
+      "documents": 172,
+      "heavy_benefit_positives": 68,
+      "mean_utility": {
+        "fast": 0.808129,
+        "heavy": 0.838368,
+        "routed": 0.840329
+      },
+      "current_baseline": {
+        "tp": 52,
+        "fp": 48,
+        "fn": 16,
+        "tn": 56,
+        "precision": 0.52,
+        "recall": 0.764706,
+        "f1": 0.619048,
+        "f2": 0.698925,
+        "positive_rate": 0.581395,
+        "fast_rate": 0.418605
+      }
+    }
+  },
+  "false_negative_pattern": {
+    "count": 19,
+    "quality_100": 16,
+    "has_figure": 18,
+    "ids": [
+      "data_14",
+      "data_41",
+      "data_42",
+      "data_101",
+      "data_52",
+      "data_137",
+      "data_54",
+      "data_71",
+      "data_138",
+      "data_55",
+      "data_139",
+      "data_140",
+      "data_160",
+      "data_57",
+      "data_141",
+      "data_58",
+      "01030000000009",
+      "01030000000016",
+      "01030000000122"
+    ]
+  },
+  "sensitivity_candidates": {
+    "0.0": {
+      "min_gain": 0.0,
+      "actual_positives": 104,
+      "quality_threshold": 90.0,
+      "table_policy": "all_tables",
+      "fast_rate": 0.307692,
+      "tp": 71,
+      "fp": 82,
+      "fn": 33,
+      "tn": 35,
+      "precision": 0.464052,
+      "recall": 0.682692,
+      "f1": 0.552529,
+      "f2": 0.623902,
+      "positive_rate": 0.692308
+    },
+    "0.01": {
+      "min_gain": 0.01,
+      "actual_positives": 85,
+      "quality_threshold": 90.0,
+      "table_policy": "all_tables",
+      "fast_rate": 0.307692,
+      "tp": 64,
+      "fp": 89,
+      "fn": 21,
+      "tn": 47,
+      "precision": 0.418301,
+      "recall": 0.752941,
+      "f1": 0.537815,
+      "f2": 0.649087,
+      "positive_rate": 0.692308
+    },
+    "0.02": {
+      "min_gain": 0.02,
+      "actual_positives": 74,
+      "quality_threshold": 40.0,
+      "table_policy": "all_tables",
+      "fast_rate": 0.461538,
+      "tp": 54,
+      "fp": 65,
+      "fn": 20,
+      "tn": 82,
+      "precision": 0.453782,
+      "recall": 0.72973,
+      "f1": 0.559585,
+      "f2": 0.650602,
+      "positive_rate": 0.538462
+    },
+    "0.05": {
+      "min_gain": 0.05,
+      "actual_positives": 53,
+      "quality_threshold": 40.0,
+      "table_policy": "all_tables",
+      "fast_rate": 0.461538,
+      "tp": 42,
+      "fp": 77,
+      "fn": 11,
+      "tn": 91,
+      "precision": 0.352941,
+      "recall": 0.792453,
+      "f1": 0.488372,
+      "f2": 0.634441,
+      "positive_rate": 0.538462
+    }
+  },
+  "table_candidate_not_applied": {
+    "policy": "inspector_and_v2",
+    "ortogonal_cizgi": 8,
+    "dolu_dikdortgen": 6,
+    "izgara_sutun": 2,
+    "izgara_satir": 3,
+    "tp": 60,
+    "fp": 12,
+    "fn": 7,
+    "tn": 142,
+    "precision": 0.833333,
+    "recall": 0.895522,
+    "f1": 0.863309,
+    "f2": 0.882353,
+    "positive_rate": 0.325792
+  },
+  "figure_candidate_not_applied": {
+    "kume_kaplama": 0.02,
+    "tp": 84,
+    "fp": 118,
+    "fn": 0,
+    "tn": 19,
+    "precision": 0.415842,
+    "recall": 1.0,
+    "f1": 0.587413,
+    "f2": 0.780669,
+    "positive_rate": 0.914027
+  },
+  "limitations": [
+    "OCRTurk belgeleri tek sayfali; sayfa siniri davranisi kalibre edilmedi.",
+    "OCR icin taranmis/sayisal dengeli bir gercek etiket yok.",
+    "Ingilizce aktarim yalniz secilmis OpenDataLoader alt ornekleminde olculdu.",
+    "Adaylar gate.py dosyasina uygulanmadi."
+  ]
+}

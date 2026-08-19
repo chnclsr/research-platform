@@ -15,4 +15,9 @@ htmlcov/
 outputs/
 insti_patch.zip
 .codex-docx-review/
+
+# PDF parser calibration work products and locally downloaded corpora.
+research/pdf-parser/out/
+research/pdf-parser/corpus/
+research/pdf-parser/results/c1_rc1/predictions.jsonl
 CLAUDE.md
