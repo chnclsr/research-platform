@@ -35,6 +35,89 @@ def test_stage_timeline_reports_round_and_duration():
     assert timeline[1]["active"] is True
 
 
+def tools_by_name(visit: dict) -> dict[str, dict]:
+    return {f"{row['kind']}:{row['name']}": row for row in visit["tools"]}
+
+
+def test_stage_timeline_attributes_tools_to_the_enclosing_stage_visit():
+    rows = [
+        event("stage", {"stage": "SEARCH", "round": 1}, 0),
+        event("connector_metrics", {"calls": [
+            {"connector": "crossref", "success": True, "result_count": 7,
+             "latency_seconds": 1.5},
+            {"connector": "crossref", "success": False, "result_count": 0,
+             "latency_seconds": 0.5},
+        ]}, 1),
+        event("connector_error", {"connector": "crossref", "error": "HTTP 429"}, 2),
+        event("stage", {"stage": "ACQUIRE", "round": 1}, 5),
+        event("acquisition_metrics", {"calls": [
+            {"connector": "crossref", "success": True, "method": "direct",
+             "parser_id": "html", "latency_seconds": 2.0},
+            {"connector": "crossref", "success": True, "method": "crawl4ai",
+             "parser_id": "html", "latency_seconds": 4.0},
+            {"connector": "crossref", "success": False, "method": "direct",
+             "parser_id": "", "latency_seconds": 1.0},
+        ]}, 6),
+        event("stage", {"stage": "NORMALIZE", "round": 1}, 9),
+        event("llm_metrics", {"stage": "CONTENT_RELEVANCE", "calls": [
+            {"model": "qwen", "prompt_tokens": 90, "completion_tokens": 10,
+             "wall_seconds": 3.0},
+        ]}, 10),
+        event("embedding_metrics", {"stage": "CHUNK_INDEX", "calls": [
+            {"model": "nomic", "prompt_tokens": 400, "wall_seconds": 0.5},
+        ]}, 11),
+    ]
+    timeline = stage_timeline(
+        rows, datetime(2026, 7, 17, tzinfo=timezone.utc) + timedelta(seconds=12),
+    )
+    search, acquire, normalize = timeline
+    connector = tools_by_name(search)["connector:crossref"]
+    assert (connector["calls"], connector["ok"], connector["results"]) == (2, 1, 7)
+    assert connector["errors"] == 1
+    assert connector["seconds"] == 2.0
+    acquire_tools = tools_by_name(acquire)
+    assert acquire_tools["method:direct"]["calls"] == 2
+    assert acquire_tools["method:crawl4ai"]["ok"] == 1
+    # Two documents parsed, and the failed acquisition contributes no parser row.
+    assert acquire_tools["parser:html"]["calls"] == 2
+    assert [row["kind"] for row in acquire["tools"]] == ["method", "method", "parser"]
+    normalize_tools = tools_by_name(normalize)
+    # The finer-grained phase label annotates the row; placement follows the stage window.
+    assert normalize_tools["model:qwen"]["tokens"] == 100
+    assert normalize_tools["model:qwen"]["phases"] == ["CONTENT_RELEVANCE"]
+    assert normalize_tools["embedding:nomic"]["tokens"] == 400
+
+
+def test_stage_timeline_keeps_repeated_visits_of_a_stage_separate():
+    rows = [
+        event("stage", {"stage": "SEARCH", "round": 1}, 0),
+        event("connector_metrics", {"calls": [
+            {"connector": "crossref", "success": True, "result_count": 4},
+        ]}, 1),
+        event("stage", {"stage": "SEARCH", "round": 2}, 5),
+        event("connector_metrics", {"calls": [
+            {"connector": "arxiv", "success": True, "result_count": 9},
+        ]}, 6),
+    ]
+    first, second = stage_timeline(
+        rows, datetime(2026, 7, 17, tzinfo=timezone.utc) + timedelta(seconds=8),
+    )
+    assert [row["name"] for row in first["tools"]] == ["crossref"]
+    assert [row["name"] for row in second["tools"]] == ["arxiv"]
+    assert second["round"] == 2
+
+
+def test_stage_timeline_tolerates_runs_recorded_without_parser_ids():
+    rows = [
+        event("stage", {"stage": "ACQUIRE", "round": 1}, 0),
+        event("acquisition_metrics", {"calls": [{"success": True, "method": "direct"}]}, 1),
+    ]
+    visit = stage_timeline(
+        rows, datetime(2026, 7, 17, tzinfo=timezone.utc) + timedelta(seconds=2),
+    )[0]
+    assert [row["kind"] for row in visit["tools"]] == ["method"]
+
+
 def test_pipeline_progress_maps_live_stage_and_terminal_completion():
     assert pipeline_progress("INIT", "queued") == 0
     assert 25 <= pipeline_progress("SEARCH", "running") <= 35

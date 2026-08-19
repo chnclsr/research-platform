@@ -1,0 +1,173 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="rp-architecture-dark-title rp-architecture-dark-desc">
+  <title id="rp-architecture-dark-title">Research Platform system architecture</title>
+  <desc id="rp-architecture-dark-desc">Agent clients and Telegram reach the Research API through the MCP and bot gateways with a personal API key; the API enqueues the job on Redis, and the worker drives PostgreSQL, MinIO, the collection services and Ollama on the host; the control panel also reads the database directly, bypassing the API.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bfc0c0"/></marker>
+    <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#f08a59"/></marker>
+    <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6a95d8"/></marker>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#2d3142"/>
+
+  <rect x="296" y="160" width="232" height="240" rx="8" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
+  <rect x="368" y="164" width="88" height="12" rx="2" fill="#2d3142"/>
+  <text x="412" y="173" fill="rgba(245,245,245,0.35)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">ENTRY GATEWAYS</text>
+
+  <rect x="560" y="192" width="232" height="376" rx="8" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
+  <rect x="648" y="196" width="56" height="12" rx="2" fill="#2d3142"/>
+  <text x="676" y="205" fill="rgba(245,245,245,0.35)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CORE</text>
+
+  <rect x="928" y="88" width="272" height="368" rx="8" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
+  <rect x="1016" y="92" width="96" height="12" rx="2" fill="#2d3142"/>
+  <text x="1064" y="101" fill="rgba(245,245,245,0.35)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA AND COLLECTION</text>
+
+  <line x1="240" y1="224" x2="312" y2="224" stroke="#6a95d8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <line x1="240" y1="352" x2="312" y2="352" stroke="#6a95d8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <path d="M 512,224 H 536 Q 544,224 544,232 V 240 Q 544,248 552,248 H 576" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 512,352 H 536 Q 544,352 544,344 V 280 Q 544,272 552,272 H 576" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="676" y1="160" x2="676" y2="224" stroke="#6a95d8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <line x1="776" y1="136" x2="944" y2="136" stroke="#bfc0c0" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <path d="M 776,256 H 792 Q 800,256 800,248 V 160 Q 800,152 808,152 H 944" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="676" y1="288" x2="676" y2="360" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="676" y1="424" x2="676" y2="472" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 776,488 H 816 Q 824,488 824,480 V 176 Q 824,168 832,168 H 944" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 776,504 H 832 Q 840,504 840,496 V 296 Q 840,288 848,288 H 944" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 776,520 H 848 Q 856,520 856,512 V 424 Q 856,416 864,416 H 944" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M 776,536 H 872 Q 880,536 880,544 V 600 Q 880,608 888,608 H 944" fill="none" stroke="#6a95d8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+  <rect x="244" y="204" width="64" height="12" rx="2" fill="#2d3142"/>
+  <text x="276" y="213" fill="#6a95d8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">BEARER rp_</text>
+
+  <rect x="244" y="332" width="64" height="12" rx="2" fill="#2d3142"/>
+  <text x="276" y="341" fill="#6a95d8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">LONG POLL</text>
+
+  <rect x="684" y="166" width="88" height="12" rx="2" fill="#2d3142"/>
+  <text x="688" y="175" fill="#6a95d8" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">REST · COOKIE</text>
+
+  <rect x="824" y="116" width="76" height="12" rx="2" fill="#2d3142"/>
+  <text x="862" y="125" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DIRECT DB</text>
+
+  <rect x="684" y="318" width="60" height="12" rx="2" fill="#2d3142"/>
+  <text x="688" y="327" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">ENQUEUE</text>
+
+  <rect x="684" y="436" width="60" height="12" rx="2" fill="#2d3142"/>
+  <text x="688" y="445" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">ARQ JOB</text>
+
+  <rect x="888" y="560" width="64" height="12" rx="2" fill="#2d3142"/>
+  <text x="892" y="569" fill="#6a95d8" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">LLM · EMBED</text>
+
+  <rect x="48" y="192" width="192" height="64" rx="6" fill="#2d3142"/>
+  <rect x="48" y="192" width="192" height="64" rx="6" fill="rgba(191,192,192,0.10)" stroke="#8e98ac" stroke-width="1"/>
+  <rect x="56" y="200" width="28" height="12" rx="2" fill="transparent" stroke="rgba(142,152,172,0.50)" stroke-width="0.8"/>
+  <text x="70" y="209" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+  <text x="144" y="228" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Agent clients</text>
+  <text x="144" y="244" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Codex · Claude Code</text>
+
+  <rect x="48" y="320" width="192" height="64" rx="6" fill="#2d3142"/>
+  <rect x="48" y="320" width="192" height="64" rx="6" fill="rgba(191,192,192,0.10)" stroke="#8e98ac" stroke-width="1"/>
+  <rect x="56" y="328" width="28" height="12" rx="2" fill="transparent" stroke="rgba(142,152,172,0.50)" stroke-width="0.8"/>
+  <text x="70" y="337" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+  <text x="144" y="356" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Telegram</text>
+  <text x="144" y="372" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Bot API</text>
+
+  <rect x="312" y="192" width="200" height="64" rx="6" fill="#2d3142"/>
+  <rect x="312" y="192" width="200" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+  <rect x="320" y="200" width="28" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.40)" stroke-width="0.8"/>
+  <text x="334" y="209" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">MCP</text>
+  <text x="412" y="228" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MCP Gateway</text>
+  <text x="412" y="244" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:8010 · personal API key</text>
+
+  <rect x="312" y="320" width="200" height="64" rx="6" fill="#2d3142"/>
+  <rect x="312" y="320" width="200" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+  <rect x="320" y="328" width="28" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.40)" stroke-width="0.8"/>
+  <text x="334" y="337" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">BOT</text>
+  <text x="412" y="356" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">telegram-bot</text>
+  <text x="412" y="372" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">profiles: telegram</text>
+
+  <rect x="576" y="96" width="200" height="64" rx="6" fill="#2d3142"/>
+  <rect x="576" y="96" width="200" height="64" rx="6" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
+  <rect x="584" y="104" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.22)" stroke-width="0.8"/>
+  <text x="600" y="113" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HOST</text>
+  <text x="676" y="132" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Control panel</text>
+  <text x="676" y="148" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">.venv · :1111</text>
+
+  <rect x="576" y="224" width="200" height="64" rx="6" fill="#2d3142"/>
+  <rect x="576" y="224" width="200" height="64" rx="6" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1"/>
+  <rect x="584" y="232" width="28" height="12" rx="2" fill="transparent" stroke="rgba(240,138,89,0.50)" stroke-width="0.8"/>
+  <text x="598" y="241" fill="#f08a59" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+  <text x="768" y="284" fill="rgba(240,138,89,0.10)" font-size="32" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">01</text>
+  <text x="676" y="260" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Research API</text>
+  <text x="676" y="276" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:8000 · Repository</text>
+
+  <rect x="576" y="360" width="200" height="64" rx="6" fill="#2d3142"/>
+  <rect x="576" y="360" width="200" height="64" rx="6" fill="rgba(245,245,245,0.05)" stroke="#bfc0c0" stroke-width="1"/>
+  <rect x="584" y="368" width="28" height="12" rx="2" fill="transparent" stroke="rgba(191,192,192,0.50)" stroke-width="0.8"/>
+  <text x="598" y="377" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">QUE</text>
+  <text x="676" y="396" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis</text>
+  <text x="676" y="412" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ARQ queue</text>
+
+  <rect x="576" y="472" width="200" height="80" rx="6" fill="#2d3142"/>
+  <rect x="576" y="472" width="200" height="80" rx="6" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1"/>
+  <rect x="584" y="480" width="28" height="12" rx="2" fill="transparent" stroke="rgba(240,138,89,0.50)" stroke-width="0.8"/>
+  <text x="598" y="489" fill="#f08a59" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">JOB</text>
+  <text x="768" y="548" fill="rgba(240,138,89,0.10)" font-size="32" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">02</text>
+  <text x="676" y="512" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Worker</text>
+  <text x="676" y="528" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ResearchPipeline</text>
+  <text x="676" y="544" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">15-stage LangGraph</text>
+
+  <rect x="944" y="120" width="240" height="64" rx="6" fill="#2d3142"/>
+  <rect x="944" y="120" width="240" height="64" rx="6" fill="rgba(245,245,245,0.05)" stroke="#bfc0c0" stroke-width="1"/>
+  <rect x="952" y="128" width="24" height="12" rx="2" fill="transparent" stroke="rgba(191,192,192,0.50)" stroke-width="0.8"/>
+  <text x="964" y="137" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+  <text x="1064" y="156" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PostgreSQL</text>
+  <text x="1064" y="172" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">pgvector · checkpoint</text>
+
+  <rect x="944" y="248" width="240" height="64" rx="6" fill="#2d3142"/>
+  <rect x="944" y="248" width="240" height="64" rx="6" fill="rgba(245,245,245,0.05)" stroke="#bfc0c0" stroke-width="1"/>
+  <rect x="952" y="256" width="28" height="12" rx="2" fill="transparent" stroke="rgba(191,192,192,0.50)" stroke-width="0.8"/>
+  <text x="966" y="265" fill="#bfc0c0" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">OBJ</text>
+  <text x="1064" y="284" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MinIO</text>
+  <text x="1064" y="300" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">raw snapshots</text>
+
+  <rect x="944" y="376" width="240" height="64" rx="6" fill="#2d3142"/>
+  <rect x="944" y="376" width="240" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+  <rect x="952" y="384" width="28" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.40)" stroke-width="0.8"/>
+  <text x="966" y="393" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SVC</text>
+  <text x="1064" y="412" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Collection services</text>
+  <text x="1064" y="428" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">crawl4ai · agentsearch</text>
+
+  <rect x="944" y="584" width="240" height="48" rx="6" fill="#2d3142"/>
+  <rect x="944" y="584" width="240" height="48" rx="6" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
+  <rect x="952" y="592" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.22)" stroke-width="0.8"/>
+  <text x="968" y="601" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HOST</text>
+  <text x="1084" y="601" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Ollama</text>
+  <text x="1084" y="617" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">RTX 4060 · :11434</text>
+
+  <text x="48" y="580" fill="#bfc0c0" font-size="14" font-style="italic" font-family="'Instrument Serif', serif">one GPU, one ARQ queue — runs are processed serially</text>
+  <path d="M 404 572 Q 500 548 568 516" fill="none" stroke="rgba(245,245,245,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+  <circle cx="572" cy="514" r="2" fill="#bfc0c0"/>
+
+  <line x1="48" y1="656" x2="1232" y2="656" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
+  <text x="48" y="672" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+  <rect x="48" y="684" width="14" height="10" rx="2" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1"/>
+  <text x="68" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Focus</text>
+
+  <rect x="216" y="684" width="14" height="10" rx="2" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+  <text x="236" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Compose service</text>
+
+  <rect x="360" y="684" width="14" height="10" rx="2" fill="rgba(245,245,245,0.05)" stroke="#bfc0c0" stroke-width="1"/>
+  <text x="380" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Data store</text>
+
+  <rect x="536" y="684" width="14" height="10" rx="2" fill="rgba(245,245,245,0.03)" stroke="rgba(245,245,245,0.30)" stroke-width="1"/>
+  <text x="556" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Host / external</text>
+
+  <line x1="704" y1="690" x2="732" y2="690" stroke="#6a95d8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <text x="740" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">HTTP ingress</text>
+
+  <line x1="872" y1="690" x2="900" y2="690" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="908" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Internal call</text>
+
+  <line x1="1024" y1="690" x2="1052" y2="690" stroke="#bfc0c0" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="1060" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">DB read bypassing the API</text>
+</svg>

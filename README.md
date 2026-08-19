@@ -38,60 +38,14 @@ reproducible deliverables.
 
 ## One workstation, an office-wide research service
 
-```mermaid
-flowchart LR
-    subgraph Clients
-        C["Codex"]
-        CL["Claude"]
-        T["Telegram"]
-        UI["Operations console"]
-    end
-
-    subgraph Gateway
-        MCP["Authenticated MCP"]
-        API["FastAPI + SSE"]
-    end
-
-    subgraph Research
-        Q["Redis / ARQ queue"]
-        LG["LangGraph research worker"]
-        D["Discovery + acquisition"]
-        E["Evidence + coverage + audit"]
-        S["Synthesis + Word export"]
-    end
-
-    subgraph State
-        PG["PostgreSQL + pgvector"]
-        M["MinIO artifacts"]
-        O["Ollama on RTX 4060"]
-    end
-
-    C --> MCP
-    CL --> MCP
-    T --> API
-    UI --> API
-    MCP --> API --> Q --> LG
-    LG --> D --> E --> S
-    LG <--> PG
-    D --> M
-    E --> O
-    S --> O
-    S --> M
-```
+![Research Platform system architecture: entry gateways, core services, data and collection tier](docs/diagrams/system-architecture.svg)
 
 The network-facing MCP and control surfaces are authenticated and CIDR-restricted. Database,
 object-storage, and model services remain private to the host.
 
 ## Research lifecycle
 
-```text
-VALIDATE → DECOMPOSE → BUILD QUERY BRANCHES → SEARCH → ACQUIRE
-         → NORMALIZE → RETRIEVE PASSAGES → EXTRACT EVIDENCE
-         → ANALYZE CLAIMS → CHECK COVERAGE
-               ├─ gaps remain: EXPAND QUERIES → SEARCH
-               └─ sufficient/budget reached: AUDIT → ADVERSARIAL REVIEW
-                                             → SYNTHESIZE → EXPORT
-```
+![ResearchPipeline stage flow: collection round, coverage decision and recovery loop](docs/diagrams/pipeline-flow.svg)
 
 Collection does not stop merely because one plausible source was found. In
 `literature_scan` mode, accepted direct and contextual sources remain in the corpus and

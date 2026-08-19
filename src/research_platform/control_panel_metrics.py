@@ -25,6 +25,11 @@ PIPELINE_STAGES = (
     ("COMPLETE", "Tamamlandı"),
 )
 
+# Row order of the per-stage tool table, and a ceiling so one stage visit cannot bloat the
+# run detail payload. A real visit produces well under ten rows.
+TOOL_KIND_ORDER = ("connector", "method", "parser", "model", "embedding")
+MAX_TOOL_ROWS = 40
+
 
 def pipeline_progress(current_stage: str, status: str) -> int:
     if status in {"completed", "completed_incomplete"} or current_stage == "COMPLETE":
@@ -104,33 +109,116 @@ def serialize_event(event: Any) -> dict[str, Any]:
     }
 
 
+def _tool_row(
+    rows: dict[tuple[str, str], dict[str, Any]],
+    kind: str,
+    name: str,
+) -> dict[str, Any]:
+    key = (kind, name)
+    row = rows.get(key)
+    if row is None:
+        row = {
+            "kind": kind,
+            "name": name,
+            "calls": 0,
+            "ok": 0,
+            "errors": 0,
+            "results": 0,
+            "tokens": 0,
+            "seconds": 0.0,
+            "phases": [],
+        }
+        rows[key] = row
+    return row
+
+
+def _tool_rows(events: list[Any]) -> list[dict[str, Any]]:
+    """Aggregate the metric events of a single stage visit into per-tool rows."""
+    rows: dict[tuple[str, str], dict[str, Any]] = {}
+    for event in events:
+        event_type = _event_value(event, "event_type")
+        payload = _event_value(event, "payload", {}) or {}
+        if event_type == "connector_metrics":
+            for call in payload.get("calls", []):
+                row = _tool_row(rows, "connector", str(call.get("connector") or "unknown"))
+                row["calls"] += 1
+                row["ok"] += int(bool(call.get("success")))
+                row["results"] += int(call.get("result_count", 0))
+                row["seconds"] += float(call.get("latency_seconds", 0.0))
+        elif event_type == "connector_error":
+            _tool_row(rows, "connector", str(payload.get("connector") or "unknown"))["errors"] += 1
+        elif event_type == "acquisition_metrics":
+            for call in payload.get("calls", []):
+                success = int(bool(call.get("success")))
+                method = _tool_row(rows, "method", str(call.get("method") or "unknown"))
+                method["calls"] += 1
+                method["ok"] += success
+                method["seconds"] += float(call.get("latency_seconds", 0.0))
+                # Runs recorded before parser_id joined this event carry no parser at all.
+                # Leaving the row out is honest; inventing an "unknown" parser is not.
+                parser_id = str(call.get("parser_id") or "")
+                if parser_id:
+                    parser = _tool_row(rows, "parser", parser_id)
+                    parser["calls"] += 1
+                    parser["ok"] += success
+        elif event_type in {"llm_metrics", "embedding_metrics"}:
+            kind = "model" if event_type == "llm_metrics" else "embedding"
+            # The payload stage is a finer-grained phase label than the pipeline stage --
+            # CONTENT_RELEVANCE runs inside NORMALIZE and is absent from PIPELINE_STAGES --
+            # so it annotates the row rather than placing it.
+            phase = str(payload.get("stage") or "")
+            for call in payload.get("calls", []):
+                row = _tool_row(rows, kind, str(call.get("model") or "unknown"))
+                row["calls"] += 1
+                row["ok"] += 1
+                row["tokens"] += int(call.get("prompt_tokens", 0)) + int(
+                    call.get("completion_tokens", 0)
+                )
+                row["seconds"] += float(call.get("wall_seconds", 0.0))
+                if phase and phase not in row["phases"]:
+                    row["phases"].append(phase)
+    ordered = sorted(
+        rows.values(),
+        key=lambda row: (TOOL_KIND_ORDER.index(row["kind"]), -row["calls"], row["name"]),
+    )
+    for row in ordered:
+        row["seconds"] = round(row["seconds"], 2)
+    return ordered[:MAX_TOOL_ROWS]
+
+
 def stage_timeline(events: list[Any], now: datetime | None = None) -> list[dict[str, Any]]:
     now = now or datetime.now(timezone.utc)
-    stages = []
+    visits: list[dict[str, Any]] = []
     for event in events:
-        if _event_value(event, "event_type") != "stage":
-            continue
-        payload = _event_value(event, "payload", {}) or {}
-        created_at = _event_value(event, "created_at")
-        stages.append(
-            {
-                "stage": payload.get("stage", "UNKNOWN"),
-                "round": payload.get("round", 0),
-                "created_at": created_at,
-            }
-        )
-    stages.sort(key=lambda item: item["created_at"] or now)
+        if _event_value(event, "event_type") == "stage":
+            payload = _event_value(event, "payload", {}) or {}
+            visits.append(
+                {
+                    "stage": payload.get("stage", "UNKNOWN"),
+                    "round": payload.get("round", 0),
+                    "created_at": _event_value(event, "created_at"),
+                    "events": [],
+                }
+            )
+        elif visits:
+            # Metric events name no stage of their own. `_boundary` emits the stage event
+            # at the start of a stage, so an event belongs to the visit whose boundary
+            # opened the window it arrived in -- which also keeps repeated visits of the
+            # same stage across rounds separate.
+            visits[-1]["events"].append(event)
+    visits.sort(key=lambda item: item["created_at"] or now)
     output = []
-    for index, item in enumerate(stages):
+    for index, item in enumerate(visits):
         start = item["created_at"] or now
-        end = stages[index + 1]["created_at"] if index + 1 < len(stages) else now
+        end = visits[index + 1]["created_at"] if index + 1 < len(visits) else now
         output.append(
             {
                 "stage": item["stage"],
                 "round": item["round"],
                 "started_at": start.isoformat(),
                 "duration_seconds": round(max(0.0, (end - start).total_seconds()), 2),
-                "active": index == len(stages) - 1,
+                "active": index == len(visits) - 1,
+                "tools": _tool_rows(item["events"]),
             }
         )
     return output

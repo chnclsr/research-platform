@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import httpx
+
+from research_platform.acquisition import AcquisitionService
+from research_platform.config import get_settings
 from research_platform.normalization import (
     canonicalize_url, detect_document_type, detect_language, extract_links,
 )
 from research_platform.passages import retrieve_passages
-from research_platform.schemas import Passage
+from research_platform.schemas import ConnectorCandidate, Passage, SourceFamily
 
 
 def test_canonical_url_removes_tracking_fragment_and_default_port():
@@ -28,8 +32,36 @@ def test_html_link_extraction_resolves_and_deduplicates_links():
 def test_document_type_and_language_are_detected_before_chunking():
     assert detect_document_type("application/octet-stream", b"%PDF-1.7") == "pdf"
     assert detect_document_type("text/plain", b"<!doctype html><html>") == "html"
+    # Binary payloads must not read as text: acquisition only admits the text-ish types,
+    # so "binary" is what keeps a JPEG supplementary file out of the corpus.
+    assert detect_document_type("image/jpeg", b"\xff\xd8\xff\xe0\x00\x10JFIF") == "binary"
+    assert detect_document_type("text/plain", b"PK\x03\x04\x00\x00report.docx") == "binary"
+    assert detect_document_type("text/plain", b"A plain sentence with no NUL bytes.") == "text"
     assert detect_language("Bu araştırma için önemli bir yöntem ve sonuç bulunmaktadır.") == "tr"
     assert detect_language("The method and the results are available for review.") == "en"
+
+
+def test_acquired_raw_content_carries_no_nul_bytes():
+    """PostgreSQL rejects 0x00 in a text column, and source_versions stores raw_content
+    next to the parsed text -- an unscrubbed byte there fails the insert for the whole
+    NORMALIZE batch, not just its own document."""
+    service = AcquisitionService(get_settings(), httpx.AsyncClient())
+    candidate = ConnectorCandidate(
+        connector_id="fixture",
+        family=SourceFamily.WEB,
+        title="Supplementary file",
+        url="https://example.com/supp",
+    )
+    document = service._document(
+        candidate,
+        "Parsed text with a stray \x00 byte.",
+        "direct",
+        ["direct"],
+        "text/plain",
+        raw_content="Raw snapshot with a stray \x00 byte.",
+    )
+    assert "\x00" not in document.content
+    assert "\x00" not in document.raw_content
 
 
 def test_rrf_retrieval_deduplicates_identical_passage_content():

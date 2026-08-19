@@ -62,6 +62,13 @@ def detect_document_type(content_type: str, content: bytes) -> str:
         return "html"
     if "xml" in mime or header.startswith(b"<?xml"):
         return "xml"
+    # Everything unrecognised used to fall through to "text", so a DOI resolving to a
+    # JPEG supplementary file was decoded with errors="replace", passed the 400-character
+    # gate as mojibake and was admitted as a source -- and its NUL bytes then failed the
+    # source_versions insert, which fails the whole run. A NUL never appears in text worth
+    # parsing but appears in every image, archive and office document.
+    if mime.startswith(("image/", "audio/", "video/")) or b"\x00" in content[:8192]:
+        return "binary"
     return "text"
 
 

@@ -400,6 +400,60 @@ async def test_acquisition_cutoff_keeps_completed_documents_for_postprocessing()
 
 
 @pytest.mark.asyncio
+async def test_acquisition_metrics_name_the_parser_that_produced_the_text():
+    """The panel breaks a stage down by tool from this event alone, without joining
+    source_versions.provenance, so the parser has to travel with the metric."""
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Parser provenance",
+        primary_question="Which parser produced the text of each acquired source?",
+    )
+
+    class ParsingAcquisition:
+        async def acquire(self, candidate):
+            content = f"Evidence from {candidate.url}"
+            return AcquiredDocument(
+                candidate=candidate,
+                success=True,
+                access_status="open",
+                content=content,
+                content_hash=hashlib.sha256(content.encode()).hexdigest(),
+                acquisition_method="direct",
+                parser_id="pdf" if str(candidate.url).endswith(".pdf") else "html",
+            )
+
+    candidates = [
+        ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.WEB,
+            title="Report",
+            url="https://example.com/report.pdf",
+        ),
+        ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.WEB,
+            title="Article",
+            url="https://example.com/article",
+        ),
+    ]
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.acquisition = ParsingAcquisition()
+        await pipeline._acquire_node({
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "candidates": [item.model_dump(mode="json") for item in candidates],
+            "budget_started_at": datetime.now(timezone.utc).isoformat(),
+        })
+        events = await repo.events_after(row.id)
+
+    metrics = next(event for event in events if event.event_type == "acquisition_metrics")
+    assert sorted(call["parser_id"] for call in metrics.payload["calls"]) == ["html", "pdf"]
+
+
+@pytest.mark.asyncio
 async def test_search_expands_citation_frontier_to_requested_depth():
     await create_schema()
     protocol = ResearchProtocol(

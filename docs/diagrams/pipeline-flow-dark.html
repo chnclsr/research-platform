@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Research Platform · Araştırma Akışı</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #2d3142;
+      --color-ink:     #f5f5f5;
+      --color-muted:   #bfc0c0;
+      --color-accent:  #f08a59;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1320px; width: 100%; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    .scroll { overflow-x: auto; }
+    svg { width: 100%; min-width: 1120px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Flowchart · Research Platform</p>
+    <h1>ResearchPipeline: toplama turu, kapsam kararı ve kurtarma döngüsü</h1>
+
+    <div class="scroll">
+    <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="rp-pipeline-flow-dark-title rp-pipeline-flow-dark-desc">
+      <title id="rp-pipeline-flow-dark-title">ResearchPipeline araştırma akışı</title>
+      <desc id="rp-pipeline-flow-dark-desc">LangGraph akışı planlamadan aramaya, edinime, normalizasyona, pasaj indeksine, kanıt çıkarımına ve denetime iner; CHECK_COVERAGE kararı kapsamı yeterli bulursa gözden geçirme ve dışa aktarıma, bulmazsa PLAN_RECOVERY üzerinden yeni bir arama turuna yönlendirir.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#bfc0c0"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#f08a59"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6a95d8"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#2d3142"/>
+
+      <!-- ═══ ARROWS (before boxes) ═══ -->
+      <!-- A1 BAŞLA → Planlama -->
+      <line x1="352" y1="112" x2="352" y2="152" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A2 Planlama → SEARCH -->
+      <line x1="352" y1="224" x2="352" y2="264" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A3 SEARCH → ACQUIRE -->
+      <line x1="352" y1="328" x2="352" y2="368" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A4 ACQUIRE → NORMALIZE -->
+      <line x1="352" y1="432" x2="352" y2="472" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A5 NORMALIZE → CHUNK_INDEX + RETRIEVE -->
+      <line x1="472" y1="508" x2="680" y2="508" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A6 indeks → kanıt (yukarı) -->
+      <line x1="800" y1="472" x2="800" y2="432" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A7 kanıt → AUDIT (yukarı) -->
+      <line x1="800" y1="368" x2="800" y2="328" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A8 AUDIT → CHECK_COVERAGE (alt köşeye) -->
+      <line x1="800" y1="264" x2="800" y2="224" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A9 karar: eksik kapsam → PLAN_RECOVERY -->
+      <path d="M 920,160 H 968 Q 976,160 976,152 V 136 Q 976,128 984,128 H 1000" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A10 karar: yeterli / bütçe bitti → ADVERSARIAL + EXPORT -->
+      <path d="M 860,192 H 976 Q 984,192 984,200 V 300 Q 984,308 992,308 H 1000" fill="none" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A11 review → BİTİR -->
+      <line x1="1120" y1="344" x2="1120" y2="424" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- A12 kurtarma döngüsü: PLAN_RECOVERY → SEARCH -->
+      <path d="M 1120,96 V 56 Q 1120,48 1112,48 H 528 Q 520,48 520,56 V 288 Q 520,296 512,296 H 472" fill="none" stroke="#f08a59" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+
+      <!-- ═══ ARROW LABELS ═══ -->
+      <rect x="540" y="488" width="72" height="12" rx="2" fill="#2d3142"/>
+      <text x="576" y="497" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">KAYITLI BELGE</text>
+
+      <rect x="896" y="134" width="64" height="12" rx="2" fill="#2d3142"/>
+      <text x="928" y="143" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">EKSİK KAPSAM</text>
+
+      <rect x="908" y="168" width="96" height="12" rx="2" fill="#2d3142"/>
+      <text x="956" y="177" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">YETERLİ · BÜTÇE</text>
+
+      <rect x="528" y="160" width="56" height="12" rx="2" fill="#2d3142"/>
+      <text x="532" y="169" fill="#f08a59" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">TUR N+1</text>
+
+      <!-- ═══ NODES ═══ -->
+      <!-- BAŞLA (oval) -->
+      <rect x="272" y="64" width="160" height="48" rx="20" fill="#2d3142"/>
+      <rect x="272" y="64" width="160" height="48" rx="20" fill="rgba(191,192,192,0.10)" stroke="#8e98ac" stroke-width="1"/>
+      <text x="352" y="93" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">KOŞU BAŞLAR</text>
+
+      <!-- 01 Planlama (HITL) -->
+      <rect x="232" y="152" width="240" height="72" rx="6" fill="#2d3142"/>
+      <rect x="232" y="152" width="240" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="240" y="160" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.60)" stroke-width="0.8"/>
+      <text x="256" y="169" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HITL</text>
+      <text x="464" y="180" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">01</text>
+      <text x="352" y="192" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Planlama</text>
+      <text x="352" y="208" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">VALIDATE · DECOMPOSE · BRANCH</text>
+
+      <!-- 02 SEARCH -->
+      <rect x="232" y="264" width="240" height="64" rx="6" fill="#2d3142"/>
+      <rect x="232" y="264" width="240" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="240" y="272" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.30)" stroke-width="0.8"/>
+      <text x="256" y="281" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+      <text x="464" y="292" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">02</text>
+      <text x="352" y="300" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SEARCH</text>
+      <text x="352" y="316" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">connector · misyon · RRF</text>
+
+      <!-- 03 ACQUIRE -->
+      <rect x="232" y="368" width="240" height="64" rx="6" fill="#2d3142"/>
+      <rect x="232" y="368" width="240" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="240" y="376" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.30)" stroke-width="0.8"/>
+      <text x="256" y="385" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+      <text x="464" y="396" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">03</text>
+      <text x="352" y="404" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ACQUIRE</text>
+      <text x="352" y="420" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">crawl4ai · parsers/</text>
+
+      <!-- 04 NORMALIZE (HITL) -->
+      <rect x="232" y="472" width="240" height="72" rx="6" fill="#2d3142"/>
+      <rect x="232" y="472" width="240" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="240" y="480" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.60)" stroke-width="0.8"/>
+      <text x="256" y="489" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HITL</text>
+      <text x="464" y="500" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">04</text>
+      <text x="352" y="512" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">NORMALIZE</text>
+      <text x="352" y="528" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ilgi kapısı · MinIO · kayıt</text>
+
+      <!-- 05 CHUNK_INDEX + RETRIEVE -->
+      <rect x="680" y="472" width="240" height="72" rx="6" fill="#2d3142"/>
+      <rect x="680" y="472" width="240" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="688" y="480" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.30)" stroke-width="0.8"/>
+      <text x="704" y="489" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+      <text x="912" y="500" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">05</text>
+      <text x="800" y="512" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CHUNK_INDEX + RETRIEVE</text>
+      <text x="800" y="528" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">pgvector · pasaj seçimi</text>
+
+      <!-- 06 EXTRACT + ANALYZE -->
+      <rect x="680" y="368" width="240" height="64" rx="6" fill="#2d3142"/>
+      <rect x="680" y="368" width="240" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="688" y="376" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.30)" stroke-width="0.8"/>
+      <text x="704" y="385" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+      <text x="912" y="396" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">06</text>
+      <text x="800" y="404" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">EXTRACT + ANALYZE</text>
+      <text x="800" y="420" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">iddia · tekilleştirme</text>
+
+      <!-- 07 AUDIT -->
+      <rect x="680" y="264" width="240" height="64" rx="6" fill="#2d3142"/>
+      <rect x="680" y="264" width="240" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="688" y="272" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.30)" stroke-width="0.8"/>
+      <text x="704" y="281" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+      <text x="912" y="292" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">07</text>
+      <text x="800" y="300" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">AUDIT</text>
+      <text x="800" y="316" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">entailment · iddia durumu</text>
+
+      <!-- 08 CHECK_COVERAGE (karar · odak) -->
+      <polygon points="800,96 920,160 800,224 680,160" fill="#2d3142"/>
+      <polygon points="800,96 920,160 800,224 680,160" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1"/>
+      <text x="800" y="132" fill="rgba(240,138,89,0.16)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle">08</text>
+      <text x="800" y="164" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CHECK_COVERAGE</text>
+      <text x="800" y="180" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">kapsam yeterli mi?</text>
+
+      <!-- 09 PLAN_RECOVERY -->
+      <rect x="1000" y="96" width="240" height="64" rx="6" fill="#2d3142"/>
+      <rect x="1000" y="96" width="240" height="64" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="1008" y="104" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.30)" stroke-width="0.8"/>
+      <text x="1024" y="113" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
+      <text x="1232" y="124" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">09</text>
+      <text x="1120" y="132" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PLAN_RECOVERY</text>
+      <text x="1120" y="148" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">boşluk → yeni misyon</text>
+
+      <!-- 10 ADVERSARIAL + EXPORT (HITL) -->
+      <rect x="1000" y="272" width="240" height="72" rx="6" fill="#2d3142"/>
+      <rect x="1000" y="272" width="240" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <rect x="1008" y="280" width="32" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.60)" stroke-width="0.8"/>
+      <text x="1024" y="289" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HITL</text>
+      <text x="1232" y="300" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">10</text>
+      <text x="1120" y="312" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ADVERSARIAL + EXPORT</text>
+      <text x="1120" y="328" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">zayıf iddia · rapor · zip</text>
+
+      <!-- BİTİR (oval) -->
+      <rect x="1040" y="424" width="160" height="48" rx="20" fill="#2d3142"/>
+      <rect x="1040" y="424" width="160" height="48" rx="20" fill="rgba(191,192,192,0.10)" stroke="#8e98ac" stroke-width="1"/>
+      <text x="1120" y="453" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">KOŞU BİTER</text>
+
+      <!-- ═══ ANNOTATION ═══ -->
+      <text x="232" y="604" fill="#bfc0c0" font-size="14" font-style="italic" font-family="'Instrument Serif', serif">her düğüm önce _boundary çağırır — duraklat / iptal kontrolü ve state checkpoint'i</text>
+      <path d="M 600 590 Q 520 574 444 550" fill="none" stroke="rgba(245,245,245,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+      <circle cx="440" cy="548" r="2" fill="#bfc0c0"/>
+
+      <!-- ═══ LEGEND ═══ -->
+      <line x1="48" y1="656" x2="1232" y2="656" stroke="rgba(245,245,245,0.10)" stroke-width="0.8"/>
+      <text x="48" y="672" fill="#bfc0c0" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <rect x="48" y="684" width="14" height="10" rx="5" fill="rgba(191,192,192,0.10)" stroke="#8e98ac" stroke-width="1"/>
+      <text x="68" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Başlangıç / bitiş</text>
+
+      <rect x="240" y="684" width="14" height="10" rx="2" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>
+      <text x="260" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">LangGraph düğümü</text>
+
+      <polygon points="439,684 446,689 439,694 432,689" fill="rgba(240,138,89,0.10)" stroke="#f08a59" stroke-width="1"/>
+      <text x="456" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Karar</text>
+
+      <rect x="576" y="683" width="28" height="12" rx="2" fill="transparent" stroke="rgba(245,245,245,0.60)" stroke-width="0.8"/>
+      <text x="590" y="692" fill="#f5f5f5" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HITL</text>
+      <text x="612" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">İnsan onayı noktası</text>
+
+      <line x1="800" y1="690" x2="828" y2="690" stroke="#bfc0c0" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <text x="836" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Ana akış</text>
+
+      <line x1="976" y1="690" x2="1004" y2="690" stroke="#f08a59" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <text x="1012" y="692" fill="#bfc0c0" font-size="8.5" font-family="'Geist', sans-serif">Kurtarma turu (geri besleme)</text>
+    </svg>
+    </div>
+  </div>
+</body>
+</html>

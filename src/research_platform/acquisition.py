@@ -194,6 +194,10 @@ class AcquisitionService:
         parsed: ParsedDocument | None = None,
     ) -> AcquiredDocument:
         normalized = content.replace("\x00", "").strip()
+        # raw_content lands in a PostgreSQL text column too, so it needs the same scrub as
+        # the parsed text. Base64 for PDFs is unaffected; a stray NUL from any other
+        # strategy would otherwise reject the insert and fail the run.
+        raw_content = raw_content.replace("\x00", "")
         restricted = any(marker in normalized.lower() for marker in PAYWALL_MARKERS)
         return AcquiredDocument(
             candidate=candidate, success=bool(normalized) and not restricted,

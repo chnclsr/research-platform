@@ -1085,6 +1085,9 @@ class ResearchPipeline:
                         "latency_seconds": round(time.perf_counter() - started, 4),
                         "success": document.success,
                         "method": document.acquisition_method,
+                        # Which parser produced the text, so the panel can break a stage
+                        # down by tool without joining source_versions.provenance.
+                        "parser_id": document.parser_id,
                     }
                 )
                 return document

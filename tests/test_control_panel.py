@@ -196,6 +196,37 @@ async def test_panel_run_list_shows_only_the_signed_in_users_runs():
 
 
 @pytest.mark.asyncio
+async def test_run_detail_breaks_each_stage_visit_down_by_tool():
+    """The drawer's stage cards are only clickable if the detail payload carries tools."""
+    owner_id = await _account("panel-tools@example.test", "user")
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=Principal.user(owner_id))
+        run = await repo.create_run(ResearchProtocol(
+            title="Tooling run",
+            primary_question="Which tools ran in which stage of this research?",
+        ))
+        await repo.event(run.id, "stage", {"stage": "SEARCH", "round": 1})
+        await repo.event(run.id, "connector_metrics", {"calls": [
+            {"connector": "crossref", "success": True, "result_count": 6,
+             "latency_seconds": 1.2},
+        ]})
+        await repo.event(run.id, "stage", {"stage": "ACQUIRE", "round": 1})
+        await repo.event(run.id, "acquisition_metrics", {"calls": [
+            {"connector": "crossref", "success": True, "method": "direct",
+             "parser_id": "pdf", "latency_seconds": 3.0},
+        ]})
+
+    detail = await control_panel._run_detail(run.id, Principal.user(owner_id))
+    search, acquire = detail["timeline"]
+    assert [(row["kind"], row["name"]) for row in search["tools"]] == [("connector", "crossref")]
+    assert search["tools"][0]["results"] == 6
+    assert [(row["kind"], row["name"]) for row in acquire["tools"]] == [
+        ("method", "direct"),
+        ("parser", "pdf"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_panel_shows_other_peoples_active_runs_without_their_content():
     """Isolation without this reads as a broken panel: a queued run and an empty table."""
     watcher_id = await _account("panel-watcher@example.test", "user")

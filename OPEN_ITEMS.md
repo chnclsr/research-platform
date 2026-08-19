@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-14`
+Son güncelleme: `2026-08-19`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -25,6 +25,9 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 10 | Eklenti B — yetenek pazarlığı | Gereksiz ayrıştırma maliyeti | Bekliyor |
 | 11 | Eklenti C — `parse_document` MCP aracı | Ajanın teşhis yeteneği | Bekliyor |
 | 12 | Panel `native` modda hâlâ zararlı | Yanlış modda çakışma | Belgelendi |
+| 13 | Tek bir belgenin kaydı tüm koşuyu düşürüyor | Toplanan her şey kaybolur | **Yüksek** |
+| 14 | Sorgu derleyicisi tek dilde kalıyor | Türkçe soru → akademik kaynak yok | **Yüksek** |
+| 15 | Kanıt çıkarımında bütçe karakterle ölçülüyor | Latin dışı metinde 0 iddia | **Yüksek** |
 
 ---
 
@@ -219,6 +222,63 @@ hiç inmez — disk arızası senaryosunda (2. madde) kapsam daralır.
 Ayrıntı: kökteki raporun 14. bölümü ve
 [reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 "Kalan sınırlar".
+
+## 13. Tek bir belgenin kaydı tüm koşuyu düşürüyor
+
+**Durum:** `pipeline.py` NORMALIZE içinde belgeleri sırayla `repo.save_document()` ile
+yazıyor ve bu çağrı korumasız. Tek bir belgede veritabanının reddettiği bir şey olması —
+19 Ağustos'ta yakalanan `0x00` baytı gibi — o turdaki **bütün** belgeleri götürüyor: görev
+düşüyor, koşu `failed` oluyor, o ana kadar toplanan kaynaklar geri alınıyor.
+
+**Ölçüm:** 19 Ağustos 2026, koşu `01M0CEKFE0T6BJ0BK5MM7XXWYS`. Bir DOI'nin JPEG ek dosyasına
+çözülmesi tek başına koşuyu FAILED yaptı. Kök neden düzeltildi (raporun 16. bölümü), ama
+**kırılganlığın kendisi duruyor** — bir sonraki beklenmedik içerik aynı sonucu verir.
+
+**Neden ertelendi:** Connector hataları bilinçli olarak sessiz (`pipeline.py` try/except),
+belge kaydı ise değil. İkisini aynı hizaya getirmek "kaç belge sessizce düştü" sorusunu
+doğuruyor; sayaç ve olay olmadan yapılırsa gözlemlenemeyen kayıp üretir.
+
+**Yapılacak:** `save_document()` çağrısını belge başına `try/except` ile sar, düşen belgeyi
+`document_save_failed` olayı olarak yaz (url + hata sınıfı) ve koşuyu sürdür. Olay zaten
+panelin aşama tablosuna düşer, yani kayıp görünür olur.
+
+## 14. Sorgu derleyicisi tek dilde kalıyor
+
+**Durum:** `protocol.languages = ["tr", "en"]` olmasına rağmen üretilen sorgu dallarının
+**hepsi** soru hangi dilde yazıldıysa o dilde kalıyor. `query_compiler.py` dalları soru
+metninden türetiyor ve çeviri adımı yok.
+
+**Ölçüm:** 19 Ağustos 2026, koşu `01M0CFGYWNZBJC4WQNA5KWXY66` (Türkçe soru, akciğer BT +
+yapay zeka). `arxiv`, `crossref`, `openalex`, `europe_pmc` Türkçe dizgelerle arandı ve
+neredeyse tamamı 0 sonuç döndürdü; `agentsearch_web` 14 çağrının yalnız birinde 20 sonuç
+verdi. Kabul edilen 5 kaynağın 3'ü çok dilli meta veri tutan tek bir Rus dergisinden, biri
+878 karakterlik bir paywall sayfasıydı. Aynı soru İngilizce sorulduğunda sorun ortadan
+kalkıyor — yani sınır dil desteğinde, konuda değil.
+
+**Etki:** Türkçe soru soran kullanıcı, sistem çalışıyor görünürken sessizce boş bir korpus
+alıyor. Hata yok, uyarı yok; yalnız kaynak sayısı düşük.
+
+**Yapılacak:** `languages` listesindeki her dil için sorgu dalı üret — en ucuzu, soru
+İngilizce değilse `DECOMPOSE` çıktısına İngilizce bir dal seti eklemek (tek LLM çağrısı,
+aşama başına bir kez). Alternatif olarak connector başına dil tercihi: akademik
+connector'lara İngilizce, web connector'larına yerel dil.
+
+## 15. Kanıt çıkarımında bütçe karakterle ölçülüyor
+
+**Durum:** `extract_claims()` istemi karakterle sınırlıyor (`content[:16000]`,
+`neighbor_context[:4000]`). Platformun token sayacı Latin dışı metinde ciddi biçimde eksik
+sayıyor, dolayısıyla İngilizce'de rahat sığan sınır Türkçe/Kiril metinde `num_ctx`'i
+(8192) taşırıyor. Ollama istemi kırpıyor, model bozuk çıktı üretiyor.
+
+**Ölçüm:** Aynı koşuda EXTRACT_EVIDENCE'ın 8 LLM çağrısının 7'si tam `prompt_tokens = 8192`
+tavanına dayandı; biri `num_predict` sınırında `length` ile kesildi. Sonuç: `LLM did not
+return valid JSON` ve iki turda **0 iddia**. Pasajların kendisi normaldi (ortalama 628,
+azami 700 token).
+
+**Yapılacak:** İstemi token bütçesiyle kur: `llm_context_tokens` eksi çıktı payı eksi sistem
+istemi kadar bütçe ayır, hedef pasaj ile komşu bağlamı bu bütçeye göre kırp. Ölçüm için
+gerçek tokenizer yoksa Latin dışı karakter oranına göre düzeltilmiş bir tahmin bile
+yeterli. `done_reason = "length"` da bir olay olarak yazılmalı — bugün sessiz.
 
 ---
 

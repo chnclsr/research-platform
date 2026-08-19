@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.10.0`
 
-Belge sürümü: `12.0`
+Belge sürümü: `12.1`
 
-Son güncelleme: `2026-08-18`
+Son güncelleme: `2026-08-19`
 
 ## Kapsam
 
@@ -26,7 +26,9 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 11 | Kullanıcı kimliği ve koşu sahipliği (kendi raporu var) | `3f9a191` … `84cddde` |
 | 12 | Panelden parola değiştirme | `fc3199d` |
 | 13 | Ekip kuyruğunun sansürlü görünürlüğü | `fc3199d` |
-| 14 | MCP'de kişisel kimlik | commit bekliyor |
+| 14 | MCP'de kişisel kimlik | `d88a32a` |
+| 15 | Aşama başına araç dökümü (panel) | commit bekliyor |
+| 16 | İkili içerik ve NUL baytı koşuyu düşürüyordu | commit bekliyor |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -1308,6 +1310,142 @@ sunucu tarafı tamamen doğruyken alınan bir hata olduğu için yanıltıcıdı
 **Claude Desktop bu makinede kurulu değil** (`%APPDATA%\Claude` yok). Kurulu olan Claude
 Code CLI'dir ve depodaki kurucu da onu hedefler; Claude Desktop uzak MCP sunucusunu
 uygulama içindeki *Custom connector* akışıyla bağlar. İkisinin farkı belgeye yazıldı.
+
+---
+
+## 15. Aşama başına araç dökümü (panel)
+
+### Sorun
+
+Bir koşunun hangi aşamada hangi aracı çalıştırdığı üç ayrı yere dağılmıştı ve hiçbiri
+aşama kırılımı vermiyordu:
+
+| Bilgi | Nerede | Aşama kırılımı |
+|---|---|---|
+| Connector'lar | Panelde "Sorgu dalları" tablosu | yok, dal bazında |
+| LLM modelleri | Panelde tek "LLM özeti" kartı | yok, koşu toplamı |
+| Parser'lar | `source_versions.provenance` ve `13_raw_sources.jsonl` | arayüzde hiç yok |
+
+Ham `run_events` akışında veri zaten vardı, ama panel yalnız son 150 olayı listeliyor ve
+bu koşularda `acquisition_progress` olayları listeyi doldurduğu için erken aşamaların
+ölçüm olayları görünmüyordu.
+
+### Çözüm: olayları aşama penceresine atfetmek
+
+`stage_timeline()` artık her aşama **ziyaretine** bir `tools` listesi ekliyor. Atıf kuralı:
+`_boundary` her aşamanın *başında* bir `stage` olayı yayınlıyor, dolayısıyla bir ölçüm
+olayı, kendisinden önceki son `stage` olayının açtığı pencereye aittir. Bu kural aynı
+aşamanın turlar arası tekrarlarını da kendiliğinden ayırıyor — tur 1'in SEARCH'ü ile tur
+2'nin SEARCH'ü ayrı tablolar.
+
+`llm_metrics` ve `embedding_metrics` payload'unda bir `stage` alanı var, ama bu alan
+**pipeline aşaması değil, daha ince bir faz etiketi**: `CONTENT_RELEVANCE` aslında NORMALIZE
+penceresinde yayınlanıyor ve `PIPELINE_STAGES` içinde yer almıyor. Bu etiketle yerleştirme
+yapılsaydı satır hiçbir karta düşmezdi; bu yüzden yerleştirme her zaman pencereye göre
+yapılıyor, etiket satırın "Not" sütununda faz olarak gösteriliyor.
+
+Toplanan satır türleri: `connector` (çağrı, başarı, sonuç, gecikme, `connector_error`'dan
+hata sayısı), `method` (`direct` / `crawl4ai` / `scholarly_metadata` / `none`), `parser`,
+`model` ve `embedding` (çağrı, token, süre, faz).
+
+### Parser'ın olay akışına eklenmesi
+
+`acquisition_metrics` olayının çağrı kayıtlarına `parser_id` eklendi
+([pipeline.py](src/research_platform/pipeline.py)). Böylece panel `source_versions` ile
+birleştirme yapmadan, tek olaydan aşamayı araca bölebiliyor.
+
+**Bu bilinçli olarak geriye dönük değildir.** `retrieved_at` zaman damgasıyla
+`source_versions.provenance`'ı aşama penceresine eşleyerek eski koşularda da parser
+gösterilebilirdi; iki veri yolu ve bir sezgisel eşleme pahasına. Tercih tek veri yolu
+oldu: mevcut koşularda parser satırı **görünmez**, connector / yöntem / model satırları
+görünür. Parser'ı olmayan çağrı için "unknown" satırı da üretilmiyor — olmayan ölçümü
+uydurmak yerine satır hiç açılmıyor.
+
+### Panel davranışı
+
+Zaman çizelgesindeki aşama kartları tıklanabilir (`role="button"`, Tab + Enter/Space).
+Seçilen kart vurgulanıyor ve tablo şeridin **altında** açılıyor; aynı karta tekrar tıklamak
+kapatıyor. Seçim modül düzeyinde tutulduğu için çekmece yenilendiğinde okunan aşama açık
+kalıyor, 90+ kartlık şeridin başına dönülmüyor.
+
+### Ölçüm: mevcut bir koşuda ne görünür oldu
+
+`01M0AMSVG3TPD75NXVJGY0RXEM` koşusunun 177 ölçüm olayı 96 aşama ziyaretine dağıldı.
+Panelde bugüne kadar hiç görünmemiş kırılımlar:
+
+| Ziyaret | Satır |
+|---|---|
+| SEARCH · tur 1 | `zenodo` 8 çağrı / 2 başarı / **6 hata** / 170.8 sn — tek başına aşamanın gecikmesini domine ediyor |
+| SEARCH · tur 1 | `crossref` 8 çağrı / 160 sonuç / 7.4 sn |
+| ACQUIRE · tur 1 | `direct` 26, `crawl4ai` 8, `none` 18 (başarısız edinimler), `scholarly_metadata` 1 |
+| NORMALIZE · tur 1 | `qwen3:4b-instruct` 37 çağrı / 85.3k token / faz `CONTENT_RELEVANCE` |
+| CHUNK_INDEX · tur 1 | `embeddinggemma:300m` 10 çağrı / 101.1k token |
+
+Bir uyarı: satırdaki süre, o araca yapılan çağrıların **toplamıdır** ve çağrılar paralel
+koştuğu için ziyaretin duvar saati süresini aşabilir (EXTRACT_EVIDENCE'ta 298 sn çağrı
+toplamı / 154 sn ziyaret). Bu bir hata değil, eşzamanlılığın göstergesidir.
+
+### Doğrulama
+
+- `tests/test_control_panel_metrics.py`: pencere atıfı, tekrarlanan ziyaretlerin
+  karışmaması, `parser_id` taşımayan eski payload'ların satır üretmemesi, faz etiketinin
+  yerleştirmeyi değiştirmemesi.
+- `tests/test_control_panel.py`: `_run_detail` çıktısının `timeline[].tools` taşıdığı.
+- `tests/test_pipeline.py`: `acquisition_metrics` olayının parser'ı taşıdığı.
+- Panelin satır içi JavaScript'i `node --check` ile ayrıştırıldı — bu dosyada sözdizimi
+  hatası çekmecenin tamamını sessizce bozar.
+- 244 test geçiyor.
+
+---
+
+## 16. İkili içeriğin metin sanılması ve koşuyu düşüren NUL baytı
+
+### Belirti
+
+19 Ağustos'ta başlatılan bir koşu NORMALIZE aşamasında düştü:
+
+```
+asyncpg.exceptions.CharacterNotInRepertoireError: invalid byte sequence for encoding "UTF8": 0x00
+[SQL: INSERT INTO source_versions (... content, raw_content, provenance ...)]
+```
+
+### Zincir
+
+1. Bir DOI (`10.17816/dd569388-4203407`) makaleye değil, **ek dosyaya** çözüldü:
+   `downloadSuppFile/...` — içerik bir JPEG (`\xff\xd8\xff\xe0..JFIF`).
+2. `detect_document_type()` tanımadığı her şeyi `"text"` sayıyordu; JPEG "metin" oldu ve
+   `_direct`'in `{"text","html","json","xml","pdf"}` beyaz listesinden geçti.
+3. `PlainTextParser` baytları `errors="replace"` ile çözdü. Ortaya çıkan mojibake 400
+   karakterlik asgari uzunluk eşiğini rahatça geçti, yani kaynak **kabul edildi**.
+4. `_document()` `content`'ten NUL baytlarını temizliyordu ama `raw_content`'ten
+   temizlemiyordu. PostgreSQL text sütununda `0x00` kabul etmez.
+5. INSERT reddedildi → NORMALIZE görevi çöktü → koşu `failed`. O turda toplanan her şey
+   gitti.
+
+### Düzeltme
+
+**Filtre —** `detect_document_type()` artık ikili içeriği tanıyor: MIME `image/`, `audio/`
+veya `video/` ile başlıyorsa ya da ilk 8 KB'de `0x00` varsa `"binary"` döndürüyor. Bu tür
+beyaz listede olmadığı için aday sessizce atlanıyor ve korpusa hiç girmiyor.
+
+**Değişmez —** `_document()` artık `raw_content`'i de temizliyor. PDF'lerin base64 gövdesi
+etkilenmiyor; başka bir stratejiden gelecek tek bir NUL da artık INSERT'i reddettiremez.
+
+İkisi birlikte gerekiyor: filtre çöpü korpustan uzak tutar, temizlik ise "metin sütununa
+NUL yazılmaz" değişmezini strateji sayısından bağımsız hâle getirir.
+
+### Kalan kırılganlık
+
+Kök neden kapandı ama **kaydedilemeyen tek bir belgenin tüm turu düşürmesi** duruyor:
+`save_document()` çağrısı korumasız. [OPEN_ITEMS.md](OPEN_ITEMS.md) 13. madde olarak
+eklendi — belge başına `try/except` + `document_save_failed` olayı, böylece kayıp panelin
+aşama tablosunda görünür olur.
+
+### Doğrulama
+
+`tests/test_collection_architecture.py`: JPEG ve ZIP başlıklarının `"binary"` döndüğü, düz
+metnin hâlâ `"text"` olduğu, ve `_document()` çıktısının hiçbir alanında NUL kalmadığı.
+245 test geçiyor. Düzeltme worker container'ında doğrulandı.
 
 ---
 
