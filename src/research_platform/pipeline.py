@@ -44,6 +44,7 @@ from .relevance import (
     temporal_relevance,
 )
 from .query_compiler import compile_provider_query
+from .research_plan import build_research_plan, plan_strategy
 from .recovery import (
     diagnose_gaps,
     initial_missions,
@@ -104,6 +105,7 @@ class PipelineState(TypedDict, total=False):
     connector_success_rates: dict[str, float]
     budget_started_at: str
     hitl_guidance: list[str]
+    plan_feedback: list[str]
     report_outline_guidance: str
 
 
@@ -207,6 +209,51 @@ class ResearchPipeline:
                 return response if isinstance(response, dict) else {}
         return None
 
+    async def _hitl_entries(self, run_id: str, interaction_type: str) -> list[dict]:
+        """Every answered interaction of one type, oldest first.
+
+        `_hitl_response` returns only the last answer, which is all the single-shot gates
+        need. The plan gate has to count rejections across rounds, so it needs the series.
+        """
+        run = await self.repo.get_run(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        return [
+            entry
+            for entry in (run.hitl_history or [])
+            if entry.get("type") == interaction_type
+        ]
+
+    async def _request_input(
+        self,
+        state: PipelineState,
+        interaction_type: str,
+        data: dict[str, Any],
+        checkpoint_stage: str,
+        timeout_minutes: int = 5,
+    ) -> None:
+        """Park the run on a durable checkpoint and hand control to the user.
+
+        Split out of `_maybe_hitl` because the plan gate must be able to ask again after a
+        rejection, while `_maybe_hitl` deliberately replays the first answer forever.
+        """
+        now = datetime.now(timezone.utc)
+        interaction = {
+            "interaction_id": new_id(),
+            "type": interaction_type,
+            "data": data,
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(minutes=timeout_minutes)).isoformat(),
+        }
+        await self.repo.checkpoint(state["run_id"], checkpoint_stage, dict(state))
+        await self.repo.update_run(
+            state["run_id"],
+            status=RunStatus.AWAITING_INPUT.value,
+            interaction=interaction,
+        )
+        await self.repo.event(state["run_id"], "hitl_awaiting_input", interaction)
+        raise PipelineHalted("awaiting_input")
+
     async def _maybe_hitl(
         self,
         state: PipelineState,
@@ -220,22 +267,113 @@ class ResearchPipeline:
         previous = await self._hitl_response(state["run_id"], interaction_type)
         if previous is not None:
             return previous
-        now = datetime.now(timezone.utc)
-        interaction = {
-            "interaction_id": new_id(),
-            "type": interaction_type,
-            "data": data,
-            "created_at": now.isoformat(),
-            "expires_at": (now + timedelta(minutes=5)).isoformat(),
-        }
-        await self.repo.checkpoint(state["run_id"], checkpoint_stage, dict(state))
-        await self.repo.update_run(
-            state["run_id"],
-            status=RunStatus.AWAITING_INPUT.value,
-            interaction=interaction,
+        await self._request_input(state, interaction_type, data, checkpoint_stage)
+        return None
+
+    async def _plan_feedback(self, run_id: str) -> list[str]:
+        """What the user asked to change, read from the answers rather than from state.
+
+        The checkpoint is written before the rejection it is waiting for exists, so state
+        always trails by one round; the answer history is the only current source.
+        """
+        notes = []
+        for entry in await self._hitl_entries(run_id, "plan_review"):
+            response = entry.get("response")
+            if not isinstance(response, dict) or response.get("approved"):
+                continue
+            note = str(response.get("modifications", "")).strip()
+            if note:
+                notes.append(note)
+        return notes
+
+    async def _apply_plan_duration(
+        self,
+        run_id: str,
+        state: PipelineState,
+        protocol: ResearchProtocol,
+        minutes: int,
+    ) -> None:
+        """Persist a duration the user changed while approving the plan.
+
+        The resumed run reads its protocol from the row (`run()`), and the panel reads it
+        from there too, so the new budget has to land in the database -- not only in the
+        in-memory state.
+        """
+        if minutes == protocol.budget.max_wall_minutes:
+            return
+        payload = protocol.model_dump(mode="json")
+        previous = payload["budget"]["max_wall_minutes"]
+        payload["budget"]["max_wall_minutes"] = minutes
+        state["protocol"] = ResearchProtocol.model_validate(payload).model_dump(mode="json")
+        await self.repo.update_run(run_id, protocol=state["protocol"])
+        await self.repo.event(
+            run_id,
+            "plan_duration_changed",
+            {"from_minutes": previous, "to_minutes": minutes},
         )
-        await self.repo.event(state["run_id"], "hitl_awaiting_input", interaction)
-        raise PipelineHalted("awaiting_input")
+
+    async def _plan_gate(
+        self,
+        state: PipelineState,
+        output: dict[str, Any],
+        protocol: ResearchProtocol,
+    ) -> dict[str, Any]:
+        """Nothing is searched until somebody has seen what the run intends to do.
+
+        Unlike the other checkpoints this one can ask repeatedly: a rejection carries
+        feedback, the run rewinds to DECOMPOSE, and the questions and queries are rebuilt
+        with that feedback before the plan is presented again.
+        """
+        run_id = state["run_id"]
+        if not protocol.hitl.plan_review:
+            await self.repo.event(
+                run_id,
+                "plan_skipped",
+                {"reason": "plan_review disabled by the caller"},
+            )
+            return output
+        answered = [
+            entry
+            for entry in await self._hitl_entries(run_id, "plan_review")
+            if isinstance(entry.get("response"), dict)
+        ]
+        latest = answered[-1]["response"] if answered else None
+        if latest is not None and latest.get("approved"):
+            minutes = latest.get("max_wall_minutes")
+            if isinstance(minutes, int):
+                await self._apply_plan_duration(run_id, state, protocol, minutes)
+            await self.repo.event(
+                run_id,
+                "research_plan_approved",
+                {"revisions": len(answered) - 1},
+            )
+            return output
+        feedback = await self._plan_feedback(run_id)
+        if len(answered) >= self.settings.plan_max_revisions:
+            await self.repo.update_run(run_id, status=RunStatus.CANCELLED.value)
+            await self.repo.event(
+                run_id,
+                "plan_rejection_limit",
+                {"revisions": len(answered), "feedback": feedback},
+            )
+            raise PipelineHalted("plan_rejected")
+        planning_state = {**state, **output, "plan_feedback": feedback}
+        plan = build_research_plan(
+            protocol=protocol,
+            state=planning_state,
+            settings=self.settings,
+        )
+        plan["strategy_note"] = await plan_strategy(self.llm, plan, protocol.report_language)
+        await self._emit_llm_metrics(run_id, "PLAN")
+        await self.repo.event(run_id, "research_plan", plan)
+        await self._request_input(
+            planning_state,
+            "plan_review",
+            {"plan": plan},
+            "DECOMPOSE",
+            self.settings.hitl_plan_timeout_minutes,
+        )
+        return output
 
     async def _emit_llm_metrics(self, run_id: str, stage: str) -> None:
         metrics = self.llm.drain_metrics()
@@ -414,6 +552,14 @@ class ResearchPipeline:
                     ]
                 )
             )[:12]
+        # A rejected plan rewinds the run to this stage, so what the user asked to change
+        # has to reach decomposition -- otherwise the next plan repeats the rejected one.
+        feedback = await self._plan_feedback(state["run_id"])
+        if feedback:
+            output["plan_feedback"] = feedback
+            output["sub_questions"] = list(
+                dict.fromkeys([*output["sub_questions"], *feedback])
+            )[:12]
         return output
 
     async def build_query_branches(self, state: PipelineState) -> dict:
@@ -453,35 +599,7 @@ class ResearchPipeline:
             "branch_queries": {mission.branch_id: mission.query for mission in missions},
             "round_number": max(1, state.get("round_number", 0)),
         }
-        response = await self._maybe_hitl(
-            {**state, **output},
-            "plan_review",
-            {
-                "plan": {
-                    "primary_question": protocol.primary_question,
-                    "sub_questions": state.get("sub_questions", []),
-                    "queries": queries,
-                    "source_families": [
-                        item.value for item in protocol.connectors.included_families
-                    ],
-                    "budget": protocol.budget.model_dump(mode="json"),
-                },
-            },
-            "BUILD_QUERY_BRANCHES",
-        )
-        if response and not response.get("approved", False):
-            modification = str(response.get("modifications", "")).strip()
-            if modification:
-                output["queries"] = list(dict.fromkeys([*queries, modification]))[:12]
-                output["missions"] = [
-                    mission.model_dump(mode="json")
-                    for mission in initial_missions(protocol, output["queries"])
-                ]
-                output["required_branch_ids"] = [item["branch_id"] for item in output["missions"]]
-                output["branch_queries"] = {
-                    item["branch_id"]: item["query"] for item in output["missions"]
-                }
-        return output
+        return await self._plan_gate(state, output, protocol)
 
     async def search(self, state: PipelineState) -> dict:
         await self._boundary(state, "SEARCH")

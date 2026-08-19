@@ -80,17 +80,24 @@ class StoppingCriteria(BaseModel):
 class ResearchBudget(BaseModel):
     max_rounds: int = Field(4, ge=1, le=12)
     max_sources: int | None = Field(None, ge=1)
-    max_wall_minutes: int = Field(45, ge=1, le=1440)
+    # Deliberately without a default: how long a run may collect is the caller's decision,
+    # and a silent 45 minutes was a decision nobody saw being made.
+    max_wall_minutes: int = Field(ge=1, le=1440)
     results_per_connector: int = Field(20, ge=1, le=100)
     acquisition_concurrency: int = Field(4, ge=1, le=16)
     exhaustive_until_budget: bool = True
 
 
 class HitlConfig(BaseModel):
-    """Optional user checkpoints for a single research run."""
+    """User checkpoints for a single research run.
+
+    `plan_review` defaults on: a run should not start searching before somebody has seen
+    what it is about to do. A caller that automates end to end can still send false, and
+    the pipeline records that choice as a `plan_skipped` event.
+    """
 
     planning_questions: bool = False
-    plan_review: bool = False
+    plan_review: bool = True
     source_review: bool = False
     outline_review: bool = False
 
@@ -132,6 +139,10 @@ class ResearchScope(BaseModel):
     end_date: datetime | None = None
     geography: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)
+    # Set by the protocol validator when wording such as "last 3 months" produced the
+    # window above. Recorded rather than recomputed: the inference is time-dependent, so
+    # asking again later gives different bounds and cannot prove what happened here.
+    dates_inferred: bool = False
 
 
 class SentinelSource(BaseModel):
@@ -196,7 +207,9 @@ class ResearchProtocol(BaseModel):
     family_targets: dict[SourceFamily, FamilyTarget] = Field(default_factory=dict)
     sentinel_sources: list[SentinelSource] = Field(default_factory=list, max_length=50)
     stopping_criteria: StoppingCriteria = Field(default_factory=StoppingCriteria)
-    budget: ResearchBudget = Field(default_factory=ResearchBudget)
+    # No default: a protocol without a stated collection budget cannot be built at all,
+    # so no surface can start a run whose duration nobody chose.
+    budget: ResearchBudget
     output_mode: Literal["raw", "result", "both"] = "both"
     hitl: HitlConfig = Field(default_factory=HitlConfig)
 
@@ -206,6 +219,7 @@ class ResearchProtocol(BaseModel):
             inferred = infer_relative_date_range(self.primary_question)
             if inferred:
                 self.scope.start_date, self.scope.end_date = inferred
+                self.scope.dates_inferred = True
         if (
             self.scope.start_date is not None
             and self.scope.end_date is not None

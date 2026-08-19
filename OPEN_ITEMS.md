@@ -258,6 +258,10 @@ kalkıyor — yani sınır dil desteğinde, konuda değil.
 **Etki:** Türkçe soru soran kullanıcı, sistem çalışıyor görünürken sessizce boş bir korpus
 alıyor. Hata yok, uyarı yok; yalnız kaynak sayısı düşük.
 
+**Not (19 Ağustos):** Sorun kapanmadı, ama artık **koşu başlamadan görülebiliyor** — plan
+onayı ekranı sorgu dallarını olduğu gibi listeliyor, dolayısıyla hepsinin tek dilde olduğu
+onaydan önce fark edilip düzeltme istenebiliyor.
+
 **Yapılacak:** `languages` listesindeki her dil için sorgu dalı üret — en ucuzu, soru
 İngilizce değilse `DECOMPOSE` çıktısına İngilizce bir dal seti eklemek (tek LLM çağrısı,
 aşama başına bir kez). Alternatif olarak connector başına dil tercihi: akademik

@@ -27,6 +27,17 @@ class UnsafeUrlError(ValueError):
     pass
 
 
+# The order AcquisitionService.acquire() falls through, named so the pre-run plan can state
+# it without restating it. Zotero candidates short-circuit before any of these.
+ACQUISITION_STRATEGY_ORDER = (
+    "direct",
+    "scholarly_metadata",
+    "agentsearch_read",
+    "crawl4ai",
+    "scrapling",
+)
+
+
 async def validate_public_url(url: str, allow_private: bool = False) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -250,6 +261,16 @@ class AcquisitionService:
                 if parser is None:
                     return None
                 parsed = parser.parse(response.content, url=current, content_type=ctype)
+                if len(parsed.text.strip()) < 400:
+                    for alt in self.parsers.candidates(document_type, ctype, response.content):
+                        if alt.id != parser.id:
+                            try:
+                                alt_parsed = alt.parse(response.content, url=current, content_type=ctype)
+                                if len(alt_parsed.text.strip()) >= 400:
+                                    parsed = alt_parsed
+                                    break
+                            except Exception:
+                                pass
                 if len(parsed.text.strip()) < 400:
                     return None
                 return self._document(

@@ -344,6 +344,7 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     bot.allow_group_chats = False
     bot.allow_all_users = True
     bot.pending_research = {}
+    bot.watched_runs = {}
     client = FakeClient()
     message = {
         "from": {"id": 7},
@@ -414,6 +415,7 @@ async def test_unlinked_telegram_user_is_told_how_to_get_linked():
     bot.allow_group_chats = False
     bot.allow_all_users = True
     bot.pending_research = {}
+    bot.watched_runs = {}
 
     client = FakeClient()
     await bot._handle(client, {
@@ -519,6 +521,7 @@ def _link_bot() -> TelegramResearchBot:
     bot.allow_group_chats = False
     bot.allow_all_users = False
     bot.pending_research = {}
+    bot.watched_runs = {}
     return bot
 
 

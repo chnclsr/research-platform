@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .base import DocumentParser, ParserHealth
 from .html import HtmlParser
-from .pdf import PdfParser
+from .pdf import PdfParser, PyMuPdfParser, PyPdfParser
 from .structured import PlainTextParser
 
 
@@ -25,6 +25,20 @@ class ParserRegistry:
     def get(self, parser_id: str) -> DocumentParser | None:
         return self._parsers.get(parser_id)
 
+    def candidates(
+        self,
+        document_type: str,
+        content_type: str = "",
+        content: bytes = b"",
+    ) -> list[DocumentParser]:
+        """Return all available parsers capable of parsing this document, sorted by priority."""
+        matches = [
+            parser
+            for parser in self.parsers
+            if parser.can_parse(document_type, content_type, content)
+        ]
+        return sorted(matches, key=lambda parser: (-parser.priority, parser.id))
+
     def select(
         self,
         document_type: str,
@@ -37,21 +51,21 @@ class ParserRegistry:
         # silently emit garbage, so it is treated exactly like an unknown id and falls
         # back to the deterministic pick rather than failing the run.
         if overrides:
-            override = self._parsers.get(overrides.get(document_type, ""))
+            requested = overrides.get(document_type, "")
+            override = self._parsers.get(requested)
+            # Legacy alias support: if override is "pdf" or "html", map to top candidate
+            if override is None and requested in {"pdf", "html"}:
+                cands = self.candidates(document_type, content_type, content)
+                if cands:
+                    return cands[0]
             if override is not None and override.can_parse(document_type, content_type, content):
                 return override
-        candidates = [
-            parser
-            for parser in self.parsers
-            if parser.can_parse(document_type, content_type, content)
-        ]
-        if not candidates:
-            return None
-        return sorted(candidates, key=lambda parser: (-parser.priority, parser.id))[0]
+        cands = self.candidates(document_type, content_type, content)
+        return cands[0] if cands else None
 
     def health(self) -> list[ParserHealth]:
         return [parser.health() for parser in self.parsers]
 
 
 def build_parser_registry() -> ParserRegistry:
-    return ParserRegistry([HtmlParser(), PdfParser(), PlainTextParser()])
+    return ParserRegistry([HtmlParser(), PyMuPdfParser(), PyPdfParser(), PlainTextParser()])

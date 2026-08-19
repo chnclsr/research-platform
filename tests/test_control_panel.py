@@ -173,11 +173,13 @@ async def test_panel_run_list_shows_only_the_signed_in_users_runs():
         mine = await repo.create_run(ResearchProtocol(
             title="Owner run",
             primary_question="Which runs belong to the signed-in panel user?",
+            budget={"max_wall_minutes": 30},
         ))
         theirs = await Repository(session, actor=Principal.user(other_id)).create_run(
             ResearchProtocol(
                 title="Other run",
                 primary_question="Which runs belong to somebody else entirely?",
+                budget={"max_wall_minutes": 30},
             )
         )
 
@@ -204,6 +206,7 @@ async def test_run_detail_breaks_each_stage_visit_down_by_tool():
         run = await repo.create_run(ResearchProtocol(
             title="Tooling run",
             primary_question="Which tools ran in which stage of this research?",
+            budget={"max_wall_minutes": 30},
         ))
         await repo.event(run.id, "stage", {"stage": "SEARCH", "round": 1})
         await repo.event(run.id, "connector_metrics", {"calls": [
@@ -236,6 +239,7 @@ async def test_panel_shows_other_peoples_active_runs_without_their_content():
             ResearchProtocol(
                 title="Somebody else's subject",
                 primary_question="What is the other team member actually researching?",
+                budget={"max_wall_minutes": 30},
             )
         )
 
@@ -267,6 +271,7 @@ async def test_admin_gets_no_team_section_because_the_main_table_is_complete():
             ResearchProtocol(
                 title="Visible to the admin in full",
                 primary_question="Does the admin need a redacted copy of this run?",
+                budget={"max_wall_minutes": 30},
             )
         )
 
@@ -301,6 +306,7 @@ async def test_run_detail_exposes_timeline_funnel_and_quality():
         run = await repo.create_run(ResearchProtocol(
             title="Panel detail",
             primary_question="Does the panel explain research collection quality?",
+            budget={"max_wall_minutes": 30},
         ))
         await repo.event(run.id, "stage", {"stage": "SEARCH", "round": 1})
         await repo.event(run.id, "connector_metrics", {"calls": [{

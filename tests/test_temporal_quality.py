@@ -72,6 +72,7 @@ def test_academic_recent_query_uses_only_academic_family_as_required_coverage():
             "What clinical studies were published in the last 3 months about "
             "lung cancer radiomics?"
         ),
+        budget={"max_wall_minutes": 30},
     )
     assert set(protocol.family_targets) == {SourceFamily.ACADEMIC}
     assert protocol.family_targets[SourceFamily.ACADEMIC].minimum_sources == 2
@@ -96,6 +97,7 @@ def test_temporal_gate_rejects_old_and_unknown_sources_for_bounded_research():
         primary_question="Recent clinical studies about lung cancer",
         scope={"start_date": "2026-04-17T00:00:00Z", "end_date": "2026-07-17T23:59:59Z"},
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
     old = ConnectorCandidate(
         connector_id="crossref", family=SourceFamily.ACADEMIC,
@@ -119,6 +121,7 @@ def test_post_acquisition_gate_rejects_finance_noise_and_keeps_lung_ct_study():
             "What new clinical studies use axial chest CT for lung cancer risk estimation?"
         ),
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
     finance_candidate = ConnectorCandidate(
         connector_id="crossref", family=SourceFamily.ACADEMIC,
@@ -151,6 +154,7 @@ def test_academic_gate_does_not_use_related_page_links_to_change_the_paper_subje
         primary_question="What radiomics methods estimate lung cancer risk from chest CT?",
         research_mode="focused_answer",
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
     candidate = ConnectorCandidate(
         connector_id="crossref", family=SourceFamily.ACADEMIC,
@@ -172,6 +176,7 @@ def test_literature_scan_retains_contextual_academic_source_without_exact_headin
         title="High recall multimodal radiology scan",
         primary_question="Multimodal vision-language models in radiology clinical safety",
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
     candidate = ConnectorCandidate(
         connector_id="arxiv",
@@ -219,6 +224,7 @@ def test_required_sentinel_uses_verified_content_match_instead_of_generic_headin
             title="Security evidence",
             primary_question="Do AI coding assistants increase vulnerable code production?",
             connectors={"profile": "custom", "included_families": ["academic"]},
+            budget={"max_wall_minutes": 30},
         ),
     )
     assert accepted

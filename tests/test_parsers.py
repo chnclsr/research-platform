@@ -11,15 +11,20 @@ from __future__ import annotations
 import pytest
 
 from research_platform.parsers import (
-    DocumentParser, ParsedDocument, ParsedTable, ParserRegistry, build_parser_registry,
+    DocumentParser,
+    HtmlParser,
+    ParsedDocument,
+    ParsedTable,
+    ParserRegistry,
+    PlainTextParser,
+    PyMuPdfParser,
+    PyPdfParser,
+    build_parser_registry,
 )
-from research_platform.parsers.html import HtmlParser
-from research_platform.parsers.pdf import PdfParser
-from research_platform.parsers.structured import PlainTextParser
 from research_platform.passages import chunk_document
 
 
-ALL_PARSERS = [HtmlParser(), PdfParser(), PlainTextParser()]
+ALL_PARSERS = [HtmlParser(), PyMuPdfParser(), PyPdfParser(), PlainTextParser()]
 
 
 @pytest.mark.parametrize("parser", ALL_PARSERS, ids=lambda p: p.id)
@@ -51,8 +56,8 @@ def test_parser_reports_its_own_id(parser):
 
 def test_registry_selects_deterministically_by_document_type():
     registry = build_parser_registry()
-    assert registry.select("html", "text/html", b"<html>").id == "html"
-    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "pdf"
+    assert registry.select("html", "text/html", b"<html>").id == "html_structured"
+    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "pymupdf_fast"
     for document_type in ("json", "xml", "text"):
         assert registry.select(document_type, "", b"").id == "plain_text"
     assert registry.select("image", "image/png", b"\x89PNG") is None
@@ -62,14 +67,16 @@ def test_registry_selection_is_stable_across_calls():
     """content_hash and passage offsets depend on the same bytes yielding the same parser."""
     registry = build_parser_registry()
     picks = {registry.select("html", "text/html", b"<html>").id for _ in range(10)}
-    assert picks == {"html"}
+    assert picks == {"html_structured"}
 
 
 def test_registry_exposes_parsers_by_id():
     registry = build_parser_registry()
-    assert registry.get("html") is not None
+    assert registry.get("html_structured") is not None
+    assert registry.get("pymupdf_fast") is not None
+    assert registry.get("pypdf") is not None
     assert registry.get("does-not-exist") is None
-    assert {h.id for h in registry.health()} == {"html", "pdf", "plain_text"}
+    assert {h.id for h in registry.health()} == {"html_structured", "pymupdf_fast", "pypdf", "plain_text"}
 
 
 def test_html_parser_keeps_headings_so_chunking_can_build_section_paths():
@@ -176,10 +183,12 @@ def test_plain_text_parser_falls_back_to_raw_on_malformed_payloads():
     assert "unclosed" in result.text
 
 
-def test_pdf_parser_reports_which_backend_it_uses():
-    available, detail = PdfParser().available()
-    assert available
-    assert "PyMuPDF" in detail or "pypdf" in detail
+def test_pdf_parsers_report_availability():
+    pymupdf = PyMuPdfParser()
+    pypdf = PyPdfParser()
+    assert pymupdf.id == "pymupdf_fast"
+    assert pypdf.id == "pypdf"
+    assert pypdf.available()[0] is True
 
 
 class _AlternativeHtmlParser(DocumentParser):
@@ -193,28 +202,35 @@ class _AlternativeHtmlParser(DocumentParser):
 
 
 def _two_html_parsers() -> ParserRegistry:
-    return ParserRegistry([HtmlParser(), _AlternativeHtmlParser(), PdfParser()])
+    return ParserRegistry([HtmlParser(), _AlternativeHtmlParser(), PyMuPdfParser(), PyPdfParser()])
 
 
 def test_registry_honours_an_explicit_override():
     """ParserSelection lets a protocol name a parser without the LLM choosing per run."""
     registry = _two_html_parsers()
-    assert registry.select("html", "text/html", b"<html>").id == "html"
+    assert registry.select("html", "text/html", b"<html>").id == "html_structured"
     assert registry.select("html", "text/html", b"<html>", {"html": "html_alt"}).id == "html_alt"
+    assert registry.select("pdf", "application/pdf", b"%PDF", {"pdf": "pypdf"}).id == "pypdf"
+
+
+def test_registry_supports_legacy_overrides_aliases():
+    registry = build_parser_registry()
+    assert registry.select("pdf", "application/pdf", b"%PDF", {"pdf": "pdf"}).id == "pymupdf_fast"
+    assert registry.select("html", "text/html", b"<html>", {"html": "html"}).id == "html_structured"
 
 
 def test_registry_ignores_an_unknown_override_instead_of_failing():
     registry = build_parser_registry()
-    assert registry.select("html", "text/html", b"<html>", {"html": "nope"}).id == "html"
+    assert registry.select("html", "text/html", b"<html>", {"html": "nope"}).id == "html_structured"
 
 
 def test_registry_rejects_an_override_that_cannot_handle_the_document_type():
     """A mismatched override would feed PDF bytes to the HTML parser and emit garbage."""
     registry = build_parser_registry()
-    chosen = registry.select("pdf", "application/pdf", b"%PDF-1.4", {"pdf": "html"})
-    assert chosen.id == "pdf"
+    chosen = registry.select("pdf", "application/pdf", b"%PDF-1.4", {"pdf": "html_structured"})
+    assert chosen.id == "pymupdf_fast"
 
 
 def test_registry_override_only_applies_to_the_named_document_type():
     registry = _two_html_parsers()
-    assert registry.select("pdf", "application/pdf", b"%PDF", {"html": "html_alt"}).id == "pdf"
+    assert registry.select("pdf", "application/pdf", b"%PDF", {"html": "html_alt"}).id == "pymupdf_fast"

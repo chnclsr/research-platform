@@ -71,6 +71,16 @@ def _validate_hitl_response(interaction_type: str, response: dict) -> dict:
         result = {"approved": response["approved"]}
         if response.get("modifications"):
             result["modifications"] = str(response["modifications"])[:5000]
+        # The duration was already required to create the run; approving the plan is the
+        # one place it can be revised, so the bounds have to match ResearchBudget.
+        if interaction_type == "plan_review" and response.get("max_wall_minutes") is not None:
+            minutes = response["max_wall_minutes"]
+            if not isinstance(minutes, int) or isinstance(minutes, bool) or not 1 <= minutes <= 1440:
+                raise HTTPException(
+                    status_code=400,
+                    detail="max_wall_minutes must be an integer between 1 and 1440",
+                )
+            result["max_wall_minutes"] = minutes
         return result
     if interaction_type == "source_review":
         included = response.get("included_domains")

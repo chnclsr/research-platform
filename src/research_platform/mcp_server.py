@@ -68,16 +68,24 @@ def _client() -> ResearchGatewayClient:
 @mcp.tool()
 async def start_research(
     question: str,
+    max_wall_minutes: int,
     title: str = "Agent research request",
     output_mode: Literal["raw", "result", "both"] = "both",
-    max_wall_minutes: int = 45,
     max_sources: int | None = None,
     planning_questions: bool = False,
-    plan_review: bool = False,
+    plan_review: bool = True,
     source_review: bool = False,
     outline_review: bool = False,
 ) -> dict:
-    """Start a research run and return its durable run id."""
+    """Start a research run and return its durable run id.
+
+    `max_wall_minutes` has no default on purpose: how long the run may collect is a
+    decision the caller has to make, not one to inherit silently.
+
+    With `plan_review` left on, the run stops at `awaiting_input` before it searches and
+    publishes a plan; approve or revise it with `respond_to_research_checkpoint`. Pass
+    false only for unattended runs -- the run then records a `plan_skipped` event.
+    """
     protocol = ResearchProtocol(
         title=title,
         primary_question=question,

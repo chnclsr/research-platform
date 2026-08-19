@@ -49,12 +49,12 @@ Panelde **kayıt formu yoktur.** Hesaplar kabuktan açılır; komutlar ve ekip y
 `user` rolündeki birine yönetici düğmeleri ve log sekmesi hiç gösterilmez; sunucu tarafında da
 403 döner.
 
-### Ekipteki diğer işler
+### Aktif Koşular
 
 Tek GPU paylaşıldığı için kullanıcı, **başkalarının süren araştırmalarını sansürlü olarak**
 görür — yoksa kendi koşusu sırada beklerken bomboş bir tablo görür ve sistemi bozuk sanır.
 
-"Ekipteki diğer işler" tablosunda yalnız şunlar vardır: **kimin çalıştırdığı, durum, aşama,
+"Aktif Koşular" tablosunda yalnız şunlar vardır: **kimin çalıştırdığı, durum, aşama,
 kuyruk sırası ve geçen süre.** Başlık, araştırma sorusu, kaynaklar, iddialar, coverage ve
 koşu kimliği **görünmez**; satır tıklanamaz ve üzerinde işlem yapılamaz.
 

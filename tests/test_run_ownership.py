@@ -43,6 +43,7 @@ def _protocol(title: str) -> ResearchProtocol:
     return ResearchProtocol(
         title=title,
         primary_question="Which evidence answers this ownership question in full?",
+        budget={"max_wall_minutes": 30},
     )
 
 
@@ -386,6 +387,7 @@ async def test_a_personal_api_key_owns_what_it_starts():
                 "protocol": {
                     "title": "Started through an agent surface",
                     "primary_question": "Does a personal key produce an owned run?",
+                    "budget": {"max_wall_minutes": 30},
                 }
             },
         )

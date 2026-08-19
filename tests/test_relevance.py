@@ -21,6 +21,7 @@ def protocol(*, trusted_domains: list[str] | None = None) -> ResearchProtocol:
             "profile": "custom", "included_families": ["web", "code_data"],
             "trusted_domains": trusted_domains or [],
         },
+        budget={"max_wall_minutes": 30},
     )
 
 
@@ -112,6 +113,7 @@ def test_primary_authority_seed_survives_stricter_relevance_floor():
                 "profile": "custom",
                 "included_families": ["code_data"],
             },
+            budget={"max_wall_minutes": 30},
         ),
         1,
     )
@@ -129,6 +131,7 @@ def test_unrelated_official_legal_result_cannot_fill_named_product_research():
             "profile": "custom",
             "included_families": ["official_legal"],
         },
+        budget={"max_wall_minutes": 30},
     )
     unrelated = ConnectorCandidate(
         connector_id="eur_lex",
@@ -166,6 +169,7 @@ def test_academic_metadata_uses_recall_floor_before_content_admission():
             "What recent axial chest CT radiomics systems estimate lung cancer "
             "nodule malignancy?"
         ),
+        budget={"max_wall_minutes": 30},
     )
     academic = ConnectorCandidate(
         connector_id="crossref",

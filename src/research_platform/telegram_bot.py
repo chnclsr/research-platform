@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import shlex
 import time
@@ -14,11 +15,14 @@ from .gateway_client import ResearchGatewayClient
 from .identity import consume_telegram_link_code, principal_from_telegram
 from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 
+logger = logging.getLogger(__name__)
+
 
 HELP = """Research Platform komutları:
 /baglan <kod>   — Telegram hesabınızı platform hesabınıza bağlar
 /whoami
-/research [raw|result|both] [dakika|--minutes N] [--hitl] [--sources N] <soru>
+/research [raw|result|both] [dakika|--minutes N] [--hitl] [--plansiz] [--sources N] <soru>
+                  arama başlamadan önce plan onayınıza sunulur; --plansiz bunu atlar
 /status <run_id>
 /respond <run_id> approve|reject|answer|include ...
 /get <run_id> [raw|result|both]
@@ -98,8 +102,64 @@ def parse_research_request(
     )
 
 
+def plan_summary(run_id: str, plan: dict) -> str:
+    """The approval document compressed to something readable in a chat window.
+
+    The full plan is a large object built for the panel; a Telegram message caps at 4096
+    characters, so this keeps the parts a person actually decides on -- what will be
+    asked, how long it may run, and which limit will really stop it.
+    """
+    questions = plan.get("questions") or {}
+    branches = plan.get("query_plan") or []
+    budget = plan.get("budget") or {}
+    scope = plan.get("date_scope") or {}
+    lines = [
+        f"Plan onayı bekleniyor: {run_id}",
+        "",
+        f"Soru: {str(questions.get('primary', ''))[:300]}",
+    ]
+    subs = questions.get("sub_questions") or []
+    if subs:
+        lines.append(f"Alt sorular ({len(subs)}):")
+        lines += [f"  · {str(item)[:120]}" for item in subs[:5]]
+    if branches:
+        lines.append(f"Sorgu dalları ({len(branches)}):")
+        lines += [f"  · {str(item.get('query', ''))[:110]}" for item in branches[:6]]
+        if len(branches) > 6:
+            lines.append(f"  · … {len(branches) - 6} dal daha")
+    lines.append("")
+    lines.append(
+        f"Süre: {budget.get('max_wall_minutes')} dk · "
+        f"Kaynak: {budget.get('max_sources') or 'sınırsız'} · "
+        f"Tur: {budget.get('max_rounds')}"
+    )
+    inert = [
+        row["limit"]
+        for row in plan.get("effective_limits") or []
+        if not row.get("binding")
+    ]
+    if inert:
+        lines.append(f"Bağlayıcı olmayan sınır: {', '.join(inert)}")
+    if scope.get("start_date"):
+        note = " (sorudan çıkarıldı)" if scope.get("inferred_from_question") else ""
+        lines.append(
+            f"Tarih: {str(scope['start_date'])[:10]} → {str(scope.get('end_date'))[:10]}{note}"
+        )
+    if plan.get("feedback"):
+        lines.append(f"Önceki geri bildiriminiz: {len(plan['feedback'])} madde")
+    if plan.get("strategy_note"):
+        lines.append("")
+        lines.append(f"Strateji: {plan['strategy_note'][:500]}")
+    lines += [
+        "",
+        f"Onay:        /respond {run_id} approve",
+        f"Değişiklik:  /respond {run_id} reject <gerekçe>",
+    ]
+    return "\n".join(lines)
+
+
 def has_explicit_duration(parts: list[str]) -> bool:
-    tokens = [item for item in parts if item != "--hitl"]
+    tokens = [item for item in parts if item not in {"--hitl", "--plansiz"}]
     if tokens and tokens[0] in {item.value for item in DeliveryMode}:
         tokens.pop(0)
     return "--minutes" in tokens or bool(
@@ -117,13 +177,17 @@ class TelegramResearchBot:
         )
         self.gateway = ResearchGatewayClient(
             self.settings.research_api_url,
-            self.settings.api_token,
+            self.settings.service_token or self.settings.api_token,
         )
         self.allowed_users = set(self.settings.telegram_allowed_user_ids)
         self.allowed_chats = set(self.settings.telegram_allowed_chat_ids)
         self.allow_group_chats = self.settings.telegram_allow_group_chats
         self.allow_all_users = self.settings.telegram_allow_all_users
         self.pending_research: dict[str, dict] = {}
+        # Runs this process started, so the chat can be told when one stops for input.
+        # In-memory like pending_research: a restarted bot forgets, and the user falls
+        # back to /status -- acceptable for a notice, not for state that matters.
+        self.watched_runs: dict[str, dict] = {}
 
     async def _chat_allowed(self, message: dict) -> bool:
         """Whether research commands are accepted in this conversation.
@@ -228,6 +292,18 @@ class TelegramResearchBot:
     ) -> None:
         run = await gateway.start(protocol)
         budget = protocol.budget
+        if protocol.hitl.plan_review:
+            self.watched_runs[run["id"]] = {
+                "chat_id": chat_id,
+                "gateway": gateway,
+                "notified": None,
+            }
+            gate_note = (
+                "\nArama başlamadan önce planı onayınıza sunacağım; hazır olduğunda "
+                "buraya yazacağım."
+            )
+        else:
+            gate_note = "\nPlan onayı atlandı (--plansiz); arama hemen başlıyor."
         await self._send_message(
             client,
             chat_id,
@@ -235,7 +311,7 @@ class TelegramResearchBot:
             f"Toplama bütçesi: {budget.max_wall_minutes} dk; süre dolunca eldeki "
             f"kaynakların analizi ve rapor üretimi tamamlanır.\n"
             f"{budget.max_sources or 'süreye bağlı sınırsız'} kaynak, "
-            f"{budget.max_rounds} tur\n"
+            f"{budget.max_rounds} tur{gate_note}\n"
             f"Durum için: /status {run['id']}",
         )
 
@@ -410,7 +486,13 @@ class TelegramResearchBot:
             if command == "/research":
                 explicit_minutes = has_explicit_duration(parts[1:])
                 hitl_enabled = "--hitl" in parts[1:]
-                research_parts = [item for item in parts[1:] if item != "--hitl"]
+                # The plan gate is on unless the person starting the run says otherwise.
+                # It used to hang off --hitl, which meant every ordinary /research
+                # explicitly sent plan_review=false and overrode the platform default.
+                skip_plan = "--plansiz" in parts[1:]
+                research_parts = [
+                    item for item in parts[1:] if item not in {"--hitl", "--plansiz"}
+                ]
                 mode, question, budget = parse_research_request(
                     research_parts,
                     default_minutes=self.settings.telegram_default_max_wall_minutes,
@@ -425,7 +507,7 @@ class TelegramResearchBot:
                     budget=budget,
                     hitl=HitlConfig(
                         planning_questions=hitl_enabled,
-                        plan_review=hitl_enabled,
+                        plan_review=not skip_plan,
                         source_review=hitl_enabled,
                         outline_review=hitl_enabled,
                     ),
@@ -517,6 +599,31 @@ class TelegramResearchBot:
         except (httpx.HTTPError, ValueError) as exc:
             await self._send_message(client, chat_id, f"İşlem başarısız: {str(exc)[:1000]}")
 
+    async def _notify_waiting_runs(self, client: httpx.AsyncClient) -> None:
+        """Tell the chat when one of its runs has stopped for the plan approval.
+
+        Without this the run parks at awaiting_input in silence and the person who
+        started it has to guess that /status is worth running.
+        """
+        for run_id, watch in list(self.watched_runs.items()):
+            try:
+                run = await watch["gateway"].status(run_id)
+            except (httpx.HTTPError, ValueError):
+                continue
+            status = run.get("status")
+            if status in {"completed", "completed_incomplete", "failed", "cancelled"}:
+                self.watched_runs.pop(run_id, None)
+                continue
+            interaction = run.get("interaction") or {}
+            interaction_id = interaction.get("interaction_id")
+            if not interaction_id or interaction_id == watch["notified"]:
+                continue
+            if interaction.get("type") != "plan_review":
+                continue
+            watch["notified"] = interaction_id
+            plan = (interaction.get("data") or {}).get("plan") or {}
+            await self._send_message(client, watch["chat_id"], plan_summary(run_id, plan))
+
     async def serve(self) -> None:
         offset = 0
         async with httpx.AsyncClient(timeout=70) as client:
@@ -538,6 +645,12 @@ class TelegramResearchBot:
                     callback = update.get("callback_query")
                     if callback:
                         await self._handle_callback(client, callback)
+                # Runs on the long-poll cycle: at most a minute late, and a failure here
+                # must never take the command loop down with it.
+                try:
+                    await self._notify_waiting_runs(client)
+                except Exception:
+                    logger.exception("plan bildirimi başarısız")
 
 
 def run() -> None:

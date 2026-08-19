@@ -149,6 +149,7 @@ async def test_semantic_source_judge_uses_relevance_score(response, expected):
     protocol = ResearchProtocol(
         title="Semantic source admission",
         primary_question="What recent CT models estimate lung cancer risk?",
+        budget={"max_wall_minutes": 30},
     )
     candidate = ConnectorCandidate(
         connector_id="fixture",
@@ -186,6 +187,7 @@ async def test_semantic_source_judge_retries_and_uses_delivery_failure_policy(
         primary_question="Which evidence directly answers the research question?",
         output_mode=output_mode,
         research_mode=research_mode,
+        budget={"max_wall_minutes": 30},
     )
     document = AcquiredDocument(
         candidate=ConnectorCandidate(
@@ -215,6 +217,7 @@ async def test_pipeline_preserves_cancellation_before_worker_start():
     protocol = ResearchProtocol(
         title="Pre-start cancellation",
         primary_question="Does a cancelled queued run remain cancelled?",
+        budget={"max_wall_minutes": 30},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
         repo = Repository(session, actor=acting_principal())
@@ -234,6 +237,7 @@ async def test_in_node_cancellation_interrupts_hung_io_promptly():
     protocol = ResearchProtocol(
         title="Hung I/O cancellation",
         primary_question="Can an active search be cancelled?",
+        budget={"max_wall_minutes": 30},
     )
     settings = get_settings().model_copy(update={
         "pipeline_control_poll_s": 0.01,
@@ -281,6 +285,7 @@ async def test_hung_node_has_a_hard_safety_timeout():
     protocol = ResearchProtocol(
         title="Hung node timeout",
         primary_question="Does a hung node terminate?",
+        budget={"max_wall_minutes": 30},
     )
     settings = get_settings().model_copy(update={"pipeline_control_poll_s": 0.01})
     async with SessionLocal() as session, httpx.AsyncClient() as client:
@@ -407,6 +412,7 @@ async def test_acquisition_metrics_name_the_parser_that_produced_the_text():
     protocol = ResearchProtocol(
         title="Parser provenance",
         primary_question="Which parser produced the text of each acquired source?",
+        budget={"max_wall_minutes": 30},
     )
 
     class ParsingAcquisition:
@@ -419,7 +425,7 @@ async def test_acquisition_metrics_name_the_parser_that_produced_the_text():
                 content=content,
                 content_hash=hashlib.sha256(content.encode()).hexdigest(),
                 acquisition_method="direct",
-                parser_id="pdf" if str(candidate.url).endswith(".pdf") else "html",
+                parser_id="pymupdf_fast" if str(candidate.url).endswith(".pdf") else "html_structured",
             )
 
     candidates = [
@@ -450,7 +456,7 @@ async def test_acquisition_metrics_name_the_parser_that_produced_the_text():
         events = await repo.events_after(row.id)
 
     metrics = next(event for event in events if event.event_type == "acquisition_metrics")
-    assert sorted(call["parser_id"] for call in metrics.payload["calls"]) == ["html", "pdf"]
+    assert sorted(call["parser_id"] for call in metrics.payload["calls"]) == ["html_structured", "pymupdf_fast"]
 
 
 @pytest.mark.asyncio
@@ -464,7 +470,7 @@ async def test_search_expands_citation_frontier_to_requested_depth():
             "included_families": ["academic"],
             "citation_depth": 2,
         },
-        budget={"max_sources": 10, "results_per_connector": 4},
+        budget={"max_sources": 10, "results_per_connector": 4, "max_wall_minutes": 30},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
         repo = Repository(session, actor=acting_principal())
@@ -500,7 +506,7 @@ async def test_public_semantic_scholar_fanout_is_limited_per_round():
             "profile": "custom", "included_families": ["academic"],
             "included_connectors": ["semantic_scholar"], "citation_depth": 0,
         },
-        budget={"max_sources": 10, "results_per_connector": 2},
+        budget={"max_sources": 10, "results_per_connector": 2, "max_wall_minutes": 30},
     )
     registry = CitationRegistry()
     missions = [
@@ -532,6 +538,9 @@ async def test_pipeline_resumes_to_auditable_export():
         research_mode="focused_answer",
         connectors={"profile": "custom", "included_families": ["web"]},
         budget={"max_rounds": 2, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
+        # Unattended run: the plan gate is on by default and would park this at
+        # awaiting_input before SEARCH. Approving it is covered in test_hitl.py.
+        hitl={"plan_review": False},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
         repo = Repository(session, actor=acting_principal())
@@ -578,6 +587,7 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
         research_mode="focused_answer",
         connectors={"profile": "custom", "included_families": ["web"]},
         budget={"max_rounds": 1, "max_sources": 5, "max_wall_minutes": 5, "results_per_connector": 2},
+        hitl={"plan_review": False},
     )
     async with SessionLocal() as session, httpx.AsyncClient() as client:
         repo = Repository(session, actor=acting_principal())
@@ -619,6 +629,7 @@ async def test_checkpoint_refuses_a_state_over_the_size_limit(monkeypatch):
         run = await repo.create_run(ResearchProtocol(
             title="Checkpoint size",
             primary_question="Does the checkpoint guard reject oversized state?",
+            budget={"max_wall_minutes": 30},
         ))
         monkeypatch.setattr("research_platform.repository.CHECKPOINT_MAX_BYTES", 2048)
 
@@ -644,6 +655,7 @@ async def test_frontier_skips_hostless_links_instead_of_failing_the_run():
         run = await repo.create_run(ResearchProtocol(
             title="Frontier hostless",
             primary_question="Does a hostless link abort the frontier?",
+            budget={"max_wall_minutes": 30},
         ))
         added = await repo.add_frontier_links(
             run.id,

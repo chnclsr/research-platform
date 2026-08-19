@@ -53,6 +53,10 @@ class ZoteroSyncService:
                 "zotero_collections": request.collections,
                 "zotero_tags": request.tags,
             },
+            # A corpus sync is not a research run: it never enters the pipeline and no
+            # wall-clock budget is ever consulted. The value is stated rather than
+            # defaulted only because the protocol now requires it to be a deliberate one.
+            budget={"max_wall_minutes": 60},
         )
         run = await self.repo.create_run(protocol)
         await self.repo.update_run(

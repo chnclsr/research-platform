@@ -37,7 +37,7 @@ def official_protocol() -> ResearchProtocol:
             "profile": "custom",
             "included_families": ["web", "official_legal", "code_data"],
         },
-        budget={"max_sources": 12},
+        budget={"max_sources": 12, "max_wall_minutes": 30},
     )
 
 
@@ -99,6 +99,7 @@ def test_required_sentinel_becomes_exact_seeded_search_mission():
             url="https://arxiv.org/abs/2108.09293",
             persistent_id="arxiv:2108.09293",
         )],
+        budget={"max_wall_minutes": 30},
     )
     mission = next(
         item for item in initial_missions(protocol, [protocol.primary_question])
@@ -120,6 +121,7 @@ def test_missing_sentinel_creates_exact_recovery_mission():
             url="https://arxiv.org/abs/2108.09293",
             persistent_id="arxiv:2108.09293",
         )],
+        budget={"max_wall_minutes": 30},
     )
     gaps = diagnose_gaps(
         protocol,
@@ -246,7 +248,7 @@ def test_literature_scan_probe_uses_family_connectors_and_more_acquisition_slots
             "academic": {"minimum_sources": 5},
             "web": {"minimum_sources": 2},
         },
-        budget={"results_per_connector": 12},
+        budget={"results_per_connector": 12, "max_wall_minutes": 30},
     )
     missions = literature_scan_probe_missions(protocol, 2)
     assert {mission.required_family for mission in missions} == {

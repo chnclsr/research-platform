@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.10.0`
 
-Belge sürümü: `12.1`
+Belge sürümü: `12.3`
 
 Son güncelleme: `2026-08-19`
 
@@ -27,8 +27,10 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 12 | Panelden parola değiştirme | `fc3199d` |
 | 13 | Ekip kuyruğunun sansürlü görünürlüğü | `fc3199d` |
 | 14 | MCP'de kişisel kimlik | `d88a32a` |
-| 15 | Aşama başına araç dökümü (panel) | commit bekliyor |
-| 16 | İkili içerik ve NUL baytı koşuyu düşürüyordu | commit bekliyor |
+| 15 | Aşama başına araç dökümü (panel) | `b8ec33b` |
+| 16 | İkili içerik ve NUL baytı koşuyu düşürüyordu | `b8ec33b` |
+| 17 | Zorunlu plan onayı ve zorunlu araştırma süresi | commit bekliyor |
+| 18 | Telegram botu SERVICE_TOKEN ve granüler parser motorları | commit bekliyor |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -1449,6 +1451,181 @@ metnin hâlâ `"text"` olduğu, ve `_document()` çıktısının hiçbir alanın
 
 ---
 
+## 17. Koşu öncesi zorunlu plan onayı ve zorunlu araştırma süresi
+
+### Sorun
+
+Bir koşu "başlat" denildiği anda aramaya başlıyordu ve ne yapacağının önemli bir kısmı o
+ana kadar hiçbir yerde görünmüyordu: sorunun metninden **otomatik çıkarılan tarih
+aralığı**, `max_rounds`'un `literature_scan` modunda yok sayılması, hangi modellerin
+kullanılacağı, hangi çıktıların üretileceği. Bunlar ancak koşu bittikten sonra olay
+akışından geriye dönük anlaşılıyordu. Süre de sessiz bir varsayılandı: `max_wall_minutes`
+verilmezse 45 dakika kabul ediliyor ve kullanıcı bunu hiç görmüyordu.
+
+### Süre: zorunluluk modelde, istek sınırında değil
+
+`ResearchBudget.max_wall_minutes` ve `ResearchProtocol.budget` varsayılansız hâle geldi.
+Zorunluluğu istek doğrulayıcısına koymak daha ucuzdu — 42 çağrı yerine dokunmadan — ama
+o zaman `zotero_sync`, Telegram varsayılanları ya da ileride eklenecek herhangi bir iç yol
+sessizce 45 dakikalık bir bütçe kurmaya devam edebilirdi. Modelde zorunlu olunca **süresi
+belirtilmemiş bir protokol hiçbir yolda kurulamıyor**, ve API tarafında ayrı bir
+doğrulayıcı yazmaya da gerek kalmıyor: FastAPI 422 ile
+`loc: ["body","protocol","budget","max_wall_minutes"]` döndürüyor.
+
+Bedeli 42 çağrı yerinin açık süre alması oldu (40'ı test fixture'ı). `zotero_sync` bir
+araştırma koşusu değil ve duvar saati bütçesi orada hiç okunmuyor; oraya açık bir değer ve
+gerekçesi yazıldı — görünmez 45 dakika yerine görünür ve açıklanmış bir sayı.
+
+Yüzeyler: MCP `start_research`'te `max_wall_minutes` varsayılanını kaybetti ve araç
+şemasında artık `required: question, max_wall_minutes` görünüyor; Langflow bileşenine
+zorunlu girdi eklendi; Telegram zaten `has_explicit_duration` ile süre sormadan koşu
+başlatmıyordu ve bu davranış artık testle korunuyor.
+
+### Telegram: varsayılanı ezen bayrak
+
+İlk sürüm Telegram'ı "değişiklik gerekmiyor" diye geçmişti; **yanlıştı.** Bot koşuyu
+açarken dört HITL bayrağını da `--hitl` anahtarına bağlıyordu:
+
+```python
+hitl=HitlConfig(planning_questions=hitl_enabled, plan_review=hitl_enabled, ...)
+```
+
+Yani `--hitl` yazılmayan her `/research`, `plan_review=false` **göndererek** yeni
+varsayılanı eziyordu. Bottan başlatılan ilk örnek koşu (`01M0D2BMN6FC051VKA4VQS5121`)
+planlama aşaması olmadan çalıştı ve hata böyle görüldü. Varsayılanı bir yerde değiştirmek,
+onu açıkça gönderen çağıranları düzeltmez — bu iş sınıfında aranacak ilk şey budur.
+
+Düzeltme: `plan_review` artık `--hitl`'den bağımsız ve varsayılan açık; atlamak için
+`--plansiz` bayrağı var (atlama yetkisinin koşuyu açanda olması kararıyla tutarlı).
+
+### Telegram'da plan onayı görünür hâle geldi
+
+Kapıyı zorunlu yapmak tek başına yetmiyordu: bot koşularını izlemiyordu, yani koşu
+`awaiting_input`'ta sessizce bekliyor ve kullanıcının `/status` yazmayı akıl etmesi
+gerekiyordu. Ayrıca `/status` planın **içeriğini** göstermiyordu, dolayısıyla onay körlemesine
+verilecekti.
+
+Bot artık başlattığı koşuları hafızasında tutuyor ve her long-poll turunda (en fazla ~1
+dakika gecikmeyle) durumlarını yokluyor; `plan_review` beklemeye düşen koşunun plan özetini
+ve `/respond <id> approve|reject <gerekçe>` komutlarını sohbete yazıyor. Özet
+`plan_summary()` ile üretiliyor: Telegram'ın 4096 karakter sınırına sığacak şekilde soru,
+alt sorular, ilk sorgu dalları, bütçe, **bağlayıcı olmayan sınırlar**, tarih kapsamı
+(sorudan çıkarıldıysa notuyla) ve strateji notu.
+
+İzleme listesi süreçte tutuluyor; bot yeniden başlarsa unutulur ve kullanıcı `/status`'a
+düşer. Bilinçli: bu bir bildirim kolaylığı, koşunun durumu değil — koşu ve planı
+veritabanında duruyor.
+
+### Plan kapısı
+
+`hitl.plan_review` varsayılanı `True` oldu. Atlama yetkisi **koşuyu açanda**: `false`
+gönderen bir çağıran kapıyı atlar ve bu karar `plan_skipped` olayı olarak yazılır. Kurulum
+düzeyinde bir yasak konmadı; başsız otomasyonun tıkanmaması bunu gerektiriyordu.
+
+Kapı `build_query_branches` sonunda, SEARCH'ten hemen önce duruyor — plan ancak
+ayrıştırma ve sorgu üretimi bittikten sonra kurulabilir. Reddedilirse koşu **DECOMPOSE'a
+geri sarılır**, geri bildirim alt sorulara katılır ve sorgular yeniden üretilir; en fazla
+`plan_max_revisions` (3) tur, sonra koşu iptal edilir.
+
+`_maybe_hitl` ikiye ayrıldı. Diğer üç kapı geçmişte bir yanıt bulduğunda hep onu döndürür;
+plan kapısı bunun tersini ister, bu yüzden durdurma kısmı `_request_input` olarak ayrıldı
+ve kapı kendi döngüsünü yönetiyor.
+
+**Yakalanan sıralama hatası:** geri bildirim ilk yazılışta checkpoint'lenmiş state'ten
+okunuyordu. Checkpoint, beklediği reddedilmeden **önce** yazıldığı için state bir tur
+geride kalıyor ve yeniden kurulan plan reddedilen planın aynısı çıkıyordu. Kaynak
+`hitl_history`'ye çevrildi (`_plan_feedback`); canlı doğrulamada ikinci turda
+`FDA regulatory clearance...` ve `CE marking status...` dalları üretildi.
+
+### Plan belgesi
+
+Yeni `research_plan.py`, ağ çağrısı yapmayan saf bir modül. İçeriği: sorular, sorgu
+dalları, kaynak seçimi ayarları, tarih kapsamı, bütçe, **etkin sınırlar**, durdurma
+ölçütleri, modeller, edinim strateji sırası ve parser'lar, çıktılar, kalan onay noktaları,
+önceki geri bildirimler ve LLM'in yazdığı kısa strateji notu. Not ayrı bir alanda durur ve
+üretilemezse boş kalır — plan onsuz da eksiksizdir.
+
+**Connector listesi bilinçli olarak plana konmadı.** Hangi connector'ın çağrılabildiği
+çalışma anına ait, zamanla değişen bir olgudur; plan saatlerce onay bekleyebileceği için
+orada tutamayacağı bir söz vermiş olurdu. Bu bilgi `connectors_skipped` olayında ve panelin
+aşama × araç tablosunda kalıyor.
+
+"Etkin sınırlar" bölümü hangi sınırın gerçekten durdurucu olduğunu söylüyor. Canlı
+doğrulamada üretilen plan, `max_rounds=4` için `bağlayıcı=hayır` ve gerekçesini yazdı —
+bu tam olarak 19 Ağustos'ta bir koşuyu izlerken şaşırdığımız davranıştı.
+
+**Tarih çıkarımı kaydediliyor, yeniden hesaplanmıyor.** İlk sürüm çıkarımı plan anında
+tekrar çalıştırıp karşılaştırıyordu; zaman damgaları saniyeler kaydığı için sonuç her
+zaman "çıkarım yok" çıkıyordu. `ResearchScope.dates_inferred` alanı eklendi ve çıkarımı
+yapan doğrulayıcı onu işaretliyor.
+
+### Zaman aşımı
+
+Diğer kapılar 5 dakikada sönüyor; insan onayı bekleyen bir plan için bu çok kısaydı.
+`hitl_plan_timeout_minutes` (varsayılan 1440) eklendi. Süre dolması veri kaybı değil —
+`respond` ucu `paused` koşuları da kabul ediyor — ama gereksiz "duraklatıldı" gürültüsü
+üretmiyor.
+
+### Doğrulama
+
+Canlı kurulumda ölçülenler (koşu `01M0D0N89XRBS36PPGPRXSSYKV`):
+
+| Adım | Sonuç |
+|---|---|
+| Süresiz `POST /v1/research-runs` | 422 |
+| Süreli koşu | `awaiting_input`, `research_plan` olayı yazıldı |
+| Plan onaylanmadan SEARCH | `connector_metrics` sayısı **0** |
+| Red + gerekçe | Yeni plan, revizyon 1 |
+| İkinci red | Revizyon 2; sorgulara FDA/CE dalları eklendi |
+| Onay + süre 20 → 12 | Koşu SEARCH'e geçti, `protocol.budget.max_wall_minutes = 12`, `plan_duration_changed` olayı |
+| MCP `tools/list` | `required: question, max_wall_minutes` |
+| Telegram `/research` (bayraksız) | Plan kapısı açık; bot plan özetini sohbete yazıyor |
+
+265 test geçiyor. Panelin plan kartı bölümlere ayrıldı (sorular, sorgu dalları, kaynak
+seçimi, etkin sınırlar, modeller, çıktılar, strateji notu), süre girdisi eklendi ve
+"Değişiklik iste" artık gerekçesiz gönderilemiyor — gerekçe yeniden planlamanın tek girdisi.
+
+---
+
+## 18. Telegram botu SERVICE_TOKEN düzeltmesi ve granüler parser motorları
+
+### 1. Telegram Botu `SERVICE_TOKEN` Uyuşmazlığı (`401 Unauthorized`)
+
+**Olay:** Kullanıcı Telegram botu üzerinden `/research` komutunu başlattığında ve süre butonunu seçtiğinde API'ye `POST /v1/research-runs` isteği atılıyor, ancak istek `401 Unauthorized: Invalid bearer credential` ile reddediliyordu.
+
+**Kök Neden:** `v0.10.0` ile çok kullanıcılı güvenlik modelinde `SERVICE_TOKEN` ayrılmıştı. `api.py`, aracı servislerden `X-Actor-User` ile gelen çağrılarda `settings.service_token or settings.api_token` beklerken, `telegram_bot.py` içerisindeki `ResearchGatewayClient` istemcisi `self.settings.api_token` ile başlatılmıştı. `.env` içinde `SERVICE_TOKEN` ve `API_TOKEN` farklı değerler taşıdığından API isteği yetkisiz sayıyordu.
+
+**Uygulanan Çözüm:** `telegram_bot.py` içindeki gateway istemcisi `self.settings.service_token or self.settings.api_token` olarak güncellendi.
+
+---
+
+### 2. Granüler Parser Motorları (`pymupdf_fast`, `pypdf`, `html_structured`, `plain_text`)
+
+**Olay:** Web Kontrol Paneli `ACQUIRE` aşamasındaki telemetri tablosunda ayrıştırıcı araç isimleri jenerik (`pdf`, `html`) olarak gösteriliyordu. Arkada PyMuPDF mi yoksa pypdf mi çalıştığı belirsiz kalıyor, gelecekte eklenecek yeni parser motorlarının (örn. `docling_pdf`, `marker_ocr`) ayırt edilmesi mümkün olmuyordu.
+
+**Uygulanan Çözüm:**
+1. **`PyMuPdfParser` (`pymupdf_fast`):** PyMuPDF / `fitz` tabanlı, iki sütunlu akademik makaleleri doğru okuma sırasında süper hızlı işleyen birincil PDF motoru (`priority = 10`).
+2. **`PyPdfParser` (`pypdf`):** Saf Python tabanlı güvenilir yedek PDF motoru (`priority = 0`).
+3. **`HtmlParser` (`html_structured`):** Tabloları Markdown'a dönüştüren ve kod bloklarını koruyan yapılandırılmış HTML motoru (`priority = 10`).
+4. **`PlainTextParser` (`plain_text`):** Düz metin, JSON ve XML anahtar-değer ayrıştırıcısı.
+5. **Otomatik Fallback ve Seçim:** `ParserRegistry` sınıfına `candidates()` metodu eklendi. Birincil motor (`pymupdf_fast`) bozuk veya hasarlı bir PDF ile karşılaştığında, `acquisition.py` edinim sürecini düşürmeden otomatik olarak sıradaki motora (`pypdf`) düşer.
+6. **Denetlenebilirlik (Provenance):** Hangi motor çalıştıysa veritabanına (`source_versions.provenance`), teslimat dosyalarına (`13_raw_sources.jsonl`, `18_structured_extracts.json`) ve kontrol paneli arayüzüne tam motor adıyla yazılır.
+
+---
+
+### 3. Kontrol Paneli Başlık Güncellemesi
+
+* Web Kontrol Panelinde (`control_panel_ui.py` ve `CONTROL_PANEL_GUIDE.md`) "Ekipteki diğer işler" başlığı, netlik ve kullanıcı deneyimi için **"Aktif Koşular"** olarak güncellendi.
+
+---
+
+### Doğrulama
+
+* `tests/test_parsers.py` (34 test), `tests/test_research_plan.py` (5 test), `tests/test_pipeline.py` (19 test) ve tüm test paketi (269 test) çalıştırılarak tam doğrulama sağlandı.
+* Docker container'ları yeniden derlenip canlı ortamda doğrulandı.
+
+---
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her
@@ -1456,3 +1633,4 @@ madde için ölçümler ve yapılacak iş. Bu raporda bölüm bölüm dağılmı
 notlarının toplandığı yer orası; yeni bir sınır tespit edildiğinde oraya eklenmeli.
 
 Bu bölümü burada çoğaltmıyoruz — iki listenin zamanla birbirinden ayrışması kaçınılmazdı.
+

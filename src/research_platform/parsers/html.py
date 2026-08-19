@@ -147,10 +147,10 @@ def html_to_markdown(html: str) -> str:
 
 
 class HtmlParser(DocumentParser):
-    id = "html"
+    id = "html_structured"
     document_types = ("html",)
     capabilities = ("text", "sections", "tables", "code", "links")
-    priority = 0
+    priority = 10
 
     def parse(self, content: bytes, *, url: str, content_type: str = "") -> ParsedDocument:
         raw = content.decode("utf-8", errors="replace")

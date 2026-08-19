@@ -1,3 +1,4 @@
+import inspect
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +11,37 @@ from research_platform.repository import Repository
 from research_platform.schemas import ResearchProtocol, RunStatus
 
 
+def test_every_entry_surface_demands_a_duration():
+    """The schema stops the API; the other surfaces have to ask before they get there."""
+    from research_platform.mcp_server import start_research
+    from research_platform.telegram_bot import has_explicit_duration
+
+    parameter = inspect.signature(start_research).parameters["max_wall_minutes"]
+    assert parameter.default is inspect.Parameter.empty
+
+    assert has_explicit_duration(["--minutes", "30", "lung", "CT"]) is True
+    assert has_explicit_duration(["45", "lung", "CT"]) is True
+    # No duration in the message: the bot must offer the choice instead of assuming one.
+    assert has_explicit_duration(["lung", "CT", "--hitl"]) is False
+
+
+@pytest.mark.asyncio
+async def test_a_run_cannot_be_created_without_stating_its_duration():
+    """A silent 45-minute default was a decision nobody saw being made."""
+    await ensure_test_user()
+    with TestClient(app) as client:
+        client.headers.update(api_headers())
+        response = client.post("/v1/research-runs", json={
+            "protocol": {
+                "title": "Durationless request",
+                "primary_question": "Can a run start without stating how long it may collect?",
+            }
+        })
+    assert response.status_code == 422, response.text
+    locations = [".".join(str(part) for part in error["loc"]) for error in response.json()["detail"]]
+    assert any("max_wall_minutes" in item or item.endswith("budget") for item in locations)
+
+
 @pytest.mark.asyncio
 async def test_create_and_read_run():
     await ensure_test_user()
@@ -20,6 +52,7 @@ async def test_create_and_read_run():
                 "title": "API acceptance test",
                 "primary_question": "Can the API create a validated research run?",
                 "connectors": {"profile": "core"},
+                "budget": {"max_wall_minutes": 30},
             }
         })
         assert response.status_code == 200, response.text
@@ -57,6 +90,7 @@ async def test_startup_reconciles_queued_and_cancel_requested_runs():
     protocol = ResearchProtocol(
         title="Queue reconciliation",
         primary_question="Can interrupted queue records be recovered safely?",
+        budget={"max_wall_minutes": 30},
     )
     async with SessionLocal() as session:
         repo = Repository(session, actor=acting_principal())

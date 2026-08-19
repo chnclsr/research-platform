@@ -130,6 +130,12 @@ class Settings(BaseSettings):
     telegram_default_max_rounds: int = Field(3, ge=1, le=12)
     user_agent: str = "ResearchPlatform/0.1 (local research; contact=local)"
 
+    # The plan gate waits on a person, not on a service: five minutes -- the window the
+    # other checkpoints use -- would park most runs before anyone opened the panel.
+    hitl_plan_timeout_minutes: int = Field(1440, ge=5, le=20160)
+    # How many times a rejected plan may be rebuilt before the run is given up on.
+    plan_max_revisions: int = Field(3, ge=1, le=10)
+
     max_download_bytes: int = 25 * 1024 * 1024
     request_timeout_s: float = 25.0
     pipeline_control_poll_s: float = Field(1.0, ge=0.1, le=10.0)

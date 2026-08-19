@@ -295,6 +295,7 @@ async def test_repository_merges_provider_snapshots_by_doi_and_saves_relations()
         run = await repo.create_run(ResearchProtocol(
             title="Academic dedupe",
             primary_question="Does provider deduplication preserve provenance?",
+            budget={"max_wall_minutes": 30},
         ))
         for connector, url in (
             ("openalex", "https://openalex.org/W1"),

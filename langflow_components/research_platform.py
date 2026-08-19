@@ -26,6 +26,9 @@ class BuildResearchProtocol(Component):
         MultilineInput(name="sub_questions", display_name="Sub-questions (one per line)"),
         DropdownInput(name="profile", display_name="Connector Profile", options=["core", "all"], value="core"),
         StrInput(name="report_language", display_name="Report Language", value="tr"),
+        # Required: the platform refuses a protocol that does not state how long the run
+        # may collect, so the flow has to ask rather than inherit a hidden default.
+        StrInput(name="max_wall_minutes", display_name="Max Wall Minutes", required=True),
     ]
     outputs = [Output(name="protocol", display_name="Protocol", method="build_protocol")]
 
@@ -46,6 +49,7 @@ class BuildResearchProtocol(Component):
             "languages": [self.report_language, "en"] if self.report_language != "en" else ["en"],
             "report_language": self.report_language,
             "connectors": {"profile": self.profile, "included_families": families},
+            "budget": {"max_wall_minutes": int(self.max_wall_minutes)},
         })
 
 

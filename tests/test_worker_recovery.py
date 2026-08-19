@@ -32,6 +32,7 @@ async def test_worker_startup_recovers_orphans_and_finalizes_pending_cancel():
     protocol = ResearchProtocol(
         title="Worker recovery",
         primary_question="Can interrupted jobs resume safely?",
+        budget={"max_wall_minutes": 30},
     )
     async with SessionLocal() as session:
         repo = Repository(session, actor=acting_principal())

@@ -16,6 +16,7 @@ def protocol() -> ResearchProtocol:
         title="Discovery quality",
         primary_question="Which lung CT radiomics systems estimate cancer risk?",
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
 
 
@@ -38,6 +39,7 @@ def test_academic_query_compiler_prioritizes_translated_turkish_medical_anchors(
             "nodül malignite tahmini yapan çalışmaları bul."
         ),
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
     compiled = compile_provider_query(
         "openalex",
@@ -55,6 +57,7 @@ def test_literature_query_branch_inherits_primary_subject_context():
         title="Context-preserving literature scan",
         primary_question="Multimodal vision-language models in radiology clinical safety",
         connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
     )
     compiled = compile_provider_query(
         "crossref",
