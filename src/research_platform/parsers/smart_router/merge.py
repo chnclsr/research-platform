@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence
 
+from .ayarlar import AYAR
 from .engines import EngineResult
 
 # Levels 1-5 shift down one; level 6 has nowhere to go and is left alone.
@@ -77,6 +78,7 @@ def birlestir(
     decisions: Optional[Dict[int, List[str]]] = None,
     requested: Optional[Dict[str, Sequence[int]]] = None,
     score: Optional[Callable[[str], Optional[float]]] = None,
+    tolerans: float = AYAR.karantina_tolerans,
 ) -> MergedDocument:
     """
     Merge fast-path text with heavy-engine output, page by page.
@@ -92,6 +94,13 @@ def birlestir(
     engine's page only replaces the fast one if it does not score worse -- the
     output check the pipeline was missing. Without it every non-empty heavy page
     wins, which is the old behaviour.
+
+    `tolerans` widens that check to `heavy >= fast - tolerans`. At 0.0 -- today's
+    setting, and what every measurement so far was taken with -- any drop at all
+    quarantines the page, and a tie decided in the third decimal counts as a drop:
+    measured over 261 pages, 16 of 37 quarantines had the two scores within 0.1 of
+    each other, so those were coin flips that also cost the heavy engine's table
+    grid. A calibrated dead band belongs in the profile, not here.
     """
     decisions = decisions or {}
     requested = requested or {}
@@ -115,7 +124,7 @@ def birlestir(
             if not (text and text.strip()):
                 continue
             page_no = int(page_no)
-            if not _is_improvement(score, fast_pages.get(page_no, ""), text):
+            if not _is_improvement(score, fast_pages.get(page_no, ""), text, tolerans):
                 # Being expensive does not make output better. Docling was once
                 # observed turning "unidirectionality constraint by using a masked
                 # language model" into "unidi-eat i, a inn otlinnolns guage model"
@@ -177,7 +186,8 @@ def birlestir(
 
 
 def _is_improvement(
-    score: Optional[Callable[[str], Optional[float]]], fast: str, heavy: str
+    score: Optional[Callable[[str], Optional[float]]], fast: str, heavy: str,
+    tolerans: float = 0.0,
 ) -> bool:
     """
     Is the heavy engine's version at least as good as the one we already had?
@@ -185,6 +195,10 @@ def _is_improvement(
     Unscoreable either way (no scorer, empty fast text, a grader that returns
     None) means we cannot tell, and the heavy page wins by default -- it was
     requested for a reason. Only a measured drop keeps the fast text.
+
+    `tolerans` is how much of a drop still counts as "as good": 0.0 means any
+    drop at all, which is what the pipeline has always done. See `birlestir`
+    for why a dead band is worth calibrating.
     """
     if score is None or not fast.strip():
         return True
@@ -194,7 +208,7 @@ def _is_improvement(
         return True
     if fast_score is None or heavy_score is None:
         return True
-    return heavy_score >= fast_score
+    return heavy_score >= fast_score - tolerans
 
 
 def sayfa_basliklariyla(document: MergedDocument) -> str:

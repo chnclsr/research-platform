@@ -1,0 +1,116 @@
+# smart_router yönlendirme profili
+#
+# Bu dosya PDF'in hangi sayfasının ağır motora (Docling) gideceğini belirleyen
+# bütün eşikleri taşır. Buradaki her değer ÇIKTIYI DEĞİŞTİRİR: bir eşiği
+# oynatmak farklı sayfaları ağır yola yollar, bu da farklı metin ve farklı
+# `content_hash` demektir.
+#
+# Bu yüzden:
+#   * `esik_version` ELLE YAZILMAZ. Etkin ayarların sha256'sından türetilir
+#     (`ayarlar.py`), provenance'a yazılır. Eşik değişince sürüm kendiliğinden
+#     değişir, güncellemeyi unutmak mümkün değildir.
+#   * Bu dosya bir koşu başlarken bir kez okunur ve dondurulur. Çalışma anında
+#     değişmez — determinizm bir tercih değil, `registry.py`'nin şartı.
+#   * Dosya yoksa veya bozuksa kod gömülü varsayılanlara düşer ve uyarıyı
+#     provenance'a yazar. Tek yazım hatası PDF hattını durdurmaz.
+#
+# BURAYA KONMAYACAK OLANLAR:
+#   * `KRITIK_TETIKLEYICI` / `UYARI` kümeleri — bunlar sayı değil teşhis tanımı.
+#     "TOTAL_TEXT_DROPPED kritiktir" bir ayar değil, bir anlamdır.
+#   * `priority = 10` — registry sözleşmesi.
+#   * Eşzamanlılık, timeout, Docling köprüsü — bunlar çıktıyı değil dağıtımı
+#     ilgilendirir, `.env` ile yönetilir (SMART_ROUTER_MAX_CONCURRENT_HEAVY,
+#     SMART_ROUTER_DOCLING_PYTHON).
+#
+# Yolu `.env` içindeki `SMART_ROUTER_CONFIG_PATH` ile değiştirilebilir.
+
+profil_adi: gate_v2_kalibre_edilmedi
+
+# --------------------------------------------------------------------------
+# KAPI — sayfa başına sinyal eşikleri (eski gate.ESIK)
+# --------------------------------------------------------------------------
+kapi:
+  metin:
+    sayfa_min_karakter: 100      # altında sayfa "metinsiz" sayılır
+    bos_sayfa_karakter: 20       # altında ve görselsiz/çizimsizse "boş"
+    taranmis_kaplama: 0.50       # görsel sayfanın bu kadarını kaplıyorsa taranmış
+    bozuk_karakter_orani: 0.05
+
+  # Ölçüldü (261 + 200 sayfa): recall 0,93 / 0,98 · precision 0,55 / 0,51
+  # Yüksek güven kademesi (inspector AND v2): precision 0,75 / 0,87
+  # C2 taraması en iyi adayı inspector_and_v2 · ort 8 · dolu 6 · sütun 2 · satır 3
+  # (precision 0,833 · recall 0,896) buldu ama holdout olmadığı için UYGULANMADI.
+  tablo:
+    ortogonal_cizgi: 6
+    dolu_dikdortgen: 8
+    izgara_sutun: 3
+    izgara_satir: 4
+    izgara_bosluk: 12.0          # kelimeler arası bu boşluk hücre sınırı sayılır
+    izgara_y_tolerans: 3.0       # aynı satır sayılan y farkı
+
+  # Ölçüldü (261 + 200 sayfa): recall 0,99 / 0,99 · precision 0,69 / 0,62
+  # Kural: cluster_drawings() OR get_images(full=True). Eski kural 0,63 / 0,76 idi.
+  sekil:
+    kume_kaplama: 0.03           # çizim kümesi sayfanın bu kadarını kaplıyorsa şekil
+
+# --------------------------------------------------------------------------
+# YÖNLENDİRME — hangi sayfa ağır motora gider
+# --------------------------------------------------------------------------
+# Kural: needs_ocr ∪ has_table ∪ {kalite < esik} ∪ {kritik teşhis}
+# has_figure TETİKLEYİCİ DEĞİLDİR (gate.sayfa_secici docstring'i, ölçümüyle).
+yonlendirme:
+  # KALİBRE EDİLMEDİ (plan D12). Ölçülen sayfa skoru dağılımı: medyan 95,0,
+  # 261 sayfanın 68'i bu eşiğin altında. Sayfa bazlı skorlar belge bazlıdan
+  # 9/9 belgede +9,9…+23,4 yüksek çıkıyor, yani 75 bu ölçekte düşük kalabilir.
+  kalite_esik: 75.0
+
+  # true = yalnız `tablo_guven == "yuksek"` sayfalar tabloyla tetiklenir.
+  # Bu bir KALİBRASYON anahtarıdır, çalışma anı bütçesi DEĞİLDİR (plan 8.3).
+  yuksek_guven_yeter: false
+
+# --------------------------------------------------------------------------
+# BİRLEŞTİRME — ağır motorun çıktısı kabul edilir mi
+# --------------------------------------------------------------------------
+birlestirme:
+  # Ağır sayfa yalnız `heavy_skor >= fast_skor - tolerans` ise kabul edilir.
+  # 0.0 = ölü bant yok, bugünkü davranış. Ölçüldü (261 sayfa): 37 karantinanın
+  # 16'sında iki skor arasındaki fark 0,1 puandan küçük, yani karar fiilen
+  # yazı-tura. Kalibrasyondan sonra 0,5 civarı denenmeli.
+  karantina_tolerans: 0.0
+
+  # `smart_pdf._page_scorer` — karantina kararının verildiği bozulma skoru.
+  # `critic_ceza`'dan AYRI olması bilinçli: o bir sayfayı notlandırır, bu iki
+  # motorun aynı sayfa için ürettiği iki metni karşılaştırır.
+  #
+  # DİKKAT — ölçülmüş bir tutarsızlık: aynı iki sinyal `critic_ceza`'da farklı
+  # katsayılarla duruyor (unicode 10,0 ve gibberish ×300 orada; 20,0 ve ×100
+  # burada). Hangisinin doğru olduğu kalibrasyon sorusu (plan D12).
+  corruption:
+    gibberish_kat: 100.0
+    unicode_ceza: 20.0
+
+# --------------------------------------------------------------------------
+# CRITIC CEZA KATSAYILARI — kalite skorunun kendisi (eski critic.SAYFA_CEZA)
+# --------------------------------------------------------------------------
+# KALİBRE EDİLMEDİ. Bu değerler `evaluate()`'in DÜZ METNE göre ayarlanmış
+# değerlerinden taşındı; plan D12 markdown ve SAYFA ölçeğinde yeniden
+# kalibrasyon şart koşuyor (sayfa başına metin az, oranların varyansı yüksek).
+#
+# Her metrik: skor 100'den başlar, `esik` aşılırsa
+#     ceza = min((olculen - esik) * kat, tavan)
+# kadar düşer.
+critic_ceza:
+  char_drop:        {esik: 0.10, kat: 120.0, tavan: 45.0}
+  gibberish:        {esik: 0.02, kat: 300.0, tavan: 25.0}
+  dangling:         {esik: 0.08, kat: 160.0, tavan: 35.0}
+  broken:           {esik: 0.35, kat: 50.0,  tavan: 15.0}
+  hyphen:           {esik: 3.0,  kat: 1.5,   tavan: 15.0}
+  orphan:           {esik: 5.0,  kat: 1.0,   tavan: 10.0}
+  latex:            {kat: 5.0,   tavan: 20.0}
+  tablo_duzensiz:   {esik: 0.15, kat: 40.0,  tavan: 15.0}
+  baslik_tutarsiz:  {esik: 0.20, kat: 30.0,  tavan: 10.0}
+
+  # Eşiksiz, sabit cezalar
+  sabit:
+    scanned: 60.0
+    unicode_bozuk: 10.0          # D6: ikili varlık sinyali (kalibre edilmedi)

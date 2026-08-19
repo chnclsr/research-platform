@@ -19,6 +19,7 @@ Kapi 0,65-14,84 ms/sayfa; Docling 1.550 ms/sayfa — kapi 100+ kat ucuz.
 secemiyor, yalniz kuyruk onceligi icin duruyor (plan D8).
 """
 
+from .ayarlar import AYAR, Ayarlar, yukle as ayarlari_yukle
 from .critic import PDFCritic
 from .gate import ESIK_VERSION, GirisKapisi, SayfaBayrak, kritik_mi, sayfa_secici
 from .inspector import InspectorSonuc, PdfInspectorAdapter, InspectorSayfa
@@ -26,6 +27,7 @@ from .orchestrator import ROUTER_VERSION, SmartRouterHatti, kuyruk_skoru
 from .pages import ardisik_bloklar, cagri_plani, api_icin, normalize
 
 __all__ = [
+    "AYAR", "Ayarlar", "ayarlari_yukle",
     "PDFCritic", "GirisKapisi", "SayfaBayrak", "sayfa_secici", "kritik_mi",
     "ESIK_VERSION", "PdfInspectorAdapter", "InspectorSonuc", "InspectorSayfa",
     "SmartRouterHatti", "kuyruk_skoru", "ROUTER_VERSION",

@@ -60,30 +60,22 @@ from typing import Any, Dict, List, Optional
 
 import pymupdf
 
+from .ayarlar import AYAR
 from .inspector import InspectorSonuc, PdfInspectorAdapter, PROFIL_INSPECTOR
 
 # --------------------------------------------------------------------------
-# ESIKLER — hepsi tek yerde, kalibrasyon (plan D12) buradan yapilir
+# ESIKLER — degerler `config/smart_router.yaml` icinde, gomulu varsayilanlar
+# `ayarlar.VARSAYILAN` altinda. Kalibrasyon (plan D12) profil dosyasindan
+# yapilir; burada yalniz etkin profile bakilir, sayi yazilmaz.
 # --------------------------------------------------------------------------
-ESIK: Dict[str, float] = {
-    # metin katmani
-    "sayfa_min_karakter": 100,      # altinda sayfa "metinsiz" sayilir
-    "bos_sayfa_karakter": 20,       # altinda ve gorselsiz/cizimsizse "bos"
-    "taranmis_kaplama": 0.50,       # gorsel sayfanin bu kadarini kapliyorsa taranmis
-    "bozuk_karakter_orani": 0.05,
-    # tablo — v2 kurali (olculdu: duyarlilik 0,86 / 0,93 tek basina)
-    "ortogonal_cizgi": 6,
-    "dolu_dikdortgen": 8,
-    "izgara_sutun": 3,
-    "izgara_satir": 4,
-    "izgara_bosluk": 12.0,
-    "izgara_y_tolerans": 3.0,
-    # sekil — D11 ile degisen kural
-    "kume_kaplama": 0.03,           # cizim kumesi sayfanin bu kadarini kapliyorsa sekil
-}
+#: Kopya: `AYAR` dondurulmus, ama tasidigi sozluk degil. Kopyalamazsak burada
+#: yapilan bir degisiklik etkin profili de degistirir ve `esik_version` yalan olur.
+ESIK: Dict[str, float] = dict(AYAR.kapi_esikleri)
 
-#: Kalibrasyon surumu — provenance'a yazilir (plan E8)
-ESIK_VERSION = "gate_v2_2026-08-18_A10_kalibre_edilmedi"
+#: Kalibrasyon surumu — provenance'a yazilir (plan E8). ELLE YAZILMAZ: etkin
+#: ayarlarin sha256'sindan turetilir, boylece bir esik degisip surum ayni
+#: kalamaz. Bkz. `ayarlar._surum()`.
+ESIK_VERSION = AYAR.esik_version
 
 
 # --------------------------------------------------------------------------
@@ -353,8 +345,8 @@ class GirisKapisi:
 def sayfa_secici(bayraklar: Dict[int, SayfaBayrak],
                  kalite: Optional[Dict[int, Optional[float]]] = None,
                  *,
-                 kalite_esik: float = 75.0,
-                 yuksek_guven_yeter: bool = False,
+                 kalite_esik: float = AYAR.kalite_esik,
+                 yuksek_guven_yeter: bool = AYAR.yuksek_guven_yeter,
                  kritik: Optional[Dict[int, Optional[str]]] = None) -> Dict[str, Any]:
     """Agir motora gidecek sayfa listesini kurar.
 

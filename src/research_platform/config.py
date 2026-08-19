@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     figure_source_embedding_enabled: bool = True
     figure_source_max_exports: int = Field(5, ge=0, le=12)
     figure_source_min_confidence: float = Field(0.70, ge=0.0, le=1.0)
+    # Which PDF page goes to the heavy engine. The file is the unit of change: its
+    # contents are hashed into `esik_version` and written to provenance, so a
+    # threshold cannot move without the version moving with it. Read once at import
+    # by parsers/smart_router/ayarlar.py, which falls back to embedded defaults on a
+    # missing or malformed file rather than failing the pipeline -- a typo in a
+    # config file must not take PDF parsing down. Empty means the repository
+    # default, config/smart_router.yaml.
+    smart_router_config_path: str = ""
     passage_target_tokens: int = Field(700, ge=200, le=1800)
     passage_overlap_tokens: int = Field(100, ge=0, le=400)
     passages_per_question: int = Field(8, ge=1, le=30)

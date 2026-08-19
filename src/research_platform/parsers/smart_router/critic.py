@@ -36,8 +36,10 @@ import re
 import statistics
 import time
 import unicodedata
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from collections import Counter
+
+from .ayarlar import AYAR
 
 class PDFCritic:
     """14 Boyutlu Açık Kaynak Standartlarında Kalite ve Yönlendirme Denetleyicisi."""
@@ -47,8 +49,16 @@ class PDFCritic:
     # kod/formul blogu baslangici -- satir gecisi sayilmaz
     BLOK_ONEK = ('$$', '```')
     
-    def __init__(self, fallback_threshold: float = 75.0):
+    def __init__(self, fallback_threshold: float = AYAR.kalite_esik,
+                 ceza: Optional[Dict[str, float]] = None):
+        """`ceza`: sayfa skorunun ceza katsayilari (`SAYFA_CEZA` bicimi).
+
+        Varsayilani modul sonundaki `SAYFA_CEZA` -- orasi da etkin profilden
+        gelir. Burada `None` birakilip cagri aninda cozuluyor, cunku `SAYFA_CEZA`
+        bu siniftan SONRA tanimli; varsayilan deger olarak yazilsa NameError olur.
+        """
         self.fallback_threshold = fallback_threshold
+        self.ceza = dict(ceza) if ceza else SAYFA_CEZA
 
     def evaluate(self, router_json: Dict[str, Any], inspector_text: str) -> Dict[str, Any]:
         start_time = time.perf_counter()
@@ -420,7 +430,7 @@ class PDFCritic:
             return {"quality_score": None, "critical_issue": "BOS_SAYFA",
                     "olculemedi": True}
 
-        C = SAYFA_CEZA
+        C = self.ceza
         skor = 100.0
         cd = m.get("char_drop_ratio")
 
@@ -604,37 +614,11 @@ MD_ISARET = re.compile(r"[#|*`_>\-]+")
 #: D7 geregi yalniz belge duzeyinde hesaplanabilen metrikler
 BELGE_DUZEYI_METRIKLER = ("running_header_leak_ratio", "repetition_loop_ratio")
 
-#: Sayfa skorunun ceza katsayilari — TEK YERDE, kalibrasyon buradan yapilir
-SAYFA_CEZA: Dict[str, float] = {
-    "char_drop_esik": 0.10,
-    "char_drop_kat": 120.0,
-    "char_drop_tavan": 45.0,
-    "scanned": 60.0,
-    "gibberish_esik": 0.02,
-    "gibberish_kat": 300.0,
-    "gibberish_tavan": 25.0,
-    "unicode_bozuk": 10.0,        # D6: ikili sinyal, sabit ceza (kalibre edilmedi)
-    "dangling_esik": 0.08,
-    "dangling_kat": 160.0,
-    "dangling_tavan": 35.0,
-    "broken_esik": 0.35,
-    "broken_kat": 50.0,
-    "broken_tavan": 15.0,
-    "hyphen_esik": 3.0,
-    "hyphen_kat": 1.5,
-    "hyphen_tavan": 15.0,
-    "orphan_esik": 5.0,
-    "orphan_kat": 1.0,
-    "orphan_tavan": 10.0,
-    "latex_kat": 5.0,
-    "latex_tavan": 20.0,
-    "tablo_duzensiz_esik": 0.15,
-    "tablo_duzensiz_kat": 40.0,
-    "tablo_duzensiz_tavan": 15.0,
-    "baslik_tutarsiz_esik": 0.20,
-    "baslik_tutarsiz_kat": 30.0,
-    "baslik_tutarsiz_tavan": 10.0,
-}
+#: Sayfa skorunun ceza katsayilari. Degerler `config/smart_router.yaml` ->
+#: `critic_ceza`, gomulu varsayilanlar `ayarlar.VARSAYILAN`. Kopya alinir: `AYAR`
+#: dondurulmus ama sozlugu degil, burada yapilan bir degisiklik etkin profili de
+#: degistirir ve `esik_version` yalan olurdu.
+SAYFA_CEZA: Dict[str, float] = dict(AYAR.critic_ceza)
 
 
 def markdown_isaretsiz(metin: str) -> str:

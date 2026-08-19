@@ -338,3 +338,96 @@ def test_registry_rejects_an_override_that_cannot_handle_the_document_type():
 def test_registry_override_only_applies_to_the_named_document_type():
     registry = _two_html_parsers()
     assert registry.select("pdf", "application/pdf", b"%PDF", {"html": "html_alt"}).id == "pdf"
+
+
+# ---------------------------------------------------------------------------
+# Threshold profile (config/smart_router.yaml)
+# ---------------------------------------------------------------------------
+# The version string used to be hand-written, so it could describe values it no
+# longer matched and provenance would be wrong without anything failing. These
+# pin the two properties that replaced it: the version follows the values, and a
+# broken profile costs the profile rather than the pipeline.
+
+def _profil(tmp_path, govde: str):
+    yol = tmp_path / "smart_router.yaml"
+    yol.write_text(govde, encoding="utf-8")
+    return str(yol)
+
+
+def test_threshold_profile_version_follows_the_values(tmp_path):
+    from research_platform.parsers.smart_router import ayarlari_yukle
+
+    taban = ayarlari_yukle("/nonexistent/profile.yaml")
+    degisik = ayarlari_yukle(_profil(tmp_path, "kapi:\n  tablo:\n    ortogonal_cizgi: 4\n"))
+
+    assert degisik.kapi_esikleri["ortogonal_cizgi"] == 4
+    assert degisik.esik_version != taban.esik_version, (
+        "a threshold moved but the version did not; provenance would be wrong"
+    )
+
+
+def test_a_profile_restating_the_defaults_keeps_the_same_version(tmp_path):
+    """The version describes behaviour, so identical behaviour is the same version."""
+    from research_platform.parsers.smart_router import ayarlari_yukle
+
+    taban = ayarlari_yukle("/nonexistent/profile.yaml")
+    ayni = ayarlari_yukle(_profil(
+        tmp_path, "yonlendirme:\n  kalite_esik: 75.0\n# yorum surumu degistirmez\n"))
+    assert ayni.esik_version == taban.esik_version
+
+
+def test_a_broken_profile_falls_back_to_defaults_and_says_so(tmp_path):
+    """A typo in a config file must not take PDF parsing down."""
+    from research_platform.parsers.smart_router import ayarlari_yukle
+    from research_platform.parsers.smart_router.ayarlar import VARSAYILAN
+
+    ayar = ayarlari_yukle(_profil(tmp_path, "kapi: [bu bir sozluk degil\n"))
+    assert ayar.kalite_esik == VARSAYILAN["yonlendirme"]["kalite_esik"]
+    assert ayar.uyarilar, "the fallback happened silently"
+
+
+def test_a_bad_value_costs_that_value_not_the_whole_profile(tmp_path):
+    """The other thresholds in the file are still better than the defaults."""
+    from research_platform.parsers.smart_router import ayarlari_yukle
+
+    ayar = ayarlari_yukle(_profil(tmp_path, (
+        "kapi:\n"
+        "  tablo:\n"
+        "    ortogonal_cizgi: 4\n"
+        "    dolu_dikdortgen: -3\n"      # negative: nonsense for a count
+        "  sekil:\n"
+        "    bilinmeyen_anahtar: 1\n"    # typo: must not look configured
+    )))
+    assert ayar.kapi_esikleri["ortogonal_cizgi"] == 4
+    assert ayar.kapi_esikleri["dolu_dikdortgen"] == 8
+    assert "bilinmeyen_anahtar" not in ayar.kapi_esikleri
+    assert len(ayar.uyarilar) == 2
+
+
+def test_the_active_profile_reaches_provenance():
+    """An operator has to be able to tell which thresholds parsed a document."""
+    from research_platform.parsers.smart_router import AYAR
+
+    ozet = AYAR.ozet()
+    assert ozet["esik_version"] == AYAR.esik_version
+    assert ozet["kaynak"]
+
+
+# CODEX/CLAUDE: the quarantine rule had no dead band, so a tie decided in the
+# third decimal threw away the heavy page and its table grid. The band is a
+# profile value now; 0.0 keeps every measurement taken so far valid.
+def test_merge_dead_band_keeps_a_heavy_page_that_scored_marginally_lower():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(engine="docling", pages={1: "heavy"})
+    puan = {"fast": 90.0, "heavy": 89.98}.get
+
+    sifir = birlestir({1: "fast"}, results=[heavy], requested={"docling": [1]},
+                      score=puan, tolerans=0.0)
+    assert sifir.quarantined_pages == [1]
+
+    bant = birlestir({1: "fast"}, results=[heavy], requested={"docling": [1]},
+                     score=puan, tolerans=0.5)
+    assert bant.quarantined_pages == []
+    assert bant.pages[0].engine == "docling"

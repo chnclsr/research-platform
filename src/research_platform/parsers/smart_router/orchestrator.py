@@ -48,10 +48,11 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from .ayarlar import AYAR, Ayarlar
 from .critic import PDFCritic
-from .gate import ESIK_VERSION, GirisKapisi, sayfa_secici
+from .gate import GirisKapisi, sayfa_secici
 from .inspector import PdfInspectorAdapter
 from .pages import cagri_plani
 
@@ -112,19 +113,28 @@ def kuyruk_skoru(bayraklar: Dict[int, Any], sayfa_sayisi: int) -> float:
 class SmartRouterHatti:
     """inspector -> kapi -> critic -> sayfa secici -> agir motor plani."""
 
-    def __init__(self, *, kalite_esik: float = 75.0,
-                 yuksek_guven_yeter: bool = False,
-                 ocr_motoru: str = "docling") -> None:
-        self.kalite_esik = kalite_esik
+    def __init__(self, *, kalite_esik: Optional[float] = None,
+                 yuksek_guven_yeter: Optional[bool] = None,
+                 ocr_motoru: str = "docling",
+                 ayar: Ayarlar = AYAR) -> None:
+        """`ayar`: etkin esik profili (`config/smart_router.yaml`).
+
+        Tekil esikler ayrica gecilebilir ve profili ezer; kalibrasyon taramalari
+        boyle calisir. Ezilen deger `esik_version`'a GIRMEZ -- surum profilin
+        hash'idir. Bu yuzden ezme olcum icindir; uretimde profil dosyasi degisir.
+        """
+        self.ayar = ayar
+        self.kalite_esik = ayar.kalite_esik if kalite_esik is None else kalite_esik
         # KALIBRASYON anahtari, calisma ani butcesi DEGIL (plan 8.3):
         # `content_hash` ayristirilmis metinden uretiliyor ve ayni baytlar her
         # kosuda ayni ciktiyi vermek zorunda.
-        self.yuksek_guven_yeter = yuksek_guven_yeter
+        self.yuksek_guven_yeter = (ayar.yuksek_guven_yeter
+                                   if yuksek_guven_yeter is None else yuksek_guven_yeter)
         if ocr_motoru not in YOL_MOTOR["OCR"]:
             raise ValueError(f"OCR motoru olculmus degil: {ocr_motoru}")
         self.ocr_motoru = ocr_motoru
-        self.kapi = GirisKapisi()
-        self.critic = PDFCritic(fallback_threshold=kalite_esik)
+        self.kapi = GirisKapisi(esik=ayar.kapi_esikleri)
+        self.critic = PDFCritic(fallback_threshold=self.kalite_esik, ceza=ayar.critic_ceza)
 
     def calistir(self, pdf_path: str, *,
                  metin_dahil: bool = False) -> Dict[str, Any]:
@@ -224,7 +234,10 @@ class SmartRouterHatti:
             # --- provenance (plan E8). Profil hash'e KATILMAZ, burada kalir.
             "parser_profile": insp.profil,
             "router_version": ROUTER_VERSION,
-            "esik_version": ESIK_VERSION,
+            # Modul sabiti DEGIL bu ornegin profili: `ayar=` ile ezilmis bir
+            # kosuda modul sabiti yanlis surumu bildirirdi.
+            "esik_version": self.ayar.esik_version,
+            "esik_profili": self.ayar.ozet(),
             "kalite_esik": self.kalite_esik,
             "yuksek_guven_yeter": self.yuksek_guven_yeter,
             # --- sonuc

@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from .smart_router import PDFCritic, ROUTER_VERSION, SmartRouterHatti
+    from .smart_router.ayarlar import AYAR
     from .smart_router.engines import (
         ENGINE_VERSION, DoclingEngine, EngineResult, MinerUEngine,
     )
@@ -35,6 +36,7 @@ try:
     _ROUTER_IMPORT_ERROR: str = ""
 except Exception as exc:  # pragma: no cover - exercised only when deps are absent
     SmartRouterHatti = None  # type: ignore[assignment]
+    AYAR = None  # type: ignore[assignment]
     ROUTER_VERSION = ESIK_VERSION = ""
     _ROUTER_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
 
@@ -76,14 +78,22 @@ class SmartPdfParser(DocumentParser):
         Still True when the engine is missing: the fast path handles text PDFs on
         its own, and returning False would disable page routing altogether rather
         than degrade it. The detail string is where the difference shows.
+
+        A threshold profile that failed to load degrades the same way -- routing
+        still works on the embedded defaults -- so it is reported here rather than
+        raised. Otherwise a typo in the YAML would silently change which pages get
+        the heavy engine and nothing would say so.
         """
         if SmartRouterHatti is None:
             return False, f"smart_router unavailable ({_ROUTER_IMPORT_ERROR})"
+        profil = f"profile {AYAR.esik_version}"
+        if AYAR.uyarilar:
+            profil += f" (DEFAULTS: {'; '.join(AYAR.uyarilar)})"
         engine_ready, engine_detail = DoclingEngine().available()
         if engine_ready:
-            return True, f"smart_router, heavy path via {engine_detail}"
+            return True, f"smart_router, {profil}, heavy path via {engine_detail}"
         return True, (
-            f"smart_router, TEXT ONLY -- no heavy engine ({engine_detail}); "
+            f"smart_router, {profil}, TEXT ONLY -- no heavy engine ({engine_detail}); "
             "scanned PDFs will not survive acquisition"
         )
 
@@ -173,7 +183,12 @@ class SmartPdfParser(DocumentParser):
         return {
             "parser_profile": profile,
             "router_version": ROUTER_VERSION,
-            "esik_version": ESIK_VERSION,
+            # From the run, not the module: the threshold profile is a file that a
+            # deployment can point elsewhere, so the version that parsed THIS
+            # document is the one worth recording. Falls back to the module
+            # constant when the router never ran (parse failure path).
+            "esik_version": decision.get("esik_version") or ESIK_VERSION,
+            "esik_profili": decision.get("esik_profili"),
             "engine_version": ENGINE_VERSION,
             "degraded": merged.degraded,
             "notes": merged.notes,
@@ -265,14 +280,23 @@ class SmartPdfParser(DocumentParser):
 
         What the check does buy: a heavy engine that returns encoding-corrupt or
         empty text for a page we already had clean text for no longer overwrites it.
+
+        NOTE. These two coefficients weigh the same two signals the gate's quality
+        score already weighs, at different values: the gate charges 10.0 for unicode
+        corruption and scales gibberish by 300, this check charges 20.0 and scales
+        by 100. Two calibrations of one pair of signals. Both now live in the
+        threshold profile so the discrepancy is at least visible in one file; which
+        pair is right is a calibration question (plan D12), not a merge question.
         """
         critic = PDFCritic()
+        gibberish_kat = AYAR.corruption["gibberish_kat"]
+        unicode_ceza = AYAR.corruption["unicode_ceza"]
 
         def score(text: str):
             metrics = critic.sayfa_metrikleri(text)
-            corruption = metrics["gibberish_ratio"] * 100.0
+            corruption = metrics["gibberish_ratio"] * gibberish_kat
             if metrics["unicode_bozuk"]:
-                corruption += 20.0
+                corruption += unicode_ceza
             return 100.0 - corruption
 
         return score
