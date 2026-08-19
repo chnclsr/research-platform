@@ -1,0 +1,192 @@
+{
+ "ortam": {
+  "makine": "PC_6605",
+  "islemci": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "python": "3.12.7",
+  "os": "Windows-11-10.0.26200-SP0",
+  "torch": "2.13.0+cu132",
+  "cuda_var": true,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "gpu_bellek_gb": 8.0,
+  "cuda_surum": "13.2",
+  "docling": "2.120.3"
+ },
+ "device": "cuda",
+ "threads": 28,
+ "runs": 1,
+ "isinma_sn": 16.41,
+ "belgeler": [
+  {
+   "belge": "turkce_makale",
+   "sayfa": 6,
+   "sure_sn": 6.936,
+   "ms_sayfa": 1155.9,
+   "tum_kosular_sn": [
+    6.936
+   ],
+   "karakter": 55746,
+   "markdown_sha256": "0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d"
+  },
+  {
+   "belge": "resnet_2sutun_gorsel",
+   "sayfa": 12,
+   "sure_sn": 7.262,
+   "ms_sayfa": 605.2,
+   "tum_kosular_sn": [
+    7.262
+   ],
+   "karakter": 64377,
+   "markdown_sha256": "edf5f143e78fc6ca675c8d1e77c6b87f0e23f43e3b9eb2d4e80e506dfb006437"
+  },
+  {
+   "belge": "vgg_tablo_agirlikli",
+   "sayfa": 14,
+   "sure_sn": 9.798,
+   "ms_sayfa": 699.9,
+   "tum_kosular_sn": [
+    9.798
+   ],
+   "karakter": 66944,
+   "markdown_sha256": "9616d52a70604e676307cd8b2409d5d8cfced22f24d7b9be71cd77ba25999a0d"
+  },
+  {
+   "belge": "attention_tablo",
+   "sayfa": 15,
+   "sure_sn": 6.87,
+   "ms_sayfa": 458.0,
+   "tum_kosular_sn": [
+    6.87
+   ],
+   "karakter": 48957,
+   "markdown_sha256": "19e695f78c33569a86613ce5903b10006d01f80b8e830f790e0d7d7d42ab8f24"
+  },
+  {
+   "belge": "bert_2sutun_dipnot",
+   "sayfa": 16,
+   "sure_sn": 7.482,
+   "ms_sayfa": 467.6,
+   "tum_kosular_sn": [
+    7.482
+   ],
+   "karakter": 70235,
+   "markdown_sha256": "e7a30118d29070650f21f6ea2dce8c664e713f2d6edc2931fa071a1978ffa061"
+  },
+  {
+   "belge": "sybil_tip_2sutun",
+   "sayfa": 17,
+   "sure_sn": 12.16,
+   "ms_sayfa": 715.3,
+   "tum_kosular_sn": [
+    12.16
+   ],
+   "karakter": 70650,
+   "markdown_sha256": "eee2e7074b6a6ee687a3ac83f24be9f32725536e52e492e6635cdc247d86782d"
+  },
+  {
+   "belge": "gpt3_uzun_75sayfa",
+   "sayfa": 75,
+   "sure_sn": 60.888,
+   "ms_sayfa": 811.8,
+   "tum_kosular_sn": [
+    60.888
+   ],
+   "karakter": 332980,
+   "markdown_sha256": "a34e84044fd082b1f73e0b2d7f4813823642b79b4bb1b404aafc836ed8a4d558"
+  },
+  {
+   "belge": "gpt4_uzun_gorsel",
+   "sayfa": 100,
+   "sure_sn": 19.556,
+   "ms_sayfa": 195.6,
+   "tum_kosular_sn": [
+    19.556
+   ],
+   "karakter": 289543,
+   "markdown_sha256": "7414a4877f7b50ee9bce60e3fea0ff8ff58cd3e724718820ce3088d9365d6faf"
+  },
+  {
+   "belge": "taranmis_bert_2sutun_dipnot",
+   "sayfa": 6,
+   "sure_sn": 10.375,
+   "ms_sayfa": 1729.1,
+   "tum_kosular_sn": [
+    10.375
+   ],
+   "karakter": 24964,
+   "markdown_sha256": "88f6025911e5b63514c1659781f742365a86212ddfd4df3a5c6a9385b7c94458"
+  }
+ ],
+ "toplam_sn": 141.3,
+ "toplam_sayfa": 261,
+ "ortalama_ms_sayfa": 541.5,
+ "esdegerlik": {
+  "taban": "out\\gpu_docling_json_cpu",
+  "belgeler": [
+   {
+    "belge": "turkce_makale",
+    "sayfa": 6,
+    "farkli_sayfa": 0,
+    "ornekler": []
+   },
+   {
+    "belge": "resnet_2sutun_gorsel",
+    "sayfa": 12,
+    "farkli_sayfa": 0,
+    "ornekler": []
+   },
+   {
+    "belge": "vgg_tablo_agirlikli",
+    "sayfa": 14,
+    "farkli_sayfa": 0,
+    "ornekler": []
+   },
+   {
+    "belge": "attention_tablo",
+    "sayfa": 15,
+    "farkli_sayfa": 0,
+    "ornekler": []
+   },
+   {
+    "belge": "bert_2sutun_dipnot",
+    "sayfa": 16,
+    "farkli_sayfa": 0,
+    "ornekler": []
+   },
+   {
+    "belge": "sybil_tip_2sutun",
+    "sayfa": 17,
+    "farkli_sayfa": 1,
+    "ornekler": [
+     11
+    ]
+   },
+   {
+    "belge": "gpt3_uzun_75sayfa",
+    "sayfa": 75,
+    "farkli_sayfa": 2,
+    "ornekler": [
+     49,
+     50
+    ]
+   },
+   {
+    "belge": "gpt4_uzun_gorsel",
+    "sayfa": 100,
+    "farkli_sayfa": 1,
+    "ornekler": [
+     99
+    ]
+   },
+   {
+    "belge": "taranmis_bert_2sutun_dipnot",
+    "sayfa": 6,
+    "farkli_sayfa": 3,
+    "ornekler": [
+     2,
+     3,
+     4
+    ]
+   }
+  ]
+ }
+}

@@ -232,6 +232,32 @@ C araçları `scripts/c1_*.py`, `scripts/c2_kalibrasyon.py` ve
 `scripts/korpus_*.py`; küçük ölçüm kanıtları `results/c1_rc1/` altındadır.
 Ham corpus ve çalışma çıktıları Git'e girmez.
 
+## Sayfa sayfa inceleme arayüzü
+
+`scripts/hata_arayuzu.py` 9 belgelik korpusun 261 sayfasını tek HTML'de gözle
+incelenebilir hâle getirir: sayfanın kendi görüntüsü üzerinde referans tablo/şekil
+kutuları, kapının ne dediği, TP/FP/FN hükmü, yönlendirme kararı ve fast/heavy/seçilen
+metinler yan yana. Üretilen HTML ve sayfa görüntüleri (~37 MB) Git'e girmez;
+korpustan yeniden üretilir.
+
+```powershell
+python research\pdf-parser\scripts\hata_arayuzu.py   # -> research/pdf-parser/html/
+```
+
+## GPU ölçümleri
+
+`scripts/gpu_docling_olc.py` Docling'in hızını, determinizmini ve CPU/GPU çıktı
+eşdeğerliğini ölçer; `scripts/gpu_sekil_aciklama.py` `do_picture_description`
+VLM'ini ölçer. Kanıtlar ve yorumu `results/gpu/README.md` içinde, kararlar
+`reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` bölüm E/F/G'de.
+
+Özet: GPU 3,06× hızlandırıyor · determinizm geçti · **eşdeğerlik geçmedi**
+(261 sayfanın 7'si CPU'dan farklı, biri gerçek içerik kaybı) · şekil açıklaması
+SmolVLM-256M ile **uyduruyor**, açılmadı.
+
+9 belgelik korpusun PDF'leri depoda değil: `corpus/kendi/` altına konur ya da
+`KENDI_KORPUS` ile yeri gösterilir.
+
 Varsayılan corpus konumları:
 
 - OCRTurk/DocLayNet/OmniDocBench: repo kökünde `corpus/raw`, gerekirse

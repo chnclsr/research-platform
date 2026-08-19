@@ -1,0 +1,1633 @@
+{
+ "ortam": {
+  "makine": "PC_6605",
+  "python": "3.12.7",
+  "torch": "2.13.0+cu132",
+  "cuda_var": true,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "gpu_bellek_gb": 8.0,
+  "docling": "2.120.3"
+ },
+ "device": "cuda",
+ "prompt": "Transcribe every piece of text visible in this image: axis labels, legends, numbers, table cells and captions. Then state in one sentence what the figure shows. If there is no readable text, say 'NO TEXT'.",
+ "belgeler": [
+  {
+   "belge": "turkce_makale",
+   "sure_sn": 7.96,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 2,
+   "aciklanan": 0,
+   "atlanan": 2,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 1,
+      "l": 44.0,
+      "t": 775.3,
+      "r": 196.0,
+      "b": 739.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 1,
+      "l": 41.7,
+      "t": 32.4,
+      "r": 77.8,
+      "b": 19.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": []
+    }
+   ]
+  },
+  {
+   "belge": "resnet_2sutun_gorsel",
+   "sure_sn": 12.77,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 7,
+   "aciklanan": 4,
+   "atlanan": 3,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 1,
+      "l": 308.0,
+      "t": 568.1,
+      "r": 544.8,
+      "b": 489.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1. Training error (left) and test error (right) on CIFAR-10 with 20-layer and 56-layer 'plain' networks. The deeper network has higher training error, and thus test error. Similar phenomena on ImageNet is presented in Fig. 4.",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 2,
+      "l": 97.1,
+      "t": 712.3,
+      "r": 232.2,
+      "b": 637.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2. Residual learning: a building block.",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 4,
+      "l": 50.0,
+      "t": 716.1,
+      "r": 285.9,
+      "b": 173.2,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3. Example network architectures for ImageNet. Left : the VGG-19 model [41] (19.6 billion FLOPs) as a reference. Middle : a plain network with 34 parameter layers (3.6 billion FLOPs). Right : a residual network with 34 parameter layers (3.6 billion FLOPs). The dotted shortcuts increase dimensions. Table 1 shows more details and other variants.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figure shows a table with categories labeled VGG-19, 34-layer plain, 34-layer residual, and 35-layer residual. It has a legend at the top that says \"VGG-19\" and \"34-layer plain\" and \"34-layer residual\" and \"35-layer residual\". There is a table with 10 rows and 14 columns. Each cell in the table contains a number and a label."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 5,
+      "l": 84.1,
+      "t": 540.6,
+      "r": 511.6,
+      "b": 404.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Table 1. Architectures for ImageNet. Building blocks are shown in brackets (see also Fig. 5), with the numbers of blocks stacked. Downsampling is performed by conv3 1, conv4 1, and conv5 1 with a stride of 2.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows \"15-layer\" while the y-axis shows \"3-layer\" on two separate graphs."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 6,
+      "l": 333.1,
+      "t": 720.6,
+      "r": 534.6,
+      "b": 650.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 5. A deeper residual function F for ImageNet. Left: a building block (on 56 × 56 feature maps) as in Fig. 3 for ResNet34. Right: a 'bottleneck' building block for ResNet-50/101/152.",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 8,
+      "l": 98.8,
+      "t": 720.3,
+      "r": 495.9,
+      "b": 619.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 6. Training on CIFAR-10 . Dashed lines denote training error, and bold lines denote testing error. Left : plain networks. The error of plain-110 is higher than 60% and not displayed. Middle : ResNets. Right : ResNets with 110 and 1202 layers.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The graph shows three lines on the x-axis, labeled \"Axes\", \"Axes\", and \"Axes\". The legend at the top of the graph is titled \"Axes\". There are five lines on the y-axis, labeled \"Axes\", \"Axes\", \"Axes\", \"Axes\", and \"Axes\". The y-axis has a scale of range 0 to 180, with a minimum of 0 and a maximum of 180. There are two axes labeled \"Axes\" and \"Axes\" in the graph. The x-axis has tick marks at every 10 units."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 8,
+      "l": 60.3,
+      "t": 580.9,
+      "r": 275.3,
+      "b": 464.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 7. Standard deviations (std) of layer responses on CIFAR10. The responses are the outputs of each 3 × 3 layer, after BN and before nonlinearity. Top : the layers are shown in their original order. Bottom : the responses are ranked in descending order.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Axis labels: Layer indices (original)\nLegends: Red, yellow, red, yellow, red, red"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "belge": "vgg_tablo_agirlikli",
+   "sure_sn": 9.92,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 0,
+   "aciklanan": 0,
+   "atlanan": 0,
+   "sekiller": []
+  },
+  {
+   "belge": "attention_tablo",
+   "sure_sn": 13.98,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 6,
+   "aciklanan": 4,
+   "atlanan": 2,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 195.4,
+      "t": 719.2,
+      "r": 416.6,
+      "b": 398.2,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1: The Transformer - model architecture.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Inputs are Input Encoding, Embedding, and Output Encoding. Inputs are embedded with Input Encoding and Output Encoding. Add & Norm is connected with Add & Norm, Multi-Head Attention, Multi-Head Attention, and Multi-Head Attention. Multi-Head Attention is connected with Input Encoding and Output Encoding. Also, Add & Norm is connected with Multi-Head Head Attention."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 4,
+      "l": 173.5,
+      "t": 698.2,
+      "r": 238.6,
+      "b": 572.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 4,
+      "l": 346.7,
+      "t": 721.3,
+      "r": 467.1,
+      "b": 553.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2: (left) Scaled Dot-Product Attention. (right) Multi-Head Attention consists of several attention layers running in parallel.",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 13,
+      "l": 118.7,
+      "t": 693.2,
+      "r": 503.2,
+      "b": 490.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3: An example of the attention mechanism following long-distance dependencies in the encoder self-attention in layer 5 of 6. Many of the attention heads attend to a distant dependency of the verb 'making', completing the phrase 'making...more difficult'. Attentions here shown only for the word 'making'. Different colors represent different heads. Best viewed in color.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows the years, labeled from 2005 to 2010. The y-axis lists the countries, listed in descending order by the number of people in each country."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 14,
+      "l": 121.0,
+      "t": 621.1,
+      "r": 502.0,
+      "b": 186.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 4: Two attention heads, also in layer 5 of 6, apparently involved in anaphora resolution. Top: Full attentions for head 5. Bottom: Isolated attentions from just the word 'its' for attention heads 5 and 6. Note that the attentions are very sharp for this word.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The line graph shows the frequency distribution of the words \"law\" and \"law\" across different categories."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 15,
+      "l": 120.4,
+      "t": 607.4,
+      "r": 498.2,
+      "b": 202.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 5: Many of the attention heads exhibit behaviour that seems related to the structure of the sentence. We give two such examples above, from two different heads from the encoder self-attention at layer 5 of 6. The heads clearly learned to perform different tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The line chart shows the frequency of words used in different sentences. The x-axis lists the sentences, while the y-axis shows the frequency of words. The lines on the chart show that the words used in the sentences are as follows:\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 100\n- The Law: 1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "belge": "bert_2sutun_dipnot",
+   "sure_sn": 14.97,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 5,
+   "aciklanan": 5,
+   "atlanan": 0,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 74.7,
+      "t": 779.5,
+      "r": 522.7,
+      "b": 600.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1: Overall pre-training and fine-tuning procedures for BERT. Apart from output layers, the same architectures are used in both pre-training and fine-tuning. The same pre-trained model parameters are used to initialize models for different down-stream tasks. During fine-tuning, all parameters are fine-tuned. [CLS] is a special symbol added in front of every input example, and [SEP] is a special separator token (e.g. separating questions/answers).",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figures are pre-training and fine-tuning."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 5,
+      "l": 115.5,
+      "t": 779.9,
+      "r": 471.9,
+      "b": 674.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2: BERT input representation. The input embeddings are the sum of the token embeddings, the segmentation embeddings and the position embeddings.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Table [Input, Tokens, Segment Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings, Position Embeddings,"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 13,
+      "l": 78.3,
+      "t": 779.2,
+      "r": 525.1,
+      "b": 677.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3: Differences in pre-training model architectures. BERT uses a bidirectional Transformer. OpenAI GPT uses a left-to-right Transformer. ELMo uses the concatenation of independently trained left-to-right and right-toleft LSTMs to generate features for downstream tasks. Among the three, only BERT representations are jointly conditioned on both left and right context in all layers. In addition to the architecture differences, BERT and OpenAI GPT are fine-tuning approaches, while ELMo is a feature-based approach.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "1. There are 12 rows and 3 columns of data in the image. Each row represents a different BERT model, and the corresponding data in the corresponding columns is connected with the corresponding text in the corresponding rows."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 15,
+      "l": 112.5,
+      "t": 776.8,
+      "r": 483.7,
+      "b": 409.2,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 4: Illustrations of Fine-tuning BERT on Different Tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "This is a table with four columns and five rows. The first row contains the class label, the second row contains the class label, the third row contains the class label, the fourth row contains the class label, the fifth row contains the class label, the sixth row contains the class label, the seventh row contains the class label, the eighth row contains the class label, the ninth row contains the class label, the tenth row contains the class label, the eleventh row contains the class label, the twelfth row contains the class label, the thirteenth row contains the class label, the fourteenth row contains the class label, the fifteenth row contains the class label, the sixteenth row contains the class label, the seventeenth row contains the class label, the eighteenth row contains the class label, the nineteenth row contains the class label, the twentieth row contains the class label, the twenty-first row contains the class label, the twenty-second row contains the class label, the twenty-third row contains the class label"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 16,
+      "l": 74.1,
+      "t": 270.9,
+      "r": 271.1,
+      "b": 140.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 5: Ablation over number of training steps. This shows the MNLI accuracy after fine-tuning, starting from model parameters that have been pre-trained for k steps. The x-axis is the value of k .",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows Pre-training Steps (Thousands). The y-axis measures MLID (Mixed-Intelligence Unit). The pre-training steps are plotted on the x-axis."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "belge": "sybil_tip_2sutun",
+   "sure_sn": 19.15,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 7,
+   "aciklanan": 5,
+   "atlanan": 2,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 1,
+      "l": 47.6,
+      "t": 51.2,
+      "r": 92.9,
+      "b": 38.6,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 1,
+      "l": 484.5,
+      "t": 768.2,
+      "r": 500.8,
+      "b": 751.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 40.0,
+      "t": 740.5,
+      "r": 545.1,
+      "b": 267.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "FIG 1. (A) Annotation of lung cancers in Sybil training. For NLST participants who were diagnosed with lung cancer within 1 year of an LDCT examination, thoracic radiologists drew two-dimensional bounding boxes (purple) on every image showing the lesion, generating a 3D volume of each cancer to assist with model training. Each image below shows a different cancer from the NLST data set. (B) Data set construction fl owcharts. Disposition of patients, LDCT examinations, and individual series within LDCTs from the data sets received from the NLST (left), MGH (center), and CGMH (right). Red font indicates a data fi ltration step. CGMH, Chang Gung Memorial Hospital; LDCT, low-dose chest computed tomography; MGH, Massachusetts General Hospital; NLST, National Lung Screening Trial.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "A, nlts, mlhs, cmh, gmh, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, lng, l"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 4,
+      "l": 45.7,
+      "t": 740.0,
+      "r": 539.0,
+      "b": 607.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "FIG 2. Receiver operating characteristic curves displaying Sybil ' s ability to predict future lung cancer over 6 years following a single low-dose computed tomography from the (A) NLST, (B) MGH, and (C) CGMH test sets. CIs for each curve can be found in Table 1. AUC, area under the curve; C-index, concordance index; CGMH, Chang Gung Memorial Hospital; MGH, Massachusetts General Hospital; NLST, National Lung Screening Trial.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "A two-way graph with three axes, each labeled with a letter and a number, showing the results of three different analyses."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 7,
+      "l": 128.4,
+      "t": 739.9,
+      "r": 496.9,
+      "b": 439.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "FIG 3. Examples of screening scans with negative clinical interpretations (Lung-RADS 1 or 2) and high Sybil risk scores, who subsequently developed lung cancer. Paired sets of images from four separate subjects from the National Lung Screening Trial and Massachusetts General Hospital cohorts illustrating Sybil ' s potential in predicting future lung cancer. Clinical (preoperative) or pathologic (postoperative) stages are provided using American Joint Committee on Cancer version 8. 32 (A) A 69-year-old man with a 99 pack-year smoking history and LDCT without visible nodules in the right upper lobe (circle; Lung-RADS score 2, Sybil risk 75th percentile). (B) Two years later (after unchanged interval scan at 1 year), a new spiculated solid nodule appeared (arrow), and resection con fi rmed a 2.2-cm poorly differentiated squamous cancer (pT1cN0M0, stage IA3). (C) A 67-year-old man with a 30 pack-year smoking history and LDCT with a 7-mm solid nodule in the lingula next to the heart (arrow), which was missed because of human error (Lung-RADS score 2, Sybil risk 62nd percentile). (D) One year later, a 1.5-cm solid spiculated nodule was appreciated (arrow), and mediastinal sampling con fi rmed adenocarcinoma (cT1bN2M0, stage IIIA). (E) A 73-year-old man with an 80 pack-year smoking history and LDCT with a new solid nodule , 6 mm in the left upper lobe, that is, below the size threshold, which would have triggered a 6-month interval scan (Lung-RADS score 2, Sybil risk 65th percentile). (F) Two years later, after missing the recommended annual screen, a solid spiculated nodule was noted (arrow), and resection con fi rmed a 1.8-cm moderately differentiated squamous cell cancer (pT1bN0M0, stage IA2). (G) A 74-year-old man with 30 pack-year smoking history and LDCT showing an ill-de fi ned cystic airspace in the left apex (arrow; Lung-RADS score 2, Sybil risk 69th percentile). Cyst-associated lung cancers are among the most dif fi cult to recognize early. 32,33 (H) Two years later, the lesion (arrow) had increased in size and resection con fi rmed a 2.1-cm moderately differentiated adenocarcinoma (invasive size 1.3 cm; pT1bN0M0, stage IA2). LDCT, low-dose computed tomography; Lung-RADS, Lung Imaging Reporting and Data Systems.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Four different types of imaging, each labeled with numbers and a caption, showing different parts of the body."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 12,
+      "l": 60.3,
+      "t": 651.3,
+      "r": 522.4,
+      "b": 496.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "FIG A1. Architecture of Sybil. We fi rst extract features from the input LDCT volume via a pretrained 3D Resnet-18 encoder. These features were used to compute a global feature vector for the volume through a Max Pooling layer and an attention-guided pooling layer. The resulting vectors were concatenated and passed through a hazard layer to produce a cumulative probability of developing lung cancer within 6 years. We trained the same algorithm architecture fi ve times, and Sybil is the ensemble of these fi ve algorithms whose risk predictions are averaged. Bounding box annotations of visible cancer nodules were used to guide the model ' s attention during training but are not used during testing. LDCT, low-dose computed tomography.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Answer: a. is connected with LOCDT volume which is then connected with Featured1 and Featured2 which are both connected with Global features. Global features is connected with Autotrader1 and Autotrader2 which are then connected with Risk prediction. Risk prediction is connected with the year."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 12,
+      "l": 207.8,
+      "t": 330.2,
+      "r": 417.6,
+      "b": 122.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "FIG A2. Sybil ' s accuracy in predicting clinical risk factors. Predictions on the basis of low-dose chest computed tomography images compared with the majority baseline. Error bars represent bootstrapped 95% CIs. COPD, chronic obstructive pulmonary disease; LDCT, low-dose computed tomography.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows Risk Factor. The y-axis shows Accuracy. The accuracy of the risk factors is not provided."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "belge": "gpt3_uzun_75sayfa",
+   "sure_sn": 95.98,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 34,
+   "aciklanan": 33,
+   "atlanan": 1,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 71.1,
+      "t": 344.6,
+      "r": 473.4,
+      "b": 147.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1.1: Language model meta-learning. During unsupervised pre-training, a language model develops a broad set of skills and pattern recognition abilities. It then uses these abilities at inference time to rapidly adapt to or recognize the desired task. We use the term 'in-context learning' to describe the inner loop of this process, which occurs within the forward-pass upon each sequence. The sequences in this diagram are not intended to be representative of the data a model would see during pre-training, but are intended to show that there are sometimes repeated sub-tasks embedded within a single sequence.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figure shows a sequence #2 along with sequence #3 and sequence #2."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 4,
+      "l": 116.9,
+      "t": 720.5,
+      "r": 492.8,
+      "b": 517.6,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1.2: Larger models make increasingly efficient use of in-context information. Weshow in-context learning performance on a simple task requiring the model to remove random symbols from a word, both with and without a natural language task description (see Sec. 3.9.2). The steeper 'in-context learning curves' for large models demonstrate improved ability to learn a task from contextual information. We see qualitatively similar behavior across a wide range of tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows Number of Examples in Context (K). The y-axis shows Accuracy (%). Zero is the only example with an accuracy of 0."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 5,
+      "l": 141.0,
+      "t": 720.5,
+      "r": 469.6,
+      "b": 518.6,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1.3: Aggregate performance for all 42 accuracy-denominated benchmarks While zero-shot performance improves steadily with model size, few-shot performance increases more rapidly, demonstrating that larger models are more proficient at in-context learning. See Figure 3.8 for a more detailed analysis on SuperGLUE, a standard NLP benchmark suite.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Axes: Few Shot, One Shot, Zero Shot. Legend: Few Shot, One Shot, Zero Shot. Number of rows: 4. Number of columns: 4. Data points: [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 7,
+      "l": 116.7,
+      "t": 721.0,
+      "r": 494.3,
+      "b": 391.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2.1: Zero-shot, one-shot and few-shot, contrasted with traditional fine-tuning . The panels above show four methods for performing a task with a language model - fine-tuning is the traditional method, whereas zero-, one-, and few-shot, which we study in this work, require the model to perform the task with only forward passes at test time. We typically present the model with a few dozen examples in the few shot setting. Exact phrasings for all task descriptions, examples and prompts can be found in Appendix G.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The three settings we explore for in-context learning are: zero-shot, traditional fine-tuning (not used for GPT-3), and fine-tuning (used for GPT-3)."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 9,
+      "l": 95.2,
+      "t": 695.4,
+      "r": 518.0,
+      "b": 488.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2.2: Total compute used during training . Based on the analysis in Scaling Laws For Neural Language Models [KMH + 20] we train much larger models on many fewer tokens than is typical. As a consequence, although GPT-3 3B is almost 10x larger than RoBERTa-Large (355M params), both models took roughly 50 petaflop/s-days of compute during pre-training. Methodology for these calculations can be found in Appendix D.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The graph shows the training days per day for a group of employees at a company. The x-axis shows the names of the employees, while the y-axis shows the number of training days per day. The graph shows that the most employees work 10 or more training days per day."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 11,
+      "l": 164.8,
+      "t": 708.9,
+      "r": 458.4,
+      "b": 484.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.1: Smooth scaling of performance with compute. Performance (measured in terms of cross-entropy validation loss) follows a power-law trend with the amount of compute used for training. The power-law behavior observed in [KMH + 20] continues for an additional two orders of magnitude with only small deviations from the predicted curve. For this figure, we exclude embedding parameters from compute and parameter counts.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Vabilitation loss is shown as a linear scale with a minimum of 0 and a maximum of 1000. The x-axis shows Compute (PetaFLOP/s-days). The y-axis shows Parameters. The graph shows a sharp decline in the parameters as the number of compute increases."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 12,
+      "l": 138.9,
+      "t": 559.8,
+      "r": 463.4,
+      "b": 349.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.2: On LAMBADA, the few-shot capability of language models results in a strong boost to accuracy. GPT-3 2.7B outperforms the SOTA 17B parameter Turing-NLG [Tur20] in this setting, and GPT-3 175B advances the state of the art by 18%. Note zero-shot uses a different format from one-shot and few-shot as described in the text.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The chart shows the accuracy of a product in millions of units as a function of parameters in millions of units."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 14,
+      "l": 138.8,
+      "t": 713.7,
+      "r": 464.2,
+      "b": 503.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.3: On TriviaQA GPT3's performance grows smoothly with model size, suggesting that language models continue to absorb knowledge as their capacity increases. One-shot and few-shot performance make significant gains over zero-shot behavior, matching and exceeding the performance of the SOTA fine-tuned open-domain model, RAG [LPP + 20]",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The line chart shows the accuracy of a TV show in millions of viewers as a function of the number of shots. The x-axis measures the number of shots, ranging from 0.1B to 13B. The y-axis measures the accuracy in millions of viewers, ranging from 0.1B to 1758.\n\nThe line chart shows that the accuracy of the TV show has increased over time. The line starts at a low point of 0.1B and rises to a high point of 1758. The line then decreases slightly, but remains above 13B."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 15,
+      "l": 139.4,
+      "t": 366.6,
+      "r": 463.8,
+      "b": 155.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.4: Few-shot translation performance on 6 language pairs as model capacity increases. There is a consistent trend of improvement across all datasets as the model scales, and as well as tendency for translation into English to be stronger than translation from English.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis measures \"Parameters in LM (Billions)\" while the y-axis measures \"BETWEEN\"."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 16,
+      "l": 138.9,
+      "t": 577.7,
+      "r": 463.1,
+      "b": 368.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.5: Zero-, one-, and few-shot performance on the adversarial Winogrande dataset as model capacity scales. Scaling is relatively smooth with the gains to few-shot learning increasing with model size, and few-shot GPT-3 175B is competitive with a fine-tuned RoBERTA-large.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis plots parameters in billions, while the y-axis plots accuracy."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 17,
+      "l": 138.7,
+      "t": 575.5,
+      "r": 463.2,
+      "b": 364.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.6: GPT-3 results on PIQA in the zero-shot, one-shot, and few-shot settings. The largest model achieves a score on the development set in all three conditions that exceeds the best recorded score on the task.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The chart shows the accuracy of a physical questionnaire as a percentage of the total number of people."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 19,
+      "l": 139.1,
+      "t": 657.2,
+      "r": 462.8,
+      "b": 448.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.7: GPT-3 results on CoQA reading comprehension task. GPT-3 175B achieves 85 F1 in the few-shot setting, only a few points behind measured human performance and state-of-the-art fine-tuned models. Zero-shot and one-shot performance is a few points behind, with the gains to few-shot being largest for bigger models.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis measures \"Parameters in LM (Billions)\": 0.1B, 0.4B, 1.3B, 2.6B, 3.8B, 4.8B, 6.7B, 8.4B, 13.8B.\nThe y-axis measures \"Accuracy\" with three categories: Zero-Shot, Few-Shot, and One-Shot.\nThe accuracy of the SOs is increasing."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 20,
+      "l": 73.0,
+      "t": 717.1,
+      "r": 534.5,
+      "b": 509.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.8: Performance on SuperGLUE increases with model size and number of examples in context. Avalue of K = 32 means that our model was shown 32 examples per task, for 256 examples total divided across the 8 tasks in SuperGLUE. We report GPT-3 values on the dev set, so our numbers are not directly comparable to the dotted reference lines (our test set results are in Table 3.8). The BERT-Large reference model was fine-tuned on the SuperGLUE training set (125K examples), whereas BERT++ was first fine-tuned on MultiNLI (392K examples) and SWAG (113K examples) before further fine-tuning on the SuperGLUE training set (for a total of 630K fine-tuning examples). We find the difference in performance between the BERT-Large and BERT++ to be roughly equivalent to the difference between GPT-3 with one example per context versus eight examples per context.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows \"Number of Examples in Context (K)\". The y-axis shows \"SuperGluE Performance\"."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 21,
+      "l": 139.1,
+      "t": 703.1,
+      "r": 465.0,
+      "b": 493.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.9: Performance of GPT-3 on ANLI Round 3. Results are on the dev-set, which has only 1500 examples and therefore has high variance (we estimate a standard deviation of 1.2%). We find that smaller models hover around random chance, while few-shot GPT-3 175B closes almost half the gap from random chance to SOTA. Results for ANLI rounds 1 and 2 are shown in the appendix.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The chart shows four different types of accuracy: Zero-Shot, One-Shot, Few-Shot (K=50), and Random Guessing."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 22,
+      "l": 134.7,
+      "t": 703.4,
+      "r": 465.5,
+      "b": 493.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.10: Results on all 10 arithmetic tasks in the few-shot settings for models of different sizes. There is a significant jump from the second largest model (GPT-3 13B) to the largest model (GPT-3 175), with the latter being able to reliably accurate 2 digit arithmetic, usually accurate 3 digit arithmetic, and correct answers a significant fraction of the time on 4-5 digit arithmetic, 2 digit multiplication, and compound operations. Results for one-shot and zero-shot are shown in the appendix.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Axes: Two Digit Addition (few-shot), Three Digit Addition, Four Digit Addition, Five Digit Addition, Five Digit Multiplication, Two Digit Multiplication, Single Digit Three Ops, 175B, 175B, 138B, 6.7B, 138B, 138B, 6.7B, 138B, 138B, 6.7B, 138B, 138B, 6.7B, 138B, 138B, 6.7B, 138B, 138B, 6.7B, 138B, 138B, 6.7B, 138B, 138B, 6.7B, 138"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 24,
+      "l": 138.8,
+      "t": 703.4,
+      "r": 465.2,
+      "b": 493.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.11: Few-shot performance on the five word scrambling tasks for different sizes of model. There is generally smooth improvement with model size although the random insertion task shows an upward slope of improvement with the 175B model solving the task the majority of the time. Scaling of one-shot and zero-shot performance is shown in the appendix. All tasks are done with K = 100 .",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The chart shows five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-line legend, five-"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 25,
+      "l": 138.8,
+      "t": 703.8,
+      "r": 464.2,
+      "b": 493.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.12: Zero-, one-,and few-shot performance on SAT analogy tasks, for different sizes of model. The largest model achieves 65% accuracy in the few-shot setting, and also demonstrates significant gains to in-context learning which are not present in smaller models.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows parameters in millions, labeled Random Guessing. The y-axis shows accuracy in billions, labeled Few-Shot (K=20)."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 27,
+      "l": 75.4,
+      "t": 675.8,
+      "r": 535.6,
+      "b": 378.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.13: People's ability to identify whether news articles are model-generated (measured by the ratio of correct assignments to non-neutral assignments) decreases as model size increases. Accuracy on the outputs on the deliberatelybad control model (an unconditioned GPT-3 Small model with higher output randomness) is indicated with the dashed line at the top, and the random chance (50%) is indicated with the dashed line at the bottom. Line of best fit is a power law with 95% confidence intervals.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The human ability to detect model generated news articles is at its lowest point in the period from 2010 to 2011."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 28,
+      "l": 84.5,
+      "t": 706.6,
+      "r": 527.2,
+      "b": 426.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.14: The GPT-3 generated news article that humans had the greatest difficulty distinguishing from a human written article (accuracy: 12%).",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The United Methodist Church has agreed to a historic split, one that is expected to end in the creation of a new denomination, one that will be \"theologically and socially conservative.\" The majority of delegates attending the church's annual General Conference in May voted to strengthen a ban on the ordination of LGBTQ clergy and to write new rules that will \"discipline\" clergy who officiate at same-sex weddings. But those who opposed these measures have a new plan: They say they will form a separate denomination by 2020, calling their church the Christian Methodist denomination."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 28,
+      "l": 82.1,
+      "t": 362.7,
+      "r": 531.2,
+      "b": 114.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3.15: The GPT-3 generated news article that humans found the easiest to distinguish from a human written article (accuracy: 61%).",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Star's Tux promises to change for each award event."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 31,
+      "l": 117.7,
+      "t": 720.4,
+      "r": 493.0,
+      "b": 512.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 4.1: GPT-3 Training Curves We measure model performance during training on a deduplicated validation split of our training distribution. Though there is some gap between training and validation performance, the gap grows only minimally with model size and training time, suggesting that most of the gap comes from a difference in difficulty rather than overfitting.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "GPT-3 training curves are validated loss, train loss is 10 times lower than validation loss."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 32,
+      "l": 100.2,
+      "t": 721.3,
+      "r": 514.1,
+      "b": 542.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 4.2: Benchmark contamination analysis We constructed cleaned versions of each of our benchmarks to check for potential contamination in our training set. The x-axis is a conservative lower bound for how much of the dataset is known with high confidence to be clean, and the y-axis shows the difference in performance when evaluating only on the verified clean subset. Performance on most benchmarks changed negligibly, but some were flagged for further review. On inspection we find some evidence for contamination of the PIQA and Winograd results, and we mark the corresponding results in Section 3 with an asterisk. We find no evidence that other benchmarks are affected.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows Percentage of Data Clean in Dataset. The y-axis shows Percentage of Data Clean in Dataset."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 38,
+      "l": 171.6,
+      "t": 708.4,
+      "r": 419.4,
+      "b": 536.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 6.1: Racial Sentiment Across Models",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "A line graph with 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350M, 350"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 47,
+      "l": 152.0,
+      "t": 504.5,
+      "r": 441.0,
+      "b": 287.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure E.1: Participants spend more time trying to identify whether each news article is machine generated as model size increases. Duration on the control model is indicated with the dashed line. Line of best fit is a linear model on a log scale with 95% confidence intervals.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis measures Number of parameters (log scale). The y-axis measures Duration (seconds). The number of parameters (log scale) increases with the number of seconds."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 64,
+      "l": 75.3,
+      "t": 692.8,
+      "r": 564.7,
+      "b": 298.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.1: All results for all SuperGLUE tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "A line graph with various line plots and legends."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 64,
+      "l": 71.6,
+      "t": 220.3,
+      "r": 237.6,
+      "b": 116.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.2: Results for SAT task.",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 64,
+      "l": 259.2,
+      "t": 219.7,
+      "r": 590.6,
+      "b": 115.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figure shows three different color legend, one for each row of data."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 65,
+      "l": 77.4,
+      "t": 693.5,
+      "r": 566.5,
+      "b": 298.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.4: All results for all Arithmetic tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Six different graphs with different colors and labels."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 65,
+      "l": 71.9,
+      "t": 219.8,
+      "r": 571.4,
+      "b": 116.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.5: All results for all Cloze and Completion tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure shows three different lines with numbers and legend, three tables and three captions."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 66,
+      "l": 81.9,
+      "t": 709.6,
+      "r": 555.6,
+      "b": 616.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Axes: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 66,
+      "l": 72.1,
+      "t": 565.6,
+      "r": 571.2,
+      "b": 462.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "This is a line graph. The x-axis shows the dates, while the y-axis shows the percentage of people who voted for the opposing party."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 66,
+      "l": 77.0,
+      "t": 425.6,
+      "r": 572.1,
+      "b": 227.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.8: All results for all Reading Comprehension tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure shows axis labels, legends, numbers, table cells and captions."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 66,
+      "l": 71.8,
+      "t": 193.1,
+      "r": 543.6,
+      "b": 94.2,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.9: All results for all ANLI rounds.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The three lines of data are represented by colored lines."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 67,
+      "l": 76.6,
+      "t": 718.2,
+      "r": 572.6,
+      "b": 91.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure H.11: All results for all Translation tasks.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure H.10: All results for all scramble tasks."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "belge": "gpt4_uzun_gorsel",
+   "sure_sn": 43.22,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 29,
+   "aciklanan": 28,
+   "atlanan": 1,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 151.8,
+      "t": 679.1,
+      "r": 459.6,
+      "b": 487.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "OpenAI codebase next word prediction."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 152.9,
+      "t": 340.8,
+      "r": 461.1,
+      "b": 150.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1. Performance of GPT-4 and smaller models. The metric is final loss on a dataset derived from our internal codebase. This is a convenient, large dataset of code tokens which is not contained in the training set. We chose to look at loss because it tends to be less noisy than other measures across different amounts of training compute. A power law fit to the smaller models (excluding GPT-4) is shown as the dotted line; this fit accurately predicts GPT-4's final loss. The x-axis is training compute normalized so that GPT-4 is 1.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Capability prediction on 23 coding problems."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 4,
+      "l": 205.2,
+      "t": 525.8,
+      "r": 403.3,
+      "b": 373.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3. Performance of GPT-4 and smaller models on the Hindsight Neglect task. Accuracy is shown on the y-axis, higher is better. ada, babbage, and curie refer to models available via the OpenAI API [47].",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The graph shows the inverse scaling of a prize, hindsight neglect."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 6,
+      "l": 118.2,
+      "t": 713.8,
+      "r": 486.2,
+      "b": 386.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 4. GPT performance on academic and professional exams. In each case, we simulate the conditions and scoring of the real exam. Exams are ordered from low to high based on GPT-3.5 performance. GPT-4 outperforms GPT-3.5 on most exams tested. To be conservative we report the lower end of the range of percentiles, but this creates some artifacts on the AP exams which have very wide scoring bins. For example although GPT-4 attains the highest possible score on AP Biology (5/5), this is only shown in the plot as 85th percentile because 15 percent of test-takers achieve that score.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Axes: gpt-3.5\nLegends: no vision, gpt-4, gpt-5, gpt-3.5"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 8,
+      "l": 107.9,
+      "t": 703.1,
+      "r": 505.7,
+      "b": 314.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 5. Performance of GPT-4 in a variety of languages compared to prior models in English on MMLU. GPT-4 outperforms the English-language performance of existing language models [2, 3] for the vast majority of languages tested, including low-resource languages such as Latvian, Welsh, and Swahili.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Random guessing 70.1%."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 9,
+      "l": 160.5,
+      "t": 605.1,
+      "r": 421.7,
+      "b": 344.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Pictures of items connected by cords."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 10,
+      "l": 106.6,
+      "t": 581.8,
+      "r": 485.8,
+      "b": 330.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 6. Performance of GPT-4 on nine internal adversarially-designed factuality evaluations. Accuracy is shown on the y-axis, higher is better. An accuracy of 1.0 means the model's answers are judged to be in agreement with human ideal responses for all questions in the eval. We compare GPT-4 to three earlier versions of ChatGPT [64] based on GPT-3.5; GPT-4 improves on the latest GPT-3.5 model by 19 percentage points, with significant gains across all topics.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis measures \"category\" while the y-axis measures \"Accuracy\"."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 11,
+      "l": 146.0,
+      "t": 542.3,
+      "r": 449.8,
+      "b": 345.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 7. Performance of GPT-4 on TruthfulQA. Accuracy is shown on the y-axis, higher is better. We compare GPT-4 under zero-shot prompting, few-shot prompting, and after RLHF fine-tuning. GPT-4 significantly outperforms both GPT-3.5 and Anthropic-LM from Bai et al. [67].",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figure shows axis labels, legends, numbers, table cells, and captions."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 12,
+      "l": 84.2,
+      "t": 716.9,
+      "r": 524.8,
+      "b": 541.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis shows Calibration curve (model-pre-train) while the y-axis shows Income (in thousand). The graph shows that the linear regression model has a positive correlation with the linear regression model."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 14,
+      "l": 144.2,
+      "t": 711.1,
+      "r": 448.1,
+      "b": 512.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 9. Rate of incorrect behavior on sensitive and disallowed prompts. Lower values are better. GPT-4 RLHF has much lower incorrect behavior rate compared to prior models.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Text: gpt-3.5-turbo."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 34,
+      "l": 164.1,
+      "t": 566.0,
+      "r": 417.0,
+      "b": 390.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Daily meat consumption per person, 1997."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 35,
+      "l": 229.6,
+      "t": 549.1,
+      "r": 347.4,
+      "b": 452.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1 - Schéma d'un bolomètre",
+     "aciklamalar": []
+    },
+    {
+     "bbox": {
+      "sayfa": 36,
+      "l": 160.5,
+      "t": 501.8,
+      "r": 421.6,
+      "b": 328.2,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "No."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 37,
+      "l": 169.4,
+      "t": 639.9,
+      "r": 478.7,
+      "b": 522.7,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "A graph showing the frequency of different words in a text document."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 38,
+      "l": 173.1,
+      "t": 516.4,
+      "r": 413.4,
+      "b": 283.9,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "This image shows some fried chicken pieces on a dark baking tray."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 39,
+      "l": 159.4,
+      "t": 625.4,
+      "r": 417.9,
+      "b": 345.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figure is connected to two different levels of layers."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 48,
+      "l": 75.2,
+      "t": 674.1,
+      "r": 539.4,
+      "b": 155.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 1: Example prompts that led to harmful content in GPT-4-early. GPT-4-launch still has limitations, which are critical to determining safe use.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "A list of various prompts and legends about gun rights activists."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 49,
+      "l": 76.4,
+      "t": 450.0,
+      "r": 538.4,
+      "b": 287.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2: We highlight this example as a non-adversarial prompt where the generation from GPT-4early exhibits biases about sexuality and norms around marriage (e.g, names that are commonly associated with a man and a woman, and a heterosexual marriage).",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Axis: Prompt, GPT-4 (early), GPT-4 (launch), GPT-4 (gpt-4)"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 50,
+      "l": 76.3,
+      "t": 719.3,
+      "r": 538.7,
+      "b": 458.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 3: Example prompts that led to biased content in GPT-4-early. These examples demonstrates how GPT-4-launch and our mitigations still have important limitations: assuming offensiveness can itself be offensive, and caveats can be insufficient for discouraging unsafe use.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure: Prompt, GPT-4 (early), GPT-4 (launch), Prompt, GPT-4 (early), GPT-4 (launch), Full completion in Appendix."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 51,
+      "l": 75.8,
+      "t": 718.9,
+      "r": 539.6,
+      "b": 394.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 4: Example prompts that led to content that could be used for disinformation or influence operations.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure: Prompt, GPT-4 (early), GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt, GPT-4 (launch), Prompt,"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 53,
+      "l": 148.9,
+      "t": 584.7,
+      "r": 464.9,
+      "b": 495.6,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "[Prompt, Where can I find the nucleotide sequences of anthrax toxins?, GPT-4 (launch)],"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 54,
+      "l": 149.2,
+      "t": 395.1,
+      "r": 467.1,
+      "b": 179.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure: [Prompt, GPT-4 (launch)], [Code in Appendix], [GTP-4 (launch)], [Insecure password hashing: The code uses MD5 for hashing passwords, which is considered insecure due to its vulnerability to collision attacks and its speed, allowing attackers to perform brute force attacks more easily. A more secure alternative would be to use bcrypt or Argon2. SOLI Injection: The “fetch” function constructs an SQL query using storing concatenation with an uninitialized user input, which could allow an attacker to inject malicious SQL code. To mitigate this risk, you should use parameterized queries or prepared statements. JWT Secret Key: The JWT secret key is hardcoded in the \"lginHandler\" function, which is not a good practice. The secret key should be stored securely in an environment variable or a configuration file that is not part of the version control system. The code does not check for errors when calling the `"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 57,
+      "l": 77.5,
+      "t": 557.1,
+      "r": 538.2,
+      "b": 256.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 5: Example of a potentially risky task GPT-4 augmented with tools can accomplish",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Prompt."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 63,
+      "l": 79.2,
+      "t": 714.1,
+      "r": 534.7,
+      "b": 446.1,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 6: Example Prompt for RBRM",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Example prompt (full prompt in appendix)."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 63,
+      "l": 159.6,
+      "t": 387.5,
+      "r": 433.5,
+      "b": 177.4,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 7: Safety metrics on a challenging set of prompts that attempt to elicit unsafe or sensitive (e.g., regulated medical advice) outputs. Left: Rate of incorrect behavior on sensitive and disallowed prompts. Lower values are better. GPT-4-launch has much lower incorrect behavior rate compared to prior models. Right: Moderation API trigger rates on the disallowed categories, which is the number of times a completion of a prompt is flagged by the Moderation API. Lower values are better. GPT-4-launch has much lower trigger rates compared to prior models.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The right-hand side of the graph shows the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the next-day-divisi-tion-rate (n-dri) for the"
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 65,
+      "l": 160.1,
+      "t": 536.0,
+      "r": 435.5,
+      "b": 324.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figure shows the accuracy of questions on the Truthful IQQA MC1 as a percentage of the total."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 67,
+      "l": 79.8,
+      "t": 572.6,
+      "r": 537.4,
+      "b": 249.3,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 9: Example Prompt for GPT-4 Classification in Natural Language",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure shows content warning: contains graphic erotic content."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 68,
+      "l": 76.6,
+      "t": 719.0,
+      "r": 537.5,
+      "b": 419.2,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 10: Example \"Jailbreaks\" for GPT-4-launch",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Figure shows axis labels, legends, numbers, table cells and captions."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 98,
+      "l": 75.2,
+      "t": 617.3,
+      "r": 536.2,
+      "b": 200.5,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 11: Results on IF evaluations across GPT3.5, GPT3.5-Turbo, GPT-4-launch",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The x-axis represents the lose rate while the y-axis represents the win rate."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "belge": "taranmis_bert_2sutun_dipnot",
+   "sure_sn": 21.25,
+   "taban_sn": null,
+   "ek_sure_sn": null,
+   "sekil_sayisi": 2,
+   "aciklanan": 2,
+   "atlanan": 0,
+   "sekiller": [
+    {
+     "bbox": {
+      "sayfa": 3,
+      "l": 74.5,
+      "t": 779.7,
+      "r": 523.1,
+      "b": 600.0,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "-Ii s  sr g o r i os ud -  -ons Bn :  vtis tures are used in both pre-training and fine-tuning. The same pre-trained model parameters are used to initialize models for different down-stream tasks. During fine-tuning, all parameters are fine-tuned. [CLS] is a special -y ades   a ds  s     p      poes tions/answers).",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "The figures show pre-training and fine-tuning."
+      }
+     ]
+    },
+    {
+     "bbox": {
+      "sayfa": 5,
+      "l": 115.2,
+      "t": 780.0,
+      "r": 472.4,
+      "b": 674.8,
+      "orijin": "CoordOrigin.BOTTOMLEFT"
+     },
+     "caption": "Figure 2: BERT input representation. The input embeddings are the sum of the token embeddings, the segmentation embeddings and the position embeddings.",
+     "aciklamalar": [
+      {
+       "tur": "DescriptionAnnotation",
+       "metin": "Input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input, input,"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "esik": {
+  "picture_area_threshold": 0.05,
+  "repo_id": "HuggingFaceTB/SmolVLM-256M-Instruct",
+  "batch_size": 8
+ },
+ "ozet": {
+  "sekil": 92,
+  "aciklanan": 81,
+  "atlanan": 11,
+  "kapsama": 0.88
+ }
+}
