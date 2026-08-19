@@ -720,11 +720,10 @@ kalıyor.
 - `gpt3` s.50: **1.307 → 465 karakter (−%64)**, bir markdown tablosu tamamen kayboldu.
 - `gpt4` s.33: Devanagari çevriyazılı Marathi satırı büyük ölçüde eridi.
 
-**Bu iki kaybın cihazdan mı sürümden mi geldiği AYRILAMADI** — ölçüm betiği CPU ve
-GPU sayfa çıktısını aynı dizine yazdığı için yeni makinenin CPU sayfa metni
-korunmadı. Belge düzeyi hash'ler cihaz farkını kanıtlıyor ama sayfa düzeyi
-atıf için betik cihaza göre ayrı dizin yazacak şekilde düzeltilip **CPU koşusu
-tekrarlanmalı**.
+**Bu iki kaybın cihazdan mı sürümden mi geldiği bu koşuda ayrılamadı** — ölçüm
+betiği CPU ve GPU sayfa çıktısını aynı dizine yazdığı için yeni makinenin CPU
+sayfa metni korunmadı. Betik cihaza göre ayrı dizin yazacak şekilde düzeltilip
+koşu tekrarlandı; **atıf G bölümünde çözüldü.**
 
 ### E.5 Bu koşudan çıkan işler
 
@@ -818,6 +817,102 @@ satırlık bir değişiklik.
 - `esik_version` değişmedi (`gate_v2_kalibre_edilmedi_f671e1af`) — profile yalnız
   yorum eklendi ve hash **etkin ayarların**, dosya baytlarının değil. Tasarımın
   amaçlandığı gibi çalıştığının doğrulaması.
+
+## G. İkinci GPU Koşusu — Atıf Çözüldü, Şekil Açıklaması Denendi (2026-08-19)
+
+<!-- CLAUDE-2026-08-19: IS1 esdegerlik atfi + IS2 do_picture_description olcumu. -->
+
+Betik cihaza göre ayrı çıktı dizini yazacak şekilde düzeltildi
+(`gpu_docling_json_cpu/` ve `gpu_docling_json_cuda/`) ve aynı makinede iki koşu
+tekrarlandı. Ham çıktı: `out/gpu/`.
+
+### G.1 Eşdeğerlik atfı — GPU daha kötü, ama nadiren
+
+Aynı makine, aynı Docling sürümü, tek değişken cihaz. **261 sayfanın 7'si farklı:**
+
+| Belge | Farklı sayfa | Ne oldu |
+|---|---|---|
+| sybil_tip_2sutun | 11 | satır bölünmesi, +1 karakter |
+| gpt3_uzun_75sayfa | 49 | tablo satırlarında boşluk farkı, ±0 karakter |
+| **gpt3_uzun_75sayfa** | **50** | **1.307 → 465 karakter (−%64), 18 → 6 `\|`** |
+| gpt4_uzun_gorsel | 99 | satır bölünmesi, +1 karakter |
+| taranmis_bert | 2, 3, 4 | kelime sınırı/boşluk, ±0–1 karakter |
+
+**6'sı kozmetik.** Satır bölünmesi, boşluk, bir kelime sınırı
+(`fine-tuning. Durin` vs `fine-tuning.During`). İçerik kaybı yok.
+
+**1'i gerçek kayıp.** `gpt3` s.50'de bir markdown soru-cevap tablosu GPU çıktısında
+**tamamen kayboldu** — CPU'da 18 boru işareti, GPU'da 6.
+
+**Karar: GPU daha kötü, ama nadiren — 261 sayfada 1 (%0,4).** Buna karşılık
+7 sayfanın hepsi baytları değiştiriyor, yani `content_hash` her durumda farklı çıkıyor.
+
+**Önceki şüphe düzeltildi:** E.4'te "iki sayfada kayıp" denmişti. `gpt4` s.33
+(Marathi satırının erimesi) ve `resnet` s.5 aynı makinedeki listede **yok** — o ikisi
+**Docling sürüm farkından** geliyor (2.120.1 → 2.120.3), cihazdan değil. Cihaza
+atfedilebilecek tek içerik kaybı `gpt3` s.50'dir.
+
+### G.2 Şekil açıklaması (VLM) — kapsama iyi, içerik güvenilmez
+
+`do_picture_description` + `SmolVLM-256M-Instruct`, iki prompt ile.
+
+**Kapsama ve maliyet:**
+
+| | |
+|---|---:|
+| Şekil | 92 |
+| Açıklama alan | **81 (%88)** |
+| Eşiğin altında atlanan | 11 |
+| Ek süre (261 sayfa) | **124,1 sn ≈ 475 ms/sayfa** |
+
+Ek maliyet, GPU'lu Docling'in kendisini (530 ms/sayfa) neredeyse ikiye katlıyor.
+Atlanan 11 şekil `picture_area_threshold = 0.05` yüzünden — "açıklanmadı" değil,
+"açıklanmaya değer bulunmadı".
+
+**İçerik — asıl sonuç: model uyduruyor.**
+
+Varsayılan prompt, ResNet makalesindeki bir grafik için:
+
+> *"The image is a line graph depicting the percentage of people who have been
+> diagnosed with a certain disease over a period of time... The first section,
+> labeled '1990-1995'..."*
+
+Transformer makalesindeki dikkat görselleştirmesi için:
+
+> *"The image is a bar chart titled 'It Is Like Being In A Biggest Group Of People'..."*
+
+Bu içeriklerin hiçbiri o belgelerde yok. **SmolVLM-256M uyduruyor.**
+
+Metin isteyen prompt ölçülebilir biçimde daha iyi: açıklama kelimelerinin belgenin
+caption havuzunda bulunma oranı **0,433 vs 0,328** (ortalama), medyan 0,400 vs 0,275.
+Yapısal diyagramlarda ara sıra doğru da oluyor — Transformer mimarisi için
+*"Input Encoding, Embedding, Output Encoding... Add & Norm is connected with
+Multi-Head Attention"* gerçekten o şeklin içeriği. Ama aynı prompt başka bir yerde
+dikkat matrisini *"x-axis shows the years, labeled from 2005 to 2010"* diye anlatıyor.
+Her iki promptta da açıklamaların **%19'unda** belgeyle örtüşme 0,10'un altında.
+
+(Örtüşme oranı zayıf bir vekildir — bir açıklama doğru olup caption'da geçmeyen
+kelimeler kullanabilir. Kararı veren nitel okumadır ve o tartışmasız.)
+
+**Karar: bu model boyutunda özellik boşluğu kapatmıyor, kötüleştiriyor.**
+
+Bugünkü durumda Docling şekil yerine `<!-- image -->` koyuyor — **dürüstçe boş**.
+Uydurma bir açıklama ise **kendinden emin biçimde yanlış**: gömme vektörüne girer,
+aranır, alıntılanır ve hiçbir yerde uyarı çıkmaz. Bir araştırma ajanı için bu, boş
+yer tutucudan **daha tehlikelidir**.
+
+### G.3 Bu koşudan çıkan sonuçlar
+
+1. Şekil boşluğu **kapanmadı.** SmolVLM-256M (256M parametre) yetersiz. Denenmeye
+   değer sıradaki adım daha büyük bir model (`granite_picture_description`) veya
+   API tabanlı bir VLM; **ama önce bu koşunun uyarısı**: doğruluk ölçülmeden
+   açılırsa korpusa uydurma içerik girer.
+2. Şekil açıklaması açılacaksa **metin isteyen prompt** kullanılmalı, varsayılan
+   "betimle" promptu değil.
+3. GPU'nun tek içerik kaybı `gpt3` s.50; cihaz yine de provenance'a yazılmalı
+   (F.1'de yapıldı) çünkü 7 sayfanın hepsi `content_hash`'i değiştiriyor.
+4. Docling sürüm farkı (2.120.1 → 2.120.3) tek başına 2 sayfada içerik değiştirdi —
+   **sürüm de provenance'a girmeli**, bugün girmiyor.
 
 ## 12. Son Cümle
 
