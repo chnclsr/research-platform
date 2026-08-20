@@ -35,6 +35,39 @@ def candidate(connector: str, title: str, url: str, snippet: str = "") -> Connec
     )
 
 
+def test_lexical_relevance_matches_both_the_english_and_the_original_wording():
+    """The gate compares question terms with document text, so language decides admission.
+
+    An English-only list would drop a Turkish official document on a Turkish topic -- the
+    mirror image of the problem translating the question solves.
+    """
+    from research_platform.relevance import candidate_relevance
+
+    translated = ResearchProtocol(
+        title="Lung CT",
+        primary_question="What does AI-assisted reading change in lung cancer CT screening?",
+        original_question="Akciğer kanseri BT taramasında yapay zeka destekli okuma neyi değiştirir?",
+        original_language="tr",
+        budget={"max_wall_minutes": 30},
+    )
+    english_paper = candidate(
+        "openalex",
+        "AI-assisted reading in lung cancer CT screening",
+        "https://example.org/paper",
+        snippet="Randomised comparison of AI-assisted reading in lung cancer screening.",
+    )
+    turkish_document = candidate(
+        "official_registry",
+        "Akciğer kanseri taramasında yapay zeka kullanımı",
+        "https://saglik.example/rehber",
+        snippet="Akciğer kanseri BT taramasında yapay zeka destekli okuma rehberi.",
+    )
+    english_score, _ = candidate_relevance(english_paper, translated)
+    turkish_score, _ = candidate_relevance(turkish_document, translated)
+    assert english_score > 0
+    assert turkish_score > 0
+
+
 def test_exact_repository_and_trusted_domain_filter_reject_benchmark_noise():
     rows = [
         candidate("agentsearch_web", "Architecture - Wikipedia", "https://en.wikipedia.org/wiki/Architecture"),

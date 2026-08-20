@@ -1,10 +1,142 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.9.1`
+Platform sürümü: `v0.10.4`
 
-Belge sürümü: `5.1`
+Belge sürümü: `6.0`
 
-Son güncelleme: `2026-07-30`
+Son güncelleme: `2026-08-20`
+
+Ayrıntılı gerekçeler ve ölçümler
+[DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
+[MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
+içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.10.4 — 2026-08-20
+
+- Araştırma artık soru hangi dilde gelirse gelsin **İngilizce yürüyor**: soru ve alt
+  sorular ilk aşamada çevriliyor, kullanıcının yazdığı metin protokolde saklanıyor.
+- Sorun yalnız sorgu dili değildi — alaka kapıları soru ile belge arasında sözcük
+  örtüşmesi arıyor, dolayısıyla Türkçe soruda İngilizce makaleler LLM'e ulaşmadan
+  eleniyordu. Aynı soruda ölçülen: `openalex` 0 → 320, `crossref` 0 → 160,
+  `europe_pmc` 0 → 155, `arxiv` 0 → 120 sonuç.
+- Alaka kapıları hem İngilizce hem özgün soruyla eşleşiyor; Türkiye'ye özgü bir konuda
+  Türkçe resmî belge çevirinin ters etkisiyle elenmiyor.
+- İddia metinleri İngilizce üretiliyor ama **alıntılar asla çevrilmiyor** — alıntı
+  kaynaktan birebir kopyalanıp pasajda doğrulanıyor, çevrilmiş bir alıntı denetimden
+  geçemez ve iddiayı sessizce düşürürdü.
+- Rapor kullanıcının seçtiği dilde yazılmaya devam ediyor; `report_language` artık
+  yalnız `tr` ve `en` kabul ediyor, çünkü sentezin dil denetimi yalnız bu ikisini
+  doğrulayabiliyor.
+- Plan onay ekranı sorunun geldiği dilde okunuyor: bölüm başlıkları, sınır açıklamaları,
+  alt sorular ve strateji notu. Sorgu dalları İngilizce kalıyor — connector'lara birebir
+  o dizeler gidiyor.
+- Kullanıcının kendi cümlesi planda önde, İngilizce araştırma sorusu altında duruyor;
+  yanlış çeviri bütçe harcanmadan önce yakalanabiliyor.
+- Çeviri başarısız olursa koşu düşmüyor, özgün dille devam edip olayı kaydediyor.
+
+## v0.10.3 — 2026-08-19
+
+- **Koşu, planı onaylanmadan aramaya başlamıyor.** Arama öncesi bir plan üretilip
+  kullanıcıya sunuluyor; onaylanana kadar hiçbir connector çağrılmıyor.
+- Plan, koşunun yapacağı her şeyi yazıyor: sorular, sorgu dalları, kaynak seçimi,
+  tarih kapsamı, bütçe, **hangi sınırın gerçekten bağlayıcı olduğu**, durdurma ölçütleri,
+  modeller, edinim strateji sırası, parser'lar ve üretilecek çıktılar.
+- Sorunun metninden otomatik çıkarılan tarih aralığı artık planda açıkça görünüyor;
+  daha önce her sorguyu sessizce daraltıyordu.
+- Plan reddedilirse gerekçe alınıp alt sorular ve sorgular yeniden üretiliyor; en fazla
+  üç tur, sonra koşu iptal ediliyor.
+- **Araştırma süresi zorunlu hâle geldi.** Süresi belirtilmemiş bir protokol artık hiçbir
+  yoldan kurulamıyor; sessiz 45 dakika varsayılanı kalktı. MCP aracında da zorunlu
+  parametre, Langflow bileşenine girdi eklendi.
+- Süre, plan onaylanırken değiştirilebiliyor.
+- Telegram botu plan beklediğinde sohbete plan özetini ve onay komutlarını yazıyor;
+  `--plansiz` bayrağı kapıyı atlamak isteyenler için.
+- Telegram'dan başlatılan koşular `401 Unauthorized` alıyordu: bot `API_TOKEN`, API ise
+  `SERVICE_TOKEN` bekliyordu. Bot artık servis jetonunu kullanıyor.
+- PDF ve HTML ayrıştırma motorları ayrıştı: `pymupdf_fast` (birincil, iki sütunlu
+  akademik makalelerde doğru okuma sırası), `pypdf` (yedek), `html_structured`,
+  `plain_text`. Birincil motor bozuk bir PDF'te düşerse edinim durmuyor, sıradaki motora
+  geçiyor ve hangi motorun çalıştığı provenance'a yazılıyor.
+
+## v0.10.2 — 2026-08-19
+
+- Kontrol panelinde zaman çizelgesindeki aşama kartları tıklanabilir: bir karta
+  tıklayınca o aşamada çalışan connector, edinim yöntemi, parser, LLM ve embedding
+  dökümü açılıyor — çağrı, başarı, sonuç, token ve süre kırılımıyla.
+- Her kart bir aşama **ziyareti**; aynı aşamanın turlar arası tekrarları ayrı tablolar
+  gösteriyor.
+- Edinim olayına `parser_id` eklendi, böylece hangi belgenin hangi parser'la okunduğu
+  panelden görülebiliyor.
+- **İkili içeriğin koşuyu düşürmesi giderildi.** Bir DOI'nin JPEG ek dosyasına çözülmesi
+  hâlinde içerik "metin" sayılıyor, mojibake üretiliyor ve içindeki NUL baytı
+  veritabanı yazımını reddettirip **o turda toplanan her şeyi** götürüyordu. Artık
+  ikili içerik tanınıp atlanıyor.
+- README'deki düşük kaliteli mermaid şeması ve ASCII yaşam döngüsü çizimi, mimari ve
+  pipeline akışını gösteren SVG diyagramlarla değiştirildi.
+
+## v0.10.1 — 2026-08-18
+
+- MCP artık paylaşılan jeton değil **kişisel API anahtarı** istiyor; `MCP_BEARER_TOKEN`
+  kaldırıldı. Böylece ajandan (Claude Code, Codex) başlatılan koşunun gerçek bir sahibi
+  oluyor.
+- Belirti yanıltıcıydı: paylaşılan jetonla `tools/list` 200 dönüyor ve araçlar görünüyor,
+  yalnız *çağrılar* 401 alıyordu — çünkü paylaşılan jeton sistem asli kimliğine eşleniyor
+  ve API sahipsiz koşuyu reddediyor.
+- Yedekleme betiği ve istemci kurucuları kişisel anahtar kullanacak biçimde güncellendi.
+
+## v0.10.0 — 2026-08-18
+
+- **Panel giriş gerektiriyor ve her kullanıcı yalnız kendi koşularını görüyor.** Kayıt
+  formu yok; hesaplar `research-admin` ile kabuktan açılıyor.
+- Üç kimlik bilgisi türü tek bir `Principal` kavramına çözülüyor: oturum çerezi, kişisel
+  API anahtarı (`rp_...`) ve servis jetonu + `X-Actor-User`.
+- Sahiplik route'ta değil **veri katmanında** zorlanıyor: `run_id` alan her `Repository`
+  metodu bir metasınıf tarafından otomatik korunuyor, yeni metot eklemek ek iş
+  gerektirmiyor.
+- Yabancı bir koşu 404 döndürüyor, 403 değil — 403 koşunun var olduğunu doğrulardı.
+- Yetki ayrımı: container başlat/durdur, log okuma ve connector testi yalnız yöneticide.
+  Bu ayrım olmadan giriş koymak, giren herkese worker'ı durdurma düğmesi vermek olurdu.
+- Telegram hesabını kullanıcı kendi bağlıyor: panelden alınan tek kullanımlık, 5 dakika
+  geçerli kod bota veriliyor. `TELEGRAM_ALLOWED_USER_IDS` birebir sohbetlerde emekli
+  edildi, grup sohbetlerinde korundu.
+- Ortak korpus okuması koşunun **sahibine** göre kapsamlanıyor; çağırana göre
+  kapsamlamak her kullanıcının metnini her koşuya verirdi.
+- Panelden parola değiştirme eklendi; parola değişimi kullanıcının tüm oturumlarını
+  düşürüyor.
+- Kullanıcı, başkalarının süren koşularını **sansürlü** görüyor — yalnız kim, durum,
+  aşama, kuyruk sırası ve geçen süre. Tek GPU paylaşıldığı için bu olmadan kendi koşusu
+  sırada beklerken bomboş bir tablo görüp sistemi bozuk sanardı.
+- `mcp-gateway` portu tüm arayüzlere bağlıydı, loopback'e alındı.
+
+## v0.9.4 — 2026-08-17
+
+- Word raporundaki `[Sxx]` etiketleri kaynak kataloğuna bağlandı; okuyucu iddiadan
+  kaynağa tek tıkla gidebiliyor.
+
+## v0.9.3 — 2026-08-14
+
+- Tamamlanan her koşu, tüm çıktılarını içeren tek bir ZIP olarak yerel yedek klasörüne
+  iniyor; teslimat dizini yanlış sahiplikle oluşturulduğu için çalışmayan yedekleme
+  devreye alındı.
+- Ayrıştırma `parsers/` paketine taşındı: HTML tabloları markdown'a çevriliyor, kod
+  blokları korunuyor, PDF okuma sırası düzeltildi.
+- Parser seçimi deterministik: içerik sinyallerinden seçiliyor, protokoldeki açık
+  override kaydediliyor ve seçilen parser `source_versions.provenance` içine yazılıyor.
+  Determinizm şart, çünkü `content_hash` ayrıştırılmış metinden hesaplanıyor ve kaynak
+  sürüm tekilleştirmesi buna bağlı.
+
+## v0.9.2 — 2026-08-13
+
+- AgentSearch adaptörü eklendi ve compose yığınına alındı; 3939 portundaki SearXNG
+  beklenen sözleşmeye çevriliyor.
+- **NORMALIZE checkpoint boyut hatası giderildi.** Büyük PDF içeren koşular
+  PostgreSQL'in 256 MiB jsonb sınırında çöküyor ve toplanan tüm belgeler geri
+  alınıyordu; ham gövde artık checkpoint'e girmiyor.
+- Checkpoint'ler tamamlanan koşularda temizleniyor ve boyut koruması eklendi.
+- Kontrol paneli Docker yığınını yönetebiliyor (`CONTROL_PANEL_DEPLOYMENT=docker`);
+  `native` modda kalırsa panel 8000/8010 portlarında çakışan süreçler başlatıyordu.
+- MinIO verisi named volume yerine host klasörüne (bind mount) alındı: `docker compose
+  down -v` artık bu veriyi silmiyor ve klasör doğrudan yedeklenebiliyor.
 
 ## v0.9.1 — 2026-07-30
 

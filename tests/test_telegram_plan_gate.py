@@ -107,6 +107,40 @@ async def test_a_finished_run_stops_being_watched():
     assert bot.sent == []
 
 
+def test_plan_summary_speaks_the_language_the_request_arrived_in():
+    base = {
+        "questions": {
+            "primary": "Which methods detect pulmonary nodules?",
+            "sub_questions": ["Which datasets are used?"],
+        },
+        "query_plan": [{"query": "pulmonary nodule detection CT"}],
+        "budget": {"max_wall_minutes": 30, "max_rounds": 4},
+        "effective_limits": [{"limit": "max_rounds", "binding": False}],
+    }
+    english = plan_summary("RUN1", {**base, "display_language": "en"})
+    assert "Plan awaiting approval" in english
+    assert "Query branches" in english
+    assert "Non-binding limit" in english
+    assert "Approve:" in english
+
+    turkish = plan_summary("RUN1", {
+        **base,
+        "display_language": "tr",
+        "questions": {
+            **base["questions"],
+            "translated": True,
+            "original": "Hangi yöntemler nodül tespit ediyor?",
+            "sub_questions_display": ["Hangi veri setleri kullanılıyor?"],
+        },
+    })
+    assert "Plan onayı bekleniyor" in turkish
+    # The reader's own wording leads, the operational English stays underneath.
+    assert turkish.index("Hangi yöntemler nodül") < turkish.index("Which methods detect")
+    assert "Hangi veri setleri kullanılıyor?" in turkish
+    # Query branches are the strings that actually go out, so they are never translated.
+    assert "pulmonary nodule detection CT" in turkish
+
+
 def test_plan_summary_stays_inside_a_telegram_message():
     plan = {
         "questions": {

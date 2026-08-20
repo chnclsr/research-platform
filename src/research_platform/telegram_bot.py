@@ -102,6 +102,54 @@ def parse_research_request(
     )
 
 
+# Chat chrome in the language the request arrived in. The plan's own prose arrives already
+# localised from research_plan.py; these are the labels around it.
+PLAN_TEXT = {
+    "tr": {
+        "waiting": "Plan onayı bekleniyor",
+        "question": "Soru",
+        "research_wording": "Araştırma dili (İngilizce)",
+        "sub_questions": "Alt sorular",
+        "branches": "Sorgu dalları",
+        "more": "{count} dal daha",
+        "duration": "Süre",
+        "minutes": "dk",
+        "sources": "Kaynak",
+        "unlimited": "sınırsız",
+        "rounds": "Tur",
+        "inert": "Bağlayıcı olmayan sınır",
+        "dates": "Tarih",
+        "inferred": "sorudan çıkarıldı",
+        "feedback": "Önceki geri bildiriminiz",
+        "strategy": "Strateji",
+        "approve": "Onay:       ",
+        "reject": "Değişiklik: ",
+        "reason": "gerekçe",
+    },
+    "en": {
+        "waiting": "Plan awaiting approval",
+        "question": "Question",
+        "research_wording": "Research wording (English)",
+        "sub_questions": "Sub-questions",
+        "branches": "Query branches",
+        "more": "{count} more branches",
+        "duration": "Duration",
+        "minutes": "min",
+        "sources": "Sources",
+        "unlimited": "unlimited",
+        "rounds": "Rounds",
+        "inert": "Non-binding limit",
+        "dates": "Dates",
+        "inferred": "inferred from the question",
+        "feedback": "Your earlier feedback",
+        "strategy": "Strategy",
+        "approve": "Approve: ",
+        "reject": "Changes: ",
+        "reason": "reason",
+    },
+}
+
+
 def plan_summary(run_id: str, plan: dict) -> str:
     """The approval document compressed to something readable in a chat window.
 
@@ -113,25 +161,32 @@ def plan_summary(run_id: str, plan: dict) -> str:
     branches = plan.get("query_plan") or []
     budget = plan.get("budget") or {}
     scope = plan.get("date_scope") or {}
+    text = PLAN_TEXT["en" if plan.get("display_language") == "en" else "tr"]
+    # The reader's own wording leads; the English the run uses stays underneath so a bad
+    # translation can still be rejected here.
+    translated = bool(questions.get("translated") and questions.get("original"))
+    lead = questions["original"] if translated else questions.get("primary", "")
     lines = [
-        f"Plan onayı bekleniyor: {run_id}",
+        f"{text['waiting']}: {run_id}",
         "",
-        f"Soru: {str(questions.get('primary', ''))[:300]}",
+        f"{text['question']}: {str(lead)[:300]}",
     ]
-    subs = questions.get("sub_questions") or []
+    if translated:
+        lines.append(f"{text['research_wording']}: {str(questions['primary'])[:300]}")
+    subs = questions.get("sub_questions_display") or questions.get("sub_questions") or []
     if subs:
-        lines.append(f"Alt sorular ({len(subs)}):")
+        lines.append(f"{text['sub_questions']} ({len(subs)}):")
         lines += [f"  · {str(item)[:120]}" for item in subs[:5]]
     if branches:
-        lines.append(f"Sorgu dalları ({len(branches)}):")
+        lines.append(f"{text['branches']} ({len(branches)}):")
         lines += [f"  · {str(item.get('query', ''))[:110]}" for item in branches[:6]]
         if len(branches) > 6:
-            lines.append(f"  · … {len(branches) - 6} dal daha")
+            lines.append(f"  · … {text['more'].format(count=len(branches) - 6)}")
     lines.append("")
     lines.append(
-        f"Süre: {budget.get('max_wall_minutes')} dk · "
-        f"Kaynak: {budget.get('max_sources') or 'sınırsız'} · "
-        f"Tur: {budget.get('max_rounds')}"
+        f"{text['duration']}: {budget.get('max_wall_minutes')} {text['minutes']} · "
+        f"{text['sources']}: {budget.get('max_sources') or text['unlimited']} · "
+        f"{text['rounds']}: {budget.get('max_rounds')}"
     )
     inert = [
         row["limit"]
@@ -139,21 +194,22 @@ def plan_summary(run_id: str, plan: dict) -> str:
         if not row.get("binding")
     ]
     if inert:
-        lines.append(f"Bağlayıcı olmayan sınır: {', '.join(inert)}")
+        lines.append(f"{text['inert']}: {', '.join(inert)}")
     if scope.get("start_date"):
-        note = " (sorudan çıkarıldı)" if scope.get("inferred_from_question") else ""
+        note = f" ({text['inferred']})" if scope.get("inferred_from_question") else ""
         lines.append(
-            f"Tarih: {str(scope['start_date'])[:10]} → {str(scope.get('end_date'))[:10]}{note}"
+            f"{text['dates']}: {str(scope['start_date'])[:10]} → "
+            f"{str(scope.get('end_date'))[:10]}{note}"
         )
     if plan.get("feedback"):
-        lines.append(f"Önceki geri bildiriminiz: {len(plan['feedback'])} madde")
+        lines.append(f"{text['feedback']}: {len(plan['feedback'])}")
     if plan.get("strategy_note"):
         lines.append("")
-        lines.append(f"Strateji: {plan['strategy_note'][:500]}")
+        lines.append(f"{text['strategy']}: {plan['strategy_note'][:500]}")
     lines += [
         "",
-        f"Onay:        /respond {run_id} approve",
-        f"Değişiklik:  /respond {run_id} reject <gerekçe>",
+        f"{text['approve']} /respond {run_id} approve",
+        f"{text['reject']} /respond {run_id} reject <{text['reason']}>",
     ]
     return "\n".join(lines)
 

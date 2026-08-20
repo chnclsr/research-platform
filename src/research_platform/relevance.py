@@ -130,7 +130,9 @@ def github_repositories(value: str) -> list[tuple[str, str]]:
 
 
 def candidate_relevance(candidate: ConnectorCandidate, protocol: ResearchProtocol) -> tuple[float, list[str]]:
-    question = " ".join([protocol.primary_question, *protocol.sub_questions])
+    # Both phrasings: the run researches in English, but a source in the user's own
+    # language should still match on its own terms.
+    question = " ".join(protocol.research_questions())
     question_terms = topic_terms(question)
     candidate_text = f"{candidate.title} {candidate.snippet} {candidate.url}"
     candidate_terms = topic_terms(candidate_text)
@@ -194,7 +196,7 @@ def filter_and_rank_candidates(
     trusted = protocol.connectors.trusted_domains
     target_repositories = {
         f"{owner}/{repo}".lower() for owner, repo in github_repositories(
-            " ".join([protocol.primary_question, *protocol.sub_questions])
+            " ".join(protocol.research_questions())
         )
     }
     official_entities = resolve_official_entities(protocol.primary_question)
@@ -348,15 +350,25 @@ def document_relevance(
     normalized_heading = " ".join(heading.lower().replace("-", " ").split())
     heading_terms = topic_terms(heading)
     body_terms = topic_terms(body)
-    subject_phrase = protocol.primary_question.split(":", 1)[0]
-    subject_terms = canonical_topic_terms(subject_phrase)
     document_subject_terms = canonical_topic_terms(f"{heading} {body}")
-    subject_hits = subject_terms & document_subject_terms
-    subject_coverage = len(subject_hits) / max(1, len(subject_terms))
+    # Scored per phrasing and kept at the best one, not unioned: pooling English and
+    # Turkish terms would inflate the denominator and make the gate stricter than before.
+    subject_hits: set[str] = set()
+    subject_coverage = 0.0
+    for phrasing in protocol.primary_questions():
+        phrase_terms = canonical_topic_terms(phrasing.split(":", 1)[0])
+        if not phrase_terms:
+            continue
+        hits = phrase_terms & document_subject_terms
+        coverage = len(hits) / max(1, len(phrase_terms))
+        if coverage >= subject_coverage:
+            subject_hits, subject_coverage = hits, coverage
     candidate.metadata["primary_subject_hits"] = sorted(subject_hits)
     candidate.metadata["primary_subject_coverage"] = round(subject_coverage, 4)
     primary_heading_phrases = {
-        phrase for phrase in topic_bigrams(protocol.primary_question)
+        phrase
+        for phrasing in protocol.primary_questions()
+        for phrase in topic_bigrams(phrasing)
         if phrase in normalized_heading
     }
     best_score = 0.0
@@ -364,7 +376,7 @@ def document_relevance(
     best_topic_count = 0
     best_focus_required = False
     best_focus_count = 0
-    for question in questions or [protocol.primary_question, *protocol.sub_questions]:
+    for question in questions or protocol.research_questions():
         anchors = topic_terms(question)
         if not anchors:
             continue
@@ -399,7 +411,9 @@ def document_relevance(
         or bool(candidate.metadata.get("sentinel_required"))
     )
     if protocol.research_mode == "literature_scan":
-        primary_hits = topic_terms(protocol.primary_question) & (heading_terms | body_terms)
+        primary_hits = set().union(
+            *(topic_terms(phrasing) for phrasing in protocol.primary_questions())
+        ) & (heading_terms | body_terms)
         # A literature inventory keeps plausible contextual studies for the semantic
         # classifier. Exact heading phrases and the brittle ``focus`` heuristic must not
         # erase recall before the acquired document can be inspected.

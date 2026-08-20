@@ -26,7 +26,6 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 11 | Eklenti C — `parse_document` MCP aracı | Ajanın teşhis yeteneği | Bekliyor |
 | 12 | Panel `native` modda hâlâ zararlı | Yanlış modda çakışma | Belgelendi |
 | 13 | Tek bir belgenin kaydı tüm koşuyu düşürüyor | Toplanan her şey kaybolur | **Yüksek** |
-| 14 | Sorgu derleyicisi tek dilde kalıyor | Türkçe soru → akademik kaynak yok | **Yüksek** |
 | 15 | Kanıt çıkarımında bütçe karakterle ölçülüyor | Latin dışı metinde 0 iddia | **Yüksek** |
 
 ---
@@ -220,7 +219,7 @@ kişi başına anahtar + kişi başına klasör, ama o zaman başkalarının rap
 hiç inmez — disk arızası senaryosunda (2. madde) kapsam daralır.
 
 Ayrıntı: kökteki raporun 14. bölümü ve
-[reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
+[MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 "Kalan sınırlar".
 
 ## 13. Tek bir belgenin kaydı tüm koşuyu düşürüyor
@@ -242,31 +241,6 @@ doğuruyor; sayaç ve olay olmadan yapılırsa gözlemlenemeyen kayıp üretir.
 `document_save_failed` olayı olarak yaz (url + hata sınıfı) ve koşuyu sürdür. Olay zaten
 panelin aşama tablosuna düşer, yani kayıp görünür olur.
 
-## 14. Sorgu derleyicisi tek dilde kalıyor
-
-**Durum:** `protocol.languages = ["tr", "en"]` olmasına rağmen üretilen sorgu dallarının
-**hepsi** soru hangi dilde yazıldıysa o dilde kalıyor. `query_compiler.py` dalları soru
-metninden türetiyor ve çeviri adımı yok.
-
-**Ölçüm:** 19 Ağustos 2026, koşu `01M0CFGYWNZBJC4WQNA5KWXY66` (Türkçe soru, akciğer BT +
-yapay zeka). `arxiv`, `crossref`, `openalex`, `europe_pmc` Türkçe dizgelerle arandı ve
-neredeyse tamamı 0 sonuç döndürdü; `agentsearch_web` 14 çağrının yalnız birinde 20 sonuç
-verdi. Kabul edilen 5 kaynağın 3'ü çok dilli meta veri tutan tek bir Rus dergisinden, biri
-878 karakterlik bir paywall sayfasıydı. Aynı soru İngilizce sorulduğunda sorun ortadan
-kalkıyor — yani sınır dil desteğinde, konuda değil.
-
-**Etki:** Türkçe soru soran kullanıcı, sistem çalışıyor görünürken sessizce boş bir korpus
-alıyor. Hata yok, uyarı yok; yalnız kaynak sayısı düşük.
-
-**Not (19 Ağustos):** Sorun kapanmadı, ama artık **koşu başlamadan görülebiliyor** — plan
-onayı ekranı sorgu dallarını olduğu gibi listeliyor, dolayısıyla hepsinin tek dilde olduğu
-onaydan önce fark edilip düzeltme istenebiliyor.
-
-**Yapılacak:** `languages` listesindeki her dil için sorgu dalı üret — en ucuzu, soru
-İngilizce değilse `DECOMPOSE` çıktısına İngilizce bir dal seti eklemek (tek LLM çağrısı,
-aşama başına bir kez). Alternatif olarak connector başına dil tercihi: akademik
-connector'lara İngilizce, web connector'larına yerel dil.
-
 ## 15. Kanıt çıkarımında bütçe karakterle ölçülüyor
 
 **Durum:** `extract_claims()` istemi karakterle sınırlıyor (`content[:16000]`,
@@ -278,6 +252,11 @@ sayıyor, dolayısıyla İngilizce'de rahat sığan sınır Türkçe/Kiril metin
 tavanına dayandı; biri `num_predict` sınırında `length` ile kesildi. Sonuç: `LLM did not
 return valid JSON` ve iki turda **0 iddia**. Pasajların kendisi normaldi (ortalama 628,
 azami 700 token).
+
+**Not (19 Ağustos):** Araştırma artık İngilizce yürüyor (raporun 19. bölümü), yani soru,
+alt sorular ve iddia metni Latin dışı karakter taşımıyor ve tavana dayanma baskısı azaldı.
+Sorun **kapanmadı**: pasajlar hâlâ kaynağın kendi dilinde ve Türkçe/Kiril bir kaynakta aynı
+taşma yeniden yaşanır. Bütçe hâlâ karakterle ölçülüyor.
 
 **Yapılacak:** İstemi token bütçesiyle kur: `llm_context_tokens` eksi çıktı payı eksi sistem
 istemi kadar bütçe ayır, hedef pasaj ile komşu bağlamı bu bütçeye göre kırp. Ölçüm için

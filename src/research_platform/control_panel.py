@@ -316,7 +316,12 @@ async def _run_snapshot(
                 "status": row.status,
                 "current_stage": row.current_stage,
                 "title": protocol.get("title") or "İsimsiz araştırma",
-                "question": protocol.get("primary_question") or "",
+                # What the user typed: the pipeline rewrites primary_question into English
+                # so the research side speaks one language, but the list should still show
+                # the person their own question.
+                "question": protocol.get("original_question")
+                or protocol.get("primary_question")
+                or "",
                 "output_mode": protocol.get("output_mode") or "both",
                 "round_number": row.round_number,
                 "sources_count": row.sources_count,
@@ -932,7 +937,7 @@ async def logout() -> RedirectResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.10.0"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.10.4"}
 
 
 @app.get("/api/session")

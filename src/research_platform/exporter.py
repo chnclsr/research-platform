@@ -88,12 +88,15 @@ async def build_exports(
     language_is_turkish = protocol.report_language.lower().startswith("tr")
     synthesis_package = await build_synthesis_package(
         llm=llm,
+        # The model reasons over English claims, so it gets the English question; the
+        # "write in report language" instruction inside the synthesis handles the output.
         question=protocol.primary_question,
         language=protocol.report_language,
         sources=sources,
         reportable_claims=[] if protocol.output_mode == "raw" else ordered_reportable,
         evidence_by_claim=evidence_by_claim,
-        sub_questions=protocol.sub_questions,
+        # Sub-questions become section headings in the report, so these are printed text.
+        sub_questions=protocol.sub_questions_for_report(),
     )
     figure_result = FigurePipelineResult()
     if protocol.output_mode != "raw":
@@ -239,7 +242,7 @@ async def build_exports(
     )
     report_md = (
         f"# {protocol.title}\n\n"
-        f"## Araştırma sorusu\n\n{protocol.primary_question}\n\n"
+        f"## Araştırma sorusu\n\n{protocol.question_for_report()}\n\n"
         f"## Yönetici sentezi\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"## Tematik kanıt sentezi\n\n{_markdown(synthesis.get('report'))}\n\n"
         f"## Belirsizlikler ve araştırma boşlukları\n\n"
@@ -529,7 +532,9 @@ async def build_exports(
     word_report = build_word_report(
         run_id=run_id,
         title=protocol.title,
-        question=protocol.primary_question,
+        # Printed in the document, so it follows the report language rather than the
+        # English wording the research side used.
+        question=protocol.question_for_report(),
         language=protocol.report_language,
         coverage=coverage.model_dump(),
         sources=sources,
@@ -540,7 +545,7 @@ async def build_exports(
         narrative=_markdown(synthesis.get("report")),
         uncertainty=_markdown(synthesis.get("uncertainty")),
         scope=protocol.scope.model_dump(mode="json"),
-        sub_questions=protocol.sub_questions,
+        sub_questions=protocol.sub_questions_for_report(),
         connector_ids=protocol.connectors.included_connectors,
         research_mode=protocol.research_mode,
         synthesis_package=synthesis_package,

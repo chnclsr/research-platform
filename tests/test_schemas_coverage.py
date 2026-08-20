@@ -30,6 +30,29 @@ def test_a_protocol_cannot_exist_without_a_stated_collection_duration():
     assert "max_wall_minutes" in str(missing_minutes.value)
 
 
+def test_report_language_is_limited_to_what_the_synthesis_can_verify():
+    """_language_matches() in report_synthesis.py only checks Turkish output.
+
+    A third value would promise a language nothing enforces, so the report would come back
+    in whatever the model felt like and pass every guard.
+    """
+    with pytest.raises(ValidationError):
+        ResearchProtocol(
+            title="Third language",
+            primary_question="Can the report be written in an unverified language?",
+            report_language="de",
+            budget={"max_wall_minutes": 30},
+        )
+    for language in ("tr", "en"):
+        protocol = ResearchProtocol(
+            title="Supported language",
+            primary_question="Can the report be written in a supported language?",
+            report_language=language,
+            budget={"max_wall_minutes": 30},
+        )
+        assert protocol.report_language == language
+
+
 def test_plan_review_is_the_default_checkpoint():
     protocol = ResearchProtocol(
         title="Default checkpoints",

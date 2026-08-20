@@ -5,7 +5,8 @@ kararlarını, gerekçelerini ve doğrulamalarını içerirler; güncel durumu t
 
 Aktif geliştirme raporu depo kökündedir:
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](../DEVELOPMENTS_IMPLEMENTATION_REPORT.md).
-Açık işler [OPEN_ITEMS.md](../OPEN_ITEMS.md) dosyasındadır.
+Açık işler [OPEN_ITEMS.md](../OPEN_ITEMS.md), sürüm sürüm değişiklik özeti
+[CHANGELOG.md](../CHANGELOG.md) dosyasındadır.
 
 ## Yeni değişiklik nereye yazılır
 
@@ -71,7 +72,7 @@ Böylece okuyan yanılmaz, kayıt bozulmaz. Mevcut örnekler:
 | v0.8.0 | [SYNTHESIS_REPORT_PIPELINE_V0.8.0_IMPLEMENTATION_REPORT](SYNTHESIS_REPORT_PIPELINE_V0.8.0_IMPLEMENTATION_REPORT.md) | LLM sentez pipeline'ı |
 | v0.9.0 | [FIGURE_INTELLIGENCE_V0.9.0_IMPLEMENTATION_REPORT](FIGURE_INTELLIGENCE_V0.9.0_IMPLEMENTATION_REPORT.md) | Kaynak figürü anlama |
 | v0.9.1 | [SOURCE_FIGURE_EMBEDDING_V0.9.1_IMPLEMENTATION_REPORT](SOURCE_FIGURE_EMBEDDING_V0.9.1_IMPLEMENTATION_REPORT.md) | Figürü Word raporuna yerleştirme |
-| v0.10.0 | [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md) | Kullanıcı kimliği ve koşu sahipliği |
+| v0.10.0 | [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT](../MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md) | Kullanıcı kimliği ve koşu sahipliği — **kökte**, arşivde değil |
 | — | [AGENT_GATEWAY_ARCHITECTURE_REPORT](AGENT_GATEWAY_ARCHITECTURE_REPORT.md) | Agent gateway mimarisi |
 | — | [COVERAGE_RECOVERY_REDESIGN_REPORT](COVERAGE_RECOVERY_REDESIGN_REPORT.md) | Coverage recovery yeniden tasarımı |
 | — | [COVERAGE_RECOVERY_IMPLEMENTATION_REPORT](COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md) | Coverage recovery uygulaması |

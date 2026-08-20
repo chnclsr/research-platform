@@ -1,8 +1,8 @@
 # `developments` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.10.0`
+Platform sürümü: `v0.10.4`
 
-Belge sürümü: `12.3`
+Belge sürümü: `12.5`
 
 Son güncelleme: `2026-08-19`
 
@@ -29,8 +29,10 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 14 | MCP'de kişisel kimlik | `d88a32a` |
 | 15 | Aşama başına araç dökümü (panel) | `b8ec33b` |
 | 16 | İkili içerik ve NUL baytı koşuyu düşürüyordu | `b8ec33b` |
-| 17 | Zorunlu plan onayı ve zorunlu araştırma süresi | commit bekliyor |
-| 18 | Telegram botu SERVICE_TOKEN ve granüler parser motorları | commit bekliyor |
+| 17 | Zorunlu plan onayı ve zorunlu araştırma süresi | `496a6ac` |
+| 18 | Telegram botu SERVICE_TOKEN ve granüler parser motorları | `496a6ac` |
+| 19 | Araştırma İngilizce yürüyor, rapor istenen dilde | commit bekliyor |
+| 20 | Plan ekranı sorunun geldiği dilde | commit bekliyor |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -966,7 +968,7 @@ da sorunsuzdur.
 ## 11. Kullanıcı kimliği ve koşu sahipliği (v0.10.0)
 
 Bu değişiklik şema göçü içerdiği ve dört servisi kapsadığı için kendi raporunu aldı:
-**[reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)**.
+**[MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)**.
 
 Özet: panel artık oturum açmayı gerektiriyor ve her kullanıcı yalnız kendi koşularını
 görüyor. Sahiplik `Repository` katmanında zorlanıyor — panelin hem doğrudan veritabanı hem
@@ -1041,7 +1043,7 @@ kullanıcıdan da saklanıyordu.
 
 ### v0.10.0 kararının hangi yönü değişti
 
-`reports/MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md` "kullanıcı yalnız kendi
+`MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md` "kullanıcı yalnız kendi
 koşularını görür" diyor. Bu bölüm o kararı **içerik için koruyup varlık için gevşetiyor**:
 
 | | v0.10.0 | Şimdi |
@@ -1623,6 +1625,174 @@ seçimi, etkin sınırlar, modeller, çıktılar, strateji notu), süre girdisi 
 
 * `tests/test_parsers.py` (34 test), `tests/test_research_plan.py` (5 test), `tests/test_pipeline.py` (19 test) ve tüm test paketi (269 test) çalıştırılarak tam doğrulama sağlandı.
 * Docker container'ları yeniden derlenip canlı ortamda doğrulandı.
+
+---
+
+## 19. Araştırma İngilizce yürüyor, rapor istenen dilde
+
+### Sorun: dil yalnız sorguları değil, kapıları da bağlıyordu
+
+Türkçe bir soruyla açılan koşu, sorunun dilini bütün alt aşamalara taşıyordu. 19 Ağustos'ta
+ölçülen: `arxiv`, `crossref`, `openalex`, `europe_pmc` Türkçe dizgelerle arandı ve dördü de
+**0** sonuç döndürdü.
+
+Ama asıl mesele arama değildi. [relevance.py](src/research_platform/relevance.py) sözcük
+tabanlı kapılar içeriyor — `topic_terms`, `topic_bigrams`, `canonical_topic_terms` — ve
+soru ile belge metni arasında terim örtüşmesi arıyor. Türkçe soru ile İngilizce makale
+arasında bu örtüşme sıfıra yakındır: **değerli makaleler LLM'e hiç ulaşmadan, sessizce
+eleniyordu.** Arama düzeltilse bile bu kapı kapalı kalırdı.
+
+Kök neden tek bir dize: `protocol.primary_question`. Ayrıştırma girdisi, sorgu üretimi,
+alaka yargısı, kurtarma misyonları, boşluk başlıkları ve sentez — hepsi onu okuyor.
+
+### Çözüm: soruyu yerinde çevir
+
+`VALIDATE_PROTOCOL` aşamasında `primary_question` ve `sub_questions` İngilizce'ye çevriliyor;
+kullanıcının yazdığı metin `original_question`, `original_sub_questions` ve
+`original_language` alanlarında kalıyor.
+
+**Neden yerinde:** araştırma tarafındaki ~35 çağrı yerinin hiçbiri değişmiyor, dolayısıyla
+bir tanesini atlayıp sessizce eski davranışı sürdürme riski yok. Alternatif — ayrı bir
+`research_question` alanı — her çağrı yerini tek tek çevirmeyi ve unutulan birinin fark
+edilmemesini göze almayı gerektirirdi. Bedeli, sorunun kullanıcıya gösterildiği birkaç
+yerin (`panel listesi`, çekmece başlığı, rapor başlıkları) özgün metne çevrilmesiydi;
+bunlar sayılabilir ve gözle görülür.
+
+Çeviri `VALIDATE_PROTOCOL`'de yapılıyor, çünkü plan onayı ekranına düşmesi gerekiyor:
+**yanlış çeviri, bütün koşuyu sessizce başka bir soruya yönlendirecek tek hatadır**, ve
+onay ekranı onu bütçe harcanmadan önce yakalar. Panel ve Telegram özeti İngilizce sorunun
+altında kullanıcının kendi cümlesini gösteriyor.
+
+### Üç ayrıntı
+
+**Çeviri başarısız olursa koşu düşmez.** Özgün metin korunur, `research_language_fallback`
+olayı yazılır. Türkçe araştırmak İngilizce araştırmaktan kötüdür, ama koşuyu bir çeviri
+yüzünden iptal etmekten iyidir. Doğrulama sırasında bu yol gerçekten çalıştı: Docker yeni
+başladığı için worker host'taki Ollama'ya ulaşamadı, koşu çökmek yerine Türkçe devam etti.
+
+**Alıntılar asla çevrilmiyor.** İddia metni (`text`) İngilizce, ama `quote` kaynağın kendi
+dilinden birebir kopyalanır — `evidence_quality_gate` alıntının pasajda geçtiğini doğruluyor
+ve çevrilmiş bir alıntı bu denetimi geçemeyip iddiayı sessizce düşürürdü. Prompt'a bu ayrım
+açıkça yazıldı.
+
+**Kapılar iki dille birden eşleşiyor.** `research_questions()` ve `primary_questions()`
+yardımcıları hem İngilizce hem özgün metni döndürüyor; böylece Türkiye'ye özgü bir konuda
+Türkçe resmî belge, çevirinin ters etkisiyle elenmiyor. Öznel kapsam skoru dillerin
+**birleşimi** değil **en iyisi** üzerinden hesaplanıyor: terimleri havuzlamak paydayı
+büyütür ve kapıyı eskisinden katı hâle getirirdi.
+
+### Rapor tarafı
+
+Ayrım netleşti: **akıl yürütme İngilizce, basılan metin rapor dilinde.**
+
+| Yer | Ne alır |
+|---|---|
+| Sentez prompt'ları (`RESEARCH_QUESTION`) | İngilizce soru — iddialar da İngilizce |
+| Word raporundaki "Ana soru" / "Alt sorular" | `question_for_report()` / `sub_questions_for_report()` |
+| `02_full_research_report.md` başlığı | `question_for_report()` |
+| `10_reproducibility_manifest.json` | protokolün tamamı, yani her iki soru ve çeviri bilgisi |
+
+`question_for_report()` geri çeviri yapmaz: Türkçe rapor isteyen ama İngilizce soran
+kullanıcı sorusunu İngilizce görür. Uydurulmuş bir çeviriden dürüsttür.
+
+`report_language` artık `Literal["tr", "en"]`. Serbest dizeydi ve sentezdeki
+`_language_matches` yalnız Türkçe'yi denetlediği için `"de"` yazan biri hiçbir şeyin
+doğrulanmadığı bir rapor alıyordu.
+
+### Doğrulama
+
+Aynı Türkçe soru, koşu `01M0F0G44KMQAXRB17973SDHT8`:
+
+| Ölçüm | 19 Ağustos (Türkçe) | Şimdi (Türkçe soru, İngilizce araştırma) |
+|---|---|---|
+| openalex | 0 | **320** |
+| crossref | 0 | **160** |
+| europe_pmc | 0 | **155** |
+| arxiv | 0 | **120** |
+| Sorgu dilleri | hepsi Türkçe | hepsi İngilizce |
+
+Plan onayında hem İngilizce araştırma sorusu hem kullanıcının Türkçe cümlesi göründü.
+279 test geçiyor.
+
+---
+
+## 20. Plan onay ekranı sorunun geldiği dilde okunuyor
+
+### Sorun
+
+Araştırmanın İngilizce yürümesi doğru (19. bölüm), ama kullanıcının **karar verdiği** ekran
+o çeviriyi olduğu gibi yansıtıyordu: Türkçe soru soran biri planda İngilizce sorular ve
+İngilizce bir strateji notu görüyordu.
+
+İki ayrı kusur vardı:
+
+**Strateji notu yanlış dilde çıkıyordu.** `STRATEGY_SYSTEM` "in the requested language"
+diyordu ama dil yalnız JSON yükünün içindeydi (`{"language": "tr"}`), etrafı İngilizce plan
+içeriğiyle çevrili. 4B model içeriği taklit edip İngilizce yazıyordu. Dil adı sistem
+istemine taşındı ("Write it in Turkish."); tek satırlık yer değişikliği, ölçülen sonuç:
+strateji notu artık Türkçe geliyor.
+
+**Plan metinleri sabit Türkçe'ydi.** `effective_limits` ve `deliverables` içindeki beş
+açıklama koda gömülü Türkçe'ydi, yani İngilizce soru soran kullanıcı tersinden aynı sorunu
+yaşıyordu: İngilizce sorular, Türkçe açıklamalar.
+
+### Gösterim dili sorunun dilidir, rapor dili değil
+
+`ResearchProtocol.display_language()` `original_language`'i okur. Rapor dili farklı bir
+karardır — teslimatla ilgilidir; planı ise soruyu yazan kişi okur. Türkçe sorup İngilizce
+rapor isteyen biri planı yine Türkçe görür.
+
+Bunun çalışması için sorunun dilinin güvenilir olması gerekiyordu. `detect_language()` iki
+İngilizce durak sözcüğü göremezse `"und"` döndürüyor ve kısa sorularda bu çok sık.
+`translate_research_request` artık kaynak dili de döndürüyor — model zaten çeviriyi yaparken
+biliyor. `original_language` çevrilen, zaten İngilizce olan ve çevirinin patladığı **her**
+yolda `tr`/`en` olarak yazılıyor.
+
+Bu, yan üründe sessiz bir kusuru da kapattı: `question_for_report()`
+`original_language == report_language` karşılaştırması yapıyor ve `"und"` hiçbir zaman
+eşleşmediği için **kısa Türkçe soruların raporu, kullanıcının sorusu yerine İngilizce
+çeviriyi basıyordu.**
+
+### Ne çevriliyor, ne çevrilmiyor
+
+| İçerik | Karar |
+|---|---|
+| Birincil soru | Kullanıcının cümlesi önde; İngilizce araştırma sorusu altında soluk kalır |
+| Alt sorular | Gösterim için çevrilir (`sub_questions_display`); operasyonel İngilizce liste yerinde durur |
+| **Sorgu dalları** | **Çevrilmez** — connector'lara birebir bu dizeler gidiyor; çevirmek planın yalan söylemesi olurdu |
+| Connector/parser/model adları | Çevrilmez; bunlar çalışan sistemin adları |
+| Sınır ve teslimat açıklamaları | Sunucuda yerelleşir |
+| Düğme, sütun ve bölüm başlıkları | Her yüzeyde kendi sözlüğünde |
+
+Plan **verisinin** düzyazısı sunucuda, **arayüz çerçevesi** yüzeyde yerelleşiyor: sunucunun
+düğme metni göndermesi yanlış olurdu ve panelde düğme, Telegram'da komut satırı var.
+
+### Modelin döndürdüğü şekli kabul etmek
+
+Gösterim çevirisi ilk denemede sessizce boş kaldı. Neden: istem `{"items": [...]}` istiyor,
+model ise **kaynak → çeviri eşlemesi** döndürüyor:
+
+```json
+{"What is the diagnostic accuracy...?": "Derin öğrenme modellerinin ... doğruluk ne kadardır?"}
+```
+
+`_display_items` artık üç şekli de okuyor (istenen dizi, çıplak dizi, eşleme) ve girdiyle
+bire bir hizalanamayan her yanıtı **atıyor** — yanlış uzunlukta bir liste, yanlış metni
+yanlış sorunun yanına koyardı.
+
+### Doğrulama
+
+| Ölçüm | Türkçe soru | İngilizce soru |
+|---|---|---|
+| `display_language` | `tr` | `en` |
+| PLAN aşamasındaki LLM çağrısı | 2 (gösterim çevirisi + strateji) | **1** (yalnız strateji) |
+| Sınır açıklamaları | Türkçe | İngilizce |
+| Strateji notu | Türkçe | İngilizce |
+| Alt sorular | Türkçe gösterim + İngilizce operasyonel | yalnız İngilizce |
+| Sorgu dalları | İngilizce | İngilizce |
+
+287 test geçiyor. Arka planda hiçbir şey değişmedi: sorgular, edinim, kanıt çıkarımı ve
+rapor üretimi aynı.
 
 ---
 

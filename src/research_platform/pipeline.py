@@ -24,7 +24,15 @@ from .discovery_quality import estimated_completeness, relation_to_candidate, se
 from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .embeddings import EmbeddingClient
 from .exporter import build_exports
-from .llm import LLMProvider, build_llm, decompose, extract_claims, generate_search_queries
+from .llm import (
+    LLMProvider,
+    build_llm,
+    decompose,
+    extract_claims,
+    generate_search_queries,
+    translate_for_display,
+    translate_research_request,
+)
 from .passages import (
     chunk_document,
     merge_passage_claims,
@@ -34,7 +42,7 @@ from .passages import (
     retrieve_passages,
 )
 from .paperqa_adapter import PaperQA2EvidenceEngine
-from .normalization import canonicalize_url
+from .normalization import canonicalize_url, detect_language
 from .relevance import (
     classify_candidate_admission,
     claim_relevance,
@@ -358,12 +366,28 @@ class ResearchPipeline:
             )
             raise PipelineHalted("plan_rejected")
         planning_state = {**state, **output, "plan_feedback": feedback}
+        # The approval screen speaks the language the request arrived in. This is display
+        # only: the English strings the plan describes are the ones the run will use.
+        language = protocol.display_language()
+        display_subs: list[str] = []
+        if language != "en":
+            try:
+                display_subs = await translate_for_display(
+                    self.llm,
+                    list(planning_state.get("sub_questions", [])),
+                    language,
+                )
+            except Exception:
+                # A reading aid must never hold the gate shut; the panel falls back to the
+                # operational English list.
+                display_subs = []
         plan = build_research_plan(
             protocol=protocol,
             state=planning_state,
             settings=self.settings,
+            sub_questions_display=display_subs,
         )
-        plan["strategy_note"] = await plan_strategy(self.llm, plan, protocol.report_language)
+        plan["strategy_note"] = await plan_strategy(self.llm, plan, language)
         await self._emit_llm_metrics(run_id, "PLAN")
         await self.repo.event(run_id, "research_plan", plan)
         await self._request_input(
@@ -503,7 +527,90 @@ class ResearchPipeline:
     async def validate_protocol(self, state: PipelineState) -> dict:
         await self._boundary(state, "VALIDATE_PROTOCOL")
         protocol = ResearchProtocol.model_validate(state["protocol"])
+        protocol = await self._to_research_language(state["run_id"], protocol)
         return {"protocol": protocol.model_dump(mode="json")}
+
+    async def _record_request_language(
+        self,
+        run_id: str,
+        protocol: ResearchProtocol,
+        language: str,
+    ) -> ResearchProtocol:
+        """Remember which language the request arrived in, even when nothing was translated.
+
+        The approval screen is rendered in that language, so it has to be known on every
+        path -- including the ones where the question was already English or the
+        translation failed.
+        """
+        resolved = language if language in {"tr", "en"} else "en"
+        if protocol.original_language == resolved:
+            return protocol
+        payload = protocol.model_dump(mode="json")
+        payload["original_language"] = resolved
+        await self.repo.update_run(run_id, protocol=payload)
+        return ResearchProtocol.model_validate(payload)
+
+    async def _to_research_language(
+        self,
+        run_id: str,
+        protocol: ResearchProtocol,
+    ) -> ResearchProtocol:
+        """Move the request into English before any stage reads it.
+
+        Done here, at the first stage, so the plan the user approves already shows the
+        English wording -- a bad translation is then caught before the collection budget is
+        spent rather than after.
+        """
+        if protocol.original_question:
+            return protocol
+        detected = detect_language(protocol.primary_question)
+        if detected == "en":
+            return await self._record_request_language(run_id, protocol, "en")
+        try:
+            question, sub_questions, source = await translate_research_request(
+                self.llm,
+                protocol.primary_question,
+                list(protocol.sub_questions),
+            )
+        except Exception as exc:
+            # Researching in the user's language is worse than researching in English, but
+            # far better than failing the run over a translation.
+            await self.repo.event(
+                run_id,
+                "research_language_fallback",
+                {"language": detected, "error": f"{type(exc).__name__}: {str(exc)[:200]}"},
+            )
+            return await self._record_request_language(run_id, protocol, detected)
+        finally:
+            await self._emit_llm_metrics(run_id, "VALIDATE_PROTOCOL")
+        # The model reports the language it translated from; detect_language() only gets a
+        # vote when the model declines to, because it answers "und" for anything short.
+        language = source if source in {"tr", "en"} else detected
+        if question.strip().casefold() == protocol.primary_question.strip().casefold():
+            # Short English questions come back "und" from detect_language() and reach the
+            # model anyway. When it hands the text back unchanged nothing was translated,
+            # and the run should not claim otherwise -- the plan would show the user a
+            # pointless "your question" block.
+            return await self._record_request_language(run_id, protocol, language)
+        payload = protocol.model_dump(mode="json")
+        payload["original_question"] = protocol.primary_question
+        payload["original_sub_questions"] = list(protocol.sub_questions)
+        payload["original_language"] = language
+        payload["primary_question"] = question
+        if sub_questions:
+            payload["sub_questions"] = sub_questions
+        translated = ResearchProtocol.model_validate(payload)
+        await self.repo.update_run(run_id, protocol=payload)
+        await self.repo.event(
+            run_id,
+            "research_language_translated",
+            {
+                "from_language": language,
+                "original_question": protocol.primary_question,
+                "research_question": question,
+            },
+        )
+        return translated
 
     async def decompose_question(self, state: PipelineState) -> dict:
         await self._boundary(state, "DECOMPOSE")
@@ -1401,7 +1508,10 @@ class ResearchPipeline:
             relevant, relevance_score, relevance_reasons = document_relevance(
                 document,
                 protocol,
-                [protocol.primary_question, *state.get("sub_questions", [])],
+                [
+                    *protocol.research_questions(),
+                    *state.get("sub_questions", []),
+                ],
             )
             if not relevant and (
                 protocol.research_mode == "focused_answer" or relevance_score < 0.18
@@ -2299,7 +2409,9 @@ class ResearchPipeline:
             quotes = " ".join(link.quote for link, _ in links)
             relevance = claim_relevance(
                 f"{claim.text} {quotes}",
-                " ".join([protocol.primary_question, *protocol.sub_questions]),
+                # Quotes keep the source's language, so the question terms have to cover
+                # both sides here too.
+                " ".join(protocol.research_questions()),
                 source_score,
             )
             if relevance < 0.20:

@@ -197,9 +197,18 @@ class ResearchProtocol(BaseModel):
     primary_question: str = Field(min_length=5, max_length=5000)
     research_mode: Literal["literature_scan", "focused_answer"] = "literature_scan"
     sub_questions: list[str] = Field(default_factory=list, max_length=30)
+    # Research runs in English: the pipeline translates primary_question and sub_questions
+    # in place at VALIDATE_PROTOCOL and keeps what the user typed in these three fields.
+    # Recorded rather than recomputed, for the same reason as scope.dates_inferred.
+    original_question: str | None = None
+    original_sub_questions: list[str] = Field(default_factory=list, max_length=30)
+    original_language: str = ""
     scope: ResearchScope = Field(default_factory=ResearchScope)
     languages: list[str] = Field(default_factory=lambda: ["tr", "en"], min_length=1)
-    report_language: str = "tr"
+    # Only the two languages the synthesis guard can actually verify: _language_matches()
+    # in report_synthesis.py checks Turkish output and passes everything else through, so a
+    # third value would promise a language nothing enforces.
+    report_language: Literal["tr", "en"] = "tr"
     connectors: ConnectorSelection = Field(default_factory=ConnectorSelection)
     parsers: ParserSelection = Field(default_factory=ParserSelection)
     evidence_policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
@@ -263,6 +272,56 @@ class ResearchProtocol(BaseModel):
             self.authority_policy.minimum_authority = AuthorityLevel.OFFICIAL
             self.authority_policy.strict_for_major_claims = True
         return self
+
+    def display_language(self) -> str:
+        """The language the approval screen should speak: the one the request arrived in.
+
+        Not report_language: that is a choice about the deliverable, while the plan is read
+        by whoever typed the question. Runs recorded before this existed carry no language
+        and keep the panel's original Turkish.
+        """
+        return self.original_language if self.original_language in {"tr", "en"} else "tr"
+
+    def question_for_report(self) -> str:
+        """The question as the report should print it.
+
+        The report is written in report_language, so it shows what the user typed only when
+        that is the same language. There is no back-translation: a Turkish report for an
+        English question prints the English question rather than inventing a translation.
+        """
+        if self.original_question and self.original_language == self.report_language:
+            return self.original_question
+        return self.primary_question
+
+    def sub_questions_for_report(self) -> list[str]:
+        if self.original_sub_questions and self.original_language == self.report_language:
+            return list(self.original_sub_questions)
+        return list(self.sub_questions)
+
+    def primary_questions(self) -> list[str]:
+        """The main question alone, in every language the run holds it in.
+
+        Kept separate from research_questions(): the subject and heading gates weigh the
+        main question only, and letting short sub-questions in would loosen them for
+        reasons that have nothing to do with language.
+        """
+        items = [self.primary_question]
+        if self.original_question:
+            items.append(self.original_question)
+        return list(dict.fromkeys(item for item in items if item))
+
+    def research_questions(self) -> list[str]:
+        """Every phrasing of the question the lexical relevance gates may match against.
+
+        Those gates compare question terms with document text, so an English-only list
+        would score a Turkish official document at zero on a Turkish topic -- the mirror
+        image of the problem translation solves.
+        """
+        phrasings = [self.primary_question, *self.sub_questions]
+        if self.original_question:
+            phrasings.append(self.original_question)
+        phrasings.extend(self.original_sub_questions)
+        return list(dict.fromkeys(item for item in phrasings if item))
 
 
 class RunStatus(StrEnum):
