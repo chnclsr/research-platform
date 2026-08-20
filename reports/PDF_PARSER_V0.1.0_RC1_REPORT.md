@@ -914,6 +914,19 @@ yer tutucudan **daha tehlikelidir**.
 4. Docling sürüm farkı (2.120.1 → 2.120.3) tek başına 2 sayfada içerik değiştirdi —
    **sürüm de provenance'a girmeli**, bugün girmiyor.
 
+## H. MinerU — Aday Motor Araştırması (Ayrı Dosyaya Taşındı, 2026-08-20)
+
+MinerU hybrid-engine (VLM, GPU) değerlendirmesi ve pipeline (CPU) ile
+hybrid (GPU) karşılaştırması **bu raporun stratejisinin bir parçası
+değil** — Docling'e alternatif/tamamlayıcı bir aday motorun bağımsız
+değerlendirmesi. Bu yüzden ayrı dosyaya taşındı:
+**`reports/MINERU_HYBRID_ARASTIRMA.md`**.
+
+Tek cümlelik özet: MinerU hybrid Docling GPU'ya hız alternatifi değil
+(18,5× yavaş), pipeline (CPU) ile karşılaştırıldığında da sistematik bir
+kazanç yok — ama tablo/şekil yapısında (rowspan/colspan, chart/image
+ayrımı) gerçek bir katkısı var. Karar için doğruluk ölçümü eksik.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
