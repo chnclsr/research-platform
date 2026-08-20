@@ -59,11 +59,17 @@ VARSAYILAN: Dict[str, Any] = {
         },
         "tablo": {
             "ortogonal_cizgi": 6,
-            "dolu_dikdortgen": 8,
+            # UYGULANDI (2026-08-20): 8 -> 60. Gerekce ve olcum (iki korpus):
+            # config/smart_router.yaml, entegrasyon_plani.md Bolum 17.
+            "dolu_dikdortgen": 60,
             "izgara_sutun": 3,
             "izgara_satir": 4,
             "izgara_bosluk": 12.0,
             "izgara_y_tolerans": 3.0,
+            # UYGULANDI (2026-08-20): kume_kaplama bu esigin ustundeyse
+            # (buyuk sekil/diyagram), ortogonal_cizgi tablo sinyaline hic
+            # katilmaz. 0.0 = veto kapali.
+            "sekil_veto_kaplama": 0.15,
         },
         "sekil": {
             "kume_kaplama": 0.03,

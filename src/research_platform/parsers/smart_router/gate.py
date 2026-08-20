@@ -15,9 +15,11 @@ Iki korpusta olculdu: kendi korpusumuz 261 sayfa (gumus referans: Docling ve
 MinerU'nun anlastigi sayfalar) ve resmi benchmark 200 sayfa (ELLE etiketli
 referans). Iki deger su sirayla: kendi korpus / benchmark.
 
-  tablo    inspector `pages_with_tables` OR PyMuPDF v2 kurali
-           duyarlilik 0,93 / 0,98      kesinlik 0,55 / 0,51
-           yuksek guven = inspector AND v2   kesinlik 0,75 / 0,87
+  tablo    inspector `pages_with_tables` OR PyMuPDF v2 kurali (sekil vetolu,
+           dolu_dikdortgen esigi 60 -- 2026-08-20 duzeltmesi)
+           duyarlilik 0,93 / 0,95      kesinlik 0,64 / 0,56
+           (DUZELTME ONCESI: duyarlilik 0,93 / 0,98, kesinlik 0,55 / 0,51)
+           yuksek guven = inspector AND v2   kesinlik 0,75 / 0,87 (eski olcum)
 
   sekil    `cluster_drawings()` OR `get_images(full=True)`
            duyarlilik 0,99 / 0,99      kesinlik 0,69 / 0,62
@@ -300,8 +302,23 @@ class GirisKapisi:
                 has_vector_figure = bool(kume_var)
 
                 # --- tablo: iki kaynagin OR'u, guven kademesi ayri kaydedilir
+                #
+                # UYGULANDI (2026-08-20): sekil vetosu. Sayfa buyuk bir
+                # sekil/diyagramsa (kume_kaplama >= sekil_veto_kaplama),
+                # ortogonal_cizgi tablo sinyaline HIC katilmaz -- olculdu
+                # (261 + 200 sayfa), FP'lerin cogu tam da buyuk diyagramlarda
+                # ortogonal_cizgi'nin 6'dan 4714'e kadar cikmasindan
+                # geliyordu. dolu_dikdortgen ise vetolanmiyor, cunku yogun
+                # dolu dikdortgen gercek tablo hucresi de olabiliyor
+                # (benchmark'ta 2 sayfada 66-105 dolu, gercek tablo) --
+                # onun yerine esigi 8'den 60'a yukselttik (config/smart_router.yaml).
+                buyuk_sekil = en_buyuk_kume >= self.esik["sekil_veto_kaplama"]
+                ortogonal_gecerli = (
+                    not buyuk_sekil
+                    and cizim["ortogonal_cizgi"] >= self.esik["ortogonal_cizgi"]
+                )
                 v2_tablo = bool(
-                    cizim["ortogonal_cizgi"] >= self.esik["ortogonal_cizgi"]
+                    ortogonal_gecerli
                     or cizim["dolu_dikdortgen"] >= self.esik["dolu_dikdortgen"]
                     or (izgara["izgara_sutun"] >= self.esik["izgara_sutun"]
                         and izgara["izgara_satir"] >= self.esik["izgara_satir"])

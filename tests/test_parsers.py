@@ -399,7 +399,7 @@ def test_a_bad_value_costs_that_value_not_the_whole_profile(tmp_path):
         "    bilinmeyen_anahtar: 1\n"    # typo: must not look configured
     )))
     assert ayar.kapi_esikleri["ortogonal_cizgi"] == 4
-    assert ayar.kapi_esikleri["dolu_dikdortgen"] == 8
+    assert ayar.kapi_esikleri["dolu_dikdortgen"] == 60
     assert "bilinmeyen_anahtar" not in ayar.kapi_esikleri
     assert len(ayar.uyarilar) == 2
 

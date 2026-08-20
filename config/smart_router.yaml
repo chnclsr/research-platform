@@ -36,17 +36,53 @@ kapi:
     taranmis_kaplama: 0.50       # görsel sayfanın bu kadarını kaplıyorsa taranmış
     bozuk_karakter_orani: 0.05
 
-  # Ölçüldü (261 + 200 sayfa): recall 0,93 / 0,98 · precision 0,55 / 0,51
-  # Yüksek güven kademesi (inspector AND v2): precision 0,75 / 0,87
+  # Ölçüldü (261 + 200 sayfa, DUZELTME ONCESI): recall 0,93 / 0,98 · precision
+  # 0,55 / 0,51. Yüksek güven kademesi (inspector AND v2): precision 0,75 / 0,87.
   # C2 taraması en iyi adayı inspector_and_v2 · ort 8 · dolu 6 · sütun 2 · satır 3
   # (precision 0,833 · recall 0,896) buldu ama holdout olmadığı için UYGULANMADI.
+  #
+  # UYGULANDI (2026-08-20) — sekil vetosu + dolu_dikdortgen esigi yukseltildi:
+  # Kök neden: FP'lerin %70'i (53'ten 37'si, kendi korpus) pdf-inspector zaten
+  # "tablo yok" derken PyMuPDF'in ortogonal_cizgi sinyali buyuk diyagram/grafik
+  # sekillerinde (kume_kaplama 0,3-0,64) yanlislikla tetikleniyordu — cizgi
+  # sayisi 6'dan 4714'e kadar cikabiliyor, hepsi tablo sayiliyordu.
+  #
+  # OLCULDU (261 sayfa kendi + 200 sayfa resmi benchmark, ikisinde de):
+  #
+  #   kural                              kendi P/R      benchmark P/R
+  #   ----------------------------------  -------------  --------------
+  #   mevcut (OR, sekil_veto_kaplama=0)   0,551 / 0,929  0,506 / 0,976
+  #   tam veto (ort VE dolu bastirilir)   0,644 / 0,929  0,565 / 0,929
+  #   UYGULANAN (ort bastirilir, dolu     0,637 / 0,929  0,556 / 0,952
+  #   esigi 8->60 yukseltilir)
+  #
+  # "Tam veto" kendi korpusta bedavaydi ama benchmark'ta 2 gercek tabloyu
+  # kacirdi -- bu 2 sayfada tablo buyuk bir gorsel/golgeleme alaninin icinde
+  # (kume_kaplama 0,38-0,41) ama dolu_dikdortgen cok yuksekti (66, 105) --
+  # yani YOGUN dolu dikdortgen gercek tablo hucresi olabiliyor, tam bastirmak
+  # yanlis. Bu yuzden ortogonal_cizgi (diyagram/grafik cizgi sayisi) buyuk
+  # sekilde tamamen sayilmiyor, ama dolu_dikdortgen sayilmaya devam ediyor --
+  # yalniz esigi 8'den 60'a yukseltildi (cogu diyagramda 8-43 dolu dikdortgen
+  # var, gercek yogun tablo hucresi 60'in cok ustunde). Sonuc: precision hemen
+  # hemen ayni, ama benchmark recall'i 0,929'dan 0,952'ye cikti (kaybedilen
+  # 2 gercek tablodan biri geri kazanildi).
+  #
+  # KALAN ACIK: benchmark'ta hala 2 (once 1) kacirilan gercek tablo var --
+  # cogu taranmis/goruntu tabanli sayfalarda (PyMuPDF hic vektor bilgisi
+  # goremiyor) ya da cok buyuk gorsel icine gomulu. Bunlari yakalamak
+  # goruntu/OCR tabanli tablo tespiti gerektiriyor, esik ayariyla degil --
+  # ayri, daha buyuk bir is (entegrasyon_plani.md Bolum 17, "tablo tespiti").
   tablo:
     ortogonal_cizgi: 6
-    dolu_dikdortgen: 8
+    dolu_dikdortgen: 60
     izgara_sutun: 3
     izgara_satir: 4
     izgara_bosluk: 12.0          # kelimeler arası bu boşluk hücre sınırı sayılır
     izgara_y_tolerans: 3.0       # aynı satır sayılan y farkı
+    # Kume_kaplama bu esigin ustundeyse (buyuk sekil/diyagram), ortogonal_cizgi
+    # tablo sinyaline HIC KATILMAZ -- yalniz dolu_dikdortgen ve izgara kurallari
+    # gecerli kalir. 0 = veto kapali (eski davranis).
+    sekil_veto_kaplama: 0.15
 
   # Ölçüldü (261 + 200 sayfa): recall 0,99 / 0,99 · precision 0,69 / 0,62
   # Kural: cluster_drawings() OR get_images(full=True). Eski kural 0,63 / 0,76 idi.
