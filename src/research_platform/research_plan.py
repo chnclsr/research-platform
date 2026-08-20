@@ -179,6 +179,11 @@ def build_research_plan(
             else NOTES[language]["full"],
         },
         "remaining_checkpoints": checkpoints,
+        # What the user chose while scoping, so the plan shows how their answers landed.
+        "planning_answers": list(state.get("planning_answers", [])),
+        # The subset that became protocol fields rather than prompt guidance. Shown
+        # separately because it is the only part the run is obliged to honour.
+        "applied_settings": list(state.get("applied_settings", [])),
         "feedback": list(state.get("plan_feedback", [])),
         "strategy_note": "",
     }

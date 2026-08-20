@@ -64,7 +64,20 @@ def _validate_hitl_response(interaction_type: str, response: dict) -> dict:
             raise HTTPException(
                 status_code=400, detail="each answer needs question and answer strings"
             )
-        return {"answers": answers}
+        # Rebuilt field by field rather than passed through: `id` and `value` are what make
+        # an answer bind to a protocol field (see scoping.apply_planning_answers), and
+        # everything else a caller sends would otherwise land in hitl_history unchecked.
+        return {
+            "answers": [
+                {
+                    "question": item["question"][:500],
+                    "answer": item["answer"][:2000],
+                    "id": str(item.get("id") or "")[:60],
+                    "value": str(item.get("value") or "")[:120],
+                }
+                for item in answers
+            ]
+        }
     if interaction_type in {"plan_review", "outline_review"}:
         if not isinstance(response.get("approved"), bool):
             raise HTTPException(status_code=400, detail="approved boolean is required")

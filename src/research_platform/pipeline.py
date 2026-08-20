@@ -30,6 +30,8 @@ from .llm import (
     decompose,
     extract_claims,
     generate_search_queries,
+    planning_choices,
+    research_label,
     translate_for_display,
     translate_research_request,
 )
@@ -66,6 +68,13 @@ from .recovery import (
 from .auth import Principal
 from .repository import Repository
 from .scholarly import candidate_dedupe_key
+from .scoping import (
+    LABEL_MAX_LENGTH,
+    apply_planning_answers,
+    date_suffix,
+    fixed_questions,
+    slugify,
+)
 from .schemas import (
     AcquiredDocument,
     AuthorityLevel,
@@ -82,6 +91,22 @@ from .schemas import (
 )
 from .storage import ObjectStore
 from .temporal import constrain_text_to_scope, enrich_publication_date
+
+# Used when the model cannot produce usable scoping options. The checkpoint worked with
+# plain questions before options existed, so losing the tailored wording is not a reason to
+# skip asking.
+FALLBACK_PLANNING_QUESTIONS = {
+    "tr": [
+        "Araştırmanın coğrafi veya kurumsal kapsamı ne olmalı?",
+        "Öncelikli kaynak türleri ve özellikle dışlanacak kaynaklar var mı?",
+        "Sonuç hangi kararı desteklemeli veya hangi belirsizliği çözmeli?",
+    ],
+    "en": [
+        "What geographic or institutional scope should the research cover?",
+        "Which kinds of sources matter most, and which should be left out?",
+        "Which decision should the result support, or which uncertainty resolve?",
+    ],
+}
 
 
 class PipelineState(TypedDict, total=False):
@@ -112,7 +137,8 @@ class PipelineState(TypedDict, total=False):
     available_connectors: list[str]
     connector_success_rates: dict[str, float]
     budget_started_at: str
-    hitl_guidance: list[str]
+    planning_answers: list[str]
+    applied_settings: list[dict[str, Any]]
     plan_feedback: list[str]
     report_outline_guidance: str
 
@@ -528,7 +554,34 @@ class ResearchPipeline:
         await self._boundary(state, "VALIDATE_PROTOCOL")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         protocol = await self._to_research_language(state["run_id"], protocol)
+        protocol = await self._name_run(state["run_id"], protocol)
         return {"protocol": protocol.model_dump(mode="json")}
+
+    async def _name_run(self, run_id: str, protocol: ResearchProtocol) -> ResearchProtocol:
+        """Give the run a short topic handle for chat clients to print instead of a ULID.
+
+        Done after translation so the label is English whichever language the question
+        arrived in. A cosmetic field: if the model is unreachable or answers with something
+        unusable, the question itself is slugified and the run carries on.
+        """
+        if protocol.label:
+            return protocol
+        try:
+            answer = await research_label(self.llm, protocol.primary_question)
+        except Exception:
+            answer = ""
+        finally:
+            await self._emit_llm_metrics(run_id, "VALIDATE_PROTOCOL")
+        label = slugify(answer, max_length=LABEL_MAX_LENGTH) or slugify(
+            protocol.primary_question, max_length=LABEL_MAX_LENGTH
+        )
+        label += date_suffix(protocol)
+        if not label:
+            return protocol
+        payload = protocol.model_dump(mode="json")
+        payload["label"] = label[:64]
+        await self.repo.update_run(run_id, protocol=payload)
+        return ResearchProtocol.model_validate(payload)
 
     async def _record_request_language(
         self,
@@ -615,8 +668,18 @@ class ResearchPipeline:
     async def decompose_question(self, state: PipelineState) -> dict:
         await self._boundary(state, "DECOMPOSE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
+        # Answers that name a protocol value are applied before anything reads the protocol
+        # again -- BUILD_QUERY_BRANCHES takes the source families from here.
+        protocol, applied = await self._apply_scoping(state["run_id"], protocol)
+        # Both sources of user steering reach the model as guidance rather than as
+        # questions: they are preferences about the run, not things to go and find out.
+        planning = await self._planning_answers(state["run_id"])
+        feedback = await self._plan_feedback(state["run_id"])
         sub_questions, concepts = await decompose(
-            self.llm, protocol.primary_question, protocol.sub_questions
+            self.llm,
+            protocol.primary_question,
+            protocol.sub_questions,
+            guidance=[*planning, *feedback],
         )
         sub_questions = [
             constrain_text_to_scope(
@@ -628,46 +691,117 @@ class ResearchPipeline:
         ]
         await self._emit_llm_metrics(state["run_id"], "DECOMPOSE")
         output = {"sub_questions": sub_questions[:12], "concepts": concepts[:20]}
-        response = await self._maybe_hitl(
-            {**state, **output},
-            "planning_questions",
-            {
-                "questions": [
-                    {"question": "Araştırmanın coğrafi veya kurumsal kapsamı ne olmalı?"},
-                    {
-                        "question": "Öncelikli kaynak türleri ve özellikle dışlanacak kaynaklar var mı?"
-                    },
-                    {
-                        "question": "Sonuç hangi kararı desteklemeli veya hangi belirsizliği çözmeli?"
-                    },
-                ]
-            },
-            "DECOMPOSE",
-        )
-        if response:
-            guidance = [
-                str(item.get("answer", "")).strip()
-                for item in response.get("answers", [])
-                if str(item.get("answer", "")).strip()
-            ]
-            output["hitl_guidance"] = guidance
-            output["sub_questions"] = list(
-                dict.fromkeys(
-                    [
-                        *output["sub_questions"],
-                        *guidance,
-                    ]
-                )
-            )[:12]
+        if applied:
+            output["protocol"] = protocol.model_dump(mode="json")
+            output["applied_settings"] = applied
+        if planning:
+            output["planning_answers"] = planning
         # A rejected plan rewinds the run to this stage, so what the user asked to change
         # has to reach decomposition -- otherwise the next plan repeats the rejected one.
-        feedback = await self._plan_feedback(state["run_id"])
         if feedback:
             output["plan_feedback"] = feedback
             output["sub_questions"] = list(
                 dict.fromkeys([*output["sub_questions"], *feedback])
             )[:12]
+        await self._planning_gate(state, output, protocol)
         return output
+
+    async def _planning_answers(self, run_id: str) -> list[str]:
+        """What the user chose while scoping the run, as `question -> answer` lines.
+
+        Steering, not questions. An earlier version appended the raw answers to
+        sub_questions, which turned a tapped option like "clinical validation" into its own
+        search branch.
+        """
+        response = await self._hitl_response(run_id, "planning_questions")
+        if not isinstance(response, dict):
+            return []
+        lines = []
+        for item in response.get("answers", []):
+            answer = str(item.get("answer", "")).strip()
+            if not answer:
+                continue
+            question = str(item.get("question", "")).strip()
+            lines.append(f"{question} -> {answer}" if question else answer)
+        return lines
+
+    async def _planning_response_items(self, run_id: str) -> list[dict]:
+        """The scoping answers as they were stored, ids and values intact."""
+        response = await self._hitl_response(run_id, "planning_questions")
+        if not isinstance(response, dict):
+            return []
+        return [item for item in response.get("answers", []) if isinstance(item, dict)]
+
+    async def _apply_scoping(
+        self,
+        run_id: str,
+        protocol: ResearchProtocol,
+    ) -> tuple[ResearchProtocol, list[dict]]:
+        """Turn the answers that name a protocol value into the protocol itself.
+
+        Persisted rather than left in state: the resumed run reads its protocol from the
+        row, and so does the panel. An answer that binds to nothing -- typed by hand, or an
+        option the model invented -- changes nothing here and still reaches the prompts
+        through _planning_answers().
+        """
+        items = await self._planning_response_items(run_id)
+        if not items:
+            return protocol, []
+        updated, applied = apply_planning_answers(protocol, items)
+        if not applied:
+            if any(item.get("value") for item in items):
+                await self.repo.event(
+                    run_id,
+                    "scoping_not_applied",
+                    {"values": [item.get("value") for item in items if item.get("value")]},
+                )
+            return protocol, []
+        await self.repo.update_run(run_id, protocol=updated.model_dump(mode="json"))
+        await self.repo.event(run_id, "scoping_applied", {"settings": applied})
+        return updated, applied
+
+    async def _planning_gate(
+        self,
+        state: PipelineState,
+        output: dict[str, Any],
+        protocol: ResearchProtocol,
+    ) -> None:
+        """Let the user narrow the run before any of it is planned.
+
+        Only asked where somebody is actually waiting to answer -- an unattended run would
+        otherwise park here forever -- and only once, since the answers survive in
+        hitl_history and reach decomposition through _planning_answers().
+        """
+        if not protocol.hitl.planning_questions:
+            return
+        if await self._hitl_response(state["run_id"], "planning_questions") is not None:
+            return
+        language = protocol.display_language()
+        try:
+            questions = await planning_choices(
+                self.llm,
+                protocol.primary_question,
+                list(output.get("sub_questions", [])),
+                language,
+            )
+        except Exception:
+            questions = []
+        await self._emit_llm_metrics(state["run_id"], "PLANNING_QUESTIONS")
+        if not questions:
+            # The checkpoint predates options and still works without them; a model that
+            # returns nothing usable costs the tailored wording, not the checkpoint.
+            questions = [{"question": text} for text in FALLBACK_PLANNING_QUESTIONS[language]]
+        # The two binding questions lead: their options carry real protocol values, so they
+        # are the ones worth answering first. The generated pair stays behind them as
+        # steering, and four questions is as much as a chat interview can ask for.
+        questions = [*fixed_questions(protocol, language), *questions[:2]]
+        await self._request_input(
+            {**state, **output},
+            "planning_questions",
+            {"questions": questions},
+            "DECOMPOSE",
+            self.settings.hitl_plan_timeout_minutes,
+        )
 
     async def build_query_branches(self, state: PipelineState) -> dict:
         await self._boundary(state, "BUILD_QUERY_BRANCHES")
@@ -679,6 +813,10 @@ class ResearchPipeline:
                 state.get("sub_questions", []),
                 [f.value for f in protocol.connectors.included_families],
                 protocol.languages,
+                guidance=[
+                    *state.get("planning_answers", []),
+                    *state.get("plan_feedback", []),
+                ],
             )
         except Exception:
             generated = []

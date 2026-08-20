@@ -199,6 +199,170 @@ async def test_feedback_reaches_decomposition_on_the_very_next_pass():
         assert output["plan_feedback"] == ["Cover FDA clearances"]
 
 
+class ScopingLLM:
+    """Answers the scoping call with options, and decomposition with fixed sub-questions."""
+
+    def __init__(self, choices=None):
+        self.prompts = []
+        self.choices = choices if choices is not None else {
+            "questions": [
+                {"question": "Hangi yön önemli?", "options": ["Klinik", "Maliyet"]},
+                {"question": "Hangi kaynaklar?", "options": ["Denemeler", "Kayıtlar"]},
+            ]
+        }
+
+    async def complete_json(self, system: str, user: str):
+        self.prompts.append(user)
+        if "scoping a research run" in system:
+            return self.choices
+        return {"sub_questions": ["Which datasets are used?"], "concepts": ["nodules"]}
+
+    def drain_metrics(self):
+        return []
+
+
+@pytest.mark.asyncio
+async def test_scoping_questions_carry_options_and_stop_the_run_before_planning():
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(repo, hitl=HitlConfig(planning_questions=True))
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = ScopingLLM()
+        with pytest.raises(PipelineHalted, match="awaiting_input"):
+            await pipeline.decompose_question(
+                {"run_id": row.id, "protocol": row.protocol, "round_number": 0}
+            )
+        waiting = await repo.get_run(row.id)
+        assert waiting.interaction["type"] == "planning_questions"
+        questions = waiting.interaction["data"]["questions"]
+        # The two binding questions lead and carry protocol values beside their wording;
+        # the model's questions follow and carry none, which is what keeps them steering.
+        assert [item.get("id") for item in questions] == [
+            "date_scope",
+            "source_families",
+            None,
+            None,
+        ]
+        assert questions[1]["values"] == ["academic", "official", "code_data", "core"]
+        assert questions[2]["options"] == ["Klinik", "Maliyet"]
+        assert "values" not in questions[2]
+
+
+def test_repeated_options_are_not_a_choice():
+    """Measured on the live model: one question came back with the same option five times,
+    and a second question repeated the first one's option set."""
+    from research_platform.llm import _choice_questions
+
+    questions = _choice_questions({"questions": [
+        {"question": "Which sources count?", "options": ["Trials"] * 5},
+        {"question": "Which angle?", "options": ["Clinical", "Cost", "clinical"]},
+        {"question": "Restated angle?", "options": ["Cost", "Clinical"]},
+    ]})
+    # The all-identical question is gone, the duplicate option is folded away, and the
+    # question that only restates the previous option set is dropped.
+    assert [item["question"] for item in questions] == ["Which angle?"]
+    assert questions[0]["options"] == ["Clinical", "Cost"]
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_returns_no_usable_options_still_asks_the_question():
+    """Losing the tailored wording is not a reason to skip the checkpoint."""
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(repo, hitl=HitlConfig(planning_questions=True))
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = ScopingLLM(choices={"questions": "not a list"})
+        with pytest.raises(PipelineHalted, match="awaiting_input"):
+            await pipeline.decompose_question(
+                {"run_id": row.id, "protocol": row.protocol, "round_number": 0}
+            )
+        questions = (await repo.get_run(row.id)).interaction["data"]["questions"]
+        # Two binding questions plus the first two plain fallbacks: the checkpoint keeps
+        # asking, and the part that can actually change the protocol is unaffected by the
+        # model having failed.
+        assert [item.get("id") for item in questions] == [
+            "date_scope",
+            "source_families",
+            None,
+            None,
+        ]
+        assert all("options" not in item for item in questions[2:])
+
+
+@pytest.mark.asyncio
+async def test_scoping_answers_steer_the_research_instead_of_becoming_sub_questions():
+    """A tapped option is a preference, not something to go and find out.
+
+    Appending it verbatim, as an earlier version did, turned "Clinical" into its own
+    search branch.
+    """
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(repo, hitl=HitlConfig(planning_questions=True))
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        llm = ScopingLLM()
+        pipeline.llm = llm
+        await repo.update_run(
+            row.id,
+            hitl_history=[
+                {
+                    "type": "planning_questions",
+                    "response": {"answers": [
+                        {"question": "Hangi yön önemli?", "answer": "Klinik"},
+                    ]},
+                }
+            ],
+        )
+        output = await pipeline.decompose_question(
+            {"run_id": row.id, "protocol": row.protocol, "round_number": 0}
+        )
+    assert output["sub_questions"] == ["Which datasets are used?"]
+    assert "Klinik" not in output["sub_questions"]
+    assert output["planning_answers"] == ["Hangi yön önemli? -> Klinik"]
+    # It reached the model as guidance instead.
+    assert any("Klinik" in prompt for prompt in llm.prompts)
+
+
+@pytest.mark.asyncio
+async def test_a_bound_answer_reaches_the_protocol_the_next_stage_reads():
+    """The complaint this closes: an option that looked like a setting and set nothing."""
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(repo, hitl=HitlConfig(planning_questions=True))
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = ScopingLLM()
+        await repo.update_run(
+            row.id,
+            hitl_history=[
+                {
+                    "type": "planning_questions",
+                    "response": {"answers": [
+                        {"question": "Hangi kaynaklar?", "answer": "Resmî",
+                         "id": "source_families", "value": "official"},
+                        {"question": "Hangi yön önemli?", "answer": "Klinik",
+                         "id": "", "value": ""},
+                    ]},
+                }
+            ],
+        )
+        output = await pipeline.decompose_question(
+            {"run_id": row.id, "protocol": row.protocol, "round_number": 0}
+        )
+        families = output["protocol"]["connectors"]["included_families"]
+        assert families == ["official_legal", "web", "academic"]
+        assert [item["id"] for item in output["applied_settings"]] == ["source_families"]
+        # Persisted, not only carried in state: the resumed run and the panel both read
+        # the protocol from the row.
+        stored = await repo.get_run(row.id)
+        assert stored.protocol["connectors"]["included_families"] == families
+        # The answer that bound to nothing still reaches the prompts as guidance.
+        assert "Hangi yön önemli? -> Klinik" in output["planning_answers"]
+
+
 @pytest.mark.asyncio
 async def test_the_run_is_cancelled_once_the_revision_limit_is_reached():
     await create_schema()

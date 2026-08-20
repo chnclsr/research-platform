@@ -937,7 +937,7 @@ async def logout() -> RedirectResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.10.4"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.10.7"}
 
 
 @app.get("/api/session")

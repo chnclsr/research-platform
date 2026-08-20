@@ -1,10 +1,10 @@
 # `developments` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.10.4`
+Platform sürümü: `v0.10.7`
 
-Belge sürümü: `12.5`
+Belge sürümü: `12.8`
 
-Son güncelleme: `2026-08-19`
+Son güncelleme: `2026-08-20`
 
 ## Kapsam
 
@@ -31,8 +31,11 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 16 | İkili içerik ve NUL baytı koşuyu düşürüyordu | `b8ec33b` |
 | 17 | Zorunlu plan onayı ve zorunlu araştırma süresi | `496a6ac` |
 | 18 | Telegram botu SERVICE_TOKEN ve granüler parser motorları | `496a6ac` |
-| 19 | Araştırma İngilizce yürüyor, rapor istenen dilde | commit bekliyor |
-| 20 | Plan ekranı sorunun geldiği dilde | commit bekliyor |
+| 19 | Araştırma İngilizce yürüyor, rapor istenen dilde | `210dca6` |
+| 20 | Plan ekranı sorunun geldiği dilde | `210dca6` |
+| 21 | Telegram: dil seçimi, şıklı planlama söyleşisi | commit bekliyor |
+| 22 | Bağlayıcı kapsam soruları, plan düğmeleri, koşu adı | commit bekliyor |
+| 23 | Koşu adı kimliğin yerini tutuyor, `/kosular` | commit bekliyor |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -1793,6 +1796,348 @@ yanlış sorunun yanına koyardı.
 
 287 test geçiyor. Arka planda hiçbir şey değişmedi: sorgular, edinim, kanıt çıkarımı ve
 rapor üretimi aynı.
+
+---
+
+## 21. Telegram: dil seçimi, şıklı planlama söyleşisi ve tek dilde konuşan bot
+
+### Sorun
+
+İngilizce başlatılan bir araştırmada plan onaylandıktan sonra gelen yanıt şuydu:
+
+```
+01M0...: yanıt alındı, durum queued
+```
+
+Tek cümlede iki dil. 20. bölümde yalnız **plan özeti** iki dilli yapılmıştı; botun geri
+kalan metinleri koda gömülü Türkçe kalmıştı — `PLAN_TEXT` dışında 52 satır, ~40 mesaj.
+
+İkinci eksik: soru alınıp doğrudan ayrıştırmaya giriyordu. Kullanıcının "şunu değil bunu
+kastediyorum" diyebileceği bir an yoktu. `planning_questions` kapısı bunun için vardı ama
+varsayılan kapalıydı, soruları koda gömülü üç genel cümleydi ve yanıt yalnız serbest
+metindi.
+
+### Dilin kaynağı
+
+`ResearchProtocol.interaction_language` eklendi ve `display_language()` sırası şu oldu:
+**açık seçim → sorunun yazıldığı dil → tr**. `original_language`'in anlamı korundu; o alan
+"soru hangi dilde yazılmıştı" bilgisidir ve `question_for_report()`'u besler, tercih değil.
+
+Botta `reply_language()` aynı sırayı izleyip sonuna iki basamak ekler: Telegram istemci
+dili (`from.language_code`) ve varsayılan Türkçe. `detect_language()` yalnız `tr`/`en`
+dediğinde oy kullanır — kısa metinde `"und"` döndürüyor ve bunu İngilizce saymak,
+düzeltmeye çalıştığımız hatanın aynısını ters yönde üretirdi.
+
+Koşuya dair yanıtlar için ek sorgu gerekmiyor: `/status` ve `/respond` yanıtları zaten
+protokolü taşıyor (`RunView.protocol`).
+
+### Şıklı sorular: yanıt sözleşmesi değişmeden
+
+Kapının **soru** yükü genişledi, **yanıt** biçimi aynı kaldı:
+
+```
+{"questions": [{"question": "...", "options": ["...", "..."]}]}   ← options yeni
+{"answers":   [{"question": "...", "answer": "..."}]}             ← değişmedi
+```
+
+Bu yüzden `_validate_hitl_response` hiç değişmedi ve panel de aynı soruları kazandı:
+`options` varsa radyo düğmeleri + "başka" alanı, yoksa bugünkü serbest metin.
+
+Kapı zaten `DECOMPOSE` sonunda, plan kapısından önce duruyordu; istenen sıra (önce
+söyleşi, sonra plan) yeni bir aşama gerektirmedi.
+
+### Yinelenen şıklar bir seçim değildir
+
+Canlı ölçümde 4B model bir soruyu **beş kez aynı şıkla** döndürdü ("Klinik deneyim
+raporları" ×5) ve başka bir soru ilk sorunun şık kümesini tekrarladı. Böyle bir soru
+kullanıcıya hiçbir şey sormaz. `_choice_questions` artık şıkları büyük/küçük harf duyarsız
+tekilleştiriyor, iki farklı şıkkı kalmayan soruyu atıyor ve şık kümesi öncekiyle aynı olan
+soruyu düşürüyor. Düzeltmeden sonra aynı soruda dört soru yerine üç soru kaldı, hepsinin
+beş farklı şıkkı var.
+
+### Cevaplar alt soru değil, yönlendirme
+
+Kapı bugüne kadar cevapları doğrudan `sub_questions` listesine ekliyordu. Şık cevapları
+kısa ifadeler olduğu için ("Klinik") bu, kendi başına bir sorgu dalı üretirdi. Cevaplar
+artık `planning_answers` olarak durur ve `plan_feedback` ile aynı yolu izler:
+`decompose` ve `generate_search_queries` onları **guidance** olarak alır.
+
+Canlı doğrulamada "AI'nın iş yükü üzerindeki etkisi" seçildiğinde üretilen alt soru
+`How does AI-assisted reading affect radiologist **workload** in lung CT imaging?` oldu ve
+sorgu dallarına da yansıdı; ham Türkçe cevap metni hiçbir yerde sorgu olarak görünmedi.
+
+### Yol boyunca çıkan bir çökme hatası
+
+`_link_hint()` parametresiz tanımlıyken süre seçimi geri çağrısında bir argümanla
+çağrılıyordu. O yol — süre düğmesine basan ama hesabı bağlı olmayan kullanıcı —
+`TypeError` üretir, `_handle_callback` bunu yakalamaz ve `serve()` döngüsünden dışarı
+çıkarak **botu düşürürdü**. İşlev artık dil parametresi alıyor.
+
+### Doğrulama
+
+| Ölçüm | Sonuç |
+|---|---|
+| Şıklı sorular (Türkçe koşu) | 3 soru, her birinde 5 farklı şık |
+| Söyleşi sırası | Kapı `awaiting_input`, plan **kurulmadan** önce |
+| Cevabın etkisi | Alt sorularda ve sorgu dallarında "workload" |
+| Ham cevap metni | `sub_questions`'ta **yok** |
+| Mesaj tablosu | `MESSAGES["tr"]` ve `MESSAGES["en"]` aynı anahtar kümesinde (test) |
+
+295 test geçiyor. Araştırma dili değişmedi: arama, edinim ve kanıt çıkarımı İngilizce
+yürümeye devam ediyor.
+
+---
+
+## 22. Bağlayıcı kapsam soruları, plan düğmeleri ve okunabilir koşu adı
+
+### Sorun
+
+21. bölüm kapsam sorularını şıklı hâle getirdi ama cevapların ne yaptığını değiştirmedi.
+Canlı kullanımda dört eksik çıktı; hepsi kullanıcının planı okuyup karar verdiği ana ait.
+
+**Şıklar ayar gibi görünüyor, ayar değildi.** Cevaplar yalnız `decompose` ve
+`generate_search_queries` istemlerine ek metin olarak giriyordu. "Resmî kaynaklara öncelik
+ver" seçildiğinde `connectors.included_families` değişmiyor, koşu aynı aileleri tarıyordu
+ve 4B model yönlendirmeyi görmezden gelebiliyordu. Şıkları model uydurduğu için "Klinik
+deneyim raporları" gibi sistemin sözlüğünde karşılığı olmayan seçenekler de çıkıyordu —
+model talimatı harfiyen uygulasa bile eşlenecek bir alan yoktu. Doğrulanabilir de değildi:
+plan "Verdiğiniz yanıtlar: 2" diyor, koşunun onlara uyup uymadığı görünmüyordu. Süreyi
+karşılaştırın — `budget.max_wall_minutes` diye bir alan var, değişip değişmediğine
+bakılabiliyor.
+
+**Onay bir komut yazmayı gerektiriyordu.** Sohbetin geri kalanı düğmeyle ilerlerken tek
+karar anı 26 karakterlik bir ULID'i elle yazmaya bağlıydı.
+
+**Mesajlar koşuyu ULID ile adlandırıyor ve dil karıştırıyordu.**
+`01M0FG…: yanıt alındı, durum queued`. Cümle iki dilli tablodaydı, içine gömülen **değer**
+değildi: `queued`, `DECOMPOSE`, `plan_review`, `both` ham enum token'ı olarak basılıyordu.
+21. bölümde kapatılan dil karışıklığının kalan yarısı buydu.
+
+**Plan mesajı düz metin ve uzundu.** Alt sorular, sorgu dalları ve bütçe aynı blokta;
+kararın dayandığı satırlar duvarın içinde kayboluyordu.
+
+### Bağlayıcı sorular: iki yol, bilerek
+
+Yeni `src/research_platform/scoping.py` saf modülü iki sabit soru tanımı ve
+`apply_planning_answers` barındırıyor. Sabit soruların şıkları gerçek enum değerleri
+taşıyor; modelin ürettiği sorular bugünkü gibi yönlendirme kalıyor.
+
+| Soru (`id`) | Yazdığı alan | `value` |
+|---|---|---|
+| `date_scope` | `scope.start_date` / `end_date` / `dates_inferred` / `dates_chosen` | `keep` · `last_1y` · `last_3y` · `last_5y` · `any` |
+| `source_families` | `connectors.included_families`, `connectors.profile`, `family_targets` | `academic` · `official` · `code_data` · `core` |
+
+Her şeyi alana bağlamak istemedik: modelin uydurduğu bir şıkkın karşılığı yok, ve zorla
+eşleştirmek sessizce yanlış alanı yazmak demek olurdu. İki soru bağlayıcı, ikisi serbest.
+
+**Yanıt sözleşmesi bozulmadı.** Soru yüküne `id` ve `values`, yanıt maddesine `id` ve
+`value` eklendi; ikisi de isteğe bağlı. Düğmeye basılınca dolar, kullanıcı kendi cevabını
+yazarsa boş kalır ve o cevap yönlendirmeye düşer. `_validate_hitl_response` cevapları
+artık alan alan yeniden kuruyor — eskiden listeyi olduğu gibi geçiriyordu, yani çağıranın
+gönderdiği her anahtar `hitl_history`'ye denetlenmeden iniyordu.
+
+**Neden `DECOMPOSE` başında uygulanıyor.** `BUILD_QUERY_BRANCHES` kaynak ailelerini
+protokolden okuyor. Cevap `repo.update_run(protocol=…)` ile satıra da yazılıyor
+(`_apply_plan_duration` emsali): devam eden koşu protokolünü satırdan okuyor, panel de
+oradan okuyor.
+
+**`family_targets` filtrelenmiyor, temizleniyor.** Protokol doğrulayıcısı mevcut hedef
+haritasını yalnız daraltıyor; aile listesi genişlediğinde yeni aileler için hedef
+üretemezdi. Temizleyip yeniden kurdurmak tek doğru yol.
+
+**Bir kapsam cevabı koşuyu düşüremez.** Aile minimumları `max_sources`'u aşınca doğrulayıcı
+`ValueError` atıyor; bu durumda protokol **değiştirilmeden** bırakılıyor ve
+`scoping_not_applied` olayı yazılıyor. Cevap koşudan daha az değerli.
+
+**`ResearchScope.dates_chosen` neden gerekti.** "Tarih sınırı olmasın" seçimi pencereyi
+temizliyor, ama doğrulayıcı `start_date is None` görünce aralığı aynı sorudan hemen geri
+çıkarıyordu — cevap bir sonraki doğrulamada kendiliğinden geri alınıyordu. `dates_chosen`
+çıkarımı kapatıyor. `dates_inferred` ile karıştırılmamalı: o, pencerenin nereden geldiğini
+kaydeder; bu, kullanıcının karar verdiğini kaydeder.
+
+### Plan düğmeleri
+
+Plan mesajının altında `plan_review:<run_id>:approve|reject` geri çağrılı iki düğme
+(~46 bayt, Telegram'ın 64 bayt sınırının altında).
+
+**Gerekçesiz reddetme yasak.** `{"approved": false}` gerekçesiz gönderilirse
+`_plan_feedback` boş notu atlıyor, plan aynen yeniden kuruluyor ve koşu
+`plan_max_revisions` dolana kadar dönüyor. Bot bu yüzden önce "neyi değiştirelim?" diye
+soruyor, serbest metni bekliyor, sonra `modifications` ile gönderiyor.
+
+**`/respond` kaldı ve `/help`'te duruyor.** `watched_runs` süreç hafızasında; bot yeniden
+başlarsa düğmeler ölür. Düğme o durumda "geçersiz" diyip komut satırını tekrarlıyor —
+yeniden başlatmayı atlatan tek yol o.
+
+**Serbest metin yönlendirmesi tek kapıda.** Reddetme gerekçesi ikinci bir bekleyen metin
+türü getirdi. İki ayrı sözlüğe sırayla bakmak, cevabın hangisine önce bakıldığına bağlı
+kalması demekti; oturumlara `kind` alanı eklendi ve yönlendirici tek yerde ayırıyor.
+
+**Yetki.** `watched_runs` artık `user_id` de tutuyor ve geri çağrı `chat_id` ile birlikte
+onu da doğruluyor (`_claim_pending` ile aynı kontrol) — grup sohbetinde gönderenin
+başkasının koşusunu onaylaması engelleniyor.
+
+### Okunabilir koşu adı
+
+`llm.research_label` koşu başına bir kısa çağrıyla İngilizce `snake_case` bir ad üretiyor;
+`scoping.slugify` temizliyor ve tarih kapsamı varsa `_last_3m` gibi bir son ek ekleniyor.
+`ResearchProtocol.label` alanına yazılıyor — protokol jsonb, göç gerekmedi.
+
+**Neden çeviri çağrısına iliştirilmedi.** `_to_research_language` İngilizce sorularda hiç
+model çağırmadan dönüyor; iliştirmek yalnız Türkçe yolu kapsardı. Ayrı çağrı iki yolda da
+aynı çalışıyor ve tek yerde test ediliyor.
+
+**Kimliğin yerine geçmiyor.** İki koşu aynı adı alabilir, bu yüzden ULID her mesajda
+`<code>` olarak duruyor (Telegram'da dokunulunca kopyalanıyor) ve `/status`, `/respond`
+gibi komutların argümanı hâlâ ULID.
+
+> **Not:** Bu karar 23. bölümde bilinçli olarak değiştirildi. Etiketi gösterip kabul
+> etmemek, kullanıcıyı ULID'i eski mesajlarda aramaya geri gönderiyordu. Komutlar artık
+> etiketi de kabul ediyor; çakışma tahminle değil listelemeyle çözülüyor.
+
+**Türkçe `ı` elle eşleniyor.** NFKD onu ayrıştırmıyor, ASCII süzgeci de düşürüyor;
+`scholarly.py` `title_fingerprint`'teki kalıp tek başına "ısı" kelimesini yutuyor.
+
+**Bilinen sınır:** "Run başlatıldı" mesajı koşu boru hattına girmeden gönderiliyor, o anda
+ad henüz yok; o tek mesaj ULID'i gösteriyor. Adı API'de üretmek bunu çözerdi ama API'nin
+LLM istemcisi yok.
+
+### Enum değerleri ve zengin metin
+
+`MESSAGES` tablosuna `status`, `stage`, `interaction`, `mode` alt sözlükleri eklendi, iki
+dilde birden. Çeviri `label_of(strings, kind, value)` üzerinden yapılıyor ve **bilinmeyen
+değer ham hâliyle basılıyor** — yeni bir `RunStatus` üyesi boş dize ya da `KeyError`
+üretmiyor. Test botun anahtar kümesini `RunStatus`, `DeliveryMode` ve `PIPELINE_STAGES` ile
+eşliyor; panel katmanından içe aktarmak yerine test ile eşlemenin sebebi paneldeki tablonun
+yalnız Türkçe olması.
+
+`plan_summary` artık HTML dönüyor. **MarkdownV2 yerine HTML**, çünkü mesaja giren her şey
+kullanıcı metni ve HTML üç karakter kaçırmayı gerektiriyor (`& < >`), MarkdownV2 on sekiz.
+Uzun listeler `<blockquote expandable>` içinde: mesaj kapalıyken kısa, dokununca açılıyor.
+
+**`parse_mode` geri düşüşü.** Bozuk ya da desteklenmeyen tek bir varlık mesajın tamamını
+düşürüyor ve bu bugüne kadar sessizdi — kullanıcı planı hiç görmüyordu. `_send_message`
+Telegram hata dönerse etiketleri sıyırıp düz metin olarak bir kez daha gönderiyor.
+Kırpma sınırları (8 alt soru × 140, 10 dal × 120, strateji 500) 4096 karakterin altında
+kalacak şekilde seçildi: Telegram uzun mesajı kırpmaz, reddeder.
+
+### Dil sorusu kendi cevabını İngilizce sormuyor
+
+"Hangi dilde ilerleyelim?" sorusu Telegram istemcisinin dil ayarından geliyordu, yani
+Türkçe bir istek İngilizce bir soruyla karşılanabiliyordu. `/research` artık dili **istek
+metninden** çözüyor (`reply_language(question=…)`), ve aynı değer ayrıştırma hata
+mesajlarında da kullanılıyor.
+
+İstemci ayarına geri düşüş kaldı: `detect_language` kısa metne "und" diyor ve orada karar
+istemciye geçiyor. Bilerek böyle — diyakritiksiz yazılmış Türkçe ("akciger BT") de Türkçe
+işareti taşımıyor, ona İngilizce demek aynı hatanın ters yönü olurdu.
+
+### Doğrulama
+
+| Ne | Sonuç |
+|---|---|
+| Test | 315 geçiyor |
+| Dil sorusu | İstek Türkçeyse Türkçe, İngilizceyse İngilizce |
+
+---
+
+## 23. Koşu adı kimliğin yerini tam olarak tutuyor
+
+### Sorun
+
+22. bölüm mesajlarda ULID yerine konuya bağlı bir ad göstermeye başladı ama komutlar o adı
+tanımıyordu:
+
+```
+Cezeri: Research_artificial_intelligence_studies_that_last_3m: yanıt alındı, durum sırada
+Furkan: /cancel Research_artificial_intelligence_studies_that_last_3m
+        → bot anlamıyor
+```
+
+Bot adı gösterip kabul etmeyince kullanıcı ULID'i eski mesajlarda aramaya dönüyordu —
+etiketin çözdüğü sorunun aynısı, bir adım ötede. Ada bakıp "bu ne işe yarıyor" dedirten
+bir arayüz, hiç ad göstermemekten daha kötü.
+
+İkinci eksik adın kendisiydi: 50 karakter ve konuyu adlandıran kısmı yalnız iki kelime.
+Okumak için sorun değildi; **yazmak** için sorun.
+
+### Çözümleme neden botta, API'de değil
+
+API'de `run_id` alan ~15 route var ve hepsi yol parametresini `_required_run`'dan **sonra
+da** doğrudan kullanıyor (`repo.list_sources(run_id)`; `download_artifact` `_required_run`'ı
+hiç çağırmıyor). Etiketi orada kabul etmek her route'un çözülmüş kimliği kullandığını tek
+tek kanıtlamayı gerektirirdi ve kaçırılan bir yer sessizce yanlış koşuyu okurdu.
+Çözümlemeyi `Repository`'nin sahiplik gardiyanına koymak ise yetkilendirme sarmalayıcısına
+kimlik çözümleme karıştırmak olurdu — güvenlik açısından kritik tek noktayı iki işe
+birden bakar hâle getirir.
+
+Bot, kimliğin **elle yazıldığı tek yüzey**: panelde tıklanıyor, MCP/Langflow ajanları
+kimliği zaten API'den alıyor. Orada çözmek tek noktada kalıyor ve sahiplik filtresini
+bedavaya devralıyor — `GET /v1/research-runs` çağıranın kendi koşularını döndürdüğü için
+arama başkasının koşusunu hiç göremiyor.
+
+### Kurallar
+
+**ULID görünümlü argüman aramayı atlıyor.** `looks_like_run_id` (26 karakter, tümü büyük
+harf/rakam) doğruysa token olduğu gibi geçiyor, ağ çağrısı yok. Etiketler `slugify`
+çıktısı olduğu için alt çizgi ya da küçük harf taşıyor; yanlış tahminin bedeli bir
+listeleme çağrısı ve bir hata mesajı, gerçek kimlik yine çalışıyor.
+
+**Karşılaştırma `run_label` üzerinden ve casefold.** Aynı yardımcı hem mesajı yazarken hem
+ararken kullanılıyor, dolayısıyla ikisi ayrışamıyor: etiketi olmayan eski koşular da
+`run_label`'ın sorudan türettiği adla bulunuyor.
+
+**Çakışmada tahmin yok.** Aynı ada uyan birden çok koşu varsa kimlikleri, durumları ve
+tarihleriyle listeleniyor ve **hiçbir şey yapılmıyor**. `/cancel` geri alınamıyor; "en
+yenisini seç" kuralı yanlış koşuyu iptal edebilirdi.
+
+**Tekillik zorlanmıyor.** Etiketi üretirken sahibin koşularını sorgulamak gerekirdi ve boru
+hattı `Principal.system()` ile çalıştığı için o sorgu sahiple değil bütün koşularla
+eşleşirdi. Çakışma yukarıdaki listeleme ile çözülüyor.
+
+**Hata dili istemci dilinden.** Çözümleme koşuyu bulmadan önce çalışıyor, yani koşunun dili
+henüz bilinmiyor. Bulunduktan sonrası bugünkü gibi koşunun dilinde.
+
+### Ad yazılabilecek uzunlukta
+
+Üç düzeltme: `research_label` istemi en çok dört kelime istiyor ve "araştırma eylemini
+değil konuyu adlandır" diyor; `_SLUG_STOPWORDS`'e dolgu kelimeler eklendi (`research`,
+`studies`, `study`, `that`, `about`, `using`, `based`, `review`, …); etiket
+`LABEL_MAX_LENGTH = 32` ile kırpılıyor (tarih son eki bunun dışında).
+
+Aynı girdi artık `artificial_intelligence_write` veriyor. Yalnız **yeni** koşuları
+etkiliyor; kayıtlı etiketler protokolde duruyor ve aynen çalışmaya devam ediyor.
+
+### `/kosular`
+
+Son 10 koşuyu adı, durumu, aşaması ve tarihiyle listeliyor (`/runs` eş adı).
+
+**Komut satırı `<code>` içinde, çünkü Telegram argümanı taşımıyor.** Bir `/komut` metni
+bağlantı olarak görünüyor ama dokunulduğunda yalnız komutun kendisi girdi kutusuna gidiyor;
+argüman düşüyor. `<code>` ise dokunulduğunda tamamını panoya kopyalıyor — bir dokunuş
+kopyala, bir yapıştır. Önerilen komut duruma göre seçiliyor: biten koşuda `/get`, diğerinde
+`/status`.
+
+### Doğrulama
+
+| Ne | Sonuç |
+|---|---|
+| Test | 324 geçiyor |
+| `/cancel <ad>` | Doğru ULID ile iptal ediliyor, büyük/küçük harf fark etmiyor |
+| `/cancel <ULID>` | Listeleme çağrısı **yapılmıyor** |
+| Bilinmeyen ad | Hiçbir şey iptal edilmiyor, `/kosular` öneriliyor |
+| İki eşleşme | Hiçbir şey iptal edilmiyor, iki kimlik de listeleniyor |
+| Etiketsiz eski koşu | Türetilen adla bulunuyor |
+| Yeni etiket | 32 karakterin altında, dolgu kelime yok |
+| Şıkka basınca | `included_families` ve `scope` protokolde **ve** satırda değişiyor |
+| Yazınca | Alan değişmiyor, cevap yönlendirmeye düşüyor |
+| Geçersiz `value` | Protokol bozulmuyor, `scoping_not_applied` yazılıyor |
+| Aile minimumu > `max_sources` | Protokol değişmiyor, koşu ilerliyor |
+| Onay düğmesi | `{"approved": true}`, tek dilde ve koşu adıyla yanıt |
+| Reddet düğmesi | Gerekçe gelmeden **hiçbir şey** gönderilmiyor |
+| Başkasının düğmesi | Reddediliyor |
+| Bot yeniden başlamışsa | Düğme `/respond` komutunu tekrarlıyor |
+| HTML reddedilirse | Aynı mesaj düz metin olarak yeniden gidiyor |
 
 ---
 

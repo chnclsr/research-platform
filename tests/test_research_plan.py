@@ -105,6 +105,18 @@ def test_plan_carries_models_acquisition_order_and_rejection_feedback():
     assert plan["revision"] == 1
 
 
+def test_the_plan_separates_answers_that_became_settings_from_answers_that_only_steer():
+    """Only the applied half is something the run has no choice about."""
+    plan = plan_for(
+        protocol(),
+        planning_answers=["Which angle? -> Clinical"],
+        applied_settings=[{"id": "source_families", "label": "Kaynak", "value": "official",
+                           "detail": "official_legal, web, academic"}],
+    )
+    assert plan["planning_answers"] == ["Which angle? -> Clinical"]
+    assert plan["applied_settings"][0]["detail"] == "official_legal, web, academic"
+
+
 def test_the_plan_reads_in_the_language_the_request_arrived_in():
     """Display only: the strings the run will use are identical in both renderings."""
     turkish = plan_for(

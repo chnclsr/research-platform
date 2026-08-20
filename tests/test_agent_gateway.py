@@ -345,6 +345,7 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     bot.allow_all_users = True
     bot.pending_research = {}
     bot.watched_runs = {}
+    bot.pending_answers = {}
     client = FakeClient()
     message = {
         "from": {"id": 7},
@@ -352,10 +353,23 @@ async def test_telegram_research_waits_for_inline_duration_selection():
         "text": "/research raw kaynak sınırı olmayan araştırma",
     }
 
+    # Language first, then duration: neither is guessed, and nothing starts until both
+    # are answered.
     await bot._handle(client, message)
     assert bot.gateway.protocols == []
     picker = client.posts[-1][1]["json"]["reply_markup"]["inline_keyboard"]
+    assert picker[0][0]["callback_data"].startswith("research_lang:")
+
+    await bot._handle_callback(client, {
+        "id": "CALLBACK0",
+        "from": {"id": 7},
+        "data": picker[0][0]["callback_data"],
+        "message": {"message_id": 98, "chat": {"id": 11, "type": "private"}},
+    })
+    assert bot.gateway.protocols == []
+    picker = client.posts[-1][1]["json"]["reply_markup"]["inline_keyboard"]
     callback_data = picker[1][0]["callback_data"]
+    assert callback_data.startswith("research_time:")
 
     await bot._handle_callback(client, {
         "id": "CALLBACK1",
@@ -367,16 +381,21 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     assert len(bot.gateway.protocols) == 1
     assert bot.gateway.protocols[0].budget.max_wall_minutes == 30
     assert bot.gateway.protocols[0].budget.max_sources is None
+    assert bot.gateway.protocols[0].interaction_language == "tr"
 
+    # --lang answers the language question up front, so an explicit duration is enough to
+    # start straight away.
     bot.gateway.protocols.clear()
     await bot._handle(client, {
         "from": {"id": 7},
         "chat": {"id": 11, "type": "private"},
-        "text": "/research both 2 lung cancer detection by CT",
+        "text": "/research both 2 --lang en lung cancer detection by CT",
     })
     assert len(bot.gateway.protocols) == 1
     assert bot.gateway.protocols[0].budget.max_wall_minutes == 2
     assert bot.gateway.protocols[0].primary_question == "lung cancer detection by CT"
+    assert bot.gateway.protocols[0].interaction_language == "en"
+    assert bot.gateway.protocols[0].report_language == "en"
     # Every run it started was attributed to the linked account.
     assert set(bot.gateway.actors) == {telegram_owner}
 
@@ -416,6 +435,7 @@ async def test_unlinked_telegram_user_is_told_how_to_get_linked():
     bot.allow_all_users = True
     bot.pending_research = {}
     bot.watched_runs = {}
+    bot.pending_answers = {}
 
     client = FakeClient()
     await bot._handle(client, {
@@ -522,6 +542,7 @@ def _link_bot() -> TelegramResearchBot:
     bot.allow_all_users = False
     bot.pending_research = {}
     bot.watched_runs = {}
+    bot.pending_answers = {}
     return bot
 
 

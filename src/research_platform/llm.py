@@ -305,6 +305,85 @@ async def translate_for_display(
     return _display_items(data, items)
 
 
+async def planning_choices(
+    llm: LLMProvider,
+    question: str,
+    sub_questions: list[str],
+    language: str,
+) -> list[dict[str, Any]]:
+    """Questions that narrow the research, each with options the user can just tap.
+
+    Free text asks the user to do the work of guessing what the system needs; a short list
+    of options tells them what the run is actually about to decide. Written in the language
+    the conversation runs in, because only a person reads them.
+    """
+    target = "Turkish" if language == "tr" else "English"
+    data = await llm.complete_json(
+        f"You are scoping a research run before it starts. Write in {target}. Return JSON "
+        'with questions: an array of 3 to 4 objects, each {"question": string, "options": '
+        "array of 3 to 5 short mutually exclusive choices}. Ask only what would change how "
+        "the research is run -- which part of the topic to prioritise, which kinds of "
+        "sources count, which angle of the decision matters, what to leave out. Never ask "
+        "for facts the research is supposed to find. No prose.",
+        f"QUESTION: {question}\nSUB_QUESTIONS: {json.dumps(sub_questions, ensure_ascii=False)}",
+    )
+    return _choice_questions(data)
+
+
+async def research_label(llm: LLMProvider, question: str) -> str:
+    """A short English handle for the topic, for chat clients to say instead of a ULID.
+
+    Asked outright rather than piggybacked on the translation call: that call is skipped
+    entirely for questions already in English, so half the runs would come back without a
+    label. The caller sanitises the answer -- this returns whatever the model said.
+    """
+    data = await llm.complete_json(
+        "Name a research topic. Return JSON with label: a snake_case English handle for "
+        "the topic, at most 4 words, ASCII letters digits and underscores only. Name the "
+        "subject itself, never the act of researching it: no research, study, studies, "
+        "analysis, review, investigation. No dates, no articles. Example: ai_in_lung_ct. "
+        "No prose.",
+        f"QUESTION: {question}",
+    )
+    if isinstance(data, dict):
+        return str(data.get("label") or "")
+    return str(data or "")
+
+
+def _choice_questions(data: Any) -> list[dict[str, Any]]:
+    """Keep only well-formed question/option pairs; drop the rest without complaint.
+
+    A malformed answer must not hold the gate shut: the caller falls back to plain text
+    questions, which is what this checkpoint did before options existed.
+    """
+    rows = data.get("questions") if isinstance(data, dict) else data
+    if not isinstance(rows, list):
+        return []
+    questions: list[dict[str, Any]] = []
+    seen_option_sets: set[frozenset[str]] = set()
+    for row in rows[:4]:
+        if not isinstance(row, dict):
+            continue
+        text = str(row.get("question", "")).strip()
+        # A small model happily returns the same option five times, and a question whose
+        # choices are all identical asks the user nothing. Deduplicate, then drop what is
+        # left if it no longer offers a choice.
+        options: list[str] = []
+        seen: set[str] = set()
+        for option in row.get("options") or []:
+            cleaned = str(option or "").strip()
+            key = cleaned.casefold()
+            if cleaned and key not in seen:
+                seen.add(key)
+                options.append(cleaned)
+        signature = frozenset(seen)
+        if not text or len(options) < 2 or signature in seen_option_sets:
+            continue
+        seen_option_sets.add(signature)
+        questions.append({"question": text[:300], "options": options[:5]})
+    return questions
+
+
 def _display_items(data: Any, items: list[str]) -> list[str]:
     """Accept the shapes the model actually returns, not only the one it was asked for.
 
@@ -324,13 +403,24 @@ def _display_items(data: Any, items: list[str]) -> list[str]:
     return translated if len(translated) == len(items) else []
 
 
-async def decompose(llm: LLMProvider, question: str, supplied: list[str]) -> tuple[list[str], list[str]]:
+async def decompose(
+    llm: LLMProvider,
+    question: str,
+    supplied: list[str],
+    guidance: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
     if supplied:
         return supplied, []
+    steering = (
+        "\nUSER_GUIDANCE (narrow the decomposition to this; do not turn it into "
+        f"questions of its own):\n{json.dumps(guidance, ensure_ascii=False)}"
+        if guidance
+        else ""
+    )
     data = await llm.complete_json(
         "Return JSON with sub_questions (3-8 strings) and concepts (strings). Write them in "
         "English: they become search queries and are matched against source text. No prose.",
-        f"QUESTION:\n{question}",
+        f"QUESTION:\n{question}{steering}",
     )
     return list(data.get("sub_questions", [])) or [question], list(data.get("concepts", []))
 
@@ -411,13 +501,20 @@ async def generate_search_queries(
     sub_questions: list[str],
     families: list[str],
     languages: list[str],
+    guidance: list[str] | None = None,
 ) -> list[str]:
+    steering = (
+        f"\nUSER_GUIDANCE (weight the queries towards this):\n"
+        f"{json.dumps(guidance, ensure_ascii=False)}"
+        if guidance
+        else ""
+    )
     data = await llm.complete_json(
         "Return JSON with search_queries (5-15 concise strings). Use source-appropriate keywords, "
         "names and identifiers; include counter-evidence queries. Write every query in English "
         "-- scholarly indexes return almost nothing for other languages. Keep proper nouns in "
         "their original spelling. No prose.",
         f"QUESTION: {question}\nSUB_QUESTIONS: {json.dumps(sub_questions, ensure_ascii=False)}\n"
-        f"SOURCE_FAMILIES: {families}\nACCEPTABLE_SOURCE_LANGUAGES: {languages}",
+        f"SOURCE_FAMILIES: {families}\nACCEPTABLE_SOURCE_LANGUAGES: {languages}{steering}",
     )
     return [str(q).strip() for q in data.get("search_queries", []) if str(q).strip()]

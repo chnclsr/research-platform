@@ -143,6 +143,10 @@ class ResearchScope(BaseModel):
     # window above. Recorded rather than recomputed: the inference is time-dependent, so
     # asking again later gives different bounds and cannot prove what happened here.
     dates_inferred: bool = False
+    # Set when the user answered the scoping question about dates. Without it, choosing
+    # "no date limit" clears the window and the validator immediately infers it back from
+    # the same wording -- the answer would be undone by the next revalidation.
+    dates_chosen: bool = False
 
 
 class SentinelSource(BaseModel):
@@ -194,6 +198,10 @@ class ResearchProtocol(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=3, max_length=300)
+    # A short snake_case handle for the topic, filled in at VALIDATE_PROTOCOL. Chat clients
+    # print it where a ULID would otherwise say nothing about which run is meant. Display
+    # only: two runs on one topic share a label, so it never replaces the id.
+    label: str | None = Field(None, max_length=64)
     primary_question: str = Field(min_length=5, max_length=5000)
     research_mode: Literal["literature_scan", "focused_answer"] = "literature_scan"
     sub_questions: list[str] = Field(default_factory=list, max_length=30)
@@ -203,6 +211,10 @@ class ResearchProtocol(BaseModel):
     original_question: str | None = None
     original_sub_questions: list[str] = Field(default_factory=list, max_length=30)
     original_language: str = ""
+    # What the user asked to be talked to in, when they were asked outright. Kept apart
+    # from original_language: that one records which language the question was written in
+    # and feeds question_for_report(), while this is a preference and outranks it.
+    interaction_language: Literal["tr", "en"] | None = None
     scope: ResearchScope = Field(default_factory=ResearchScope)
     languages: list[str] = Field(default_factory=lambda: ["tr", "en"], min_length=1)
     # Only the two languages the synthesis guard can actually verify: _language_matches()
@@ -224,7 +236,11 @@ class ResearchProtocol(BaseModel):
 
     @model_validator(mode="after")
     def normalize_targets_and_validate_budget(self) -> "ResearchProtocol":
-        if self.scope.start_date is None and self.scope.end_date is None:
+        if (
+            not self.scope.dates_chosen
+            and self.scope.start_date is None
+            and self.scope.end_date is None
+        ):
             inferred = infer_relative_date_range(self.primary_question)
             if inferred:
                 self.scope.start_date, self.scope.end_date = inferred
@@ -274,12 +290,14 @@ class ResearchProtocol(BaseModel):
         return self
 
     def display_language(self) -> str:
-        """The language the approval screen should speak: the one the request arrived in.
+        """The language to talk to this run's owner in.
 
-        Not report_language: that is a choice about the deliverable, while the plan is read
-        by whoever typed the question. Runs recorded before this existed carry no language
-        and keep the panel's original Turkish.
+        An outright choice wins; otherwise the language the request was written in. Not
+        report_language, which is a decision about the deliverable rather than about the
+        conversation. Runs recorded before either field existed keep the panel's Turkish.
         """
+        if self.interaction_language:
+            return self.interaction_language
         return self.original_language if self.original_language in {"tr", "en"} else "tr"
 
     def question_for_report(self) -> str:

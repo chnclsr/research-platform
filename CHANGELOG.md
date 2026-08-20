@@ -1,8 +1,8 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.10.4`
+Platform sürümü: `v0.10.7`
 
-Belge sürümü: `6.0`
+Belge sürümü: `6.3`
 
 Son güncelleme: `2026-08-20`
 
@@ -10,6 +10,80 @@ Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
 [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.10.7 — 2026-08-20
+
+- **Koşu adı artık kimliğin yerini tam olarak tutuyor.** `/status`, `/cancel`, `/pause`,
+  `/resume`, `/get` ve `/respond` komutlarında ULID yerine botun gösterdiği adı
+  yazabilirsiniz. Önceden bot adı gösteriyor ama o adı kabul etmiyordu; kimliği eski
+  mesajlarda aramak gerekiyordu. Büyük/küçük harf fark etmiyor ve etiketi olmayan eski
+  koşular da sorusundan türetilen adla bulunuyor.
+- Aynı ada uyan birden çok koşu varsa bot **tahmin etmiyor**: eşleşmeleri kimlik, durum ve
+  tarihle listeliyor ve hiçbirine dokunmuyor. `/cancel` geri alınamadığı için en yenisini
+  seçmek yanlış koşuyu iptal edebilirdi.
+- Yeni **`/kosular`** komutu (`/runs` eş adı) son koşularınızı adı, durumu ve tarihiyle
+  listeliyor. Her satırın altında hazır komut var; dokununca tamamı panoya kopyalanıyor.
+- **Adlar kısaldı.** `Research_artificial_intelligence_studies_that_last_3m` yerine
+  `artificial_intelligence_last_3m` gibi. Ad artık komuta yazıldığı için dolgu kelimeler
+  (`research`, `studies`, `that`, `using`, …) atılıyor ve uzunluk 32 karakterle
+  sınırlanıyor. Mevcut koşuların adları değişmiyor.
+
+## v0.10.6 — 2026-08-20
+
+- **Kapsam sorularının ilk ikisi artık gerçekten ayar.** Tarih aralığı ve kaynak ağırlığı
+  soruları sabit; şıkları protokolün kendi değerlerini taşıyor ve seçiminiz
+  `scope.start_date` ile `connectors.included_families` alanlarına yazılıyor. Eskiden her
+  cevap yalnız istemlere ek metin olarak giriyordu, yani "resmî kaynaklara öncelik ver"
+  seçmek connector listesini değiştirmiyordu. Kalan iki soru bugünkü gibi yönlendirme.
+  Kendi cevabınızı yazarsanız hiçbir alan değişmez — yazılan cevap yönlendirme olarak
+  kalır.
+- Tarih aralığı artık **soruluyor**. "Son 3 ay" gibi ifadelerden sessizce çıkarılan pencere
+  ilk şık olarak sunuluyor; başka bir aralık ya da "tarih sınırı olmasın" seçebiliyorsunuz.
+- Uygulanan ayarlar plan ekranında ve Telegram mesajında ayrı bir satırda listeleniyor:
+  hangi cevabın hangi alanı neye çevirdiği görünüyor.
+- Botun sorduğu **"hangi dilde ilerleyelim?"** sorusu artık isteğin dilinde. Eskiden
+  Telegram istemcisinin dil ayarından geliyordu, yani Türkçe bir istek İngilizce bir
+  soruyla karşılanabiliyordu. Çok kısa isteklerde dil anlaşılamıyorsa istemci ayarına
+  düşülmeye devam ediyor.
+- **Plan onayı artık düğmeyle.** Telegram'da plan mesajının altında "Onayla" ve "Değişiklik
+  iste" düğmeleri var; `/respond <run_id> approve` yazmak gerekmiyor. Değişiklik istenirse
+  bot gerekçeyi soruyor — gerekçesiz reddetme aynı planı yeniden kurup koşuyu revizyon
+  sınırına kadar döndürüyordu. `/respond` komutu duruyor: bot yeniden başlarsa düğmeler
+  geçersiz kalıyor ve komut tek yol oluyor.
+- **Mesajlar koşuyu konusuyla anıyor.** `01M0FG…: yanıt alındı` yerine
+  `ai_in_lung_ct_last_3m: yanıt alındı`. ULID kayboluyor değil — dokunulunca kopyalanacak
+  şekilde mesajın içinde duruyor ve komutların argümanı hâlâ o.
+- Mesajların içindeki **değerler de çevriliyor**: `durum queued` yerine `durum sırada`,
+  `Aşama: DECOMPOSE` yerine `Aşama: Ayrıştırma`. Cümleler geçen sürümde iki dilli olmuştu,
+  içlerine gömülen enum değerleri olmamıştı.
+- Plan mesajı zengin metin: başlıklar kalın, alt sorular ve sorgu dalları katlanmış alıntı
+  bloklarında — dokununca açılıyor. Biçimlendirme Telegram tarafından reddedilirse mesaj
+  düz metin olarak yeniden gönderiliyor; eskiden böyle bir hata mesajın hiç görünmemesine
+  yol açıyordu.
+
+## v0.10.5 — 2026-08-20
+
+- Telegram botu artık tek dilde konuşuyor. İngilizce başlatılan bir araştırmada plan
+  onaylandıktan sonra gelen `yanıt alındı, durum queued` gibi karışık cümleler kalktı;
+  yardım metninden hata mesajlarına kadar her şey iki dilli.
+- Konuşmanın dilini **kullanıcı seçiyor**: `/research` önce "Türkçe / English" düğmesini
+  gösteriyor, `--dil en` (ya da `--lang en`) yazılmışsa soru atlanıyor. Seçim sohbeti,
+  planlama sorularını, plan ekranını ve raporun dilini belirliyor.
+- Araştırma dili değişmedi: arama, edinim ve kanıt çıkarımı İngilizce yürümeye devam
+  ediyor.
+- **Araştırma başlamadan önce şıklı sorular geliyor.** Model, soruya göre 3-4 daraltıcı
+  soru üretiyor; kullanıcı düğmeye basıyor ya da kendi yanıtını yazıyor. Son soruda
+  "eklemek istediğiniz bir şey var mı?" diye soruluyor, plan ancak bundan sonra kuruluyor.
+- Cevaplar artık alt soru olarak eklenmiyor, **yönlendirme** olarak kullanılıyor. Şık
+  cevapları kısa ifadeler olduğu için ("Klinik") eskiden kendi başına bir sorgu dalı
+  üretirlerdi. Ölçüm: "iş yükü" seçildiğinde alt soru `radiologist workload` üzerine
+  kuruldu ve sorgu dallarına yansıdı.
+- Yinelenen şıklar eleniyor: canlı ölçümde model bir soruyu beş kez aynı şıkla döndürdü.
+  Böyle bir soru kullanıcıya hiçbir şey sormadığı için atılıyor.
+- Panelde de aynı sorular şıklı görünüyor; yanıt biçimi değişmediği için mevcut akış
+  bozulmadı.
+- Süre düğmesine basan ama hesabı bağlı olmayan kullanıcıda **botu düşüren** bir hata
+  giderildi (`_link_hint` yanlış çağrılıyordu).
 
 ## v0.10.4 — 2026-08-20
 
