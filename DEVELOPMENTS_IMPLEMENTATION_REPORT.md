@@ -33,9 +33,9 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 18 | Telegram botu SERVICE_TOKEN ve granüler parser motorları | `496a6ac` |
 | 19 | Araştırma İngilizce yürüyor, rapor istenen dilde | `210dca6` |
 | 20 | Plan ekranı sorunun geldiği dilde | `210dca6` |
-| 21 | Telegram: dil seçimi, şıklı planlama söyleşisi | commit bekliyor |
-| 22 | Bağlayıcı kapsam soruları, plan düğmeleri, koşu adı | commit bekliyor |
-| 23 | Koşu adı kimliğin yerini tutuyor, `/kosular` | commit bekliyor |
+| 21 | Telegram: dil seçimi, şıklı planlama söyleşisi | `3f3077e` |
+| 22 | Bağlayıcı kapsam soruları, plan düğmeleri, koşu adı | `3f3077e` |
+| 23 | Koşu adı kimliğin yerini tutuyor, `/kosular` | `3f3077e` |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
