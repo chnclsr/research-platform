@@ -189,12 +189,37 @@ birlestirme:
 # Her metrik: skor 100'den başlar, `esik` aşılırsa
 #     ceza = min((olculen - esik) * kat, tavan)
 # kadar düşer.
+#
+# MİMARİ NOT (2026-08-20, dış inceleme + kendi ölçümümüz): `quality_score`,
+# heavy'nin gerçekten fayda sağlayıp sağlamadığını neredeyse rastgele
+# seviyesinde tahmin ediyor — 221 belgelik C1 korpusunda AUC ~0,43-0,47
+# (0,5 = rastgele), bağımsız iki yöntemle ölçüldü. Bunun nedeni tasarım:
+# bu skor "fast metin bozuk mu" sorusuna cevap vermek için var (text drop,
+# boş çıktı, unicode/CID bozulması, gibberish, çözülemeyen formül gibi
+# yüksek güvenli sinyaller), "Docling daha mı iyi olur" sorusuna değil —
+# ikinci soru router'ın table/OCR/layout/şekil sinyalleriyle cevaplaması
+# gereken AYRI bir iş. Kalite eşiği (75) kalibre edilene kadar bu skoru
+# öncelik/provenance sinyali olarak kullanmak makul, ama tek başına route
+# kararını sürükleyen ana sinyal olması KANITLA DESTEKLENMİYOR. Ayrıntı:
+# entegrasyon_plani.md Bölüm 17 (critic kapısı).
+#
+# dangling VE hyphen sinyalleri belge-düzeyi dev/holdout ayrımıyla ayrı ayrı
+# denendi (221 belge, gerçek utility etiketiyle, tek faktör bir kerede):
+#   - hyphen kapatmak: DEV'de precision +0,018, recall DEĞİŞMEDİ (0,769→0,769).
+#     Holdout'ta (n=66) hiçbir kararı DEĞİŞTİRMEDİ (fark yok, ama zarar da
+#     yok). Düşük riskli, net kazanç yönü belli — UYGULANDI (kat 1.5 → 0.0).
+#   - dangling kapatmak: DEV'de precision +0,030 ama recall -0,019 (1 belge
+#     kaçıyor); holdout'ta da fark yok. Gerçek bir ödünleşim var ve holdout
+#     bunu doğrulamıyor — BUGÜN DEĞİŞTİRİLMEDİ, açık madde.
 critic_ceza:
   char_drop:        {esik: 0.10, kat: 120.0, tavan: 45.0}
   gibberish:        {esik: 0.02, kat: 300.0, tavan: 25.0}
   dangling:         {esik: 0.08, kat: 160.0, tavan: 35.0}
   broken:           {esik: 0.35, kat: 50.0,  tavan: 15.0}
-  hyphen:           {esik: 3.0,  kat: 1.5,   tavan: 15.0}
+  # UYGULANDI (2026-08-20): kat 1.5 -> 0.0. Gerekçe ve ölçüm yukarıdaki
+  # MİMARİ NOT'ta. `esik`/`tavan` bilerek bırakıldı (kat=0 iken hiç etkileri
+  # yok) -- kalibrasyon geçmişi ve olası gelecekteki yeniden açma için kayıt.
+  hyphen:           {esik: 3.0,  kat: 0.0,   tavan: 15.0}
   orphan:           {esik: 5.0,  kat: 1.0,   tavan: 10.0}
   latex:            {kat: 5.0,   tavan: 20.0}
   tablo_duzensiz:   {esik: 0.15, kat: 40.0,  tavan: 15.0}

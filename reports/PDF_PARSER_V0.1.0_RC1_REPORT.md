@@ -1207,6 +1207,36 @@ da bugün, C1 replay'i olmasaydı bu regresyon fark edilmeyecekti.
 
 Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2e (sude-staj, bu repo dışında).
 
+## M. Critic Kapısı — Kalite Skorunun Zayıf Öngörü Gücü, hyphen Cezası Kaldırıldı (2026-08-20)
+
+Bölüm 9'un P0 listesindeki "kalite 100 + şekil içeren false-negative
+grubu" bulgusunun köküne inildi. 221 belgelik C1 korpusunda (dış incelemenin
+ölçümü + bağımsız doğrulamam): `quality_score`'un heavy'den fayda görmeyi
+öngörme AUC'si **~0,43-0,47** — rastgele seviyesinde. Mimari sebep: bu skor
+"fast metin bozuk mu" sorusuna cevap vermek için tasarlandı, "Docling daha mı
+iyi olur" sorusuna değil — ikincisi router'ın table/OCR/layout sinyalleriyle
+ayrı cevaplaması gereken bir iş. `kalite_esik`'i (75) aşağı/yukarı taşımak bu
+yüzden temel sorunu çözmüyor (izole ölçümle doğrulandı).
+
+Belge-düzeyi dev/holdout ayrımıyla (155/66) `dangling` ve `hyphen`
+cezalarının tek tek etkisi ölçüldü: `hyphen` kapatmak DEV'de precision'ı
+artırıyor, recall'e **hiç zarar vermiyor**, holdout'ta nötr — düşük riskli,
+uygulandı (`kat 1.5→0.0`). `dangling` kapatmak DEV'de daha büyük precision
+kazancı veriyor ama gerçek bir recall maliyeti var (1 belge kaçıyor),
+holdout bunu doğrulamıyor — **değiştirilmedi**, açık madde.
+
+**Tam C1 replay (174 belge, bugünün TÜM düzeltmeleri: karantina + içerik
+kaybı + tablo tespiti + formül düzeltmesi + hyphen), 18 Ağustos temeliyle:**
+precision 0,384→0,405, ağır motor çağrısı **99→89 (%10 azalma)**, routed
+utility farkı **-0,0007** (gürültü seviyesi, pratik kayıp yok). Yani: aynı
+kalite, ölçülebilir şekilde daha az gereksiz ağır motor çağrısı.
+
+Geometrik layout sinyali (kalite=100 grubunu ayırmak için — sütun sayısı,
+okuma sırası sıçraması, PyMuPDF text block bbox analizi) doğru bir sonraki
+adım olarak kaldı, bugüne sığmadı.
+
+Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2f.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production

@@ -101,7 +101,9 @@ VARSAYILAN: Dict[str, Any] = {
         "gibberish": {"esik": 0.02, "kat": 300.0, "tavan": 25.0},
         "dangling": {"esik": 0.08, "kat": 160.0, "tavan": 35.0},
         "broken": {"esik": 0.35, "kat": 50.0, "tavan": 15.0},
-        "hyphen": {"esik": 3.0, "kat": 1.5, "tavan": 15.0},
+        # UYGULANDI (2026-08-20): kat 1.5 -> 0.0. Gerekce ve olcum:
+        # config/smart_router.yaml MIMARI NOT + entegrasyon_plani.md Bolum 17.
+        "hyphen": {"esik": 3.0, "kat": 0.0, "tavan": 15.0},
         "orphan": {"esik": 5.0, "kat": 1.0, "tavan": 10.0},
         "latex": {"kat": 5.0, "tavan": 20.0},
         "tablo_duzensiz": {"esik": 0.15, "kat": 40.0, "tavan": 15.0},
