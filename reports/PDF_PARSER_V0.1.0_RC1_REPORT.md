@@ -4,6 +4,7 @@
 başarısız sonuçları ve açık işleri tek güncel kaynakta birleştiren ana rapor. -->
 
 **Tarih:** 18 Ağustos 2026
+**Son güncelleme:** 20 Ağustos 2026
 **Üretim deposu:** bu `research-platform` klonu
 **Dal:** `pdf-parser-degerlendirme`
 **Sürümlenen ölçüm alanı:** `research/pdf-parser`
@@ -60,6 +61,12 @@ tek gerçek ağır motor şu an Docling.
 RC var. Ancak ortak route kararı İngilizcede kötü genelliyor, çok sayfalı ve
 gerçek taranmış PDF doğrulaması yok, production Docling köprüsü yavaş ve tüm
 deep-research servisi canlı API/kuyruk/veritabanı ile uçtan uca sınanmadı.
+
+20 Ağustos'taki Codex bağımsız internet denemesinde 3 belge/14 sayfada HIZLI
+bırakılan 4 sayfada güçlü route kaçağı görülmedi; ancak ağır hatta seçilen bir
+sayfada Docling'in %47,2 içerik kaybı mevcut merge tarafından kabul edildi.
+Router sayfayı yakaladı, karantina yanlış karar verdi. Ayrıntı ve sınırlar Bölüm
+J'dedir.
 
 ## 2. Başlangıç Araştırması: Neden Hibrit Parser
 
@@ -545,11 +552,14 @@ Bu bloklar `CODEX-2026-08-18` yorumuyla işaretlidir.
 
 ### Kalite için P0/P1
 
-1. İngilizce aşırı yönlendirmeyi azaltan dil/belge-tipi duyarlı sinyal.
-2. Kalite 100 + şekil içeren false-negative grubunu ayıran okuma sırası/layout sinyali.
-3. Geliştirme örneklerinden bağımsız holdout ile route/table doğrulaması.
-4. Çok sayfalı referanslı PDF seti.
-5. Gerçek taranmış Türkçe/İngilizce OCR seti.
+1. Ağır çıktının büyük içerik kaybını corruption skorundan bağımsız yakalayan
+   merge koruması ve regression testi (Bölüm J).
+2. İngilizce aşırı yönlendirmeyi azaltan dil/belge-tipi duyarlı sinyal.
+3. Kalite 100 + şekil içeren false-negative grubunu ayıran okuma sırası/layout sinyali.
+4. Codex seti artık regression setidir; düzeltmeden sonra yeni ve görülmemiş bir
+   holdout ile route/table/merge doğrulaması.
+5. Çok sayfalı referanslı PDF seti.
+6. Gerçek taranmış Türkçe/İngilizce OCR seti.
 
 ### Production performansı ve dayanıklılık
 
@@ -978,11 +988,133 @@ taşındı ve yeni konumdan uçtan uca doğrulandı (4 korpus, `c1_dogrulama.py`
 smoke test, `hata_arayuzu.py` tam koşu — sude-staj'daki son sonuçla birebir
 aynı sayı, 11 + 52 birim testi). Ayrıntı: `entegrasyon_plani.md` Bölüm 17.5.
 
+## J. Codex Bağımsız İnternet Denemesi (2026-08-20)
+
+Karantina değişikliklerinin yalnız geliştirme korpusuna uyup uymadığını görmek
+için, daha önce eşik seçimi veya parser geliştirmesinde kullanılmamış üç internet
+PDF'si production sınıflarıyla çalıştırıldı:
+
+1. [IRS Form W-4 (2026)](https://www.irs.gov/pub/irs-pdf/fw4.pdf) — 5 sayfa,
+   doldurulabilir form ve büyük vergi tabloları.
+2. [EUSO Activity Report 2025 Factsheet](https://esdac.jrc.ec.europa.eu/public_path//shared_folder/doc_pub/EUSO_ActivityReport2025_Factsheet.pdf)
+   — 2 sayfa, yoğun infografik ve çok sütunlu görsel düzen.
+3. [HYDRA - Hyper Dependency](https://arxiv.org/pdf/2109.05349) — 7 sayfa,
+   iki sütunlu akademik metin, tablo ve formüller.
+
+### J.1 Yöntem
+
+Her belge önce gerçek `SmartRouterHatti` ve `SmartPdfParser._run_heavy_pages`
+akışından geçirildi. Ardından normal production maliyetinin dışında, route kaçağı
+arayabilmek için Docling belgenin **bütün sayfalarında** ikinci kez çalıştırıldı.
+Docling `2.120.1`, CPU ve Python köprüsü (`bridged`) kullanıldı.
+
+HIZLI bırakılmış bir sayfa aşağıdakilerden en az birini sağlıyorsa "güçlü route
+kaçağı adayı" sayıldı:
+
+- fast metin 40 karakterden kısa, heavy metin en az 100 karakter;
+- heavy metin fast'ten en az 300 karakter ve en az %25 daha büyük;
+- Docling sayfada structured table nesnesi buldu.
+
+Bu kontrol bağımsız insan etiketi veya ground truth değildir; yalnız olası
+kaçakları daraltan bir taramadır. Merge sınır vakalarında fast/heavy metinleri
+ayrıca nitel olarak karşılaştırıldı.
+
+### J.2 Sayısal sonuç
+
+| Belge | Sayfa | HIZLI | AGIR | Karantina | Güçlü route kaçağı adayı | Doğrulanmış nihai regresyon |
+|---|---:|---:|---:|---:|---:|---:|
+| IRS W-4 | 5 | 1 | 4 | 0 | 0 | 0 |
+| EUSO factsheet | 2 | 0 | 2 | 0 | 0 | 1 |
+| HYDRA | 7 | 3 | 4 | 1 | 0 | 0 |
+| **Toplam** | **14** | **4** | **10** | **1** | **0** | **1** |
+
+- Sayfaların **4/14'ü (%28,6)** HIZLI, **10/14'ü (%71,4)** AGIR seçildi.
+- Ağır motor fallback'i veya eksik sayfa olmadı.
+- On ağır merge kararının 9'u heavy kabulü, 1'i karantinaydı.
+- HYDRA s.4'teki karantina doğruydu: Docling
+  `<!-- formula-not-decoded -->` bıraktı ve fast metin korundu.
+- HIZLI bırakılan 4 sayfada yukarıdaki tanıma göre güçlü kaçak adayı çıkmadı.
+  HYDRA s.3'ün tam Docling çıktısında üç çözülemeyen formül işareti bulunduğu
+  için fast'te kalması ayrıca güvenli taraftaydı.
+
+### J.3 Bulunan yanlış kabul
+
+EUSO s.1 router tarafından doğru biçimde AGIR'a gönderildi; hata route kararında
+değil merge kararında oluştu. Fast çıktı **1.905**, Docling çıktısı **1.005**
+karakterdi: **900 karakter / %47,2 içerik kaybı**. Docling infografikteki altı
+faaliyet maddesini ve bir kurumsal bağlam cümlesini atmasına rağmen corruption
+skoru `99,68 → 100,0` olduğu için `skor_farki_kabul (+0.320)` kararı verildi.
+
+Bu vaka, Bölüm I'de hedeflenen katastrofik içerik-kaybı korumasının genel haliyle
+uygulanmadığını gösterdi. `_karar_ver` bugün yalnız Docling'in çözülemeyen formül
+işaretini katastrofik sayıyor; uzunluk/içerik kaybını kontrol etmiyor. Böylece bu
+denemede doğrulanmış nihai regresyon oranı **1/14 sayfa (%7,1)**, ağır merge
+kararları içinde **1/10 (%10)** oldu. Örneklem küçük olduğu için bu oranlar sistemin
+genel hata oranı olarak yorumlanamaz.
+
+Ters yöndeki büyük farkın her zaman bozulma olmadığı da doğrulandı: IRS W-4 s.5
+fast'te 5.142, Docling'de 32.529 karakterdi (6,3 kat). Nitel kontrolde bunun tekrar
+bozulması değil, üç büyük matrisin Markdown tablo ayraçları ve sütun dolgularıyla
+yapılandırılması olduğu görüldü; Docling ayrıca üç table nesnesi üretti.
+
+### J.4 Karar ve holdout statüsü
+
+Bu deneme formül karantinasının görülmemiş bir belgede doğru çalıştığını, fakat
+yalnız corruption skorunun içerik kaybını korumaya yetmediğini gösterdi. Sonraki
+bloktan önce minimum iş:
+
+1. Fast metin kullanılabilirken heavy metindeki büyük oransal kaybı ayrı gerekçeyle
+   (`heavy_buyuk_icerik_kaybi`) reddeden, profilden ayarlanabilir dar bir koruma.
+2. EUSO tipi kayıp, W-4 tipi geçerli tablo büyümesi ve fast-boş/OCR davranışı için
+   hedefli birim testleri.
+3. Mevcut 261 sayfanın regression replay'i ve ardından yeni 3-4 görülmemiş PDF ile
+   ikinci holdout.
+
+Önemli metodoloji sınırı: Bu üç PDF testten önce bağımsız holdout'tu. Sonuçları
+okunduğu ve yeni kuralın tasarımını etkilediği andan itibaren **regression setine
+dönüşmüştür**; düzeltme sonrasında aynı setin geçmesi gerekli ama genelleme kanıtı
+değildir. "HIZLI kaçak 0/4" sonucu da örneklem küçüklüğü nedeniyle "hiç
+kaçırmıyor" iddiasını desteklemez.
+
+### J.5 Koruma uygulandı (aynı gün) — 0,60 değil 0,20, ve neden
+
+J.4'ün 1. maddesi (`heavy_buyuk_icerik_kaybi`) aynı oturumda uygulandı. Kendi
+261 sayfalık korpusumuzda bağımsız bir tarama, EUSO'yla **aynı kök nedeni**
+doğruladı: `gpt4_uzun_gorsel` s.48/57/63/67'de Docling gerçek istem metnini
+tamamen düşürüp yalnız şekil başlığı bırakmış (%82-97 kayıp), corruption skoru
+bunu temiz kabul ediyordu (`skor_farki_kabul (+0.000)`).
+
+**Ama basit bir uzunluk eşiği (0,60 dahil) yanlış olurdu — ölçüldü.**
+`attention_tablo` s.14/15, EUSO ile **aynı oran aralığında** (0,387-0,389)
+ama heavy **doğrulanmış şekilde daha iyi**: fast metni bir dikkat-
+görselleştirmesi görselinden OCR artığı (gerçek bozuk/tekrarlı metin), heavy
+doğru şekilde temiz bir şekil başlığı veriyor. İkincil ayırt edici sinyal
+arandı (fast'ın kendi `repetition_loop_ratio`'su, fast'ın router kalite
+skoru) — ikisi de bu iki sınıfı güvenilir ayırmıyor.
+
+Bu yüzden eşik **muhafazakâr** seçildi: `icerik_kaybi_esik: 0.20`. Kendi
+korpusumuzda 0,18 ve altı tamamı (4/4) doğrulanmış gerçek bug, 0,237 ve üstü
+bilinen en az bir doğrulanmış iyi karar içeriyor — 0,20 ikisi arasında,
+hiçbir bilinen iyi kararı bozmuyor (ölçüldü: karantina 9→13, yalnız
+`gpt4_uzun_gorsel`'de +4, diğer 8 belgede sıfır değişiklik).
+
+**EUSO'nun kendisi (oran 0,528) bu eşikle bilerek yakalanmıyor.** Onu
+yakalayacak bir eşik (≥0,55) `attention_tablo` s.14/15'i de yanlışlıkla
+reddederdi. 0,20-0,55 aralığını güvenle kapatmak J.4 madde 1'in ötesinde,
+fast'ın kendi tutarlılığını/bozulmasını ölçen ikinci bir sinyal gerektiriyor
+— **bu henüz yapılmadı**, açık kalan iş. J.4 madde 2 (hedefli birim testleri,
+4 test) ve kısmen madde 3 (261 sayfa regression replay — ölçüldü, geçti)
+tamamlandı; yeni 3-4 belgelik ikinci holdout henüz yapılmadı.
+
+Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2b (sude-staj, bu repo dışında).
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
 sözleşmesine bağlı, sayfa bazında yönlendiren, ağır motoru çağıran, tabloları ve
 provenance'ı taşıyan çalışan bir hat ortaya çıktı. C koşusu bu hattın Türkçede
 ortalama fayda sağladığını, İngilizcede ise mevcut route kararının zarar verdiğini
-gösterdi. Bu nedenle sistem **çalışıyor**, fakat calibration sonucu "eşikleri
-yayınla" değil, "route sinyalini geliştir ve yeniden doğrula" oldu.
+gösterdi. Codex internet denemesi de görülmemiş HIZLI sayfalarda güçlü kaçak
+bulmazken merge'in büyük içerik kaybını kabul edebildiğini gösterdi. Bu nedenle
+sistem **çalışıyor**, fakat calibration sonucu "eşikleri yayınla" değil, "route
+sinyalini ve içerik-kaybı korumasını geliştir, sonra yeni holdout ile doğrula" oldu.

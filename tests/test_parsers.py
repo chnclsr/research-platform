@@ -504,6 +504,65 @@ def test_merge_accepts_a_flagged_corrupt_heavy_page_when_fast_is_empty():
     assert any("no alternative engine" in n for n in merged.notes)
 
 
+# CLAUDE-2026-08-20: a bare figure caption can score a clean corruption-check
+# ACCEPT (no gibberish, no unicode noise) while silently dropping most of the
+# page's real content -- measured on gpt4_uzun_gorsel pages 48/57/63/67 (82-97%
+# loss) and independently on an unseen document (Codex's EUSO factsheet run,
+# 47.2% loss). The score comparison alone would have accepted this page.
+def test_merge_rejects_a_heavy_page_that_collapsed_in_length():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    fast_metin = "Bu sayfada gercek, uzun bir icerik var. " * 5  # > 30 karakter
+    heavy = EngineResult(engine="docling", pages={1: "Figure 1: kisa baslik.\n\n<!-- image -->"})
+    puan = {fast_metin: 90.0}.get
+    merged = birlestir({1: fast_metin}, results=[heavy], requested={"docling": [1]},
+                       score=lambda t: 100.0, icerik_kaybi_esik=0.20)
+    assert merged.quarantined_pages == [1]
+    assert merged.pages[0].karar_gerekcesi == "heavy_buyuk_icerik_kaybi"
+
+
+# CLAUDE-2026-08-20: the check is opt-in via the profile (icerik_kaybi_esik),
+# same shape as `tolerans` -- 0 (or omitted) must keep the old behaviour so a
+# broken/absent profile does not start rejecting pages it never used to.
+def test_merge_does_not_check_content_loss_when_the_threshold_is_zero():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    fast_metin = "Bu sayfada gercek, uzun bir icerik var. " * 5
+    heavy = EngineResult(engine="docling", pages={1: "Figure 1: kisa baslik.\n\n<!-- image -->"})
+    merged = birlestir({1: fast_metin}, results=[heavy], requested={"docling": [1]},
+                       score=lambda t: 100.0, icerik_kaybi_esik=0.0)
+    assert merged.quarantined_pages == []
+
+
+# CLAUDE-2026-08-20: too little fast text to trust a ratio -- critic.py's own
+# TOTAL_TEXT_DROPPED cutoff already treats under 30 characters as no text.
+def test_merge_ignores_content_loss_ratio_when_fast_is_too_short_to_judge():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(engine="docling", pages={1: "x"})
+    merged = birlestir({1: "kisa"}, results=[heavy], requested={"docling": [1]},
+                       score=lambda t: 100.0, icerik_kaybi_esik=0.20)
+    assert merged.quarantined_pages == []
+
+
+# CLAUDE-2026-08-20: one-directional by construction -- heavy legitimately
+# expanding a page (e.g. a compressed matrix rendered as full Markdown table
+# rows, measured 6.3x on an unseen IRS form during the same Codex run) must
+# never be read as a loss.
+def test_merge_content_loss_check_never_fires_when_heavy_is_longer():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    fast_metin = "kisa metin " * 5
+    heavy = EngineResult(engine="docling", pages={1: "cok daha uzun bir aciklama metni " * 20})
+    merged = birlestir({1: fast_metin}, results=[heavy], requested={"docling": [1]},
+                       score=lambda t: 100.0, icerik_kaybi_esik=0.20)
+    assert merged.quarantined_pages == []
+
+
 # CLAUDE-2026-08-20: an earlier engine's rejection must not outlive a later
 # engine's acceptance of the same page -- CODEX-2026-08-18's table-leak fix
 # covered the table side of this, quarantined_pages had the matching gap.

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence
 
 from .ayarlar import AYAR
+from .critic import markdown_isaretsiz
 from .engines import EngineResult
 
 # Levels 1-5 shift down one; level 6 has nowhere to go and is left alone.
@@ -99,16 +100,48 @@ class _Karar:
     heavy_skor: Optional[float] = None
 
 
+#: Below this, `_icerik_kaybi_var` refuses to judge a ratio at all -- a
+#: handful of characters make an unstable denominator, and critic.py's own
+#: TOTAL_TEXT_DROPPED cutoff already treats <30 chars as no text.
+ICERIK_KAYBI_TABAN_KARAKTER = 30
+
+
+def _icerik_kaybi_var(fast: str, heavy: str, esik: float) -> bool:
+    """
+    Heavy lost most of a page's actual content -- one-directional, only fires
+    when heavy is much SHORTER than fast. Never fires the other way (heavy
+    expanding a compressed table into full Markdown rows is not a loss); see
+    `_karar_ver`'s docstring for why a two-sided length check would repeat
+    _page_scorer's documented mistake.
+
+    Measured 2026-08-20 (entegrasyon_plani.md Bölüm 17 madde #1, "Codex
+    internet denemesi"): Docling silently dropping a page's real body text
+    down to a bare figure caption -- gpt4_uzun_gorsel pages 48/57/63/67 lost
+    82-97% of the content while the corruption score, blind to length, scored
+    them a clean accept. Independently confirmed on an unseen document (EUSO
+    factsheet page 1, 47.2% loss, also accepted). `esik` is deliberately
+    conservative: attention_tablo pages 14/15 sit at the same ratio (~0.39)
+    as that EUSO case and are a *correct* heavy win (fast is OCR noise off an
+    attention-visualisation figure) -- no signal found so far tells the two
+    apart in that range, so the threshold stays low enough to leave it alone.
+    """
+    fast_temiz = len(markdown_isaretsiz(fast))
+    if fast_temiz < ICERIK_KAYBI_TABAN_KARAKTER:
+        return False
+    heavy_temiz = len(markdown_isaretsiz(heavy))
+    return (heavy_temiz / fast_temiz) < esik
+
+
 def _karar_ver(
     score: Optional[Callable[[str], Optional[float]]], fast: str, heavy: str,
-    tolerans: float = 0.0,
+    tolerans: float = 0.0, icerik_kaybi_esik: float = 0.0,
 ) -> _Karar:
     """
     Decide whether the heavy engine's page replaces the fast one it is being
     compared to. `heavy` is assumed non-empty -- birlestir() already discards
     an empty heavy page before this is called.
 
-    Four cases:
+    Five cases:
 
       1. Fast is empty, heavy is not flagged catastrophic -> accept, nothing
          to lose (unchanged from the pipeline's original behaviour).
@@ -117,32 +150,40 @@ def _karar_ver(
          but say so, so provenance does not read this as a clean win. There is
          no third engine to fall back to today (MinerU is not wired in, see
          engines.py); the gerekce names that rather than pretending otherwise.
-      3. Fast has text, heavy is flagged catastrophic -> reject, keep fast.
-      4. Fast has text, heavy is not flagged catastrophic -> compare
-         corruption scores with a dead band (`tolerans` -- see
-         config/smart_router.yaml for the measurement behind 0.1). Unscoreable
-         either way (no scorer, a grader that returns None) means we cannot
-         tell, and heavy wins by default -- it was requested for a reason.
+      3. Fast has text, heavy dropped an unresolved formula fast didn't have
+         -> reject, keep fast.
+      4. Fast has text, heavy's length collapsed relative to it
+         (`icerik_kaybi_esik`, see config/smart_router.yaml) -> reject, keep
+         fast. Checked independently of the score comparison below: the
+         gpt4_uzun_gorsel/EUSO cases above scored a clean *accept* on
+         corruption alone, since a bare caption is not gibberish.
+      5. Neither catastrophic check fired -> compare corruption scores with a
+         dead band (`tolerans` -- see config/smart_router.yaml for the
+         measurement behind 0.1). Unscoreable either way (no scorer, a grader
+         that returns None) means we cannot tell, and heavy wins by default --
+         it was requested for a reason.
 
-    "Catastrophic" is deliberately narrow and one-directional: it only fires
-    on Docling's unresolved-formula placeholder appearing in heavy but not in
-    fast. It is NOT a broad quality check -- see _page_scorer's docstring
-    (smart_pdf.py) for the measured example (turkce_makale page 3) of why
-    scoring both sides on the same composite metric reverses the routing it
-    is meant to protect: an engine that reads a table correctly gets
-    penalised for the table looking "irregular" next to no table at all.
+    Both catastrophic checks are deliberately narrow and one-directional. They
+    are NOT a broad quality check -- see _page_scorer's docstring (smart_pdf.py)
+    for the measured example (turkce_makale page 3) of why scoring both sides
+    on the same composite metric reverses the routing it is meant to protect:
+    an engine that reads a table correctly gets penalised for the table
+    looking "irregular" next to no table at all.
     """
-    heavy_katastrofik = (
+    formul_katastrofik = (
         FORMUL_COZULEMEDI_ISARETI in heavy and FORMUL_COZULEMEDI_ISARETI not in fast
     )
 
     if not fast.strip():
-        if heavy_katastrofik:
+        if formul_katastrofik:
             return _Karar(True, "fast_bos_heavy_de_bozuk_alternatif_yok")
         return _Karar(True, "fast_bos_heavy_kullanilabilir")
 
-    if heavy_katastrofik:
+    if formul_katastrofik:
         return _Karar(False, "heavy_formul_cozulemedi")
+
+    if icerik_kaybi_esik > 0 and _icerik_kaybi_var(fast, heavy, icerik_kaybi_esik):
+        return _Karar(False, "heavy_buyuk_icerik_kaybi")
 
     if score is None:
         return _Karar(True, "skorlanamadi_varsayilan_heavy")
@@ -168,6 +209,7 @@ def birlestir(
     requested: Optional[Dict[str, Sequence[int]]] = None,
     score: Optional[Callable[[str], Optional[float]]] = None,
     tolerans: float = AYAR.karantina_tolerans,
+    icerik_kaybi_esik: float = AYAR.icerik_kaybi_esik,
 ) -> MergedDocument:
     """
     Merge fast-path text with heavy-engine output, page by page.
@@ -223,7 +265,8 @@ def birlestir(
             if not (text and text.strip()):
                 continue
             page_no = int(page_no)
-            karar = _karar_ver(score, fast_pages.get(page_no, ""), text, tolerans)
+            karar = _karar_ver(score, fast_pages.get(page_no, ""), text,
+                              tolerans, icerik_kaybi_esik)
             kararlar[page_no] = karar
             if not karar.kabul:
                 # Being expensive does not make output better. Docling was once

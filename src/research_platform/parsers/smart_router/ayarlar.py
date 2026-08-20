@@ -80,6 +80,11 @@ VARSAYILAN: Dict[str, Any] = {
         # kaybı sessizce eski (0.0) davranışa geri döner. Gerekçe ve ölçüm:
         # config/smart_router.yaml + entegrasyon_plani.md Bölüm 17 madde #1.
         "karantina_tolerans": 0.1,
+        # UYGULANDI (2026-08-20): heavy/fast markdown-arindirilmis uzunluk
+        # orani bunun altindaysa (fast kullanilabilirken) heavy katastrofik
+        # sayilir. Gerekce, olcum ve bilerek yakalanmayan Codex/EUSO vakasi
+        # icin config/smart_router.yaml'daki not.
+        "icerik_kaybi_esik": 0.20,
         # `smart_pdf._page_scorer` -- the corruption-only comparison the quarantine
         # decision runs on. Kept apart from `critic_ceza` on purpose: that one
         # grades a page, this one compares two engines' versions of one page.
@@ -112,6 +117,9 @@ class Ayarlar:
     yuksek_guven_yeter: bool
     #: Heavy text is kept when `heavy >= fast - tolerance`. 0.0 is today's rule.
     karantina_tolerans: float
+    #: Below this heavy/fast length ratio (fast usable, markdown stripped),
+    #: heavy is catastrophic regardless of the corruption-score comparison.
+    icerik_kaybi_esik: float
     #: Coefficients of the corruption-only score the quarantine check compares on.
     corruption: Dict[str, float]
     profil_adi: str
@@ -295,6 +303,7 @@ def yukle(yol: Optional[str] = None) -> Ayarlar:
         kalite_esik=float(etkin["yonlendirme"]["kalite_esik"]),
         yuksek_guven_yeter=bool(etkin["yonlendirme"]["yuksek_guven_yeter"]),
         karantina_tolerans=float(etkin["birlestirme"]["karantina_tolerans"]),
+        icerik_kaybi_esik=float(etkin["birlestirme"]["icerik_kaybi_esik"]),
         corruption=dict(etkin["birlestirme"]["corruption"]),
         profil_adi=str(etkin["profil_adi"]),
         esik_version=_surum(etkin),

@@ -104,6 +104,34 @@ birlestirme:
   # `entegrasyon_plani.md` Bölüm 17, madde #1.
   karantina_tolerans: 0.1
 
+  # Fast metin kullanılabilirken (bos degil), heavy'nin markdown-arindirilmis
+  # uzunlugu fast'inkinin bu orandan AZ ise heavy katastrofik sayilir --
+  # corruption skoru ne derse desin reddedilir. Tek yonlu: yalniz heavy KUCUKSE
+  # tetiklenir, buyukse (orn. Docling'in matrisi tabloya acmasi) hic bakilmaz.
+  #
+  # OLCULDU (2026-08-20, ayni 261 sayfa + Codex'in 3 bagimsiz internet PDF'i):
+  # Codex'in EUSO bulgusu (oran 0,528, %47,2 gercek icerik kaybi, corruption
+  # skoru bunu KABUL etmisti) bu korumanin GEREKCESI. Ama kendi korpusumuzda
+  # ayni oran araliginda (0,387-0,389, attention_tablo s.14/15) heavy'nin
+  # KESINLIKLE DAHA IYI oldugu iki sayfa var -- fast orada bozuk/tekrarli metin
+  # (bir dikkat-gorsellestirmesi resminden OCR artigi), heavy dogru sekilde
+  # temiz bir sekil basligi veriyor. Ikincil bir ayirt edici sinyal (fast'in
+  # kendi tekrar orani, fast'in kalite skoru) bu iki sinifi GUVENILIR sekilde
+  # ayirmiyor -- ikisi de denendi, ikisi de karisik cikti.
+  #
+  # Bu yuzden esik MUHAFAZAKAR secildi: kendi korpusumuzda 0,18 ve alti TAMAMI
+  # (4/4) dogrulanmis gercek kayip, 0,237 ve ustu bilinen en az bir dogrulanmis
+  # iyi karar iceriyor (0,387-0,389). 0,20 ikisinin arasinda, hicbir bilinen
+  # iyi karari bozmuyor.
+  #
+  # BILEREK YAKALANMIYOR: Codex'in EUSO'su (0,528) bu esikle KATASTROFIK
+  # SAYILMAZ -- 0,20'nin cok ustunde. Bunu 0,60'a cekmek EUSO'yu yakalardi ama
+  # attention_tablo s.14/15'i de (dogrulanmis iyi karar) yanlislikla
+  # reddederdi -- olcumle kanitlandi, kabul edilmedi. Ikinci bir sinyal
+  # (fast'in kendi tutarliligi) olmadan 0,20-0,55 araligi guvenle kapatilamaz;
+  # ayri bir is (entegrasyon_plani.md Bolum 17, madde #1 devami).
+  icerik_kaybi_esik: 0.20
+
   # `smart_pdf._page_scorer` — karantina kararının verildiği bozulma skoru.
   # `critic_ceza`'dan AYRI olması bilinçli: o bir sayfayı notlandırır, bu iki
   # motorun aynı sayfa için ürettiği iki metni karşılaştırır.
