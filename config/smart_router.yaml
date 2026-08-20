@@ -206,15 +206,25 @@ birlestirme:
 # dangling VE hyphen sinyalleri belge-düzeyi dev/holdout ayrımıyla ayrı ayrı
 # denendi (221 belge, gerçek utility etiketiyle, tek faktör bir kerede):
 #   - hyphen kapatmak: DEV'de precision +0,018, recall DEĞİŞMEDİ (0,769→0,769).
-#     Holdout'ta (n=66) hiçbir kararı DEĞİŞTİRMEDİ (fark yok, ama zarar da
-#     yok). Düşük riskli, net kazanç yönü belli — UYGULANDI (kat 1.5 → 0.0).
-#   - dangling kapatmak: DEV'de precision +0,030 ama recall -0,019 (1 belge
-#     kaçıyor); holdout'ta da fark yok. Gerçek bir ödünleşim var ve holdout
-#     bunu doğrulamıyor — BUGÜN DEĞİŞTİRİLMEDİ, açık madde.
+#     Tek holdout'ta (n=66) hiçbir kararı DEĞİŞTİRMEDİ. UYGULANDI (kat 1.5 → 0.0).
+#   - dangling kapatmak: tek bir 70/30 bölünmede DEV precision +0,030 ama
+#     recall -0,019 (1 belge kaçıyor) gösterdi — ilk turda BU YÜZDEN
+#     değiştirilmedi. Ama tek bölünme güvenilmezdi: aynı gün, 20 BAĞIMSIZ
+#     rastgele 70/30 bölünmeyle (her seferinde yalnız o turun holdout'unda
+#     ölçülerek — tek bir holdout'a bakıp karar değiştirmek yerine sağlamlık
+#     testi) tekrarlandı. Sonuç TUTARLI: 20 bölünmenin HEPSİNDE FP azaldı
+#     (ortalama -2,9/bölünme), yalnız 6/20'sinde (%30) 1 belgelik TP kaybı
+#     oldu (ortalama -0,3/bölünme). Tüm 221 belgede: precision 0,426→0,454,
+#     recall 0,743→0,730 (74 faydalı belgeden 1'i). Kazanç/kayıp oranı
+#     (ortalama 2,9 gereksiz çağrı önleniyor / 0,3 marjinal fayda kaybı)
+#     net pozitif — UYGULANDI (kat 160 → 0.0).
 critic_ceza:
   char_drop:        {esik: 0.10, kat: 120.0, tavan: 45.0}
   gibberish:        {esik: 0.02, kat: 300.0, tavan: 25.0}
-  dangling:         {esik: 0.08, kat: 160.0, tavan: 35.0}
+  # UYGULANDI (2026-08-20): kat 160.0 -> 0.0. Gerekçe ve 20-bölünmelik
+  # sağlamlık testi yukarıdaki MİMARİ NOT'ta. `esik`/`tavan` bilerek
+  # bırakıldı (kat=0 iken hiç etkileri yok).
+  dangling:         {esik: 0.08, kat: 0.0,   tavan: 35.0}
   broken:           {esik: 0.35, kat: 50.0,  tavan: 15.0}
   # UYGULANDI (2026-08-20): kat 1.5 -> 0.0. Gerekçe ve ölçüm yukarıdaki
   # MİMARİ NOT'ta. `esik`/`tavan` bilerek bırakıldı (kat=0 iken hiç etkileri

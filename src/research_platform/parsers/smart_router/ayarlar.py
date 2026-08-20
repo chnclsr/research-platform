@@ -99,7 +99,10 @@ VARSAYILAN: Dict[str, Any] = {
     "critic_ceza": {
         "char_drop": {"esik": 0.10, "kat": 120.0, "tavan": 45.0},
         "gibberish": {"esik": 0.02, "kat": 300.0, "tavan": 25.0},
-        "dangling": {"esik": 0.08, "kat": 160.0, "tavan": 35.0},
+        # UYGULANDI (2026-08-20): kat 160.0 -> 0.0. Gerekce ve 20-bolunmelik
+        # saglamlik testi: config/smart_router.yaml MIMARI NOT + entegrasyon_plani.md
+        # Bolum 17.
+        "dangling": {"esik": 0.08, "kat": 0.0, "tavan": 35.0},
         "broken": {"esik": 0.35, "kat": 50.0, "tavan": 15.0},
         # UYGULANDI (2026-08-20): kat 1.5 -> 0.0. Gerekce ve olcum:
         # config/smart_router.yaml MIMARI NOT + entegrasyon_plani.md Bolum 17.

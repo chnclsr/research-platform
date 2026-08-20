@@ -1237,6 +1237,33 @@ adım olarak kaldı, bugüne sığmadı.
 
 Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2f.
 
+### M.1 dangling de kaldırıldı — sağlamlık testi ve bir etkileşim dersi (aynı gün)
+
+Bölüm M'de `dangling` bilerek değiştirilmemişti (tek bir 70/30 bölünmede
+1 belgelik recall maliyeti görülmüştü). Kullanıcı isteğiyle bu tek ölçüme
+güvenmek yerine **20 bağımsız rastgele bölünmeyle** sağlamlık testi yapıldı
+(holdout'a bakıp karar değiştirmek yerine — bu, holdout'u ikinci bir
+kalibrasyon setine çevirirdi). Sonuç tutarlı: 20 bölünmenin hepsinde FP
+azaldı (ort. -2,9), yalnız %30'unda 1 belgelik TP kaybı oldu (ort. -0,3).
+Uygulandı (`dangling.kat` 160→0).
+
+**Gerçek C1 replay'de kayıp beklenenden büyük çıktı — dürüstçe kaydedildi:**
+izole test ~%0,5 recall kaybı öngörmüştü, gerçek kombine sistemde (bugünün
+tüm düzeltmeleriyle birlikte) ~%9 puan çıktı. Sebep: izole test `has_table`
+değerlerini ESKİ tablo kuralından almıştı; bugünün tablo düzeltmesi zaten
+`has_table` tetiklemesini azalttığı için kalan sayfalarda kalite sinyali
+daha fazla yük taşıyor hâle geldi — bir **etkileşim etkisi**, izole testte
+görünmüyordu. Yine de korundu: routed utility neredeyse hiç değişmedi
+(-0,0007→-0,0012), ağır motor çağrısı belirgin azaldı (89→73). **Genel
+ders:** izole ablation testleri, başka düzeltmelerle etkileşen sinyalleri
+hafife alabilir; kesin büyüklük yalnız tam sistem replay'iyle ölçülebilir.
+
+**Nihai durum (174 belge, 18 Ağustos temeliyle):** precision 0,384→0,425,
+ağır motor çağrısı 99→73 (**%26 azalma**), routed utility farkı **-0,0012**
+(gürültü seviyesi).
+
+Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2g.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
