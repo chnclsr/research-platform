@@ -1108,6 +1108,56 @@ tamamlandı; yeni 3-4 belgelik ikinci holdout henüz yapılmadı.
 
 Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2b (sude-staj, bu repo dışında).
 
+## K. Tablo Tespiti Düzeltmesi (2026-08-20) — commit `4d0ec44`
+
+Kullanıcı önceliği: sayfada tablo var/yok kararı route (hangi motora
+gidileceği) kararını doğrudan etkiliyor. `gate.py`'nin tablo sinyali
+`inspector OR (ortogonal_cizgi≥6 OR dolu_dikdortgen≥8 OR izgara 3×4)` idi.
+
+**Kök neden.** 261 sayfada 53 yanlış pozitifin **%70'inde (37/53)**
+pdf-inspector zaten doğru şekilde "tablo yok" derken, PyMuPDF'in
+`ortogonal_cizgi` sayacı büyük diyagram/grafik şekillerinde (özellikle
+`gpt4_uzun_gorsel`'in çok panelli figürlerinde) **6'dan 4714'e kadar**
+çıkıp hepsini tablo sayıyordu.
+
+**Adaylar hem kendi korpus (261 sayfa) hem resmi benchmark'ta (200 sayfa,
+elle etiketli) ölçüldü:**
+
+| Kural | Kendi P/R | Benchmark P/R |
+|---|---:|---:|
+| Mevcut (düzeltme öncesi) | 0,551 / 0,929 | 0,506 / 0,976 |
+| Tam veto (ort+dolu ikisi de bastırılır, denendi, reddedildi) | 0,644 / 0,929 | 0,565 / 0,929 |
+| **Uygulanan** — ort. büyük şekilde bastırılır, dolu eşiği 8→60 | 0,637 / 0,929 | 0,556 / **0,952** |
+
+Tam veto kendi korpusta bedavaydı ama benchmark'ta 2 gerçek tabloyu
+kaçırıyordu — bu 2 sayfada tablo büyük bir görsel alanının içinde
+(`kume_kaplama` 0,38-0,41) ama `dolu_dikdortgen` çok yüksekti (66, 105) —
+yoğun dolu dikdörtgen gerçek tablo hücresi de olabiliyor. Bu yüzden yalnız
+`ortogonal_cizgi` büyük şekilde tamamen bastırıldı (`sekil_veto_kaplama:
+0.15`), `dolu_dikdortgen` bastırılmadı ama eşiği 8'den 60'a yükseltildi.
+
+**Doğrulama:** Gerçek `gate.py` koduyla (taklit değil) her iki korpusta da
+doğrulandı — tahmin edilen sayılarla birebir eşleşti. Ayrıca gerçek üretim
+giriş noktası (`registry.select()` → `SmartPdfParser.parse()`) canlı bir
+PDF'le uçtan uca çalıştırıldı, sorunsuz.
+
+**Ölçülen yan etki (hız):** `gpt4_uzun_gorsel`'de ağır motor çağrısı 48→40
+sayfa, boşa giden çağrı (tablo olmadığı hâlde ağır motora giden) 17→12 —
+daha az gereksiz Docling çağrısı.
+
+**Dürüstçe hâlâ açık:**
+1. **Precision hâlâ düşük** (kendi 0,637 / benchmark 0,556) — yönlendirilen
+   sayfaların ~%36-44'ünde hâlâ gerçek tablo yok. `yuksek_guven_yeter=true`
+   (AND kuralı) precision'ı 0,75-0,87'ye çıkarır ama recall'i 0,60-0,67'ye
+   düşürür — bu oturumda **reddedildi**, gerçek tablo kaçırmak daha pahalı
+   sayıldı. Kalan FP'lerin kök nedeni henüz sınıflandırılmadı (izgara kuralı
+   mı, inspector'ın kendi hatası mı, küçük diyagramlar mı) — bir sonraki iş.
+2. Benchmark'ta hâlâ 2 gerçek tablo kaçıyor — çoğu taranmış/görüntü tabanlı
+   sayfalarda, PyMuPDF hiç vektör bilgisi göremiyor. Görüntü/OCR tabanlı
+   tablo tespiti gerektiriyor, eşik ayarıyla çözülemez.
+
+Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2c (sude-staj, bu repo dışında).
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
