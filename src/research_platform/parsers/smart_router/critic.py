@@ -348,10 +348,24 @@ class PDFCritic:
         else:
             char_drop = 1.0 if karakter == 0 else 0.0
 
-        # --- gibberish (evaluate() ile ayni kural)
+        # --- gibberish. evaluate()'in kuralindan FARKLI (orasi kasitli
+        # degismedi, bkz. asagidaki not) -- burada Unicode kategorisi 'Sm'
+        # (matematik sembolu: x . E . +-, ->, vb.) ve dogrulanmis birkac 'Po'
+        # imi (dipnot/asal isareti) de mesru sayiliyor. Olculdu (2026-08-20,
+        # entegrasyon_plani.md Bolum 17 madde #1): karantinada hala reddedilen
+        # 20 sayfanin en az 19'unda "gibberish" denen karakterlerin tamami ya
+        # da buyuk cogunlugu bu iki kategoriden -- Docling'in DOGRU cikardigi
+        # sembolleri (x, elemani, bos kume, +-, ok, vb.) fast'in bozup ASCII'ye
+        # indirgedigi (orn. "Context ->" -> "Context*!*") yerlerde heavy
+        # cezalandiriliyordu. `Sk` (tek basina aksan/diaresiz isareti, orn.
+        # Docling'in "d¨urfen" gibi ayirdigi umlaut) BILEREK disarida birakildi
+        # -- bu gercek, kucuk bir cikarim kusuru, mesru sayilmiyor.
+        MESRU_PO = '†‡′″‰·'
         bozuk_ascii = sum(1 for c in metin
                           if ord(c) > 127 and not c.isalnum()
-                          and c not in 'çğıöşüÇĞİÖŞÜ’“”«»—–\n\r\t ')
+                          and c not in 'çğıöşüÇĞİÖŞÜ’“”«»—–\n\r\t '
+                          and unicodedata.category(c) != "Sm"
+                          and c not in MESRU_PO)
         gibberish = bozuk_ascii / max(karakter, 1)
 
         # --- D6: orandan ikili varlik sinyaline

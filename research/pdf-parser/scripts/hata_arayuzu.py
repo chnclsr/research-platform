@@ -36,10 +36,8 @@ import statistics
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kendi_korpus_yolu import (  # noqa: E402
-    BELGELER, CALIBRATION_ROOT, CIKTI as OUT, dogrula, pdf as pdf_yolu,
-)
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(BASE, "src"))
 from uretim_yolu import ekle  # noqa: E402
 
 ekle()
@@ -53,8 +51,15 @@ from research_platform.parsers.smart_router import SmartRouterHatti  # noqa: E40
 from research_platform.parsers.smart_router.engines import EngineResult  # noqa: E402
 from research_platform.parsers.smart_router.merge import birlestir  # noqa: E402
 
-HTML = os.path.join(CALIBRATION_ROOT, "html")
+CORPUS = os.path.join(BASE, "corpus")
+OUT = os.path.join(BASE, "out")
+HTML = os.path.join(BASE, "html")
 GORSEL = os.path.join(HTML, "hata_gorsel")
+
+BELGELER = ["turkce_makale", "resnet_2sutun_gorsel", "vgg_tablo_agirlikli",
+            "attention_tablo", "bert_2sutun_dipnot", "sybil_tip_2sutun",
+            "gpt3_uzun_75sayfa", "gpt4_uzun_gorsel",
+            "taranmis_bert_2sutun_dipnot"]
 
 #: Sayfa goruntusu buyutme carpani. 1.5 ~ 108 dpi; okunur ve dosya kucuk kalir.
 ZOOM = 1.5
@@ -170,7 +175,7 @@ def _kirp(metin: str) -> str:
 
 # --------------------------------------------------------------- toplama
 def belge_topla(stem: str) -> dict:
-    pdf = pdf_yolu(stem)
+    pdf_yolu = os.path.join(CORPUS, stem + ".pdf")
     tablo_sayfa, sekil_sayfa, tablolar, ogeler = referans(stem)
     heavy_metin = docling_sayfalari(stem)
     heavy_sn = docling_belge_sn(stem)
@@ -180,7 +185,7 @@ def belge_topla(stem: str) -> dict:
     karar = None
     for _ in range(KOSU):
         basladi = time.perf_counter()
-        karar = SmartRouterHatti().calistir(pdf, metin_dahil=True)
+        karar = SmartRouterHatti().calistir(pdf_yolu, metin_dahil=True)
         sureler.append((time.perf_counter() - basladi) * 1000)
     toplam_ms = statistics.median(sureler)
 
@@ -203,7 +208,7 @@ def belge_topla(stem: str) -> dict:
     secilen = {p.page_no: p for p in birlesik.pages}
 
     os.makedirs(os.path.join(GORSEL, stem), exist_ok=True)
-    belge = pymupdf.open(pdf)
+    belge = pymupdf.open(pdf_yolu)
     matris = pymupdf.Matrix(ZOOM, ZOOM)
 
     sayfalar = []
@@ -754,7 +759,6 @@ yanilirsa buradaki TP/FP/FN de yanilir; ornekleri gozle dogrulamak icin
 
 
 def main() -> int:
-    dogrula(BELGELER)
     os.makedirs(GORSEL, exist_ok=True)
     veriler = []
     for stem in BELGELER:

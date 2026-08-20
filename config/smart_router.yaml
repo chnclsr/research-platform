@@ -95,10 +95,14 @@ birlestirme:
   # değil, bedava. Tek büyük regresyon (resnet s.5, −22,38) 2,0'a kadar yakalanmaya
   # devam ediyor.
   #
-  # YİNE DE 0.0 BIRAKILDI: bu bir davranış değişikliği, 18 sayfanın yolunu değiştirir
-  # ve önceki ölçümlerin karşılaştırılabilirliğini bozar. C2'nin bulduğu eşik adayları
-  # da holdout olmadan uygulanmamıştı; aynı kural burada da geçerli.
-  karantina_tolerans: 0.0
+  # UYGULANDI (2026-08-20): 0.10'a çekildi. Yukarıdaki tarama zaten burada
+  # duruyordu ("bedava" satırı) ama önceki oturum davranış değişikliği riskini
+  # gerekçe göstererek 0.0'da bırakmıştı. Bugünkü karar: 16 "berabere" sayfa
+  # (fark < 0,1 puan) istatistiksel gürültü seviyesinde, mevcut corruption
+  # skoru bu farkları güvenilir ayıramıyor; 19 gerçek düşüşün hepsi (resnet
+  # s.5, -22,38 dahil) tolerans=0.10'da hâlâ yakalanıyor. Elle doğrulama:
+  # `entegrasyon_plani.md` Bölüm 17, madde #1.
+  karantina_tolerans: 0.1
 
   # `smart_pdf._page_scorer` — karantina kararının verildiği bozulma skoru.
   # `critic_ceza`'dan AYRI olması bilinçli: o bir sayfayı notlandırır, bu iki

@@ -74,7 +74,12 @@ VARSAYILAN: Dict[str, Any] = {
         "yuksek_guven_yeter": False,
     },
     "birlestirme": {
-        "karantina_tolerans": 0.0,
+        # UYGULANDI (2026-08-20): 0.1. YAML profili bozuk/eksikse sistem bu
+        # gömülü varsayılana düşüyor (ayarlar.py docstring'i, "SAFE ABSENCE") --
+        # bu yüzden YAML'daki 0.1 ile burası birlikte güncellenmezse, config
+        # kaybı sessizce eski (0.0) davranışa geri döner. Gerekçe ve ölçüm:
+        # config/smart_router.yaml + entegrasyon_plani.md Bölüm 17 madde #1.
+        "karantina_tolerans": 0.1,
         # `smart_pdf._page_scorer` -- the corruption-only comparison the quarantine
         # decision runs on. Kept apart from `critic_ceza` on purpose: that one
         # grades a page, this one compares two engines' versions of one page.

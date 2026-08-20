@@ -16,9 +16,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 from c1_metrik import METRIC_VERSION, metrikler  # noqa: E402
-from korpus_kaynak import (  # noqa: E402
-    KORPUS_KOK, METIN_REFERANSI, OPENDATALOADER_KOK, PDF_PARSE,
-)
+from korpus_kaynak import KORPUS_KOK, METIN_REFERANSI, PDF_PARSE  # noqa: E402
 from uretim_yolu import ekle  # noqa: E402
 from c1_orneklem import sec as _sec  # noqa: E402
 
@@ -84,9 +82,7 @@ def _yaz(yol: str, metin: str) -> None:
 
 
 def _coz(kayit: dict, relative: str) -> str:
-    root = (OPENDATALOADER_KOK
-            if kayit.get("yol_koku") == "opendataloader_bench"
-            else KORPUS_KOK)
+    root = BASE if kayit.get("yol_koku") == "staj" else KORPUS_KOK
     return os.path.join(root, *relative.split("/"))
 
 

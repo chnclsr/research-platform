@@ -415,7 +415,10 @@ def test_the_active_profile_reaches_provenance():
 
 # CODEX/CLAUDE: the quarantine rule had no dead band, so a tie decided in the
 # third decimal threw away the heavy page and its table grid. The band is a
-# profile value now; 0.0 keeps every measurement taken so far valid.
+# profile value now (0.1 as of 2026-08-20, config/smart_router.yaml -- see
+# entegrasyon_plani.md Bölüm 17 madde #1 for the page-by-page review behind
+# that number); both `tolerans` values below are passed explicitly so this
+# test does not depend on whatever the profile currently says.
 def test_merge_dead_band_keeps_a_heavy_page_that_scored_marginally_lower():
     from research_platform.parsers.smart_router.engines import EngineResult
     from research_platform.parsers.smart_router.merge import birlestir
@@ -431,6 +434,93 @@ def test_merge_dead_band_keeps_a_heavy_page_that_scored_marginally_lower():
                      score=puan, tolerans=0.5)
     assert bant.quarantined_pages == []
     assert bant.pages[0].engine == "docling"
+
+
+# CLAUDE-2026-08-20: exactly at the boundary (heavy == fast - tolerans) must
+# accept -- the comparison is `>=`, not `>`. Regression guard for that sign.
+def test_merge_accepts_heavy_exactly_at_the_tolerance_boundary():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(engine="docling", pages={1: "heavy"})
+    puan = {"fast": 100.0, "heavy": 99.9}.get  # fark tam olarak -0.1
+
+    merged = birlestir({1: "fast"}, results=[heavy], requested={"docling": [1]},
+                       score=puan, tolerans=0.1)
+    assert merged.quarantined_pages == []
+    assert merged.pages[0].engine == "docling"
+    assert merged.pages[0].karar_gerekcesi.startswith("skor_farki_kabul")
+
+
+# CLAUDE-2026-08-20: an unresolved-formula placeholder is real content loss
+# even when the corruption score alone looks fine or better than fast's --
+# measured on attention_tablo pages 4-6 (Docling scored >= fast on
+# gibberish/unicode but had silently dropped the attention equation into
+# this exact marker). The score comparison alone would have accepted these;
+# this check has to fire independently of it.
+def test_merge_rejects_a_heavy_page_that_lost_a_formula_even_with_a_better_score():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(engine="docling", pages={
+        1: "Attention(Q,K,V) computed as:\n\n<!-- formula-not-decoded -->\n\nmore text",
+    })
+    puan = {"fast": 90.0, "heavy": 95.0}.get  # heavy would win on score alone
+    merged = birlestir({1: "fast"}, results=[heavy], requested={"docling": [1]}, score=puan)
+    assert merged.quarantined_pages == [1]
+    assert merged.pages[0].karar_gerekcesi == "heavy_formul_cozulemedi"
+
+
+# CLAUDE-2026-08-20: an already-present placeholder in fast (e.g. carried
+# over from an earlier pass) must not itself trigger a reject -- the check
+# only fires when heavy introduces the marker and fast did not already have it.
+def test_merge_does_not_reject_for_a_formula_marker_already_present_in_fast():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(engine="docling", pages={1: "<!-- formula-not-decoded -->"})
+    fast = {1: "some text <!-- formula-not-decoded --> already here"}
+    puan = {fast[1]: 90.0, "<!-- formula-not-decoded -->": 90.0}.get
+    merged = birlestir(fast, results=[heavy], requested={"docling": [1]}, score=puan)
+    assert merged.quarantined_pages == []
+
+
+# CLAUDE-2026-08-20: an OCR page has no fast text to fall back to, so a
+# flagged-corrupt heavy result is still kept -- rejecting it would just leave
+# the empty fast text, which is no better. Provenance has to say this was not
+# a clean win, since there is no third engine to try today (MinerU is not
+# wired in, see engines.py).
+def test_merge_accepts_a_flagged_corrupt_heavy_page_when_fast_is_empty():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    heavy = EngineResult(engine="docling", pages={1: "<!-- formula-not-decoded -->"})
+    merged = birlestir({1: ""}, results=[heavy], requested={"docling": [1]},
+                       score=lambda t: 90.0)
+    assert merged.quarantined_pages == []
+    assert merged.pages[0].engine == "docling"
+    assert merged.pages[0].karar_gerekcesi == "fast_bos_heavy_de_bozuk_alternatif_yok"
+    assert merged.degraded is True
+    assert any("no alternative engine" in n for n in merged.notes)
+
+
+# CLAUDE-2026-08-20: an earlier engine's rejection must not outlive a later
+# engine's acceptance of the same page -- CODEX-2026-08-18's table-leak fix
+# covered the table side of this, quarantined_pages had the matching gap.
+def test_merge_quarantine_does_not_survive_a_later_engine_accepting_the_page():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    ilk_deneme = EngineResult(engine="docling", pages={1: "bad heavy"})
+    ikinci_deneme = EngineResult(engine="mineru", pages={1: "good heavy"})
+    puan = {"fast": 90.0, "bad heavy": 10.0, "good heavy": 95.0}.get
+
+    merged = birlestir(
+        {1: "fast"}, results=[ilk_deneme, ikinci_deneme],
+        requested={"docling": [1], "mineru": [1]}, score=puan,
+    )
+    assert merged.quarantined_pages == []
+    assert merged.pages[0].engine == "mineru"
 
 
 # CLAUDE-2026-08-19: Measured on an RTX 4060 box -- the same PDF and the same

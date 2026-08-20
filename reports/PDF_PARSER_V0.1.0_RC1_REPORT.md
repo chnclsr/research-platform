@@ -20,19 +20,33 @@ parser'a veriyordu. Ayrıca ilk smart-router prototipinde gerçek pdf-inspector
 yerine PyMuPDF tabanlı bir mock kullanıldığı için kalite kararı yanlış girdiye
 bakıyordu.
 
-Bugün ulaşılan akış:
+Bugün ulaşılan akış — kapının nerede karar verdiği, ne zaman ağır motora
+gidildiği ve fallback/karantinanın nasıl işlediği:
 
-```text
-PDF bytes
-  -> SmartPdfParser
-  -> pdf-inspector ile tüm sayfaların hızlı çıkarımı
-  -> sayfa başına OCR / tablo / şekil / kalite sinyalleri
-  -> yalnız işaretlenen sayfalar için Docling
-  -> fast/heavy sayfa karşılaştırması ve karantina
-  -> sayfaları sırayla birleştirme
-  -> Markdown + tablolar + sayfa/engine provenance
-  -> acquisition -> passages -> repository
+```mermaid
+flowchart TD
+    A["PDF bytes"] --> B["pdf-inspector: tüm sayfaların hızlı çıkarımı<br/>(fast metin, canonical markdown)"]
+    B --> C{"Giriş Kapısı — gate.py<br/>her sayfa için sinyal üretir"}
+    C -->|"needs_ocr = true<br/>(sert kapı)"| D["Zorunlu ağır motor<br/>(OCR şart)"]
+    C -->|"has_table / has_figure<br/>veya kalite düşük"| E["Ağır motor adayı"]
+    C -->|"temiz sayfa"| F["Fast metin kalır<br/>(inspector çıktısı)"]
+    D --> G["Sayfa Seçici — pages.py<br/>işaretli sayfalar ardışık bloklara gruplanır"]
+    E --> G
+    G --> H["Ağır Motor Çağrısı — Docling<br/>orchestrator.py / engines.py"]
+    H -->|"başarılı"| I{"Kalite karşılaştırması<br/>merge.py"}
+    H -->|"hata / timeout / motor erişilemez"| J["Fast metin korunur<br/>degraded provenance"]
+    I -->|"heavy kalite fast'e eşit/üstün"| K["Heavy sayfa kullanılır"]
+    I -->|"heavy kalite fast'in altında<br/>(corruption skoru)"| L["KARANTİNA<br/>fast metin korunur,<br/>tablo grid sızmaz"]
+    F --> M["Birleştirme — merge.py<br/>'Page N' başlığı + sayfa/engine provenance"]
+    J --> M
+    K --> M
+    L --> M
+    M --> N["acquisition → passages → repository"]
 ```
+
+Not: MinerU, Docling'e sıralı fallback olarak kodda hazır ama motor sınıfı
+bugün bilinçli olarak `unavailable` dönüyor (bkz. bölüm 4.7) — yani şemadaki
+tek gerçek ağır motor şu an Docling.
 
 | Kol | Amaç | Güncel durum |
 |---|---|---|
@@ -926,6 +940,43 @@ Tek cümlelik özet: MinerU hybrid Docling GPU'ya hız alternatifi değil
 (18,5× yavaş), pipeline (CPU) ile karşılaştırıldığında da sistematik bir
 kazanç yok — ama tablo/şekil yapısında (rowspan/colspan, chart/image
 ayrımı) gerçek bir katkısı var. Karar için doğruluk ölçümü eksik.
+
+## I. Karantina Yeniden Tasarımı ve Kod Konsolidasyonu (2026-08-20)
+
+Tam gerekçe, sayfa sayfa doğrulama ve ölçüm ayrıntıları:
+`entegrasyon_plani.md` Bölüm 17 (madde #1). Burada yalnız özet.
+
+**Karantina.** `merge.py::_is_improvement` (artık `_karar_ver`), fast/heavy
+sayfalarını karşılaştırırken `tolerans=0.0` kullanıyordu — 0,02 puanlık bir
+skor farkı bile sayfayı (ve tablosunu) reddediyordu. 9 belge/261 sayfalık
+etiketli sette (`research/pdf-parser/scripts/hata_arayuzu.py`) ölçüldü: 37
+karantinanın 16'sı |fark|<0,1 (yazı-tura), ve karantina skorunun kendisi
+(yalnız gibberish/unicode, kasıtlı dar) matematik sembollerini (×, ∈, →
+vb.) haksız yere cezalandırıyordu. Üç düzeltme yapıldı:
+1. `karantina_tolerans` 0,0 → **0,1** (`config/smart_router.yaml` +
+   `ayarlar.py`'nin gömülü varsayılanı — ikisi de, config kaybolursa sessiz
+   geri dönüş olmasın diye).
+2. Docling'in `<!-- formula-not-decoded -->` işaretine (formül kaybı) bağlı
+   ayrı bir katastrofik-red kuralı eklendi — skor iyi görünse bile.
+3. `critic.py::sayfa_metrikleri`'deki gibberish hesaplaması Unicode
+   kategorisi `Sm` (matematik sembolü) ve doğrulanmış birkaç `Po` imini
+   meşru sayacak şekilde genişletildi.
+
+**Sonuç (aynı 261 sayfa):** karantina **37 → 24 → 9**. Kalan 9 sayfanın
+tamamı elle doğrulandı: 5 gerçek formül kaybı, 1 gerçek regresyon
+(`resnet_2sutun_gorsel` s.5, private-use-area glyph kirliliği), 3 gerçek
+küçük Docling kusuru (bilerek düzeltilmedi). `merge.py`'ye 5 yeni birim
+testi eklendi (`tests/test_parsers.py`, 52/52 geçiyor).
+
+**Kod konsolidasyonu.** Bu çalışma sırasında `research/pdf-parser/scripts/c1_dogrulama.py`'nin
+kendi `research/pdf-parser/src/` klasörünü aradığı ama bu klasörün hiç
+var olmadığı (yani script'in fiilen bozuk olduğu) ve `research/pdf-parser/smart_router/`'ın
+17 Ağustos'tan beri güncellenmediği (üretim kodu `src/research_platform/parsers/smart_router/`'a
+taşınmıştı) fark edildi. Ölü kopya silindi; çalışan ölçüm scriptleri (daha
+önce yalnız git'e hiç girmeyen `sude-staj/` içinde yaşıyordu) buraya
+taşındı ve yeni konumdan uçtan uca doğrulandı (4 korpus, `c1_dogrulama.py`
+smoke test, `hata_arayuzu.py` tam koşu — sude-staj'daki son sonuçla birebir
+aynı sayı, 11 + 52 birim testi). Ayrıntı: `entegrasyon_plani.md` Bölüm 17.5.
 
 ## 12. Son Cümle
 

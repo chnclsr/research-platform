@@ -204,7 +204,9 @@ class SmartPdfParser(DocumentParser):
             "quarantined_pages": merged.quarantined_pages,
             "pages": [
                 {"page": page.page_no, "engine": page.engine,
-                 "decision": page.decision, "fell_back": page.fell_back}
+                 "decision": page.decision, "fell_back": page.fell_back,
+                 "fast_skor": page.fast_skor, "heavy_skor": page.heavy_skor,
+                 "karar_gerekcesi": page.karar_gerekcesi}
                 for page in merged.pages
             ],
         }

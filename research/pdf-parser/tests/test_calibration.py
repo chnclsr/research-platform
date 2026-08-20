@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 # CODEX-2026-08-18: C1 corpus contract and metric regression tests.
+# 2026-08-20: moved back here from sude-staj (never git-tracked) -- see
+# uretim_yolu.py's docstring. `src/` and `scripts/` both need to be on
+# sys.path: helper modules (c1_metrik, korpus_kaynak) live in the former,
+# the runner that imports them (c2_kalibrasyon) in the latter.
 
 import json
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
-SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+for _alt in ("src", "scripts"):
+    _yol = Path(__file__).resolve().parents[1] / _alt
+    if str(_yol) not in sys.path:
+        sys.path.insert(0, str(_yol))
 
 from c1_metrik import metrikler
 from c1_orneklem import sec
@@ -98,7 +103,7 @@ def test_opendataloader_adapter_exposes_english_pdf_reference_and_labels(tmp_pat
     )
     with patch("korpus_kaynak.sayfa_sayisi", return_value=1):
         record = list(OpenDataLoaderBenchKaynak(str(tmp_path)).kayitlar())[0]
-    assert record.yol_koku == "opendataloader_bench"
+    assert record.yol_koku == "staj"
     assert {PDF_PARSE, METIN_REFERANSI, SAYFA_ETIKETI} <= set(record.yetenekler)
     assert record.etiketler == {"tablo": 1, "sekil": 1, "denklem": 1}
     assert record.ustveri["dil"] == "en"

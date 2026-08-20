@@ -48,6 +48,12 @@ class MergedPage:
     decision: List[str] = field(default_factory=list)
     #: The heavy engine was asked for this page and did not deliver it.
     fell_back: bool = False
+    #: Corruption scores from the last quarantine check run on this page
+    #: (None if no heavy engine was ever compared against it -- see _karar_ver).
+    fast_skor: Optional[float] = None
+    heavy_skor: Optional[float] = None
+    #: Human-readable reason the last quarantine check picked what it picked.
+    karar_gerekcesi: Optional[str] = None
 
 
 @dataclass
@@ -76,6 +82,83 @@ class MergedDocument:
         return len(self.pages)
 
 
+#: Docling's own marker for a formula region it found but could not decode
+#: (do_formula_enrichment=False today, see entegrasyon_plani.md Q1/Q2). Its
+#: presence in the heavy text where the fast text has none of it is treated
+#: as catastrophic regardless of the corruption-score comparison below --
+#: an exact string match, not a heuristic, so it costs nothing to trust.
+FORMUL_COZULEMEDI_ISARETI = "<!-- formula-not-decoded -->"
+
+
+@dataclass
+class _Karar:
+    """One quarantine decision: whether the heavy page replaces the fast one."""
+    kabul: bool
+    gerekce: str
+    fast_skor: Optional[float] = None
+    heavy_skor: Optional[float] = None
+
+
+def _karar_ver(
+    score: Optional[Callable[[str], Optional[float]]], fast: str, heavy: str,
+    tolerans: float = 0.0,
+) -> _Karar:
+    """
+    Decide whether the heavy engine's page replaces the fast one it is being
+    compared to. `heavy` is assumed non-empty -- birlestir() already discards
+    an empty heavy page before this is called.
+
+    Four cases:
+
+      1. Fast is empty, heavy is not flagged catastrophic -> accept, nothing
+         to lose (unchanged from the pipeline's original behaviour).
+      2. Fast is empty, heavy IS flagged catastrophic -> accept anyway --
+         rejecting would just leave the empty fast text, which is no better --
+         but say so, so provenance does not read this as a clean win. There is
+         no third engine to fall back to today (MinerU is not wired in, see
+         engines.py); the gerekce names that rather than pretending otherwise.
+      3. Fast has text, heavy is flagged catastrophic -> reject, keep fast.
+      4. Fast has text, heavy is not flagged catastrophic -> compare
+         corruption scores with a dead band (`tolerans` -- see
+         config/smart_router.yaml for the measurement behind 0.1). Unscoreable
+         either way (no scorer, a grader that returns None) means we cannot
+         tell, and heavy wins by default -- it was requested for a reason.
+
+    "Catastrophic" is deliberately narrow and one-directional: it only fires
+    on Docling's unresolved-formula placeholder appearing in heavy but not in
+    fast. It is NOT a broad quality check -- see _page_scorer's docstring
+    (smart_pdf.py) for the measured example (turkce_makale page 3) of why
+    scoring both sides on the same composite metric reverses the routing it
+    is meant to protect: an engine that reads a table correctly gets
+    penalised for the table looking "irregular" next to no table at all.
+    """
+    heavy_katastrofik = (
+        FORMUL_COZULEMEDI_ISARETI in heavy and FORMUL_COZULEMEDI_ISARETI not in fast
+    )
+
+    if not fast.strip():
+        if heavy_katastrofik:
+            return _Karar(True, "fast_bos_heavy_de_bozuk_alternatif_yok")
+        return _Karar(True, "fast_bos_heavy_kullanilabilir")
+
+    if heavy_katastrofik:
+        return _Karar(False, "heavy_formul_cozulemedi")
+
+    if score is None:
+        return _Karar(True, "skorlanamadi_varsayilan_heavy")
+    try:
+        fast_skor, heavy_skor = score(fast), score(heavy)
+    except Exception:
+        return _Karar(True, "skor_hatasi_varsayilan_heavy")
+    if fast_skor is None or heavy_skor is None:
+        return _Karar(True, "skorlanamadi_varsayilan_heavy", fast_skor, heavy_skor)
+
+    fark = heavy_skor - fast_skor
+    if fark >= -tolerans:
+        return _Karar(True, f"skor_farki_kabul ({fark:+.3f})", fast_skor, heavy_skor)
+    return _Karar(False, f"skor_farki_red ({fark:+.3f})", fast_skor, heavy_skor)
+
+
 def birlestir(
     fast_pages: Dict[int, str],
     *,
@@ -101,12 +184,14 @@ def birlestir(
     output check the pipeline was missing. Without it every non-empty heavy page
     wins, which is the old behaviour.
 
-    `tolerans` widens that check to `heavy >= fast - tolerans`. At 0.0 -- today's
-    setting, and what every measurement so far was taken with -- any drop at all
-    quarantines the page, and a tie decided in the third decimal counts as a drop:
-    measured over 261 pages, 16 of 37 quarantines had the two scores within 0.1 of
-    each other, so those were coin flips that also cost the heavy engine's table
-    grid. A calibrated dead band belongs in the profile, not here.
+    `tolerans` widens that check to `heavy >= fast - tolerans`. Default comes from
+    the profile (`config/smart_router.yaml`, 0.1 as of 2026-08-20): measured over
+    261 pages, 16 of 37 quarantines at tolerans=0.0 had the two scores within 0.1
+    of each other -- the corruption score cannot reliably tell those apart, so
+    treating them as ties (accept heavy) rather than losses costs nothing measured
+    so far, and the 19 larger drops (including a -22.38 outlier) still quarantine
+    at 0.1. See the profile file for the full sweep and entegrasyon_plani.md
+    Bölüm 17 madde #1 for the page-by-page review behind this call.
     """
     decisions = decisions or {}
     requested = requested or {}
@@ -117,7 +202,12 @@ def birlestir(
     notes: List[str] = []
     degraded = False
 
-    quarantined: List[int] = []
+    # Every rejected attempt, engine by engine -- may include a page a LATER
+    # engine went on to win. Filtered down to the final quarantine list once
+    # every result has been processed (CODEX-2026-08-18's note below still
+    # applies to the table side of this).
+    denenip_reddedilen: List[int] = []
+    kararlar: Dict[int, _Karar] = {}
     devices: Dict[str, str] = {}
     for result in results:
         if result.device:
@@ -133,20 +223,41 @@ def birlestir(
             if not (text and text.strip()):
                 continue
             page_no = int(page_no)
-            if not _is_improvement(score, fast_pages.get(page_no, ""), text, tolerans):
+            karar = _karar_ver(score, fast_pages.get(page_no, ""), text, tolerans)
+            kararlar[page_no] = karar
+            if not karar.kabul:
                 # Being expensive does not make output better. Docling was once
                 # observed turning "unidirectionality constraint by using a masked
                 # language model" into "unidi-eat i, a inn otlinnolns guage model"
                 # on a scanned page -- overwriting blindly would have shipped that.
-                quarantined.append(page_no)
+                denenip_reddedilen.append(page_no)
                 continue
             winner[page_no] = (text, result.engine)
 
+    # A page only counts as quarantined if NO engine's attempt won it -- an
+    # earlier engine's rejection must not outlive a later engine's acceptance.
+    quarantined = sorted(set(p for p in denenip_reddedilen if p not in winner))
     if quarantined:
         degraded = True
         notes.append(
             f"{len(quarantined)} pages kept fast-path text: the heavy engine scored "
-            f"lower ({sorted(quarantined)})"
+            f"lower ({quarantined})"
+        )
+
+    # Pages where the fast path had nothing to compare against and the heavy
+    # result was itself flagged catastrophic (see _karar_ver) -- accepted
+    # because there is no third option today (MinerU is not wired in, see
+    # engines.py), but flagged so provenance does not read this as a clean win.
+    alternatifsiz_kabul = sorted(
+        p for p, k in kararlar.items()
+        if p in winner and k.gerekce == "fast_bos_heavy_de_bozuk_alternatif_yok"
+    )
+    if alternatifsiz_kabul:
+        degraded = True
+        notes.append(
+            f"{len(alternatifsiz_kabul)} pages had no usable fast text and a "
+            f"flagged-corrupt heavy result was kept anyway, no alternative engine "
+            f"available ({alternatifsiz_kabul})"
         )
 
     asked_about: Dict[int, str] = {}
@@ -169,9 +280,13 @@ def birlestir(
             if fell_back:
                 fallbacks.append(page_no)
         counts[engine] = counts.get(engine, 0) + 1
+        karar = kararlar.get(page_no)
         merged.append(MergedPage(
             page_no=page_no, text=text or "", engine=engine,
             decision=list(decisions.get(page_no, [])), fell_back=fell_back,
+            fast_skor=karar.fast_skor if karar else None,
+            heavy_skor=karar.heavy_skor if karar else None,
+            karar_gerekcesi=karar.gerekce if karar else None,
         ))
 
     if fallbacks:
@@ -193,32 +308,6 @@ def birlestir(
         quarantined_pages=sorted(quarantined),
         degraded=degraded, notes=notes,
     )
-
-
-def _is_improvement(
-    score: Optional[Callable[[str], Optional[float]]], fast: str, heavy: str,
-    tolerans: float = 0.0,
-) -> bool:
-    """
-    Is the heavy engine's version at least as good as the one we already had?
-
-    Unscoreable either way (no scorer, empty fast text, a grader that returns
-    None) means we cannot tell, and the heavy page wins by default -- it was
-    requested for a reason. Only a measured drop keeps the fast text.
-
-    `tolerans` is how much of a drop still counts as "as good": 0.0 means any
-    drop at all, which is what the pipeline has always done. See `birlestir`
-    for why a dead band is worth calibrating.
-    """
-    if score is None or not fast.strip():
-        return True
-    try:
-        fast_score, heavy_score = score(fast), score(heavy)
-    except Exception:
-        return True
-    if fast_score is None or heavy_score is None:
-        return True
-    return heavy_score >= fast_score - tolerans
 
 
 def sayfa_basliklariyla(document: MergedDocument) -> str:
