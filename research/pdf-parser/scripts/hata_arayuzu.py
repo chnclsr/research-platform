@@ -261,10 +261,16 @@ def belge_topla(stem: str) -> dict:
             "fast_karakter": len(f_metin), "heavy_karakter": len(h_metin),
             "fast_puan": None if f_puan is None else round(f_puan, 2),
             "heavy_puan": None if h_puan is None else round(h_puan, 2),
-            # 2 ondalik: karantina kuralinin olu banti YOK, 0,02 puanlik fark bile
-            # sayfayi geri cevirir. 1 ondalikta bu farklar "0,0" gorunup kayboluyordu.
+            # 2026-08-20: tolerans artik 0.1 (config/smart_router.yaml) ama
+            # 3 ondalik kaldi -- karar_gerekcesi zaten esik uzerinden gecen
+            # gercek nedeni yaziyor, bu alan yalniz ham farki gostermeye devam
+            # ediyor.
             "puan_farki": (None if (f_puan is None or h_puan is None)
                            else round(h_puan - f_puan, 3)),
+            # birlestir()'in _karar_ver'den dondurdugu insan-okur gerekce
+            # (orn. "skor_farki_red (-0.220)", "heavy_formul_cozulemedi").
+            # Sayfa hic agir motora gitmediyse None.
+            "karar_gerekcesi": birlesik_sayfa.karar_gerekcesi if birlesik_sayfa else None,
             "karantina": no in birlesik.quarantined_pages,
             "fallback": no in birlesik.fallback_pages,
         })
@@ -527,6 +533,8 @@ function kart(b, s){
     + (s.karantina ? '<span class="rz fn">KARANTINA</span>' : '')
     + (s.fallback ? '<span class="rz fp">FALLBACK</span>' : '')
     + (s.needs_ocr ? '<span class="rz fn">needs_ocr</span>' : '')
+    + (s.karar_gerekcesi ? '<span class="rz" title="_karar_ver gerekcesi">karar: '
+       + s.karar_gerekcesi + '</span>' : '')
     + (s.tablo_guven ? '<span class="rz">tablo guven: ' + s.tablo_guven + '</span>' : '')
     + (s.kritik && s.kritik !== 'NONE' ? '<span class="rz fp">' + s.kritik + '</span>' : '')
     + '</div><table class="veri">'
