@@ -463,6 +463,27 @@ def test_a_bad_value_costs_that_value_not_the_whole_profile(tmp_path):
     assert len(ayar.uyarilar) == 2
 
 
+def test_embedded_defaults_match_the_real_profile():
+    """The embedded fallback must behave exactly like the calibrated profile.
+
+    2026-08-20: `dangling.kat` was reverted 0.0->160.0 in config/smart_router.yaml
+    after a real utility regression, but VARSAYILAN in ayarlar.py was left at 0.0 --
+    if the real profile ever went missing (deploy path typo, missing file), the
+    pipeline would have silently fallen back to the WRONG, already-reverted
+    behaviour instead of degrading to what production actually runs on. This pins
+    every critic penalty so that class of drift fails a test instead of production.
+    """
+    from research_platform.parsers.smart_router import ayarlari_yukle
+
+    gercek = ayarlari_yukle()  # config/smart_router.yaml, the real deployed profile
+    varsayilan = ayarlari_yukle("/nonexistent/profile.yaml")  # embedded VARSAYILAN
+
+    assert gercek.critic_ceza == varsayilan.critic_ceza, (
+        "config/smart_router.yaml's critic_ceza drifted from ayarlar.py's VARSAYILAN "
+        "-- a missing/unreadable profile would silently change routing behaviour"
+    )
+
+
 def test_the_active_profile_reaches_provenance():
     """An operator has to be able to tell which thresholds parsed a document."""
     from research_platform.parsers.smart_router import AYAR

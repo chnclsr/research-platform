@@ -1264,6 +1264,43 @@ ağır motor çağrısı 99→73 (**%26 azalma**), routed utility farkı **-0,00
 
 Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2g.
 
+### M.2 dangling geri alındı — dış inceleme M.1'in "sağlamlık testini" haklı olarak sorguladı (aynı gün)
+
+Dış bir inceleme M.1'deki karara iki itiraz getirdi, ikisi de kodu ve verileri
+yeniden okuyarak **bağımsız doğrulandı**:
+
+1. **20 bölünme bağımsız holdout değildi.** Hepsi aynı 221 belgelik havuzdan
+   türetilen örtüşen alt örneklerdi — tek-holdout şans gürültüsünü azaltır ama
+   korpusun kendisine uyum riskine karşı koruma sağlamaz. M.1'de bunu "20
+   bağımsız bölünme" diye yazmak, taşıdığı istatistiksel güvenceyi abarttı.
+2. **"-0,3 belge/bölünme" ortalaması kaybın nerede yoğunlaştığını gizledi.**
+   v3→v4 arası engellenen 20 heavy çağrısı tek tek açıldığında: 5'i
+   utility'de **+0,040 / +0,056 / +0,089 / +0,174 / +0,202** gerçek fayda
+   kaybıydı (0,02 eşiğinin 2-10 katı, "sınır vaka" değil) ve beşinin de
+   birebir aynı imzası vardı: `critical_issue=TWO_COLUMN_CROSS_JUMP` +
+   `has_figure=true` + `has_table=false` (örn. iki sütunlu bir şiirde fast
+   parser okuma sırasını karıştırıyor, Docling doğru okuyor). "Yakalanan
+   pozitif utility oranı" v3→v4 arası 0,770→0,706'ya düşüyor.
+
+**Sonuç:** dangling tamamen gürültü değilmiş — TWO_COLUMN_CROSS_JUMP+figür
+kombinasyonunda gerçek bir layout sorununun zayıf ama gerçek bir vekili.
+M.1'deki "kaybedilen belgeler sınır vaka, gerçek kalite maliyeti neredeyse
+sıfır" değerlendirmesi **yanlıştı** — ortalamaya bakıp somut, yoğunlaşmış
+kaybı gözden kaçırdı. **`dangling.kat` 0,0→160,0 geri alındı**, sistem M
+bölümündeki duruma döndü (precision 0,405, recall 0,643, ağır çağrı 89,
+routed utility farkı -0,0007; `hyphen.kat=0,0` değişmedi, o karar
+sorgulanmadı ve hiçbir testte recall zararı yok).
+
+Bu, Bölüm 9/M'de zaten en yüksek öncelikli sonraki adım olarak duran
+**geometrik layout sinyaline** somut bir hedef veriyor: PyMuPDF blok
+koordinatlarından TWO_COLUMN_CROSS_JUMP+has_figure desenini punctuation
+sinyallerinden bağımsız doğrudan tespit eden bir kural, en az 5 pozitif +
+~15 negatif kontrol örneğiyle offline doğrulanabilir. Gerçek kaynak-ailesi
+bazlı dış holdout (221 belgelik havuzun dışından yeni belgeler) hâlâ
+kurulmadı — bir sonraki oturumun kapsamı.
+
+Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2i.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production

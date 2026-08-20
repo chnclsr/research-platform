@@ -206,25 +206,34 @@ birlestirme:
 # dangling VE hyphen sinyalleri belge-düzeyi dev/holdout ayrımıyla ayrı ayrı
 # denendi (221 belge, gerçek utility etiketiyle, tek faktör bir kerede):
 #   - hyphen kapatmak: DEV'de precision +0,018, recall DEĞİŞMEDİ (0,769→0,769).
-#     Tek holdout'ta (n=66) hiçbir kararı DEĞİŞTİRMEDİ. UYGULANDI (kat 1.5 → 0.0).
-#   - dangling kapatmak: tek bir 70/30 bölünmede DEV precision +0,030 ama
-#     recall -0,019 (1 belge kaçıyor) gösterdi — ilk turda BU YÜZDEN
-#     değiştirilmedi. Ama tek bölünme güvenilmezdi: aynı gün, 20 BAĞIMSIZ
-#     rastgele 70/30 bölünmeyle (her seferinde yalnız o turun holdout'unda
-#     ölçülerek — tek bir holdout'a bakıp karar değiştirmek yerine sağlamlık
-#     testi) tekrarlandı. Sonuç TUTARLI: 20 bölünmenin HEPSİNDE FP azaldı
-#     (ortalama -2,9/bölünme), yalnız 6/20'sinde (%30) 1 belgelik TP kaybı
-#     oldu (ortalama -0,3/bölünme). Tüm 221 belgede: precision 0,426→0,454,
-#     recall 0,743→0,730 (74 faydalı belgeden 1'i). Kazanç/kayıp oranı
-#     (ortalama 2,9 gereksiz çağrı önleniyor / 0,3 marjinal fayda kaybı)
-#     net pozitif — UYGULANDI (kat 160 → 0.0).
+#     Tek holdout'ta (n=66) hiçbir kararı DEĞİŞTİRMEDİ. UYGULANDI (kat 1.5 → 0.0),
+#     GEÇERLİ (aşağıdaki geri alma yalnız dangling'i kapsıyor).
+#   - dangling kapatmak: önce 20-bölünmelik sağlamlık testiyle "net pozitif"
+#     görünüp UYGULANDI (kat 160→0.0), SONRA GERİ ALINDI (2026-08-20, aynı gün
+#     içinde, dış inceleme + bağımsız belge-düzeyi doğrulama sonrası):
+#     20 bölünmenin hepsi AYNI 221 belgelik havuzdan üretilen ÖRTÜŞEN alt
+#     örneklerdi — bağımsız holdout değil, tek-holdout gürültüsünü azaltan
+#     ama korpus-düzeyi genellemeyi KANITLAMAYAN bir sağlamlık testi. Ortalama
+#     "-0,3 belge/bölünme" TP kaybı rakamı, kaybın GERÇEKTE nerede yoğunlaştığını
+#     gizledi. Belge-düzeyinde ayrıştırınca: v3→v4 arası kaçan 20 heavy
+#     çağrısından 5'i utility'de +0,040/+0,056/+0,089/+0,174/+0,202 GERÇEK
+#     fayda kaybıydı (0,02 eşiğinin çok üzerinde, "sınır vaka" değil) ve
+#     beşinin de TAM AYNI imzası vardı: critical_issue=TWO_COLUMN_CROSS_JUMP +
+#     has_figure=true + has_table=false (örn. data_26: iki sütunlu şiirde fast
+#     parser okuma sırasını karıştırıyor, Docling doğru okuyor). "Yakalanan
+#     pozitif utility oranı" 0,770→0,706'ya düştü. Yani dangling tamamen
+#     gürültü değil — TWO_COLUMN_CROSS_JUMP+figür kombinasyonunda GERÇEK bir
+#     layout sorununun ZAYIF bir vekili. Doğru düzeltme onu sıfırlamak değil,
+#     PyMuPDF blok koordinatlarından bu deseni doğrudan yakalayan bir geometrik
+#     sinyal geliştirmek (bkz. entegrasyon_plani.md 17.2h madde 1, hâlâ açık).
+#     GERİ ALINDI (kat 0.0 → 160.0). Ayrıntı: entegrasyon_plani.md 17.2i.
 critic_ceza:
   char_drop:        {esik: 0.10, kat: 120.0, tavan: 45.0}
   gibberish:        {esik: 0.02, kat: 300.0, tavan: 25.0}
-  # UYGULANDI (2026-08-20): kat 160.0 -> 0.0. Gerekçe ve 20-bölünmelik
-  # sağlamlık testi yukarıdaki MİMARİ NOT'ta. `esik`/`tavan` bilerek
-  # bırakıldı (kat=0 iken hiç etkileri yok).
-  dangling:         {esik: 0.08, kat: 0.0,   tavan: 35.0}
+  # UYGULANDI (2026-08-20) kat 160.0->0.0, SONRA GERİ ALINDI (2026-08-20)
+  # kat 0.0->160.0. Gerekçe: yukarıdaki MİMARİ NOT (belge-düzeyi doğrulama,
+  # 5 belgede utility kaybı 0,04-0,20, hepsi TWO_COLUMN_CROSS_JUMP+figür).
+  dangling:         {esik: 0.08, kat: 160.0, tavan: 35.0}
   broken:           {esik: 0.35, kat: 50.0,  tavan: 15.0}
   # UYGULANDI (2026-08-20): kat 1.5 -> 0.0. Gerekçe ve ölçüm yukarıdaki
   # MİMARİ NOT'ta. `esik`/`tavan` bilerek bırakıldı (kat=0 iken hiç etkileri
