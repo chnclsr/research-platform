@@ -85,10 +85,31 @@ class MergedDocument:
 
 #: Docling's own marker for a formula region it found but could not decode
 #: (do_formula_enrichment=False today, see entegrasyon_plani.md Q1/Q2). Its
-#: presence in the heavy text where the fast text has none of it is treated
-#: as catastrophic regardless of the corruption-score comparison below --
-#: an exact string match, not a heuristic, so it costs nothing to trust.
+#: presence in the heavy text where the fast text has none of it is a real
+#: signal -- an exact string match, not a heuristic, so it costs nothing to
+#: trust. It is NOT enough on its own to reject the page, though; see
+#: `_karar_ver`'s docstring (case 3) for the C1 regression that taught this.
 FORMUL_COZULEMEDI_ISARETI = "<!-- formula-not-decoded -->"
+
+#: How short heavy can be relative to fast (markdown-stripped) before an
+#: unresolved-formula marker is treated as catastrophic.
+#:
+#: CORRECTED 2026-08-20, same session: this was first set expecting the
+#: original "should reject" examples (attention_tablo 4-6, resnet 3,
+#: gpt4_uzun_gorsel 35) to be collapsed pages, the same shape as the
+#: content-loss check's cases. Re-measured while fixing the C1 regression
+#: below -- they are not. Their ratios are 0.95-1.94, indistinguishable from
+#: the pages that must NOT reject (0.84-1.97). Both are "lost one formula,
+#: kept or grew everything else"; the belief that the first group was a
+#: collapse was a misreading of a short excerpt around the formula, not the
+#: whole page. So there is no measured example, on either side, that this
+#: threshold actually separates -- at 0.5 it is inert for every case seen so
+#: far, only doing real work in the untested 0.2-0.5 band (below
+#: icerik_kaybi_esik, so content-loss would not have caught it anyway).
+#: Left in rather than deleted because that band is plausible and untested,
+#: not because it is proven -- entegrasyon_plani.md Bölüm 17 tracks this as
+#: open.
+FORMUL_KATASTROFIK_UZUNLUK_ESIGI = 0.5
 
 
 @dataclass
@@ -151,7 +172,25 @@ def _karar_ver(
          no third engine to fall back to today (MinerU is not wired in, see
          engines.py); the gerekce names that rather than pretending otherwise.
       3. Fast has text, heavy dropped an unresolved formula fast didn't have
-         -> reject, keep fast.
+         AND heavy's own length collapsed relative to fast's (below
+         `FORMUL_KATASTROFIK_UZUNLUK_ESIGI`) -> reject, keep fast. The length
+         condition was added 2026-08-20 after a 174-document C1 replay (with
+         real reference-text utility, not the corruption proxy the 9-page
+         corpus this check was designed on had to rely on) found the
+         unconditional version firing on pages where heavy was clearly ahead
+         overall -- one PDF lost a single Reynolds-number formula but
+         correctly extracted an entire data table fast had missed outright
+         (heavy 2195 chars vs fast's 1116, both scoring a clean 100 on the
+         corruption check); the reject cost 0.23 of measured utility on that
+         one document, four more showed the same pattern. Re-measuring the
+         pages this check was originally written for (attention_tablo 4-6,
+         resnet 3, gpt4_uzun_gorsel 35) at the same time found they were
+         never collapsed either -- 0.95-1.94x fast's length, indistinguishable
+         from the pages that must not reject. The belief that they were was a
+         misreading of a short excerpt around the formula, not the whole
+         page. So this length gate is not proven to separate two real
+         populations; it is a conservative placeholder pending an actual
+         collapsed-plus-formula example, see FORMUL_KATASTROFIK_UZUNLUK_ESIGI.
       4. Fast has text, heavy's length collapsed relative to it
          (`icerik_kaybi_esik`, see config/smart_router.yaml) -> reject, keep
          fast. Checked independently of the score comparison below: the
@@ -170,16 +209,16 @@ def _karar_ver(
     an engine that reads a table correctly gets penalised for the table
     looking "irregular" next to no table at all.
     """
-    formul_katastrofik = (
+    formul_var = (
         FORMUL_COZULEMEDI_ISARETI in heavy and FORMUL_COZULEMEDI_ISARETI not in fast
     )
 
     if not fast.strip():
-        if formul_katastrofik:
+        if formul_var:
             return _Karar(True, "fast_bos_heavy_de_bozuk_alternatif_yok")
         return _Karar(True, "fast_bos_heavy_kullanilabilir")
 
-    if formul_katastrofik:
+    if formul_var and _icerik_kaybi_var(fast, heavy, FORMUL_KATASTROFIK_UZUNLUK_ESIGI):
         return _Karar(False, "heavy_formul_cozulemedi")
 
     if icerik_kaybi_esik > 0 and _icerik_kaybi_var(fast, heavy, icerik_kaybi_esik):
@@ -282,9 +321,17 @@ def birlestir(
     quarantined = sorted(set(p for p in denenip_reddedilen if p not in winner))
     if quarantined:
         degraded = True
+        # CLAUDE-2026-08-20: used to say "the heavy engine scored lower" for
+        # every rejection, which was wrong as often as it was right once the
+        # formula/content-loss checks existed -- a C1 replay regression
+        # (01030000000110) was actually a formula reject with tied scores,
+        # and the note claimed the opposite of what happened. Say the real
+        # reason per page instead of one guess for all of them.
+        gerekceler = ", ".join(
+            f"{p}:{kararlar[p].gerekce}" for p in quarantined if p in kararlar
+        )
         notes.append(
-            f"{len(quarantined)} pages kept fast-path text: the heavy engine scored "
-            f"lower ({quarantined})"
+            f"{len(quarantined)} pages kept fast-path text ({gerekceler})"
         )
 
     # Pages where the fast path had nothing to compare against and the heavy

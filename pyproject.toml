@@ -17,6 +17,14 @@ dependencies = [
   "langgraph>=1.0,<2",
   "mcp>=1.27,<2",
   "minio>=7.2,<8",
+  # Exact pin, not a range: this is the smart_router fast path AND the source
+  # of every gate.py signal (table/figure/OCR detection). It was never a
+  # declared dependency before 2026-08-20 -- installed ad hoc in dev venvs
+  # only, absent here, so a real deployment would silently run the whole
+  # pipeline on the unmeasured PyMuPDF fallback (inspector.py's
+  # PyMuPDFFallback) with no error, just a name change in provenance nobody
+  # was watching for. All of today's measurements assume 1.14.1.
+  "pdf-inspector==1.14.1",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "pypdf>=5.1,<7",

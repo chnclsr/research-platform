@@ -341,6 +341,65 @@ def test_registry_override_only_applies_to_the_named_document_type():
 
 
 # ---------------------------------------------------------------------------
+# Table veto (gate.py::_v2_tablo_karari) -- pure function, no PyMuPDF page
+# needed. CLAUDE-2026-08-20: extracted from GirisKapisi._cizim's inline logic
+# specifically so these four cases could be pinned without a real PDF.
+# ---------------------------------------------------------------------------
+
+_TABLO_ESIK = {
+    "ortogonal_cizgi": 6, "dolu_dikdortgen": 60,
+    "izgara_sutun": 3, "izgara_satir": 4, "sekil_veto_kaplama": 0.15,
+}
+
+
+def test_table_veto_disabled_lets_ortogonal_count_even_with_no_drawings():
+    """Regression guard: `sekil_veto_kaplama=0` must mean "off", not "always on".
+
+    `kume_kaplama >= 0` is True for a page with no drawings at all
+    (kume_kaplama defaults to 0.0), so a bare `>=` comparison made "disabled"
+    behave like "veto every page with nothing on it" -- found reading the
+    code, not from any measured run, because the threshold has always been
+    positive in practice.
+    """
+    from research_platform.parsers.smart_router.gate import _v2_tablo_karari
+
+    esik = dict(_TABLO_ESIK, sekil_veto_kaplama=0.0)
+    cizim = {"ortogonal_cizgi": 6, "dolu_dikdortgen": 0}
+    izgara = {"izgara_sutun": 0, "izgara_satir": 0}
+    assert _v2_tablo_karari(cizim, izgara, kume_kaplama=0.0, esik=esik) is True
+
+
+def test_table_veto_suppresses_ortogonal_inside_a_large_figure():
+    """A large diagram's line count alone must not read as a table."""
+    from research_platform.parsers.smart_router.gate import _v2_tablo_karari
+
+    cizim = {"ortogonal_cizgi": 210, "dolu_dikdortgen": 43}
+    izgara = {"izgara_sutun": 1, "izgara_satir": 0}
+    assert _v2_tablo_karari(cizim, izgara, kume_kaplama=0.51, esik=_TABLO_ESIK) is False
+
+
+def test_table_veto_still_catches_a_dense_filled_grid_inside_a_figure():
+    """dolu_dikdortgen is not suppressed -- a real table can sit inside a
+    large image region (measured: two benchmark pages, 66-105 filled
+    rectangles each, both real tables)."""
+    from research_platform.parsers.smart_router.gate import _v2_tablo_karari
+
+    cizim = {"ortogonal_cizgi": 210, "dolu_dikdortgen": 66}
+    izgara = {"izgara_sutun": 1, "izgara_satir": 0}
+    assert _v2_tablo_karari(cizim, izgara, kume_kaplama=0.41, esik=_TABLO_ESIK) is True
+
+
+def test_table_veto_does_not_hide_a_grid_signal_next_to_a_figure():
+    """A page can have both a large figure and a separate, real table --
+    the grid signal (word-spacing columns) is untouched by the veto."""
+    from research_platform.parsers.smart_router.gate import _v2_tablo_karari
+
+    cizim = {"ortogonal_cizgi": 300, "dolu_dikdortgen": 10}
+    izgara = {"izgara_sutun": 4, "izgara_satir": 5}
+    assert _v2_tablo_karari(cizim, izgara, kume_kaplama=0.6, esik=_TABLO_ESIK) is True
+
+
+# ---------------------------------------------------------------------------
 # Threshold profile (config/smart_router.yaml)
 # ---------------------------------------------------------------------------
 # The version string used to be hand-written, so it could describe values it no
@@ -452,23 +511,48 @@ def test_merge_accepts_heavy_exactly_at_the_tolerance_boundary():
     assert merged.pages[0].karar_gerekcesi.startswith("skor_farki_kabul")
 
 
-# CLAUDE-2026-08-20: an unresolved-formula placeholder is real content loss
-# even when the corruption score alone looks fine or better than fast's --
-# measured on attention_tablo pages 4-6 (Docling scored >= fast on
-# gibberish/unicode but had silently dropped the attention equation into
-# this exact marker). The score comparison alone would have accepted these;
-# this check has to fire independently of it.
-def test_merge_rejects_a_heavy_page_that_lost_a_formula_even_with_a_better_score():
+# CLAUDE-2026-08-20: a formula marker on a page that ALSO collapsed in
+# length is rejected regardless of the corruption score. No confirmed real
+# example of this combination exists yet (see FORMUL_KATASTROFIK_UZUNLUK_ESIGI
+# in merge.py -- the pages this check was originally written for turned out,
+# on closer measurement, not to be collapsed at all); this pins the intended
+# behaviour with a synthetic one so the branch has coverage. Fast is written
+# long enough (>=30 chars, see ICERIK_KAYBI_TABAN_KARAKTER) for the
+# length-ratio gate below to actually judge it, not abstain.
+def test_merge_rejects_a_heavy_page_that_lost_a_formula_and_most_of_its_length():
     from research_platform.parsers.smart_router.engines import EngineResult
     from research_platform.parsers.smart_router.merge import birlestir
 
-    heavy = EngineResult(engine="docling", pages={
-        1: "Attention(Q,K,V) computed as:\n\n<!-- formula-not-decoded -->\n\nmore text",
-    })
-    puan = {"fast": 90.0, "heavy": 95.0}.get  # heavy would win on score alone
-    merged = birlestir({1: "fast"}, results=[heavy], requested={"docling": [1]}, score=puan)
+    fast_metin = "Attention is computed by taking the dot product of queries and keys. " * 3
+    heavy = EngineResult(engine="docling", pages={1: "<!-- formula-not-decoded -->"})
+    puan = {fast_metin: 90.0, "<!-- formula-not-decoded -->": 95.0}.get  # heavy would win on score alone
+    merged = birlestir({1: fast_metin}, results=[heavy], requested={"docling": [1]}, score=puan)
     assert merged.quarantined_pages == [1]
     assert merged.pages[0].karar_gerekcesi == "heavy_formul_cozulemedi"
+
+
+# CLAUDE-2026-08-20: regression guard for a real C1 replay failure
+# (01030000000110, entegrasyon_plani.md Bölüm 17) -- Docling lost one
+# Reynolds-number formula but correctly extracted an entire data table fast
+# had missed outright (heavy longer than fast, both scoring a clean 100 on
+# corruption). The formula-only check rejected it anyway and cost 0.23 of
+# measured utility. A formula marker must not veto a page heavy otherwise
+# kept or grew.
+def test_merge_does_not_reject_a_formula_marker_when_heavy_kept_the_rest_of_the_page():
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    fast_metin = "The kinematic viscosity of water varies with temperature. " * 3
+    heavy_metin = (
+        "The kinematic viscosity of water varies with temperature.\n\n"
+        "<!-- formula-not-decoded -->\n\n"
+        "| Temperature | Viscosity |\n|---|---|\n| 0 | 1.79e-6 |\n| 25 | 8.9e-7 |\n"
+    ) * 2
+    heavy = EngineResult(engine="docling", pages={1: heavy_metin})
+    merged = birlestir({1: fast_metin}, results=[heavy], requested={"docling": [1]},
+                       score=lambda t: 100.0)
+    assert merged.quarantined_pages == []
+    assert merged.pages[0].engine == "docling"
 
 
 # CLAUDE-2026-08-20: an already-present placeholder in fast (e.g. carried

@@ -41,6 +41,20 @@ except ImportError as exc:  # opsiyonel bağımlılık
     pdf_inspector = None
     _IMPORT_HATASI = exc
 
+#: Paket `__version__` dışa vermiyor (2026-08-20'de doğrulandı, `pdf_inspector.__version__`
+#: yok) -- kurulum meta verisinden okunuyor. `health()`'in yalnız "kurulu mu"
+#: değil "hangi sürüm" diyebilmesi için: pyproject.toml artık `pdf-inspector==1.14.1`'e
+#: sabitliyor, ama pin'in kendisi çalışma anında neyin fiilen yüklendiğini
+#: garanti etmez -- health bunu görünür kılar.
+def _kurulu_surum() -> Optional[str]:
+    if pdf_inspector is None:
+        return None
+    try:
+        import importlib.metadata as _metadata  # noqa: PLC0415
+        return _metadata.version("pdf-inspector")
+    except Exception:
+        return "bilinmeyen"
+
 # Parser profilleri. Fallback sessiz olmaz; hangi yoldan geldiği provenance'a
 # yazılabilsin diye çıktı bu adlarla etiketlenir (plan E6).
 PROFIL_INSPECTOR = "inspector_v1"
@@ -139,6 +153,11 @@ class PdfInspectorAdapter:
     @staticmethod
     def import_hatasi() -> Optional[str]:
         return None if _IMPORT_HATASI is None else str(_IMPORT_HATASI)
+
+    @staticmethod
+    def surum() -> Optional[str]:
+        """Kurulu pdf-inspector sürümü, kurulu değilse None (plan CLAUDE-2026-08-20)."""
+        return _kurulu_surum()
 
     @staticmethod
     def extract_pages(pdf_path: str,

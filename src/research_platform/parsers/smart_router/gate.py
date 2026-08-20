@@ -175,6 +175,39 @@ class SayfaBayrak:
         }
 
 
+def _v2_tablo_karari(cizim: Dict[str, int], izgara: Dict[str, int],
+                     kume_kaplama: float, esik: Dict[str, float]) -> bool:
+    """PyMuPDF v2 tablo kurali -- saf fonksiyon, PyMuPDF sayfasi gerektirmez.
+
+    UYGULANDI (2026-08-20): sekil vetosu. Sayfa buyuk bir sekil/diyagramsa
+    (kume_kaplama >= sekil_veto_kaplama), ortogonal_cizgi tablo sinyaline HIC
+    katilmaz -- olculdu (261 + 200 sayfa), FP'lerin cogu tam da buyuk
+    diyagramlarda ortogonal_cizgi'nin 6'dan 4714'e kadar cikmasindan
+    geliyordu. dolu_dikdortgen ise vetolanmiyor, cunku yogun dolu dikdortgen
+    gercek tablo hucresi de olabiliyor (benchmark'ta 2 sayfada 66-105 dolu,
+    gercek tablo) -- onun yerine esigi 8'den 60'a yukselttik
+    (config/smart_router.yaml).
+
+    CLAUDE-2026-08-20: `sekil_veto_kaplama > 0` sarti bilerek var. Onsuz,
+    veto "kapali" (0.0) sayildiginda bile cizimsiz bir sayfada
+    (kume_kaplama=0.0) `0.0 >= 0.0` True doner ve veto -- kapali olmasi
+    gerekirken -- yine de ortogonal_cizgi'yi bastirirdi. Kod incelemesiyle
+    bulundu, hicbir olculmus sayida bu hatanin izi yoktu cunku bugune kadar
+    esik hep pozitifti.
+    """
+    buyuk_sekil = (esik["sekil_veto_kaplama"] > 0
+                  and kume_kaplama >= esik["sekil_veto_kaplama"])
+    ortogonal_gecerli = (
+        not buyuk_sekil and cizim["ortogonal_cizgi"] >= esik["ortogonal_cizgi"]
+    )
+    return bool(
+        ortogonal_gecerli
+        or cizim["dolu_dikdortgen"] >= esik["dolu_dikdortgen"]
+        or (izgara["izgara_sutun"] >= esik["izgara_sutun"]
+            and izgara["izgara_satir"] >= esik["izgara_satir"])
+    )
+
+
 class GirisKapisi:
     """Sayfa basina bayrak uretir. Skor uretmez (plan E2)."""
 
@@ -302,27 +335,7 @@ class GirisKapisi:
                 has_vector_figure = bool(kume_var)
 
                 # --- tablo: iki kaynagin OR'u, guven kademesi ayri kaydedilir
-                #
-                # UYGULANDI (2026-08-20): sekil vetosu. Sayfa buyuk bir
-                # sekil/diyagramsa (kume_kaplama >= sekil_veto_kaplama),
-                # ortogonal_cizgi tablo sinyaline HIC katilmaz -- olculdu
-                # (261 + 200 sayfa), FP'lerin cogu tam da buyuk diyagramlarda
-                # ortogonal_cizgi'nin 6'dan 4714'e kadar cikmasindan
-                # geliyordu. dolu_dikdortgen ise vetolanmiyor, cunku yogun
-                # dolu dikdortgen gercek tablo hucresi de olabiliyor
-                # (benchmark'ta 2 sayfada 66-105 dolu, gercek tablo) --
-                # onun yerine esigi 8'den 60'a yukselttik (config/smart_router.yaml).
-                buyuk_sekil = en_buyuk_kume >= self.esik["sekil_veto_kaplama"]
-                ortogonal_gecerli = (
-                    not buyuk_sekil
-                    and cizim["ortogonal_cizgi"] >= self.esik["ortogonal_cizgi"]
-                )
-                v2_tablo = bool(
-                    ortogonal_gecerli
-                    or cizim["dolu_dikdortgen"] >= self.esik["dolu_dikdortgen"]
-                    or (izgara["izgara_sutun"] >= self.esik["izgara_sutun"]
-                        and izgara["izgara_satir"] >= self.esik["izgara_satir"])
-                )
+                v2_tablo = _v2_tablo_karari(cizim, izgara, en_buyuk_kume, self.esik)
                 insp_var = no in insp_tablo
                 has_table = bool(insp_var or v2_tablo)
                 tablo_guven = None

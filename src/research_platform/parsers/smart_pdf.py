@@ -25,7 +25,7 @@ from .base import DocumentParser, ParsedDocument, ParsedTable
 logger = logging.getLogger(__name__)
 
 try:
-    from .smart_router import PDFCritic, ROUTER_VERSION, SmartRouterHatti
+    from .smart_router import PDFCritic, PdfInspectorAdapter, ROUTER_VERSION, SmartRouterHatti
     from .smart_router.ayarlar import AYAR
     from .smart_router.engines import (
         ENGINE_VERSION, DoclingEngine, EngineResult, MinerUEngine,
@@ -36,6 +36,7 @@ try:
     _ROUTER_IMPORT_ERROR: str = ""
 except Exception as exc:  # pragma: no cover - exercised only when deps are absent
     SmartRouterHatti = None  # type: ignore[assignment]
+    PdfInspectorAdapter = None  # type: ignore[assignment]
     AYAR = None  # type: ignore[assignment]
     ROUTER_VERSION = ESIK_VERSION = ""
     _ROUTER_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
@@ -83,19 +84,32 @@ class SmartPdfParser(DocumentParser):
         still works on the embedded defaults -- so it is reported here rather than
         raised. Otherwise a typo in the YAML would silently change which pages get
         the heavy engine and nothing would say so.
+
+        CLAUDE-2026-08-20: the fast path was the same blind spot pyproject.toml
+        had -- pdf-inspector drives every gate.py signal (table/figure/OCR), was
+        never a declared dependency, and its own `available()` was never
+        surfaced here. Missing, it degrades silently to PyMuPDFFallback
+        (inspector.py) -- every threshold in this session's measurements assumes
+        the real library, and that fallback path is explicitly marked
+        unmeasured in gate.py's own OCR-detection branch.
         """
         if SmartRouterHatti is None:
             return False, f"smart_router unavailable ({_ROUTER_IMPORT_ERROR})"
         profil = f"profile {AYAR.esik_version}"
         if AYAR.uyarilar:
             profil += f" (DEFAULTS: {'; '.join(AYAR.uyarilar)})"
+        if PdfInspectorAdapter.available():
+            fast_detail = f"fast path via pdf-inspector {PdfInspectorAdapter.surum()}"
+        else:
+            fast_detail = (
+                f"fast path DEGRADED to PyMuPDFFallback ({PdfInspectorAdapter.import_hatasi()}); "
+                "table/figure/OCR signals are the unmeasured heuristic, not pdf-inspector"
+            )
         engine_ready, engine_detail = DoclingEngine().available()
-        if engine_ready:
-            return True, f"smart_router, {profil}, heavy path via {engine_detail}"
-        return True, (
-            f"smart_router, {profil}, TEXT ONLY -- no heavy engine ({engine_detail}); "
-            "scanned PDFs will not survive acquisition"
-        )
+        heavy_detail = (f"heavy path via {engine_detail}" if engine_ready
+                        else f"TEXT ONLY -- no heavy engine ({engine_detail}); "
+                             "scanned PDFs will not survive acquisition")
+        return True, f"smart_router, {profil}, {fast_detail}, {heavy_detail}"
 
     def parse(self, content: bytes, *, url: str, content_type: str = "") -> ParsedDocument:
         if SmartRouterHatti is None:

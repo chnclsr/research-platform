@@ -1158,6 +1158,55 @@ daha az gereksiz Docling çağrısı.
 
 Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2c (sude-staj, bu repo dışında).
 
+## L. Dış İnceleme Bulgusu — Formül Kuralı Gerçek Utility'de Regresyona Neden Oluyordu (2026-08-20)
+
+Bölüm K'nin dış incelemesi 6 madde istedi (pdf-inspector sabitleme + health,
+"0=veto kapalı" hatası, 4 davranış testi, bir belge incelemesi, tam C1
+replay, görülmemiş holdout). İlk 5'i uygulandı; 5. madde **gerçek bir
+regresyon** ortaya çıkardı.
+
+**pdf-inspector hiç pin'li değildi.** `research-platform/pyproject.toml`'da
+tanımlı değildi — yalnız dev venv'lerinde elle kuruluydu (sürüm 1.14.1,
+doğrulandı). Gerçek bir dağıtımda paket eksik olsaydı sistem sessizce
+ölçülmemiş `PyMuPDFFallback`'e düşer, `health()` bunu hiç göstermezdi.
+Düzeltildi: `pdf-inspector==1.14.1` eklendi, `available()` artık fast path
+sürümünü ve düşerse hangi yedeğe düştüğünü raporluyor.
+
+**Asıl bulgu — C1 replay (174 belge, gerçek referans etiketli, `out/c1_docling_cache`
+kullanılarak canlı Docling gerekmeden):** Route kararı değişmeyen 167
+belgede toplam routed-utility farkı **-0,55**. En kötü örnek
+(`01030000000110`, routed utility 0,831→0,600, **-0,23**): Docling bir
+formülü çözemeyip yerine işaret bırakmış ama **aynı sayfada eksiksiz bir
+veri tablosunu doğru çıkarmış** (fast tabloyu da kaçırmış); skor eşitti
+(100=100), Bölüm I'in formül-katastrofik kuralı yine de tüm sayfayı reddetti.
+4 belge daha aynı örüntüyü gösterdi.
+
+Bunları doğrularken, kuralın orijinal gerekçesi olan 5 örneği (`attention_tablo`
+s.4-6, `resnet` s.3, `gpt4_uzun_gorsel` s.35) da yeniden ölçtüm: **onlar da
+hiç "çökmemiş"** (uzunluk oranı 0,95-1,94, yeni regresyon örnekleriyle
+istatistiksel olarak ayırt edilemez). "Heavy sayfayı bir başlığa indirgemiş"
+değerlendirmesi, formülün etrafındaki kısa bir alıntıya bakıp tüm sayfayı
+öyle sanmaktan kaynaklanan yanlış bir okumaydı — 9 belgelik korpusun gerçek
+utility referansı olmadığı için bu nitel yargı hiç sınanmamıştı.
+
+**Düzeltme:** Formül kuralı artık yalnız heavy'nin kendi uzunluğu da fast'a
+göre çökmüşse tetikleniyor (`FORMUL_KATASTROFIK_UZUNLUK_ESIGI=0.5`).
+Dürüstçe: bu eşik bugün elimizdeki hiçbir örnekte ayırt edici değil — kural
+artık pratikte neredeyse hiç tetiklenmiyor, yalnız ölçülmemiş bir ara bantta
+(0,20-0,50) iş görüyor olabilir. Silinmedi ama "kanıtlı" da denmiyor.
+
+**Sonuç:** 5 regresyonun 4'ü tam düzeldi (fark 0,000), 1'i formülle ilgisiz
+meşru bir skor reddiydi. 167 belgedeki toplam fark -0,55'ten **-0,0011**'e
+düştü. `merge.py`'nin "the heavy engine scored lower" mesajı da düzeltildi
+(formül kaynaklı redlerde bu iddia yanlıştı, artık gerçek gerekçe yazılıyor).
+61/61 test geçiyor (4 yeni test, biri doğrudan bu regresyonun kendisi için).
+
+**Genel ders:** Küçük, referanssız bir korpusta "iyi görünen" bir kural,
+gerçek etiketli büyük bir korpusla doğrulanmadan üretime alınmamalı — tam
+da bugün, C1 replay'i olmasaydı bu regresyon fark edilmeyecekti.
+
+Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2e (sude-staj, bu repo dışında).
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
