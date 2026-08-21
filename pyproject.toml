@@ -51,7 +51,7 @@ academic = [
 # a PDF. Optional in packaging only, NOT in effect: without it the router still routes,
 # but the pages it routes have nowhere to go. They keep their fast-path text, get marked
 # `degraded` in provenance, and a fully scanned PDF is dropped by acquisition's
-# 400-character check. Every routing gain measured in reports/PDF_PARSER_V0.1.0_RC1_REPORT.md
+# 400-character check. Every routing gain measured in previous_reports/PDF_PARSER_V0.1.0_RC1_REPORT.md
 # assumes this is installed.
 #
 # Where it gets installed is an open decision (that report, section N.8): the image does

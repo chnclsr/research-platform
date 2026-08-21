@@ -226,7 +226,7 @@ GitHub'daki tek giriş noktası. -->
 
 İlk araştırmadan sonra production parser `src/research_platform/parsers/`
 altında sayfa yönlendirmeli hale getirildi. Güncel uçtan uca sonuç ve dürüst
-sınırlamalar `../../reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` dosyasındadır.
+sınırlamalar `../../previous_reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` dosyasındadır.
 
 C araçları `scripts/c1_*.py`, `scripts/c2_kalibrasyon.py` ve
 `scripts/korpus_*.py`; küçük ölçüm kanıtları `results/c1_rc1/` altındadır.
@@ -249,7 +249,7 @@ python research\pdf-parser\scripts\hata_arayuzu.py   # -> research/pdf-parser/ht
 `scripts/gpu_docling_olc.py` Docling'in hızını, determinizmini ve CPU/GPU çıktı
 eşdeğerliğini ölçer; `scripts/gpu_sekil_aciklama.py` `do_picture_description`
 VLM'ini ölçer. Kanıtlar ve yorumu `results/gpu/README.md` içinde, kararlar
-`reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` bölüm E/F/G'de.
+`previous_reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` bölüm E/F/G'de.
 
 Özet: GPU 3,06× hızlandırıyor · determinizm geçti · **eşdeğerlik geçmedi**
 (261 sayfanın 7'si CPU'dan farklı, biri gerçek içerik kaybı) · şekil açıklaması

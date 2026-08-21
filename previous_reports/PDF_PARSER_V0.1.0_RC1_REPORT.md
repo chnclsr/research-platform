@@ -490,7 +490,10 @@ production worker henüz hızlandırılmadı.
 
 ## 7. Çıktılar Nerede ve Hangi Sırayla Okunmalı
 
-1. **Bu rapor:** `reports/PDF_PARSER_V0.1.0_RC1_REPORT.md`.
+1. **Bu rapor:** `previous_reports/PDF_PARSER_V0.1.0_RC1_REPORT.md`
+   (2026-08-21'de `reports/` altından taşındı: `developments` dalı o dizini
+   `previous_reports/` olarak yeniden adlandırmıştı, aynı hizaya gelmek merge
+   sırasındaki iki yol çakışmasını ortadan kaldırdı).
 2. **İnsan okunur calibration:**
    `research/pdf-parser/results/c1_rc1/calibration_report.md`.
 3. **Koşu özeti:** `research/pdf-parser/results/c1_rc1/summary.json`.
