@@ -78,6 +78,10 @@ VARSAYILAN: Dict[str, Any] = {
     "yonlendirme": {
         "kalite_esik": 75.0,
         "yuksek_guven_yeter": False,
+        # Sayfa agir motora YALNIZ dusuk kalite skoru yuzunden gidiyorsa ve
+        # sayfada hic vektorel cizim yoksa, gonderme. False = kapali, bugunku
+        # davranis. Olcum ve gerekce: config/smart_router.yaml + rapor O.13.
+        "kalite_vetosu_cizimsiz": False,
     },
     "birlestirme": {
         # UYGULANDI (2026-08-20): 0.1, sonra (2026-08-21) 0.1 -> 5.0. YAML
@@ -129,6 +133,9 @@ class Ayarlar:
     critic_ceza: Dict[str, float]
     kalite_esik: float
     yuksek_guven_yeter: bool
+    #: Yalniz kalite gerekcesiyle gelen ve hic vektorel cizimi olmayan sayfayi
+    #: agir motora gondermeme vetosu. Bkz. `gate.sayfa_secici`.
+    kalite_vetosu_cizimsiz: bool
     #: Heavy text is kept when `heavy >= fast - tolerance`. 0.0 is today's rule.
     karantina_tolerans: float
     #: Below this heavy/fast length ratio (fast usable, markdown stripped),
@@ -316,6 +323,7 @@ def yukle(yol: Optional[str] = None) -> Ayarlar:
         critic_ceza=_duzlestir_ceza(etkin["critic_ceza"]),
         kalite_esik=float(etkin["yonlendirme"]["kalite_esik"]),
         yuksek_guven_yeter=bool(etkin["yonlendirme"]["yuksek_guven_yeter"]),
+        kalite_vetosu_cizimsiz=bool(etkin["yonlendirme"]["kalite_vetosu_cizimsiz"]),
         karantina_tolerans=float(etkin["birlestirme"]["karantina_tolerans"]),
         icerik_kaybi_esik=float(etkin["birlestirme"]["icerik_kaybi_esik"]),
         corruption=dict(etkin["birlestirme"]["corruption"]),

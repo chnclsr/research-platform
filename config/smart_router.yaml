@@ -104,6 +104,38 @@ yonlendirme:
   # Bu bir KALİBRASYON anahtarıdır, çalışma anı bütçesi DEĞİLDİR (plan 8.3).
   yuksek_guven_yeter: false
 
+  # Sayfa ağır motora YALNIZ düşük kalite skoru yüzünden gidiyorsa ve sayfada
+  # hiç vektörel çizim yoksa (bezier_egri == 0), gönderme.
+  #
+  # ÖLÇÜLDÜ (2026-08-21, rapor O.13) — üç veri ailesinde offline:
+  #
+  #   aile                   ΔNET      ağır çağrı   kaybedilen fayda
+  #   ---------------------|---------|------------|------------------
+  #   ocrturk (129)         +0,0273    58 -> 55     0,0000
+  #   opendataloader (72)   +0,3006    43 -> 32     0,0000
+  #   BİRLEŞİK (201)        +0,3279   101 -> 87     0,0000
+  #   kendi korpus (261 s.)     —     137 -> 115    boşa 28->10, gerekli 101->97
+  #
+  # precision 0,4059 -> 0,4713; recall 0,6508 DEĞİŞMİYOR. C1'de tek bir belge
+  # bile fayda kaybetmiyor: vetolanan 14 sayfanın hepsinde heavy zaten kötüydü.
+  #
+  # NEDEN BU BİÇİM: `quality_score`'un heavy'den fayda görmeyi öngörme gücü
+  # ocrturk'te AUC 0,5006 -- rastgele (Bölüm M'in 0,43-0,47 bulgusunun bağımsız
+  # tekrarı). Ama kalite gerekçesini yapısal bir koşulla birleştirmek ayırıcı:
+  # vektörel çizimi olmayan sayfa düz metindir. Eşik duyarlılığı da temiz --
+  # bezier < 0/1/2 aynı sonucu veriyor, bozulma 5'ten sonra başlıyor.
+  #
+  # ELENEN ALTERNATİF: `karakter < 1500 VE çizim yok` C1'de çok daha iyi
+  # görünüyordu (NET +1,3035) ama kendi korpusumuzda kestiği 8 çağrının 8'i de
+  # GEREKLİ çıktı ve 5 tablo kaçırttı -- C1'e aşırı uyum. Üç korpusta birden
+  # sınanmasaydı yanlış kural seçilecekti.
+  #
+  # ŞİMDİLİK KAPALI (false). Aday aynı korpusta arandı ve aynı korpusta iyi
+  # çıktı; Q13 gereği bu kabul sayılmaz, dokunulmamış kaynak-aile holdout'u
+  # şart. Açmak için bu anahtarı true yap ve `ayarlar.py`'deki gömülü
+  # varsayılanı BİRLİKTE güncelle.
+  kalite_vetosu_cizimsiz: false
+
 # --------------------------------------------------------------------------
 # BİRLEŞTİRME — ağır motorun çıktısı kabul edilir mi
 # --------------------------------------------------------------------------

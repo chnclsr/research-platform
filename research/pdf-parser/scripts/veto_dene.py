@@ -74,20 +74,50 @@ def _sayfa_bilgisi(r: dict) -> dict:
 # Aday vetolar. Her biri: (ad, aciklama, sayfa_bilgisi -> True ise HEAVY'E GITME)
 # Hepsi yalniz YAPISAL sinyallere bakar; "dil == en" gibi bir korpus bayragi
 # bilerek YOK -- 72 belgelik tek bir benchmark'in kompozisyonunu ezberlerdi.
+#
+# Her adayin bir HIPOTEZI var; kombinasyon taramasi degil. Sebep: 101 agir sayfa
+# uzerinde yeterince kural denenirse biri tesadufen iyi cikar. Aday sayisini
+# hipotezle sinirlamak, "hicbir ailede zarar verme" cubugunu anlamli tutuyor.
+#
+# Sinyallerin ayrim gucu (sinyal_ayrim.py, AUC): ocrturk'te ortogonal_cizgi
+# 0,7691 en guclu; opendataloader'da bezier_egri 0,8268 ve karakter 0,7357.
+# quality_score ocrturk'te tam rastgele (0,5006) -- bu yuzden kalite gerekcesi
+# tek basina degil, hep bir yapisal kosulla birlikte deneniyor.
 ADAYLAR = [
+    # -- kalite gerekcesi tek basina (referans: neyi kaybediyoruz)
     ("lq_tek", "yalniz low_quality ile gelen sayfayi gonderme",
      lambda s: s["gerekce"] == ["low_quality"]),
+    # -- kalite gerekcesi + "burada karmasik duzen yok" kosullari
     ("lq_tek_cizimsiz", "yalniz low_quality VE hic vektorel cizim yok",
      lambda s: s["gerekce"] == ["low_quality"] and s["bezier_egri"] == 0),
+    ("lq_tek_cizim_az", "yalniz low_quality VE bezier_egri < 5",
+     lambda s: s["gerekce"] == ["low_quality"] and s["bezier_egri"] < 5),
+    ("lq_tek_cizgisiz", "yalniz low_quality VE ortogonal cizgi yok",
+     lambda s: s["gerekce"] == ["low_quality"] and s["ortogonal_cizgi"] == 0),
+    ("lq_tek_duz", "yalniz low_quality VE ne cizim ne ortogonal cizgi",
+     lambda s: (s["gerekce"] == ["low_quality"] and s["bezier_egri"] == 0
+                and s["ortogonal_cizgi"] == 0)),
     ("lq_tek_tablosuz", "yalniz low_quality VE tablo sinyali yok",
      lambda s: s["gerekce"] == ["low_quality"] and not s["has_table"]),
+    ("lq_tek_cizimsiz_kisa", "yalniz low_quality VE cizim yok VE < 1500 karakter",
+     lambda s: (s["gerekce"] == ["low_quality"] and s["bezier_egri"] == 0
+                and s["karakter"] < 1500)),
+    # -- kalite gerekcesinden bagimsiz yapisal vetolar
     ("cizimsiz_tablosuz", "hic bezier egri yok VE ortogonal cizgi yok",
      lambda s: s["bezier_egri"] == 0 and s["ortogonal_cizgi"] == 0),
     ("kisa_sayfa", "fast metin 1500 karakterden kisa ve kritik sorun yok",
      lambda s: s["karakter"] < 1500 and not s["kritik"] and not s["needs_ocr"]),
+    ("kisa_cizimsiz", "< 1500 karakter VE hic vektorel cizim yok VE kritik yok",
+     lambda s: (s["karakter"] < 1500 and s["bezier_egri"] == 0
+                and not s["kritik"] and not s["needs_ocr"])),
     ("yogun_izgara", "izgara_satir >= 8 (yogun satir yapisi)",
      lambda s: s["izgara_satir"] >= 8),
 ]
+
+#: `lq_tek_cizimsiz`in bezier esigi bir SECIM'di (0). Komsu degerler de
+#: taranir; kural yalniz tek bir esikte calisiyorsa bu, sinyalden cok
+#: gurultuye uyum isaretidir.
+ESIK_TARAMASI = [0, 1, 2, 5, 10, 25]
 
 
 def degerlendir(kayitlar: dict, kural, ids: list[str]) -> dict:
@@ -166,12 +196,35 @@ def main() -> int:
                   % (c["ad"], m["heavy"], m["veto"], m["net"], m["net"] - t["net"],
                      m["precision"], m["recall"], m["veto_kayip"], m["veto_kazanc"]))
 
+    # --- esik duyarliligi: kural yalniz tek bir esikte mi calisiyor?
+    print("\n=== ESIK DUYARLILIGI: lq_tek VE bezier_egri < E ===")
+    print("%6s %8s %10s %10s %10s  %s" %
+          ("E", "veto", "ΔNET ocr", "ΔNET odl", "ΔNET birl", "zararsiz"))
+    sonuc["esik_taramasi"] = []
+    for esik in ESIK_TARAMASI:
+        kural = (lambda e: (lambda s: s["gerekce"] == ["low_quality"]
+                            and s["bezier_egri"] < max(e, 1) if e else
+                            (s["gerekce"] == ["low_quality"] and s["bezier_egri"] == 0)))(esik)
+        olcum = {a: degerlendir(kayitlar, kural, g) for a, g in grup.items()}
+        zararsiz = all(olcum[a]["net"] >= taban[a]["net"] - 1e-9 for a in aileler)
+        satir = {"esik": esik, "olcum": olcum, "zararsiz": zararsiz}
+        sonuc["esik_taramasi"].append(satir)
+        print("%6d %8d %+10.4f %+10.4f %+10.4f  %s" %
+              (esik, olcum["BIRLESIK"]["veto"],
+               olcum[aileler[0]]["net"] - taban[aileler[0]]["net"],
+               olcum[aileler[1]]["net"] - taban[aileler[1]]["net"],
+               olcum["BIRLESIK"]["net"] - taban["BIRLESIK"]["net"],
+               "evet" if zararsiz else "HAYIR"))
+
     print("\n--- hicbir ailede NET dusurmeyen adaylar ---")
     gecen = [c for c in sonuc["adaylar"] if c["hicbir_ailede_zarar_yok"]]
     if not gecen:
         print("  YOK -- her aday en az bir veri ailesine zarar veriyor")
     for c in gecen:
-        print("  %-18s %s" % (c["ad"], c["aciklama"]))
+        m = c["olcum"]["BIRLESIK"]
+        print("  %-22s ΔNET %+.4f  veto %d  prec %.4f  %s"
+              % (c["ad"], m["net"] - taban["BIRLESIK"]["net"], m["veto"],
+                 m["precision"], c["aciklama"]))
     print("\nNOT: bu adaylar KABUL EDILMIS degildir; dogrulama dokunulmamis")
     print("holdout ister (Q13). Ayni korpusta hem arayip hem ilan etme.")
     print("yazildi: %s" % args.cikti)

@@ -2178,6 +2178,71 @@ demek; yoksa düz metindir ve ağır motorun katacağı bir şey yoktur.
 Sıradaki iş bu üç maddedir; sırasıyla holdout kurmak, `gate.py`'ye kuralı
 eklemek ve iki korpusta gerçek replay koşmak.
 
+### O.13.5 Arama genişletildi — ve üçüncü aile bir tuzağı yakaladı
+
+Altı aday elle seçilmişti; liste on bire çıkarıldı (her aday bir hipotez taşır,
+kombinasyon taraması değil — 101 sayfa üzerinde yeterince kural denenirse biri
+tesadüfen iyi çıkar). Ayrıca `bezier_egri` eşiği tarandı.
+
+Katı çubuğu (hiçbir ailede NET düşürmeme) beş aday geçti. En yükseği
+`lq_tek_cizimsiz` değil, **`kisa_cizimsiz`** çıktı (`karakter < 1500` **ve**
+çizim yok **ve** kritik yok):
+
+| | ocrturk ΔNET | opendataloader ΔNET | Birleşik ΔNET |
+|---|---|---|---|
+| `lq_tek_cizimsiz` | +0,0273 | +0,3006 | +0,3279 |
+| `kisa_cizimsiz` | +0,2253 | **+1,0783** | **+1,3035** |
+
+`kisa_cizimsiz` opendataloader NET'ini tek başına **pozitife çeviriyordu**
+(−0,9842 → +0,0941). C1'e bakan biri bu kuralı seçerdi.
+
+**Kendi korpusumuz onu eledi:**
+
+| Kural | veto | BOŞA engellenen | GEREKLİ kaybedilen | yeni kaçırılan tablo |
+|---|---|---|---|---|
+| `lq_tek_cizimsiz` | 22 | **18** | 4 | 1 |
+| `kisa_cizimsiz` | 8 | **0** | **8** | **5** |
+
+`kisa_cizimsiz` bizim korpusumuzda yalnızca gerekli çağrıları kesiyor ve beş
+tablo kaçırtıyor. Sebebi anlaşılır: C1'in her belgesi tek sayfa ve kısa, orada
+"kısa" ≈ önemsiz; bizim korpusumuzda kısa sayfa çoğu zaman **tablo sayfası**.
+Üç korpusta birden sınanmasaydı yanlış kural seçilecekti — O.6'daki hizalama
+kontrolünün somut karşılığı.
+
+Eşik duyarlılığı `lq_tek_cizimsiz` lehine: `bezier_egri < 0 / 1 / 2` aynı
+sonucu veriyor (14 veto, ΔNET +0,3279), bozulma 5'ten sonra başlıyor
+(ocrturk −0,1743). Kural tek bir eşiğe asılı değil.
+
+### O.13.6 Kural koda eklendi (varsayılan KAPALI) ve gerçek replay ile doğrulandı
+
+`gate.sayfa_secici` artık `kalite_vetosu_cizimsiz` parametresi alıyor
+(`config/smart_router.yaml` → `yonlendirme.kalite_vetosu_cizimsiz`, gömülü
+varsayılanla birlikte). **Varsayılan `false` — üretim davranışı değişmedi.**
+Kural kasıtlı olarak dar: `has_table`, `needs_ocr` ya da kritik teşhis
+yüzünden gelen sayfaya dokunmaz, ve `bezier_egri` ölçülmemişse çalışmaz
+(eksik ölçümü "çizim yok" saymak sayfayı sessizce hızlı yolda bırakırdı).
+`tests/test_gate_kalite_vetosu.py` bu sınırların dokuzunu birden sabitliyor.
+
+İki replay koşuldu ve **offline hesap birebir tuttu**:
+
+| | offline tahmin | gerçek replay |
+|---|---|---|
+| Birleşik NET | 3,4198 | **3,4198** |
+| ağır çağrı | 87 | **87** |
+| precision | 0,4713 | **0,4713** |
+| recall | 0,6508 | **0,6508** |
+| vetolanan belge | 14 | **14** (11 opendataloader + 3 ocrturk) |
+| kaybedilen fayda | 0,0000 | **0,0000** |
+| kendi korpus ağır / boşa / kaçırılan | 115 / 10 / 4 | **115 / 10 / 4** |
+
+Veto **kapalıyken** yeni kod eski davranışı bozmuyor: 201 belgenin hiçbirinde
+fark yok (NET 3,0919, ağır 101, precision 0,4059 — hepsi aynı). Testler 81/81
+(parser 64/64 + critic 5 + korpus_ablation 3 + veto 9).
+
+**Durum: kural hazır, ölçülmüş ve kapalı.** Açmak tek satırlık bir config
+değişikliği, ama hâlâ Q13 engeli duruyor — aday aynı korpusta arandı. Açma
+kararı, dokunulmamış kaynak-aile holdout'u kurulduktan sonra verilmeli.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production

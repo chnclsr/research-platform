@@ -410,6 +410,7 @@ def sayfa_secici(bayraklar: Dict[int, SayfaBayrak],
                  *,
                  kalite_esik: float = AYAR.kalite_esik,
                  yuksek_guven_yeter: bool = AYAR.yuksek_guven_yeter,
+                 kalite_vetosu_cizimsiz: bool = AYAR.kalite_vetosu_cizimsiz,
                  kritik: Optional[Dict[int, Optional[str]]] = None) -> Dict[str, Any]:
     """Agir motora gidecek sayfa listesini kurar.
 
@@ -432,6 +433,21 @@ def sayfa_secici(bayraklar: Dict[int, SayfaBayrak],
 
     `kalite` verilmezse kalite kapisi calismaz; o sayfalar "olculmedi" sayilir,
     0 sayilmaz.
+
+    `kalite_vetosu_cizimsiz=True` iken, sayfa agir motora YALNIZ `low_quality`
+    yuzunden gidiyorsa ve sayfada hic vektorel cizim yoksa gonderilmez. Gerekcesi
+    olculdu (rapor O.13): `quality_score`'un heavy'den fayda gormeyi ongorme
+    gucu ocrturk'te AUC 0,5006 -- rastgele. Ama kalite gerekcesini "burada
+    gercekten karmasik bir duzen var" kosuluyla birlestirmek ayirici oluyor:
+    cizimi olmayan sayfa duz metindir, agir motorun katacagi bir sey yoktur.
+    Veto sayfa EKLEMEZ, yalniz geri ceker.
+
+    Kasitli olarak sinirli: `has_table`, `needs_ocr` ya da kritik teshis
+    yuzunden gelen sayfaya DOKUNMAZ -- bunlarin gerekcesi kalite skoru degil.
+    Ayni ailede daha genis bir aday (`karakter < 1500 VE cizim yok`) C1'de daha
+    iyi gorunuyordu (NET +1,3035) ama kendi korpusumuzda kestigi 8 cagrinin
+    8'i de GEREKLI cikti ve 5 tablo kacirtti; uc korpusta birden sinanmasaydi
+    yanlis kural secilecekti.
     """
     kalite = kalite or {}
     kritik = kritik or {}
@@ -464,6 +480,14 @@ def sayfa_secici(bayraklar: Dict[int, SayfaBayrak],
         if kritik_mi(ci):
             nedenler.append("critical_" + str(ci))
 
+        # Dusuk-fayda vetosu: yalniz kalite gerekcesi + hic vektorel cizim yok.
+        # `kaynak` sozlugu gate'in ham gozlemleri; bezier_egri yoksa (eski
+        # bayrak ya da farkli bir uretici) veto CALISMAZ -- eksik olcumu
+        # "cizim yok" saymak sayfayi sessizce hizli yolda birakirdi.
+        if (kalite_vetosu_cizimsiz and nedenler == ["low_quality"]
+                and (b.kaynak or {}).get("bezier_egri") == 0):
+            nedenler = []
+
         if nedenler:
             agir.append(no)
         sebep[no] = nedenler
@@ -483,6 +507,7 @@ def sayfa_secici(bayraklar: Dict[int, SayfaBayrak],
             "esik_version": ESIK_VERSION,
             "kalite_esik": kalite_esik,
             "yuksek_guven_yeter": yuksek_guven_yeter,
+            "kalite_vetosu_cizimsiz": kalite_vetosu_cizimsiz,
         },
     }
 
