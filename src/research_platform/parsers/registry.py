@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .base import DocumentParser, ParserHealth
+from .html import HtmlParser
 from .pdf import PdfParser, PyMuPdfParser, PyPdfParser
 from .smart_pdf import SmartPdfParser
 from .structured import PlainTextParser

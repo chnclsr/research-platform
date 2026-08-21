@@ -121,7 +121,11 @@ async def test_rescoring_moves_a_waiting_job_and_ignores_everything_else():
 
 
 @pytest.mark.asyncio
-async def test_an_urgent_run_pauses_the_running_normal_one():
+async def test_an_urgent_run_pauses_the_running_normal_one(monkeypatch):
+    async def _no_free_slot(repo):
+        return False
+
+    monkeypatch.setattr("research_platform.scheduler.free_slot", _no_free_slot)
     await clear_runs()
     async with SessionLocal() as session:
         repo = Repository(session, actor=acting_principal())

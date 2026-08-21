@@ -91,30 +91,24 @@ The research execution graph is implemented with LangGraph `StateGraph`, maintai
 
 PDF documents exhibit high variability, ranging from simple clean text to complex multi-column layouts with dense tables and scanned images. The Smart Router architecture isolates heavy compute resources while guaranteeing extraction quality.
 
-![Smart Router Pipeline](diagrams/smart-router-pipeline.svg)
+For a dedicated analysis of the internal router mechanisms and provenance semantics, see **[docs/SMART_ROUTER_MIMARI.md](SMART_ROUTER_MIMARI.md)**.
 
-### Pipeline Stages
+### 5.1 End-to-End Smart Router Pipeline
+`SmartPdfParser.parse()` routes each page individually through a lightweight triage pass; only flagged pages are dispatched to heavy engines, before converging at `merge.birlestir()`.
 
-1. **Fast Path Inspection (`pdf-inspector`):**
-   - Processes the full PDF at **2.6 ms/page**.
-   - Analyzes physical reading orders, vector ruling lines, and embedded image layers without heavy neural nets.
-   - Clean, text-only pages (typically ~44% of corpus) are extracted immediately.
+![Smart Router End-to-End Line](assets/smart_router_sekil1_hat.svg)
 
-2. **Karar Kapisi (Physical Gate) & PDFCritic:**
-   - **`gate.py` (`GirisKapisi`):** Detects `has_table` (vector line counts > 6 or grid structures), `needs_ocr` (zero text + image presence), and `has_figure`. Enforces `kalite_vetosu_cizimsiz` to avoid unnecessary heavy parser invocations on clean vector-less pages.
-   - **`critic.py` (`PDFCritic`):** Computes a 0–100 `quality_score`, flagging Private Use Area (PUA) glyphs, CID font errors, and dangling sentences. Pages scoring `< 75.0` are escalated to heavy processing.
+### 5.2 Class Structure & Architecture Hierarchy
+The object model decouples parser contracts (`base.py`), the entrypoint (`smart_pdf.py`), routing decision gates (`smart_router/`), and heavy engine executors.
 
-3. **Heavy Engine Lane (`engines.py`):**
-   - Protected by `_AGIR_KAPI` (`asyncio.Semaphore`) to avoid VRAM exhaustion on local hardware (e.g. RTX 4060 8GB).
-   - **Primary Engine (Docling):** Executes deep layout analysis and table cell grid reconstruction at **1.55 s/page**.
-   - **Fallback Engine (MinerU):** Engaged automatically if Docling encounters a timeout or syntax crash.
+![Smart Router Class Structure](assets/smart_router_sekil2_siniflar.svg)
 
-4. **Security, Quarantine & Merge (`merge.py`):**
-   - Compares heavy extraction output against fast path text.
-   - Rejects degraded outputs into quarantine and maintains clean fast text.
-   - Wraps sections using `nest_under_page()`: prepends `# Page N` at root and shifts document headings to `##` level, reducing section path loss from **98% to 0%**.
+### 5.3 Execution Trace of a `parse()` Invocation
+The chronological trace shows page inspection, parallel batch execution under `_AGIR_KAPI`, and quarantine filtering.
 
-### Empirical Benchmark & Defect Measurement
+![Smart Router Execution Flow](assets/smart_router_sekil3_akis.svg)
+
+### 5.4 Empirical Benchmark & Defect Measurement
 
 ![PDF Parser Benchmark & Engine Comparison](assets/pdf-parser-benchmark-comparison.svg)
 

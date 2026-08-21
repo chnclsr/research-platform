@@ -236,9 +236,9 @@ Ham corpus ve çalışma çıktıları Git'e girmez.
 
 ## Research Agent Entegrasyonu ve Aktör Rolleri
 
-> **İnteraktif Mimari Şeması:** [system_architecture_diagram.html](../../system_architecture_diagram.html) dosyasını tarayıcınızda açarak tüm uçtan uca veri akışını, LangGraph durum makinesini ve Smart Router karantina ağacını canlı inceleyebilirsiniz. Ayrıntılı mimari dokümanı için **[docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)** sayfasına bakınız.
+> **İnteraktif Mimari Şeması:** [system_architecture_diagram.html](../../system_architecture_diagram.html) dosyasını tarayıcınızda açarak tüm uçtan uca veri akışını, LangGraph durum makinesini ve Smart Router karantina ağacını canlı inceleyebilirsiniz. Ayrıntılı mimari dokümanı için **[docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)** ve **[docs/SMART_ROUTER_MIMARI.md](../../docs/SMART_ROUTER_MIMARI.md)** sayfalarına bakınız.
 
-![Smart Router Pipeline](../../docs/diagrams/smart-router-pipeline.svg)
+![Smart Router Ayrıştırma Hattı](../../docs/assets/smart_router_sekil1_hat.svg)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
