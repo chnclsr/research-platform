@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Research Platform & Smart Router Mimari Şeması</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      /* Light Theme Tokens */
+      --paper: #f8fafc;
+      --paper-2: #ffffff;
+      --paper-3: #f1f5f9;
+      --ink: #0f172a;
+      --muted: #475569;
+      --soft: #64748b;
+      --rule: rgba(15, 23, 42, 0.08);
+      --rule-solid: #cbd5e1;
+      --rule-strong: #94a3b8;
+      
+      --accent: #eb6c36;
+      --accent-tint: rgba(235, 108, 54, 0.08);
+      --accent-glow: rgba(235, 108, 54, 0.25);
+      
+      --link: #2563eb;
+      --link-tint: rgba(37, 99, 235, 0.08);
+      --success: #059669;
+      --success-tint: rgba(5, 150, 105, 0.08);
+      --purple: #7c3aed;
+      --purple-tint: rgba(124, 58, 237, 0.08);
+      --danger: #dc2626;
+      --danger-tint: rgba(220, 38, 38, 0.08);
+      
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+    }
+
+    [data-theme="dark"] {
+      --paper: #0b1120;
+      --paper-2: #1e293b;
+      --paper-3: #334155;
+      --ink: #f8fafc;
+      --muted: #94a3b8;
+      --soft: #cbd5e1;
+      --rule: rgba(248, 250, 252, 0.08);
+      --rule-solid: #334155;
+      --rule-strong: #475569;
+      
+      --accent: #f97316;
+      --accent-tint: rgba(249, 115, 22, 0.14);
+      --accent-glow: rgba(249, 115, 22, 0.35);
+      
+      --link: #60a5fa;
+      --link-tint: rgba(96, 165, 250, 0.14);
+      --success: #10b981;
+      --success-tint: rgba(16, 185, 129, 0.14);
+      --purple: #a78bfa;
+      --purple-tint: rgba(167, 139, 250, 0.14);
+      --danger: #f87171;
+      --danger-tint: rgba(248, 113, 113, 0.14);
+      
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--paper);
+      color: var(--ink);
+      line-height: 1.5;
+      padding: 24px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    /* Header Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: var(--paper-2);
+      border: 1px solid var(--rule-solid);
+      border-radius: 16px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-title h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--accent-tint);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      background: var(--paper-3);
+      padding: 4px;
+      border-radius: 12px;
+    }
+
+    .nav-tab {
+      padding: 8px 16px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nav-tab.active {
+      background: var(--paper-2);
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .theme-toggle {
+      background: var(--paper-3);
+      border: 1px solid var(--rule-solid);
+      color: var(--ink);
+      padding: 8px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Diagram Canvas Container */
+    .canvas-card {
+      background: var(--paper-2);
+      border: 1px solid var(--rule-solid);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: var(--shadow-md);
+      overflow-x: auto;
+      margin-bottom: 24px;
+    }
+
+    .diagram-view {
+      display: none;
+      width: 100%;
+    }
+
+    .diagram-view.active {
+      display: block;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* Typography inside SVG */
+    .label-title {
+      font-family: var(--font-sans);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .label-sub {
+      font-family: var(--font-sans);
+      font-weight: 500;
+    }
+
+    .label-code {
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+
+    .label-badge {
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    /* Info Grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .info-card {
+      background: var(--paper-2);
+      border: 1px solid var(--rule-solid);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .info-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .info-card p, .info-card li {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .info-card ul {
+      padding-left: 20px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
+    .pill-accent { background: var(--accent-tint); color: var(--accent); }
+    .pill-success { background: var(--success-tint); color: var(--success); }
+    .pill-purple { background: var(--purple-tint); color: var(--purple); }
+    .pill-link { background: var(--link-tint); color: var(--link); }
+    .pill-danger { background: var(--danger-tint); color: var(--danger); }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <div class="brand-title">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent)">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </svg>
+      <h1>Research Platform & Smart Router</h1>
+      <span class="brand-badge">v0.10.7 + Smart Router v0.1.0</span>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('system')">1. Genel Sistem Mimarisi</button>
+      <button class="nav-tab" onclick="switchTab('router')">2. Smart Router Derin Ayrıştırma</button>
+      <button class="nav-tab" onclick="switchTab('matrix')">3. Karantina ve Karar Matrisi</button>
+    </div>
+
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <span id="theme-icon">🌙</span> <span id="theme-text">Koyu Tema</span>
+    </button>
+  </header>
+
+  <!-- Canvas Card -->
+  <div class="canvas-card">
+
+    <!-- ========================================================================= -->
+    <!-- TAB 1: GENEL SISTEM MIMARISI                                              -->
+    <!-- ========================================================================= -->
+    <div id="view-system" class="diagram-view active">
+      <svg viewBox="0 0 1360 760" width="1360" height="760">
+        <defs>
+          <marker id="arr-sys-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--link)" />
+          </marker>
+          <marker id="arr-sys-accent" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--accent)" />
+          </marker>
+          <marker id="arr-sys-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--soft)" />
+          </marker>
+        </defs>
+
+        <!-- Boundary 1: Client & Entry -->
+        <rect x="30" y="30" width="240" height="690" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="50" y="20" width="160" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="58" y="35" class="label-badge" font-size="11" fill="var(--soft)" letter-spacing="0.05em">1. CLIENT & GİRİŞLER</text>
+
+        <!-- Telegram Bot -->
+        <g transform="translate(50, 70)">
+          <rect width="200" height="90" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">Telegram Bot</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">telegram_bot.py</text>
+          <rect x="16" y="60" width="105" height="18" rx="4" fill="var(--link-tint)" />
+          <text x="22" y="73" class="label-code" font-size="10" fill="var(--link)">Polling / Webhook</text>
+        </g>
+
+        <!-- Control Panel UI -->
+        <g transform="translate(50, 185)">
+          <rect width="200" height="90" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">Control Panel</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">control_panel.py (FastAPI)</text>
+          <rect x="16" y="60" width="95" height="18" rx="4" fill="var(--purple-tint)" />
+          <text x="22" y="73" class="label-code" font-size="10" fill="var(--purple)">Web Dashboard</text>
+        </g>
+
+        <!-- Admin CLI & API -->
+        <g transform="translate(50, 300)">
+          <rect width="200" height="90" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">Admin CLI & API</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">admin_cli.py / api.py</text>
+          <rect x="16" y="60" width="80" height="18" rx="4" fill="var(--accent-tint)" />
+          <text x="22" y="73" class="label-code" font-size="10" fill="var(--accent)">REST / SSE</text>
+        </g>
+
+        <!-- Boundary 2: LangGraph Core Engine -->
+        <rect x="305" y="30" width="310" height="690" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="325" y="20" width="210" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="333" y="35" class="label-badge" font-size="11" fill="var(--soft)" letter-spacing="0.05em">2. LANGGRAPH CORE ENGINE</text>
+
+        <!-- PLAN_RESEARCH -->
+        <g transform="translate(325, 70)">
+          <rect width="270" height="90" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">PLAN_RESEARCH (HITL)</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">Protokol &amp; İnsan İncelemesi</text>
+          <rect x="16" y="60" width="130" height="18" rx="4" fill="var(--accent-tint)" />
+          <text x="22" y="73" class="label-code" font-size="10" fill="var(--accent)">plan_review = True</text>
+        </g>
+
+        <!-- ACQUIRE -->
+        <g transform="translate(325, 185)">
+          <rect width="270" height="115" rx="12" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="2" />
+          <text x="16" y="30" class="label-title" font-size="15" fill="var(--accent)">ACQUIRE (İndirme &amp; Parse)</text>
+          <text x="16" y="52" class="label-sub" font-size="12" fill="var(--muted)">Async İndirme &amp; Eşzamanlı Dağıtım</text>
+          <text x="16" y="72" class="label-code" font-size="11" fill="var(--ink)">timeout=900s | async worker</text>
+          <rect x="16" y="82" width="140" height="18" rx="4" fill="var(--paper-2)" />
+          <text x="22" y="95" class="label-code" font-size="10" fill="var(--ink)">AcquisitionService</text>
+        </g>
+
+        <!-- EXTRACT PASSAGES -->
+        <g transform="translate(325, 330)">
+          <rect width="270" height="90" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">EXTRACT PASSAGES</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">passages.py (chunk_document)</text>
+          <rect x="16" y="60" width="140" height="18" rx="4" fill="var(--success-tint)" />
+          <text x="22" y="73" class="label-code" font-size="10" fill="var(--success)"># Page N Alıntı Yolu</text>
+        </g>
+
+        <!-- SYNTHESIZE & REPORT -->
+        <g transform="translate(325, 445)">
+          <rect width="270" height="90" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">SYNTHESIZE &amp; REPORT</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">LLM Rapor Sentezi &amp; Export</text>
+          <rect x="16" y="60" width="135" height="18" rx="4" fill="var(--link-tint)" />
+          <text x="22" y="73" class="label-code" font-size="10" fill="var(--link)">Word / Markdown / PDF</text>
+        </g>
+
+        <!-- Boundary 3: Acquisition & Parser Registry -->
+        <rect x="650" y="30" width="370" height="690" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="670" y="20" width="220" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="678" y="35" class="label-badge" font-size="11" fill="var(--soft)" letter-spacing="0.05em">3. PARSER REGISTRY HİYERARŞİSİ</text>
+
+        <!-- Parser Registry -->
+        <g transform="translate(670, 70)">
+          <rect width="330" height="110" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--ink)">ParserRegistry.select(doc_type)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Deterministik Öncelik Sıralaması:</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--accent)">(-parser.priority, parser.id)</text>
+          <rect x="16" y="78" width="170" height="20" rx="4" fill="var(--accent-tint)" />
+          <text x="22" y="92" class="label-code" font-size="10" fill="var(--accent)">1. SmartPdfParser (p=20)</text>
+        </g>
+
+        <!-- SmartPdfParser -->
+        <g transform="translate(670, 200)">
+          <rect width="330" height="135" rx="12" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="2" />
+          <text x="16" y="28" class="label-title" font-size="15" fill="var(--accent)">SmartPdfParser (Öncelik: 20)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Sayfa Yönlendirmeli Hibrit Motor</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--ink)">Fast: pdf-inspector (2.6ms/sayfa)</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--ink)">Heavy: Docling (1.55s/sayfa) + MinerU</text>
+          <rect x="16" y="98" width="150" height="20" rx="4" fill="var(--paper-2)" />
+          <text x="22" y="112" class="label-code" font-size="10" fill="var(--accent)">BİRİNCİL PDF MOTORU</text>
+        </g>
+
+        <!-- PyMuPdfParser -->
+        <g transform="translate(670, 355)">
+          <rect width="330" height="85" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="26" class="label-title" font-size="14" fill="var(--ink)">PyMuPdfParser (Öncelik: 10)</text>
+          <text x="16" y="44" class="label-sub" font-size="12" fill="var(--muted)">Hızlı salt-metin çıkarma (fitz)</text>
+          <text x="16" y="62" class="label-code" font-size="11" fill="var(--soft)">sort=True ile okuma sırası korur</text>
+        </g>
+
+        <!-- HtmlParser & PlainTextParser -->
+        <g transform="translate(670, 460)">
+          <rect width="330" height="95" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="26" class="label-title" font-size="14" fill="var(--ink)">HtmlParser &amp; PlainTextParser</text>
+          <text x="16" y="44" class="label-sub" font-size="12" fill="var(--muted)">html_structured (p=10), plain_text</text>
+          <text x="16" y="62" class="label-code" font-size="11" fill="var(--soft)">HTML tabloları ve kod bloklarını korur</text>
+        </g>
+
+        <!-- PyPdfParser -->
+        <g transform="translate(670, 575)">
+          <rect width="330" height="75" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="26" class="label-title" font-size="13" fill="var(--ink)">PyPdfParser (Öncelik: 0)</text>
+          <text x="16" y="44" class="label-sub" font-size="11" fill="var(--muted)">pypdf kütüphanesi saf Python yedeği</text>
+        </g>
+
+        <!-- Boundary 4: Data & Storage -->
+        <rect x="1055" y="30" width="275" height="690" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="1075" y="20" width="180" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="1083" y="35" class="label-badge" font-size="11" fill="var(--soft)" letter-spacing="0.05em">4. DEPOLAMA &amp; BELLEK</text>
+
+        <!-- MinIO -->
+        <g transform="translate(1075, 70)">
+          <rect width="235" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">MinIO S3 Snapshot</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">Ham PDF Baytları &amp; Resimler</text>
+          <rect x="16" y="62" width="120" height="18" rx="4" fill="var(--link-tint)" />
+          <text x="22" y="75" class="label-code" font-size="10" fill="var(--link)">raw_content BLOB</text>
+        </g>
+
+        <!-- PostgreSQL -->
+        <g transform="translate(1075, 190)">
+          <rect width="235" height="110" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">PostgreSQL / DB</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">sources, passages, runs</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--muted)">parse_provenance, status</text>
+          <rect x="16" y="78" width="110" height="18" rx="4" fill="var(--purple-tint)" />
+          <text x="22" y="91" class="label-code" font-size="10" fill="var(--purple)">ACID İlişkisel DB</text>
+        </g>
+
+        <!-- Vector DB -->
+        <g transform="translate(1075, 320)">
+          <rect width="235" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">Vektör DB (Qdrant)</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">Dense Retrieval &amp; Alıntılar</text>
+          <rect x="16" y="62" width="140" height="18" rx="4" fill="var(--success-tint)" />
+          <text x="22" y="75" class="label-code" font-size="10" fill="var(--success)">Section Path Embedding</text>
+        </g>
+
+        <!-- ARQ Worker -->
+        <g transform="translate(1075, 440)">
+          <rect width="235" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--ink)">ARQ Async Worker</text>
+          <text x="16" y="50" class="label-sub" font-size="12" fill="var(--muted)">Redis kuyruklu arka plan işleri</text>
+          <rect x="16" y="62" width="90" height="18" rx="4" fill="var(--accent-tint)" />
+          <text x="22" y="75" class="label-code" font-size="10" fill="var(--accent)">worker.py</text>
+        </g>
+
+        <!-- Connectors -->
+        <path d="M 250,115 H 285 Q 295,115 295,125 V 230 Q 295,240 305,240 H 325" fill="none" stroke="var(--link)" stroke-width="1.5" marker-end="url(#arr-sys-blue)" />
+        <path d="M 250,230 H 325" fill="none" stroke="var(--link)" stroke-width="1.5" marker-end="url(#arr-sys-blue)" />
+        <path d="M 250,345 H 285 Q 295,345 295,335 V 250 Q 295,240 305,240 H 325" fill="none" stroke="var(--link)" stroke-width="1.5" marker-end="url(#arr-sys-blue)" />
+
+        <path d="M 595,240 H 660" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arr-sys-accent)" />
+        <path d="M 835,180 V 195" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arr-sys-accent)" />
+        <path d="M 460,300 V 680 H 1040 V 120 H 1070" fill="none" stroke="var(--soft)" stroke-dasharray="4,3" stroke-width="1.2" marker-end="url(#arr-sys-muted)" />
+      </svg>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- TAB 2: SMART ROUTER DERINLEMESINE MIMARISI                                -->
+    <!-- ========================================================================= -->
+    <div id="view-router" class="diagram-view">
+      <svg viewBox="0 0 1360 860" width="1360" height="860">
+        <defs>
+          <marker id="arr-rt-fast" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--success)" />
+          </marker>
+          <marker id="arr-rt-heavy" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--purple)" />
+          </marker>
+          <marker id="arr-rt-accent" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--accent)" />
+          </marker>
+        </defs>
+
+        <!-- Stage 1 -->
+        <rect x="30" y="40" width="260" height="780" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="50" y="30" width="180" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="58" y="45" class="label-badge" font-size="11" fill="var(--soft)">1. HIZLI ÇIKARIM &amp; SİNYAL</text>
+
+        <g transform="translate(50, 70)">
+          <rect width="220" height="80" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--ink)">Ham PDF Baytları</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">PyMuPDF Stream / Memory</text>
+          <rect x="16" y="56" width="90" height="16" rx="4" fill="var(--link-tint)" />
+          <text x="20" y="68" class="label-code" font-size="10" fill="var(--link)">content: bytes</text>
+        </g>
+
+        <g transform="translate(50, 180)">
+          <rect width="220" height="130" rx="12" fill="var(--success-tint)" stroke="var(--success)" stroke-width="2" />
+          <text x="16" y="28" class="label-title" font-size="15" fill="var(--success)">pdf-inspector == 1.14.1</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">2.6 ms/sayfa (Tüm Belge)</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--ink)">• Okuma sırası sıralaması</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--ink)">• Vektör çizgi / grid tespiti</text>
+          <text x="16" y="104" class="label-code" font-size="11" fill="var(--ink)">• Görsel / Resim katmanı</text>
+        </g>
+
+        <g transform="translate(50, 340)">
+          <rect width="220" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="13" fill="var(--ink)">Fast Text Çıktısı</text>
+          <text x="16" y="48" class="label-sub" font-size="11" fill="var(--muted)">Sayfa sayfa ham metin</text>
+          <text x="16" y="66" class="label-code" font-size="11" fill="var(--soft)">dict[int, str] (fast_pages)</text>
+          <rect x="16" y="74" width="130" height="16" rx="4" fill="var(--success-tint)" />
+          <text x="20" y="86" class="label-code" font-size="10" fill="var(--success)">%44 Sayfa Burada Biter</text>
+        </g>
+
+        <!-- Stage 2 -->
+        <rect x="320" y="40" width="300" height="780" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="340" y="30" width="220" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="348" y="45" class="label-badge" font-size="11" fill="var(--soft)">2. KARAR KAPISI &amp; ELEŞTİRMEN</text>
+
+        <g transform="translate(340, 70)">
+          <rect width="260" height="150" rx="12" fill="var(--paper-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="16" y="28" class="label-title" font-size="15" fill="var(--accent)">GirisKapisi (gate.py)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Sayfa Fiziksel Sinyalleri:</text>
+          <text x="16" y="70" class="label-code" font-size="11" fill="var(--ink)">• has_table: çizgi &gt; 6, grid</text>
+          <text x="16" y="88" class="label-code" font-size="11" fill="var(--ink)">• needs_ocr: metin yok + resim</text>
+          <text x="16" y="106" class="label-code" font-size="11" fill="var(--ink)">• has_figure: vektör/şekil</text>
+          <text x="16" y="124" class="label-code" font-size="11" fill="var(--accent)">• kalite_vetosu_cizimsiz</text>
+        </g>
+
+        <g transform="translate(340, 240)">
+          <rect width="260" height="160" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="15" fill="var(--ink)">PDFCritic (critic.py)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Metin Kalite Skoru (0 - 100):</text>
+          <text x="16" y="70" class="label-code" font-size="11" fill="var(--ink)">• quality_score &lt; 75.0 ?</text>
+          <text x="16" y="88" class="label-code" font-size="11" fill="var(--ink)">• critical_issues: PUA, CID</text>
+          <text x="16" y="106" class="label-code" font-size="11" fill="var(--muted)">• critic_ceza_dokumu</text>
+          <text x="16" y="124" class="label-code" font-size="11" fill="var(--muted)">• dangling_sentence cezası</text>
+        </g>
+
+        <g transform="translate(340, 420)">
+          <rect width="260" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--ink)">sayfa_secici (pages.py)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Çağrı Planı &amp; Batching:</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--ink)">cagri_plani([1, 2, 5, 6])</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--soft)">Ardışık sayfaları paketler</text>
+        </g>
+
+        <!-- Stage 3 -->
+        <rect x="650" y="40" width="310" height="780" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="670" y="30" width="220" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="678" y="45" class="label-badge" font-size="11" fill="var(--soft)">3. AĞIR MOTOR HATTI (DOCLING)</text>
+
+        <g transform="translate(670, 70)">
+          <rect width="270" height="75" rx="12" fill="var(--paper-2)" stroke="var(--purple)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--purple)">_AGIR_KAPI (Semaphore)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">RAM / GPU Koruması (Aşırı yük engeli)</text>
+          <text x="16" y="64" class="label-code" font-size="10" fill="var(--soft)">asyncio.Semaphore(max_parallel)</text>
+        </g>
+
+        <g transform="translate(670, 165)">
+          <rect width="270" height="150" rx="12" fill="var(--purple-tint)" stroke="var(--purple)" stroke-width="2" />
+          <text x="16" y="28" class="label-title" font-size="15" fill="var(--purple)">Docling Engine (Ana Ağır Motor)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">1.55 s/sayfa | GPU / CPU</text>
+          <text x="16" y="70" class="label-code" font-size="11" fill="var(--ink)">• Hücre düzeyinde tablo gridi</text>
+          <text x="16" y="88" class="label-code" font-size="11" fill="var(--ink)">• Yapısal OCR ve Layout</text>
+          <text x="16" y="106" class="label-code" font-size="11" fill="var(--ink)">• JSON Table &amp; Markdown Pipes</text>
+          <text x="16" y="124" class="label-code" font-size="11" fill="var(--soft)">• Multi-column akış birleştirme</text>
+        </g>
+
+        <g transform="translate(670, 335)">
+          <rect width="270" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--ink)">MinerU Engine (Yedek)</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Docling Çökmesi / Timeout Durumu</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--soft)">7.66 s/sayfa (CPU/GPU)</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--soft)">Taranmış PDF'lerde 24.5k karakter</text>
+        </g>
+
+        <!-- Stage 4 -->
+        <rect x="990" y="40" width="340" height="780" rx="16" fill="none" stroke="var(--rule-solid)" stroke-dasharray="6,4" stroke-width="1.5" />
+        <rect x="1010" y="30" width="250" height="22" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+        <text x="1018" y="45" class="label-badge" font-size="11" fill="var(--soft)">4. GÜVENLİK, KARANTİNA &amp; MERGE</text>
+
+        <g transform="translate(1010, 70)">
+          <rect width="300" height="100" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--ink)">İçerik Kaybı Denetimi</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">_icerik_kaybi_var()</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--danger)">len(heavy) &lt; 0.50 * len(fast)?</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--soft)">Kaybolan formül / metin kontrolü</text>
+        </g>
+
+        <g transform="translate(1010, 190)">
+          <rect width="300" height="120" rx="12" fill="var(--paper-2)" stroke="var(--accent)" stroke-width="2" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--accent)">Bozulma Skoru &amp; Tolerans</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">dead_band = 5.0 (Son Güncelleme)</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--ink)">score(heavy) &lt; score(fast) - 5.0?</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--soft)">Font glif bozulması (-20.8) yakalar</text>
+          <text x="16" y="104" class="label-code" font-size="11" fill="var(--success)">Hatalı ret oranı: 8'den 1'e düştü</text>
+        </g>
+
+        <g transform="translate(1010, 330)">
+          <rect width="145" height="80" rx="10" fill="var(--danger-tint)" stroke="var(--danger)" stroke-width="1.5" />
+          <text x="12" y="26" class="label-title" font-size="13" fill="var(--danger)">KARANTİNA</text>
+          <text x="12" y="44" class="label-sub" font-size="11" fill="var(--muted)">Heavy reddedilir</text>
+          <text x="12" y="62" class="label-code" font-size="10" fill="var(--danger)">Fast metin kalır</text>
+
+          <g transform="translate(155, 0)">
+            <rect width="145" height="80" rx="10" fill="var(--success-tint)" stroke="var(--success)" stroke-width="1.5" />
+            <text x="12" y="26" class="label-title" font-size="13" fill="var(--success)">HEAVY KABUL</text>
+            <text x="12" y="44" class="label-sub" font-size="11" fill="var(--muted)">Docling onaylandı</text>
+            <text x="12" y="62" class="label-code" font-size="10" fill="var(--success)">Tablo &amp; OCR eklenir</text>
+          </g>
+        </g>
+
+        <g transform="translate(1010, 430)">
+          <rect width="300" height="110" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1.5" />
+          <text x="16" y="28" class="label-title" font-size="14" fill="var(--ink)">Başlık Normalizasyonu</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">nest_under_page()</text>
+          <text x="16" y="68" class="label-code" font-size="11" fill="var(--ink)">• # Page N en tepeye konur</text>
+          <text x="16" y="86" class="label-code" font-size="11" fill="var(--ink)">• Belge başlıkları ## yapılır</text>
+          <text x="16" y="102" class="label-code" font-size="11" fill="var(--success)">• section_path %98 -&gt; %0 kayıp</text>
+        </g>
+
+        <g transform="translate(1010, 560)">
+          <rect width="300" height="150" rx="12" fill="var(--paper-2)" stroke="var(--rule-strong)" stroke-width="2" />
+          <text x="16" y="28" class="label-title" font-size="15" fill="var(--ink)">ParsedDocument Çıktısı</text>
+          <text x="16" y="48" class="label-sub" font-size="12" fill="var(--muted)">Downstream Tüketiciler İçin:</text>
+          <text x="16" y="70" class="label-code" font-size="11" fill="var(--ink)">• text: Alıntılanabilir Markdown</text>
+          <text x="16" y="88" class="label-code" font-size="11" fill="var(--ink)">• tables: list[ParsedTable]</text>
+          <text x="16" y="106" class="label-code" font-size="11" fill="var(--muted)">• parse_provenance:</text>
+          <text x="24" y="122" class="label-code" font-size="10" fill="var(--soft)">engine_pages, profile, scores</text>
+          <text x="16" y="138" class="label-code" font-size="11" fill="var(--muted)">• page_count: int</text>
+        </g>
+
+        <!-- Connectors -->
+        <path d="M 270,245 H 340" fill="none" stroke="var(--success)" stroke-width="2" marker-end="url(#arr-rt-fast)" />
+        <path d="M 270,110 H 300 V 245" fill="none" stroke="var(--soft)" stroke-width="1.5" />
+        <path d="M 470,220 V 240" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arr-rt-accent)" />
+        <path d="M 470,400 V 420" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#arr-rt-accent)" />
+        <path d="M 600,470 H 635 V 240 H 670" fill="none" stroke="var(--purple)" stroke-width="2" marker-end="url(#arr-rt-heavy)" />
+        <path d="M 470,520 V 740 H 970 V 635 H 1010" fill="none" stroke="var(--success)" stroke-dasharray="5,4" stroke-width="2" marker-end="url(#arr-rt-fast)" />
+        <path d="M 940,240 H 1010" fill="none" stroke="var(--purple)" stroke-width="2" marker-end="url(#arr-rt-heavy)" />
+      </svg>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- TAB 3: KARANTINA VE KARAR MATRİSİ (ZERO OVERLAP - PRISTINE FLOWCHART)    -->
+    <!-- ========================================================================= -->
+    <div id="view-matrix" class="diagram-view">
+      <svg viewBox="0 0 1360 820" width="1360" height="820">
+        <defs>
+          <marker id="arr-dec-main" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--ink)" />
+          </marker>
+          <marker id="arr-dec-yes" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--danger)" />
+          </marker>
+          <marker id="arr-dec-no" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--success)" />
+          </marker>
+          <marker id="arr-dec-purple" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="var(--purple)" />
+          </marker>
+        </defs>
+
+        <!-- Start Node -->
+        <g transform="translate(530, 30)">
+          <rect width="300" height="64" rx="12" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="2" />
+          <text x="150" y="28" class="label-title" font-size="14" fill="var(--ink)" text-anchor="middle">Sayfa İnceleme Başlangıcı</text>
+          <text x="150" y="48" class="label-sub" font-size="12" fill="var(--muted)" text-anchor="middle">pdf-inspector çıktısı + gate sinyalleri</text>
+        </g>
+
+        <!-- Decision 1: Table / OCR / Critical Issues -->
+        <!-- Diamond Center: (680, 195), Width: 360, Height: 100 -->
+        <!-- Top: (680, 145), Right: (860, 195), Bottom: (680, 245), Left: (500, 195) -->
+        <g>
+          <polygon points="680,145 860,195 680,245 500,195" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="2" />
+          <text x="680" y="190" class="label-title" font-size="13" fill="var(--ink)" text-anchor="middle">has_table veya needs_ocr</text>
+          <text x="680" y="210" class="label-sub" font-size="11" fill="var(--muted)" text-anchor="middle">veya kritik teşhis var mı?</text>
+        </g>
+
+        <!-- Decision 2: Quality Score < 75.0 (Left Branch) -->
+        <!-- Diamond Center: (270, 345), Width: 280, Height: 90 -->
+        <!-- Top: (270, 300), Right: (410, 345), Bottom: (270, 390), Left: (130, 345) -->
+        <g>
+          <polygon points="270,300 410,345 270,390 130,345" fill="var(--paper-2)" stroke="var(--rule-strong)" stroke-width="1.5" />
+          <text x="270" y="340" class="label-title" font-size="13" fill="var(--ink)" text-anchor="middle">quality_score &lt; 75.0?</text>
+          <text x="270" y="358" class="label-sub" font-size="11" fill="var(--muted)" text-anchor="middle">(Düşük Kalite Skoru)</text>
+        </g>
+
+        <!-- Clean Path Box (Fast Path End) -->
+        <g transform="translate(40, 480)">
+          <rect width="250" height="130" rx="12" fill="var(--success-tint)" stroke="var(--success)" stroke-width="2" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--success)">HIZLI YOLDA KAL (Fast Path)</text>
+          <text x="16" y="52" class="label-sub" font-size="12" fill="var(--muted)">• Ekstra ağır çağrı yapılmaz</text>
+          <text x="16" y="72" class="label-code" font-size="11" fill="var(--ink)">• 2.6 ms/sayfa işlem hızı</text>
+          <text x="16" y="92" class="label-code" font-size="11" fill="var(--ink)">• Temiz metin korunur</text>
+          <rect x="16" y="102" width="105" height="18" rx="4" fill="var(--paper-2)" />
+          <text x="22" y="115" class="label-code" font-size="10" fill="var(--success)">engine = "fast"</text>
+        </g>
+
+        <!-- Heavy Path Box (Docling Engine) -->
+        <g transform="translate(930, 280)">
+          <rect width="360" height="130" rx="12" fill="var(--purple-tint)" stroke="var(--purple)" stroke-width="2" />
+          <text x="16" y="30" class="label-title" font-size="15" fill="var(--purple)">AĞIR MOTOR ÇAĞRISI (Docling)</text>
+          <text x="16" y="52" class="label-sub" font-size="12" fill="var(--muted)">1.55 sn/sayfa | Tablo &amp; OCR Çıkarımı</text>
+          <text x="16" y="74" class="label-code" font-size="11" fill="var(--ink)">• Tablo hücre gridleri oluşturulur</text>
+          <text x="16" y="92" class="label-code" font-size="11" fill="var(--ink)">• Görsel içi metinler taranır</text>
+          <rect x="16" y="102" width="190" height="18" rx="4" fill="var(--paper-2)" />
+          <text x="22" y="115" class="label-code" font-size="10" fill="var(--purple)">engine = "docling" (yedek: mineru)</text>
+        </g>
+
+        <!-- Decision 3: Quarantine Check -->
+        <!-- Diamond Center: (1110, 520), Width: 380, Height: 100 -->
+        <!-- Top: (1110, 470), Right: (1300, 520), Bottom: (1110, 570), Left: (920, 520) -->
+        <g>
+          <polygon points="1110,470 1300,520 1110,570 920,520" fill="var(--paper-2)" stroke="var(--danger)" stroke-width="2" />
+          <text x="1110" y="515" class="label-title" font-size="13" fill="var(--danger)" text-anchor="middle">Karantina Şartları Sağlandı mı?</text>
+          <text x="1110" y="535" class="label-sub" font-size="11" fill="var(--muted)" text-anchor="middle">Kayıp &gt; %50 VEYA Bozulma &gt; 5.0</text>
+        </g>
+
+        <!-- Quarantine Reject Box (Left of Decision 3) -->
+        <g transform="translate(680, 640)">
+          <rect width="280" height="125" rx="12" fill="var(--danger-tint)" stroke="var(--danger)" stroke-width="2" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--danger)">KARANTİNA (REDDEDİLDİ)</text>
+          <text x="16" y="52" class="label-sub" font-size="12" fill="var(--muted)">Heavy metin bozuk bulundu</text>
+          <text x="16" y="74" class="label-code" font-size="11" fill="var(--ink)">• Hızlı yol metni korunur</text>
+          <text x="16" y="94" class="label-code" font-size="11" fill="var(--ink)">• quarantined_pages.append(i)</text>
+        </g>
+
+        <!-- Heavy Accept Box (Right/Under Decision 3) -->
+        <g transform="translate(1020, 640)">
+          <rect width="290" height="125" rx="12" fill="var(--success-tint)" stroke="var(--success)" stroke-width="2" />
+          <text x="16" y="30" class="label-title" font-size="14" fill="var(--success)">HEAVY KABUL EDİLDİ</text>
+          <text x="16" y="52" class="label-sub" font-size="12" fill="var(--muted)">Metin ve Tablolar onaylandı</text>
+          <text x="16" y="74" class="label-code" font-size="11" fill="var(--ink)">• Tablolar JSON listeye eklenir</text>
+          <text x="16" y="94" class="label-code" font-size="11" fill="var(--ink)">• Başlıklar ## düzeyine çekilir</text>
+        </g>
+
+        <!-- CONNECTORS WITH ZERO COLLISION & PILL LABELS -->
+
+        <!-- Start to Decision 1 -->
+        <path d="M 680,94 V 145" fill="none" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr-dec-main)" />
+
+        <!-- Decision 1 -> Heavy Motor (EVET: Right Port 860, 195) -->
+        <path d="M 860,195 H 1110 Q 1110,195 1110,205 V 280" fill="none" stroke="var(--purple)" stroke-width="2" marker-end="url(#arr-dec-purple)" />
+        <g transform="translate(920, 183)">
+          <rect width="130" height="24" rx="6" fill="var(--paper-2)" stroke="var(--purple)" stroke-width="1" />
+          <text x="65" y="16" class="label-badge" font-size="11" fill="var(--purple)" text-anchor="middle">EVET (Tablo / OCR)</text>
+        </g>
+
+        <!-- Decision 1 -> Decision 2 (HAYIR: Left Port 500, 195) -->
+        <path d="M 500,195 H 270 Q 270,195 270,205 V 300" fill="none" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr-dec-main)" />
+        <g transform="translate(340, 183)">
+          <rect width="90" height="24" rx="6" fill="var(--paper-2)" stroke="var(--rule-solid)" stroke-width="1" />
+          <text x="45" y="16" class="label-badge" font-size="11" fill="var(--muted)" text-anchor="middle">HAYIR</text>
+        </g>
+
+        <!-- Decision 2 -> Fast Path (HAYIR: Bottom Port 270, 390 -> down to 480) -->
+        <path d="M 270,390 V 440 Q 270,450 260,450 H 165 Q 165,450 165,460 V 480" fill="none" stroke="var(--success)" stroke-width="2" marker-end="url(#arr-dec-no)" />
+        <g transform="translate(200, 405)">
+          <rect width="105" height="24" rx="6" fill="var(--paper-2)" stroke="var(--success)" stroke-width="1" />
+          <text x="52" y="16" class="label-badge" font-size="11" fill="var(--success)" text-anchor="middle">HAYIR (>= 75.0)</text>
+        </g>
+
+        <!-- Decision 2 -> Heavy Motor (EVET: Right Port 410, 345) -->
+        <path d="M 410,345 H 930" fill="none" stroke="var(--purple)" stroke-width="2" marker-end="url(#arr-dec-purple)" />
+        <g transform="translate(560, 333)">
+          <rect width="195" height="24" rx="6" fill="var(--paper-2)" stroke="var(--purple)" stroke-width="1" />
+          <text x="97" y="16" class="label-badge" font-size="11" fill="var(--purple)" text-anchor="middle">EVET (Düşük Kalite Skoru)</text>
+        </g>
+
+        <!-- Heavy Motor -> Decision 3 (Bottom Port 1110, 410 -> Top Port 1110, 470) -->
+        <path d="M 1110,410 V 470" fill="none" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr-dec-main)" />
+
+        <!-- Decision 3 -> Quarantine Reject (EVET: Left Port 920, 520 -> down to 640) -->
+        <path d="M 920,520 H 820 Q 820,520 820,530 V 640" fill="none" stroke="var(--danger)" stroke-width="2" marker-end="url(#arr-dec-yes)" />
+        <g transform="translate(775, 508)">
+          <rect width="125" height="24" rx="6" fill="var(--paper-2)" stroke="var(--danger)" stroke-width="1" />
+          <text x="62" y="16" class="label-badge" font-size="11" fill="var(--danger)" text-anchor="middle">EVET (Bozulma Var)</text>
+        </g>
+
+        <!-- Decision 3 -> Heavy Accept (HAYIR: Bottom Port 1110, 570 -> down to 640) -->
+        <path d="M 1110,570 V 600 Q 1110,610 1120,610 H 1165 Q 1165,610 1165,620 V 640" fill="none" stroke="var(--success)" stroke-width="2" marker-end="url(#arr-dec-no)" />
+        <g transform="translate(1080, 580)">
+          <rect width="115" height="24" rx="6" fill="var(--paper-2)" stroke="var(--success)" stroke-width="1" />
+          <text x="57" y="16" class="label-badge" font-size="11" fill="var(--success)" text-anchor="middle">HAYIR (Temiz)</text>
+        </g>
+
+      </svg>
+    </div>
+
+  </div>
+
+  <!-- Info Grid Cards -->
+  <div class="info-grid">
+    <div class="info-card">
+      <h3><span class="pill pill-accent">Öncelik</span> ParserRegistry (priority = 20)</h3>
+      <p><code>SmartPdfParser</code> sistemdeki tüm PDF parser'ları (<code>pymupdf_fast: 10</code>, <code>pypdf: 0</code>) geride bırakarak deterministik olarak seçilir.</p>
+      <ul>
+        <li>Hata/Eksiklik durumunda otomatik fallback çalışır.</li>
+        <li>Tüm kararlar <code>parse_provenance</code> içinde loglanır.</li>
+      </ul>
+    </div>
+
+    <div class="info-card">
+      <h3><span class="pill pill-purple">Ağır Motor</span> Docling &amp; Sayfa Bazlı İzolasyon</h3>
+      <p>Belgenin tamamı değil, yalnızca tablo ve OCR gerektiren sayfalar Docling'e gönderilir.</p>
+      <ul>
+        <li><code>_AGIR_KAPI</code> semaphore'u ile bellek ve GPU korunur.</li>
+        <li>Temiz sayfaların %44'ü hızlı hatta kalarak 100x hız kazandırır.</li>
+      </ul>
+    </div>
+
+    <div class="info-card">
+      <h3><span class="pill pill-danger">Güvenlik</span> Karantina &amp; Bozulma Toleransı (5.0)</h3>
+      <p>Docling çıktısı hızlı yol metniyle kıyaslanır. Eğer içerik kaybı &gt; %50 veya bozulma farkı &gt; 5.0 ise ağır metin karantinaya alınıp reddedilir.</p>
+      <ul>
+        <li>Önceki 0.1 toleransında yaşanan 8 ret/5 hata sorunu çözüldü.</li>
+        <li>Bölüm başlıkları <code>nest_under_page()</code> ile <code>##</code> seviyesine kaydırılarak pasaj alıntıları (%100) korunur.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(tabId) {
+    document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.diagram-view').forEach(view => view.classList.remove('active'));
+    
+    if (tabId === 'system') {
+      document.querySelectorAll('.nav-tab')[0].classList.add('active');
+      document.getElementById('view-system').classList.add('active');
+    } else if (tabId === 'router') {
+      document.querySelectorAll('.nav-tab')[1].classList.add('active');
+      document.getElementById('view-router').classList.add('active');
+    } else if (tabId === 'matrix') {
+      document.querySelectorAll('.nav-tab')[2].classList.add('active');
+      document.getElementById('view-matrix').classList.add('active');
+    }
+  }
+
+  function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    
+    document.getElementById('theme-icon').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    document.getElementById('theme-text').textContent = newTheme === 'dark' ? 'Açık Tema' : 'Koyu Tema';
+  }
+</script>
+
+</body>
+</html>
