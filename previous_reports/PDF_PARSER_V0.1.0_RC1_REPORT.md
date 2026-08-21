@@ -2242,9 +2242,60 @@ Veto **kapalıyken** yeni kod eski davranışı bozmuyor: 201 belgenin hiçbirin
 fark yok (NET 3,0919, ağır 101, precision 0,4059 — hepsi aynı). Testler 81/81
 (parser 64/64 + critic 5 + korpus_ablation 3 + veto 9).
 
-**Durum: kural hazır, ölçülmüş ve kapalı.** Açmak tek satırlık bir config
-değişikliği, ama hâlâ Q13 engeli duruyor — aday aynı korpusta arandı. Açma
-kararı, dokunulmamış kaynak-aile holdout'u kurulduktan sonra verilmeli.
+**Durum (o an): kural hazır, ölçülmüş ve kapalı.** Açma kararı O.13.7'de
+verildi.
+
+### O.13.7 Veto AÇILDI — ve ocrturk kabul kapısına ulaştı (2026-08-21)
+
+`kalite_vetosu_cizimsiz` `false` → `true`. `config/smart_router.yaml` ve
+`ayarlar.py::VARSAYILAN` birlikte değişti, `esik_version`
+`…_ba035d0c` → `…_3a5bb5c9`, testler **81/81**.
+
+**Holdout durumu — dürüst hâli.** Bu tam bir holdout doğrulaması değil,
+**yarı-holdout**: aday C1'de arandı, kendi korpusumuzda sınandı. Kendi korpus
+süs değildi, gerçekten bir adayı reddetti (O.13.5: `kisa_cizimsiz` C1'de en
+yüksek skoru alıyordu, bizim korpusumuzda kestiği 8 çağrının 8'i de gerekliydi
+ve 5 tablo kaçırtıyordu). Ama nihai aday seçilirken kendi korpus sonuçlarına
+da bakıldı, yani o küme de karar sürecine girdi. Elimizdeki dört korpustan
+yalnız ikisinde PDF var ve ikisi de kullanıldı; gerçek kaynak-aile holdout'u
+**yeni belge toplamayı** gerektiriyor. Q13 açık madde olarak duruyor; böyle bir
+set kurulduğunda bu karar yeniden ölçülmeli.
+
+**Uygulama sonrası ölçülen durum (201 belge):**
+
+| | önce (O.11.2 sonrası) | sonra |
+|---|---|---|
+| Birleşik NET | +3,0919 | **+3,4198** |
+| ağır çağrı | 101 | **87** |
+| precision | 0,4059 | **0,4713** |
+| recall | 0,6508 | **0,6508** (değişmedi) |
+| ocrturk NET / precision | +4,0760 / 0,5690 | **+4,1033 / 0,6000** |
+| opendataloader NET / precision | −0,9842 / 0,1860 | **−0,6835 / 0,2500** |
+| kendi korpus ağır / boşa / kaçırılan | 137 / 28 / 3 | **115 / 10 / 4** |
+
+**`ocrturk` precision 0,6000'e ulaştı** — Bölüm 9'daki kabul kapısı
+(`precision ≥ 0,60`) ilk kez bir veri ailesinde tutuyor. Kapı bütün olarak
+geçilmiş değil: recall 0,6346 ile 0,90 hedefinin altında ve opendataloader
+precision'ı 0,2500 ile uzak. Ama bugüne kadar hiçbir ayar bu eşiğe
+yaklaştırmamıştı.
+
+**Ablation yeni tabanda tekrarlandı** (O.12.4'ün kuralı: config değişince
+ablation bayatlar). Taban artık heavy 87 / NET 3,4198 / ocrturk +4,1033 /
+opendataloader −0,6835. Üç hüküm değişti:
+
+* `hyphen.kat` artık **nötr** (ΔNET 0,0000; önce −0,0684). Etkilediği sayfalar
+  zaten veto tarafından kesiliyor — ayar yerinde duruyor ama ölçülebilir bir
+  işi kalmadı.
+* `dangling.kat → 0` geri alması daha da zararlı (−0,5520; önce −0,2241) ama
+  etki alanı daraldı (Δheavy −6; önce −20).
+* `karantina_tolerans` artık yalnız ocrturk'te iş yapıyor; opendataloader'da
+  ΔNET 0,0000 — orada reddedilecek sayfa kalmadı.
+
+Karantina karnesi yeni tabanda: 87 ağır sayfa, 1 red (o da yanlış), NET
+−0,0458. Yanlış kabul 60 → 46'ya düştü, çünkü vetolanan 14 sayfanın çoğu zaten
+yanlış kabuldü. Korelasyon (−0,0637) ve sessizlik oranı (%79) değişmedi —
+karantina sinyalinin kendi sorunu duruyor, veto onu çözmedi, yalnız üzerine
+düştüğü küme küçüldü.
 
 ## 12. Son Cümle
 

@@ -79,9 +79,12 @@ VARSAYILAN: Dict[str, Any] = {
         "kalite_esik": 75.0,
         "yuksek_guven_yeter": False,
         # Sayfa agir motora YALNIZ dusuk kalite skoru yuzunden gidiyorsa ve
-        # sayfada hic vektorel cizim yoksa, gonderme. False = kapali, bugunku
-        # davranis. Olcum ve gerekce: config/smart_router.yaml + rapor O.13.
-        "kalite_vetosu_cizimsiz": False,
+        # sayfada hic vektorel cizim yoksa, gonderme. UYGULANDI (2026-08-21):
+        # False -> True. YAML ile BIRLIKTE degisir; ayrilirlarsa config kaybi
+        # sessizce eski davranisa dondurur (tests/test_parsers.py bu esitligi
+        # test eder). Olcum: C1 NET 3,0919 -> 3,4198, agir cagri 101 -> 87,
+        # kaybedilen fayda 0,0000. Gerekce: config/smart_router.yaml + rapor O.13.
+        "kalite_vetosu_cizimsiz": True,
     },
     "birlestirme": {
         # UYGULANDI (2026-08-20): 0.1, sonra (2026-08-21) 0.1 -> 5.0. YAML

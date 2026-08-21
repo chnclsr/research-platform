@@ -130,11 +130,20 @@ yonlendirme:
   # GEREKLİ çıktı ve 5 tablo kaçırttı -- C1'e aşırı uyum. Üç korpusta birden
   # sınanmasaydı yanlış kural seçilecekti.
   #
-  # ŞİMDİLİK KAPALI (false). Aday aynı korpusta arandı ve aynı korpusta iyi
-  # çıktı; Q13 gereği bu kabul sayılmaz, dokunulmamış kaynak-aile holdout'u
-  # şart. Açmak için bu anahtarı true yap ve `ayarlar.py`'deki gömülü
-  # varsayılanı BİRLİKTE güncelle.
-  kalite_vetosu_cizimsiz: false
+  # UYGULANDI (2026-08-21): false -> true. Gerçek replay ile doğrulandı,
+  # offline hesapla birebir aynı çıktı (rapor O.13.6).
+  #
+  # HOLDOUT DURUMU — dürüst hâli: bu YARI-holdout. Aday C1'de arandı, kendi
+  # korpusumuzda sınandı. Kendi korpus süs değildi, gerçekten bir adayı
+  # REDDETTİ: `kisa_cizimsiz` C1'de en yüksek skoru alıyordu (ΔNET +1,3035,
+  # opendataloader NET'ini tek başına pozitife çeviriyordu) ama bizim
+  # korpusumuzda kestiği 8 çağrının 8'i de GEREKLİ çıktı ve 5 tablo kaçırttı.
+  # Yine de tam holdout değil, çünkü nihai aday seçilirken kendi korpus
+  # sonuçlarına da bakıldı. Elimizdeki dört korpustan yalnız ikisinde PDF var
+  # ve ikisi de kullanıldı; gerçek kaynak-aile holdout'u YENİ BELGE TOPLAMAYI
+  # gerektiriyor (Q13, açık madde). Böyle bir set kurulduğunda bu karar
+  # yeniden ölçülmeli.
+  kalite_vetosu_cizimsiz: true
 
 # --------------------------------------------------------------------------
 # BİRLEŞTİRME — ağır motorun çıktısı kabul edilir mi
