@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 720" width="1660" height="720">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .card-accent { fill: rgba(235, 108, 54, 0.08); stroke: #eb6c36; stroke-width: 2; }
+      .card-success { fill: rgba(5, 150, 105, 0.08); stroke: #059669; stroke-width: 2; }
+      .card-link { fill: rgba(37, 99, 235, 0.08); stroke: #2563eb; stroke-width: 2; }
+      .tag-bg { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1; }
+      
+      .label-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 700; font-size: 13px; fill: #0f172a; }
+      .label-sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 500; font-size: 11px; fill: #475569; }
+      .label-badge { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-weight: 700; font-size: 10px; fill: #ffffff; }
+      
+      .c-accent { fill: #eb6c36; }
+      .c-link { fill: #2563eb; }
+      .c-success { fill: #059669; }
+      .c-muted { fill: #475569; }
+      
+      .conn-ink { fill: none; stroke: #0f172a; stroke-width: 1.5; }
+      .conn-accent { fill: none; stroke: #eb6c36; stroke-width: 2; }
+      .conn-green { fill: none; stroke: #059669; stroke-width: 2; }
+      .conn-loop { fill: none; stroke: #eb6c36; stroke-dasharray: 5,4; stroke-width: 2; }
+    </style>
+    <marker id="arr-lg-main" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#0f172a" />
+    </marker>
+    <marker id="arr-lg-accent" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#eb6c36" />
+    </marker>
+    <marker id="arr-lg-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#059669" />
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" class="bg" rx="16" />
+
+  <!-- Satır 1: 1'den 6'ya (Soldan Sağa) -->
+  <g transform="translate(40, 60)">
+    <circle cx="30" cy="35" r="22" fill="#0f172a" />
+    <text x="30" y="39" class="label-badge" text-anchor="middle">START</text>
+  </g>
+
+  <g transform="translate(120, 60)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">VALIDATE_PROTOCOL</text>
+    <text x="16" y="48" class="label-sub">Protokol &amp; Bütçe Doğrulama</text>
+  </g>
+
+  <g transform="translate(360, 60)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">DECOMPOSE</text>
+    <text x="16" y="48" class="label-sub">Soru Alt Boyutlara Ayrılır</text>
+  </g>
+
+  <g transform="translate(600, 60)">
+    <rect width="220" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">BUILD_QUERY_BRANCHES</text>
+    <text x="16" y="48" class="label-sub">Arama Sorgu Dalları Üretilir</text>
+  </g>
+
+  <g transform="translate(860, 60)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">SEARCH</text>
+    <text x="16" y="48" class="label-sub">Konnektör Arama Yürütme</text>
+  </g>
+
+  <g transform="translate(1100, 60)">
+    <rect width="220" height="70" rx="10" class="card-accent" />
+    <text x="16" y="28" class="label-title c-accent" font-size="14">ACQUIRE (İndirme &amp; Parse)</text>
+    <text x="16" y="48" class="label-sub">SmartPdfParser / Registry</text>
+  </g>
+
+  <g transform="translate(1360, 60)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">NORMALIZE</text>
+    <text x="16" y="48" class="label-sub">Metin &amp; NUL Karakter Temizliği</text>
+  </g>
+
+  <!-- Satır 2: 7'den 12'ye (Sağdan Sola) -->
+  <g transform="translate(1360, 220)">
+    <rect width="200" height="70" rx="10" class="card-success" />
+    <text x="16" y="28" class="label-title c-success">CHUNK_INDEX</text>
+    <text x="16" y="48" class="label-sub">passages.py (# Page N)</text>
+  </g>
+
+  <g transform="translate(1100, 220)">
+    <rect width="220" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">RETRIEVE_PASSAGES</text>
+    <text x="16" y="48" class="label-sub">Alakalı Pasajları Getir</text>
+  </g>
+
+  <g transform="translate(860, 220)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">EXTRACT_EVIDENCE</text>
+    <text x="16" y="48" class="label-sub">Kanıt ve Alıntı Çıkarımı</text>
+  </g>
+
+  <g transform="translate(600, 220)">
+    <rect width="220" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">ANALYZE_CLAIMS</text>
+    <text x="16" y="48" class="label-sub">İddia Doğrulama &amp; Çelişki</text>
+  </g>
+
+  <g transform="translate(360, 220)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">AUDIT</text>
+    <text x="16" y="48" class="label-sub">Kalite &amp; Doğruluk Denetimi</text>
+  </g>
+
+  <!-- CHECK_COVERAGE Karar Düğümü -->
+  <g transform="translate(120, 215)">
+    <polygon points="100,0 200,40 100,80 0,40" fill="rgba(235, 108, 54, 0.08)" stroke="#eb6c36" stroke-width="2" />
+    <text x="100" y="38" class="label-title c-accent" font-size="12" text-anchor="middle">CHECK_COVERAGE</text>
+    <text x="100" y="54" class="label-sub" font-size="10" text-anchor="middle">Kapsam Yeterli mi?</text>
+  </g>
+
+  <!-- Satır 3: Bitiş & Recovery -->
+  <g transform="translate(120, 380)">
+    <rect width="200" height="70" rx="10" class="card" stroke="#eb6c36" stroke-width="1.5" />
+    <text x="16" y="28" class="label-title c-accent">PLAN_RECOVERY</text>
+    <text x="16" y="48" class="label-sub">Eksik Konular İçin Yeni Arama</text>
+  </g>
+
+  <g transform="translate(360, 380)">
+    <rect width="200" height="70" rx="10" class="card" />
+    <text x="16" y="28" class="label-title">ADVERSARIAL_REVIEW</text>
+    <text x="16" y="48" class="label-sub">Karşıt Argüman İncelemesi</text>
+  </g>
+
+  <g transform="translate(600, 380)">
+    <rect width="220" height="70" rx="10" class="card-link" />
+    <text x="16" y="28" class="label-title c-link" font-size="14">SYNTHESIZE_EXPORT</text>
+    <text x="16" y="48" class="label-sub">Nihai Rapor &amp; Word (.docx)</text>
+  </g>
+
+  <g transform="translate(860, 390)">
+    <circle cx="25" cy="25" r="22" fill="#059669" />
+    <text x="25" y="29" class="label-badge" text-anchor="middle">END</text>
+  </g>
+
+  <!-- AKIŞ OKLARI -->
+  <path d="M 94,95 H 120" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 320,95 H 360" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 560,95 H 600" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 820,95 H 860" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 1060,95 H 1100" class="conn-accent" marker-end="url(#arr-lg-accent)" />
+  <path d="M 1320,95 H 1360" class="conn-ink" marker-end="url(#arr-lg-main)" />
+
+  <path d="M 1560,95 H 1585 Q 1590,95 1590,105 V 245 Q 1590,255 1585,255 H 1560" class="conn-green" marker-end="url(#arr-lg-green)" />
+
+  <path d="M 1360,255 H 1320" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 1100,255 H 1060" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 860,255 H 820" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 600,255 H 560" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <path d="M 360,255 H 320" class="conn-accent" marker-end="url(#arr-lg-accent)" />
+
+  <path d="M 220,295 V 380" class="conn-accent" marker-end="url(#arr-lg-accent)" />
+  <g transform="translate(230, 330)">
+    <rect width="90" height="20" rx="4" class="tag-bg" stroke="#eb6c36" />
+    <text x="45" y="14" class="label-sub c-accent" font-size="9" text-anchor="middle" font-weight="700">expand (eksik)</text>
+  </g>
+
+  <path d="M 320,255 H 345 Q 350,255 350,265 V 405 Q 350,415 355,415 H 360" class="conn-ink" marker-end="url(#arr-lg-main)" />
+  <g transform="translate(355, 330)">
+    <rect width="85" height="20" rx="4" class="tag-bg" />
+    <text x="42" y="14" class="label-sub c-muted" font-size="9" text-anchor="middle" font-weight="700">finish (tam)</text>
+  </g>
+
+  <path d="M 560,415 H 600" class="conn-ink" marker-end="url(#arr-lg-main)" stroke="#2563eb" stroke-width="2" />
+  <path d="M 820,415 H 860" class="conn-green" marker-end="url(#arr-lg-green)" />
+
+  <path d="M 220,450 V 550 Q 220,560 230,560 H 1610 Q 1620,560 1620,550 V 35 Q 1620,25 1610,25 H 960 Q 950,25 950,35 V 60" class="conn-loop" marker-end="url(#arr-lg-accent)" />
+  <g transform="translate(880, 548)">
+    <rect width="130" height="24" rx="6" class="tag-bg" stroke="#eb6c36" />
+    <text x="65" y="16" class="label-sub c-accent" font-size="10" text-anchor="middle" font-weight="700">Recovery Loop</text>
+  </g>
+</svg>

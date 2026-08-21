@@ -36,16 +36,13 @@ reproducible deliverables.
   console.
 - `raw`, `result`, and `both` delivery contracts for downstream agents.
 
-## System Architecture & Pipeline Explorer
+## System Architecture & End-to-End Flow
 
-[![System Architecture](https://img.shields.io/badge/Architecture-Interactive_SVG_Explorer-f97316?style=for-the-badge&logo=diagramsdotnet&logoColor=white)](./system_architecture_diagram.html)
-[![LangGraph StateGraph](https://img.shields.io/badge/LangGraph-14_Node_State_Machine-3b82f6?style=for-the-badge&logo=langchain&logoColor=white)](./system_architecture_diagram.html)
-[![Smart Router Engine](https://img.shields.io/badge/Smart_Router-Priority_20_Hybrid-10b981?style=for-the-badge)](./system_architecture_diagram.html)
-[![Storage Layer](https://img.shields.io/badge/Storage-PostgreSQL_+_MinIO_+_Qdrant-8b5cf6?style=for-the-badge&logo=postgresql&logoColor=white)](./system_architecture_diagram.html)
+![Research Platform End-to-End System Architecture & Database Lifecycle](docs/diagrams/e2e-system-flow.svg)
 
-> **[Open Interactive Architecture Blueprint (`system_architecture_diagram.html`)](./system_architecture_diagram.html)**
-> 
-> *A standalone, zero-dependency interactive SVG architecture explorer built in accordance with editorial diagram design standards. Features live Light/Dark mode toggles, orthogonal collision-free routing, and 4 dedicated operational views.*
+> **Detailed Architectural Specifications:**
+> - Complete subsystem breakdowns, data dictionaries, and state machine transitions: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+> - Standalone browser-based interactive diagram with light/dark theme toggles: **[system_architecture_diagram.html](./system_architecture_diagram.html)**
 
 | View | Focus & Coverage | Architectural Subsystems |
 |---|---|---|
@@ -57,8 +54,6 @@ reproducible deliverables.
 ---
 
 ## One workstation, an office-wide research service
-
-![Research Platform system architecture: entry gateways, core services, data and collection tier](docs/diagrams/system-architecture.svg)
 
 The network-facing MCP and control surfaces are authenticated and CIDR-restricted. Database,
 object-storage, and model services remain private to the host.

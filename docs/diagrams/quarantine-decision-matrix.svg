@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 820" width="1360" height="820">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .card-accent { fill: rgba(235, 108, 54, 0.08); stroke: #eb6c36; stroke-width: 2; }
+      .card-success { fill: rgba(5, 150, 105, 0.08); stroke: #059669; stroke-width: 2; }
+      .card-purple { fill: rgba(124, 58, 237, 0.08); stroke: #7c3aed; stroke-width: 2; }
+      .card-danger { fill: rgba(220, 38, 38, 0.08); stroke: #dc2626; stroke-width: 2; }
+      .tag-bg { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1; }
+      .pill-white { fill: #ffffff; }
+      
+      .label-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 700; font-size: 14px; fill: #0f172a; }
+      .label-sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 500; font-size: 12px; fill: #475569; }
+      .label-code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-weight: 500; font-size: 11px; fill: #0f172a; }
+      .label-badge { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-weight: 700; font-size: 11px; fill: #64748b; }
+      
+      .c-accent { fill: #eb6c36; }
+      .c-link { fill: #2563eb; }
+      .c-success { fill: #059669; }
+      .c-purple { fill: #7c3aed; }
+      .c-danger { fill: #dc2626; }
+      .c-muted { fill: #475569; }
+      
+      .conn-ink { fill: none; stroke: #0f172a; stroke-width: 2; }
+      .conn-purple { fill: none; stroke: #7c3aed; stroke-width: 2; }
+      .conn-success { fill: none; stroke: #059669; stroke-width: 2; }
+      .conn-danger { fill: none; stroke: #dc2626; stroke-width: 2; }
+    </style>
+    <marker id="arr-dec-main" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#0f172a" />
+    </marker>
+    <marker id="arr-dec-yes" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#dc2626" />
+    </marker>
+    <marker id="arr-dec-no" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#059669" />
+    </marker>
+    <marker id="arr-dec-purple" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#7c3aed" />
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" class="bg" rx="16" />
+
+  <!-- Start Node -->
+  <g transform="translate(530, 30)">
+    <rect width="300" height="64" rx="12" class="card" stroke="#0f172a" stroke-width="2" />
+    <text x="150" y="28" class="label-title" text-anchor="middle">Sayfa İnceleme Başlangıcı</text>
+    <text x="150" y="48" class="label-sub" text-anchor="middle">pdf-inspector çıktısı + gate sinyalleri</text>
+  </g>
+
+  <!-- Decision 1 -->
+  <g>
+    <polygon points="680,145 860,195 680,245 500,195" fill="rgba(235, 108, 54, 0.08)" stroke="#eb6c36" stroke-width="2" />
+    <text x="680" y="190" class="label-title" font-size="13" text-anchor="middle">has_table veya needs_ocr</text>
+    <text x="680" y="210" class="label-sub" font-size="11" text-anchor="middle">veya kritik teşhis var mı?</text>
+  </g>
+
+  <!-- Decision 2 -->
+  <g>
+    <polygon points="270,300 410,345 270,390 130,345" fill="#ffffff" stroke="#0f172a" stroke-width="1.5" />
+    <text x="270" y="340" class="label-title" font-size="13" text-anchor="middle">quality_score &lt; 75.0?</text>
+    <text x="270" y="358" class="label-sub" font-size="11" text-anchor="middle">(Düşük Kalite Skoru)</text>
+  </g>
+
+  <!-- Clean Path Box -->
+  <g transform="translate(40, 480)">
+    <rect width="250" height="130" rx="12" class="card-success" />
+    <text x="16" y="30" class="label-title c-success">HIZLI YOLDA KAL (Fast Path)</text>
+    <text x="16" y="52" class="label-sub">• Ekstra ağır çağrı yapılmaz</text>
+    <text x="16" y="72" class="label-code">• 2.6 ms/sayfa işlem hızı</text>
+    <text x="16" y="92" class="label-code">• Temiz metin korunur</text>
+    <rect x="16" y="102" width="105" height="18" rx="4" class="pill-white" />
+    <text x="22" y="115" class="label-code c-success" font-size="10">engine = "fast"</text>
+  </g>
+
+  <!-- Heavy Path Box -->
+  <g transform="translate(930, 280)">
+    <rect width="360" height="130" rx="12" class="card-purple" />
+    <text x="16" y="30" class="label-title c-purple" font-size="15">AĞIR MOTOR ÇAĞRISI (Docling)</text>
+    <text x="16" y="52" class="label-sub">1.55 sn/sayfa | Tablo &amp; OCR Çıkarımı</text>
+    <text x="16" y="74" class="label-code">• Tablo hücre gridleri oluşturulur</text>
+    <text x="16" y="92" class="label-code">• Görsel içi metinler taranır</text>
+    <rect x="16" y="102" width="190" height="18" rx="4" class="pill-white" />
+    <text x="22" y="115" class="label-code c-purple" font-size="10">engine = "docling" (yedek: mineru)</text>
+  </g>
+
+  <!-- Decision 3 -->
+  <g>
+    <polygon points="1110,470 1300,520 1110,570 920,520" fill="#ffffff" stroke="#dc2626" stroke-width="2" />
+    <text x="1110" y="515" class="label-title c-danger" font-size="13" text-anchor="middle">Karantina Şartları Sağlandı mı?</text>
+    <text x="1110" y="535" class="label-sub" font-size="11" text-anchor="middle">Kayıp &gt; %50 VEYA Bozulma &gt; 5.0</text>
+  </g>
+
+  <!-- Quarantine Reject Box -->
+  <g transform="translate(680, 640)">
+    <rect width="280" height="125" rx="12" class="card-danger" />
+    <text x="16" y="30" class="label-title c-danger">KARANTİNA (REDDEDİLDİ)</text>
+    <text x="16" y="52" class="label-sub">Heavy metin bozuk bulundu</text>
+    <text x="16" y="74" class="label-code">• Hızlı yol metni korunur</text>
+    <text x="16" y="94" class="label-code">• quarantined_pages.append(i)</text>
+  </g>
+
+  <!-- Heavy Accept Box -->
+  <g transform="translate(1020, 640)">
+    <rect width="290" height="125" rx="12" class="card-success" />
+    <text x="16" y="30" class="label-title c-success">HEAVY KABUL EDİLDİ</text>
+    <text x="16" y="52" class="label-sub">Metin ve Tablolar onaylandı</text>
+    <text x="16" y="74" class="label-code">• Tablolar JSON listeye eklenir</text>
+    <text x="16" y="94" class="label-code">• Başlıklar ## düzeyine çekilir</text>
+  </g>
+
+  <!-- Connectors -->
+  <path d="M 680,94 V 145" class="conn-ink" marker-end="url(#arr-dec-main)" />
+
+  <path d="M 860,195 H 1110 Q 1110,195 1110,205 V 280" class="conn-purple" marker-end="url(#arr-dec-purple)" />
+  <g transform="translate(920, 183)">
+    <rect width="130" height="24" rx="6" class="tag-bg" stroke="#7c3aed" />
+    <text x="65" y="16" class="label-badge c-purple" text-anchor="middle">EVET (Tablo / OCR)</text>
+  </g>
+
+  <path d="M 500,195 H 270 Q 270,195 270,205 V 300" class="conn-ink" stroke-width="1.5" marker-end="url(#arr-dec-main)" />
+  <g transform="translate(340, 183)">
+    <rect width="90" height="24" rx="6" class="tag-bg" />
+    <text x="45" y="16" class="label-badge" text-anchor="middle">HAYIR</text>
+  </g>
+
+  <path d="M 270,390 V 440 Q 270,450 260,450 H 165 Q 165,450 165,460 V 480" class="conn-success" marker-end="url(#arr-dec-no)" />
+  <g transform="translate(200, 405)">
+    <rect width="105" height="24" rx="6" class="tag-bg" stroke="#059669" />
+    <text x="52" y="16" class="label-badge c-success" text-anchor="middle">HAYIR (&gt;= 75.0)</text>
+  </g>
+
+  <path d="M 410,345 H 930" class="conn-purple" marker-end="url(#arr-dec-purple)" />
+  <g transform="translate(560, 333)">
+    <rect width="195" height="24" rx="6" class="tag-bg" stroke="#7c3aed" />
+    <text x="97" y="16" class="label-badge c-purple" text-anchor="middle">EVET (Düşük Kalite Skoru)</text>
+  </g>
+
+  <path d="M 1110,410 V 470" class="conn-ink" marker-end="url(#arr-dec-main)" />
+
+  <path d="M 920,520 H 820 Q 820,520 820,530 V 640" class="conn-danger" marker-end="url(#arr-dec-yes)" />
+  <g transform="translate(775, 508)">
+    <rect width="125" height="24" rx="6" class="tag-bg" stroke="#dc2626" />
+    <text x="62" y="16" class="label-badge c-danger" text-anchor="middle">EVET (Bozulma Var)</text>
+  </g>
+
+  <path d="M 1110,570 V 600 Q 1110,610 1120,610 H 1165 Q 1165,610 1165,620 V 640" class="conn-success" marker-end="url(#arr-dec-no)" />
+  <g transform="translate(1080, 580)">
+    <rect width="115" height="24" rx="6" class="tag-bg" stroke="#059669" />
+    <text x="57" y="16" class="label-badge c-success" text-anchor="middle">HAYIR (Temiz)</text>
+  </g>
+</svg>
