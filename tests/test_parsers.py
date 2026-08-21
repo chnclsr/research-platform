@@ -116,7 +116,7 @@ def test_registry_falls_back_when_smart_router_is_unavailable(monkeypatch):
 
     monkeypatch.setattr(smart_pdf, "SmartRouterHatti", None)
     registry = build_parser_registry()
-    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "pdf"
+    assert registry.select("pdf", "application/pdf", b"%PDF-1.4").id == "pymupdf_fast"
 
 
 def test_pdf_page_numbers_survive_nested_headings():
@@ -786,4 +786,3 @@ def test_merge_reports_no_device_when_the_engine_did_not_name_one():
         requested={"docling": [1]},
     )
     assert merged.engine_devices == {}
->>>>>>> pdf-parser-degerlendirme
