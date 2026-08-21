@@ -248,6 +248,9 @@ def belge_topla(stem: str) -> dict:
             "yol": kayit["yol"], "motor": kayit["islenecek_motor"],
             "gerekce": kayit.get("karar_kaynagi") or [],
             "kalite": kayit.get("quality_score"),
+            # Skoru hangi cezanin ne kadar dusurdugu -- "low_quality" gerekcesi
+            # tek basina sayfanin NEDEN dusuk puan aldigini soylemiyordu.
+            "cezalar": kayit.get("kalite_cezalari") or {},
             "kritik": kayit.get("critical_issue"),
             "sinyaller": kayit.get("gate_signals") or {},
             "kutular": kutular,
@@ -482,6 +485,20 @@ function sinyalMetni(s){
   for(var i = 0; i < alan.length; i++) if(alan[i] in g) c.push(alan[i] + '=' + g[alan[i]]);
   return c.join('   ');
 }
+// Kalite skorunun kirilimi: 100'den hangi ceza ne kadar dusurdu.
+// "low_quality" gerekcesi tek basina sayfanin NEDEN dusuk puan aldigini
+// soylemiyordu; 261 sayfanin 26'si yalniz bu gerekceyle agir motora gidiyor
+// ve 25'inde tek ceza dangling (rapor Bolum O.8.2).
+function cezaDokumu(s){
+  var c = s.cezalar || {};
+  var adlar = Object.keys(c).sort(function(a,b){ return c[b]-c[a]; });
+  if (!adlar.length) return s.kalite === null ? '' : ' <span class="kucuk">(ceza yok)</span>';
+  var parca = adlar.map(function(a){
+    return '<span class="rz ' + (adlar.length === 1 ? 'fn' : 'fp') + '">'
+      + a + ' &minus;' + c[a].toFixed(1) + '</span>';
+  }).join(' ');
+  return '<div style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap">' + parca + '</div>';
+}
 function yonRozet(s){
   var m = {BOSA:['fp','BOSA GONDERILDI'], KACIRILDI:['fn','KACIRILDI'],
            GEREKLI:['tp','gerekli agir'], OCR:['vurgulu','OCR'],
@@ -545,7 +562,7 @@ function kart(b, s){
     + '<tr><th>Karar nedeni</th><td>'
     + (s.gerekce.length ? s.gerekce.join(', ') : '&mdash;') + '</td></tr>'
     + '<tr><th>Kalite skoru (kapi)</th><td>'
-    + (s.kalite === null ? 'olculemedi' : s.kalite) + '</td></tr></table>'
+    + (s.kalite === null ? 'olculemedi' : s.kalite) + cezaDokumu(s) + '</td></tr></table>'
     + '<div class="sinyal">' + sinyalMetni(s) + '</div>'
     + metinSekme(id, s) + hucreBlok(s) + '</div></article>';
 }

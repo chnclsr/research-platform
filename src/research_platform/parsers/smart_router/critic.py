@@ -442,46 +442,66 @@ class PDFCritic:
         """
         if bos:
             return {"quality_score": None, "critical_issue": "BOS_SAYFA",
-                    "olculemedi": True}
+                    "olculemedi": True, "cezalar": {}}
 
         C = self.ceza
         skor = 100.0
         cd = m.get("char_drop_ratio")
 
+        # Her ceza `ceza()` uzerinden gecer: skoru dusurur VE dokume yazilir.
+        # Dokum teshis icindir -- 2026-08-21'e kadar yalniz toplam skor
+        # gorunuyordu, bu yuzden "sayfa neden low_quality" sorusu ancak kod
+        # okunarak cevaplanabiliyordu. Olculdu: yalniz low_quality yuzunden agir
+        # motora giden 26 sayfanin 25'inde TEK ceza dangling'di (rapor O.8.2).
+        cezalar: Dict[str, float] = {}
+
+        def ceza(ad: str, miktar: float) -> None:
+            nonlocal skor
+            if miktar > 0:
+                cezalar[ad] = round(cezalar.get(ad, 0.0) + miktar, 2)
+                skor -= miktar
+
         if cd is not None and cd > C["char_drop_esik"]:
-            skor -= min((cd - C["char_drop_esik"]) * C["char_drop_kat"],
-                        C["char_drop_tavan"])
+            ceza("char_drop", min((cd - C["char_drop_esik"]) * C["char_drop_kat"],
+                                  C["char_drop_tavan"]))
         if needs_ocr:
-            skor -= C["scanned"]
+            ceza("scanned", C["scanned"])
         if m["gibberish_ratio"] > C["gibberish_esik"]:
-            skor -= min(m["gibberish_ratio"] * C["gibberish_kat"], C["gibberish_tavan"])
+            ceza("gibberish", min(m["gibberish_ratio"] * C["gibberish_kat"],
+                                  C["gibberish_tavan"]))
         if m["unicode_bozuk"]:
-            skor -= C["unicode_bozuk"]
+            ceza("unicode_bozuk", C["unicode_bozuk"])
         if m["dangling_sentence_ratio"] > C["dangling_esik"]:
-            skor -= min((m["dangling_sentence_ratio"] - C["dangling_esik"]) * C["dangling_kat"],
-                        C["dangling_tavan"])
+            ceza("dangling",
+                 min((m["dangling_sentence_ratio"] - C["dangling_esik"]) * C["dangling_kat"],
+                     C["dangling_tavan"]))
         if m["broken_line_ratio"] > C["broken_esik"]:
-            skor -= min((m["broken_line_ratio"] - C["broken_esik"]) * C["broken_kat"],
-                        C["broken_tavan"])
+            ceza("broken",
+                 min((m["broken_line_ratio"] - C["broken_esik"]) * C["broken_kat"],
+                     C["broken_tavan"]))
         if m["hyphen_density_per_1k_words"] > C["hyphen_esik"]:
-            skor -= min((m["hyphen_density_per_1k_words"] - C["hyphen_esik"]) * C["hyphen_kat"],
-                        C["hyphen_tavan"])
+            ceza("hyphen",
+                 min((m["hyphen_density_per_1k_words"] - C["hyphen_esik"]) * C["hyphen_kat"],
+                     C["hyphen_tavan"]))
         if m["orphan_density_per_1k_words"] > C["orphan_esik"]:
-            skor -= min((m["orphan_density_per_1k_words"] - C["orphan_esik"]) * C["orphan_kat"],
-                        C["orphan_tavan"])
+            ceza("orphan",
+                 min((m["orphan_density_per_1k_words"] - C["orphan_esik"]) * C["orphan_kat"],
+                     C["orphan_tavan"]))
         if m["latex_imbalance"] > 0:
-            skor -= min(m["latex_imbalance"] * C["latex_kat"], C["latex_tavan"])
+            ceza("latex", min(m["latex_imbalance"] * C["latex_kat"], C["latex_tavan"]))
         if m["table_irregularity_ratio"] > C["tablo_duzensiz_esik"]:
-            skor -= min(m["table_irregularity_ratio"] * C["tablo_duzensiz_kat"],
-                        C["tablo_duzensiz_tavan"])
+            ceza("tablo_duzensiz",
+                 min(m["table_irregularity_ratio"] * C["tablo_duzensiz_kat"],
+                     C["tablo_duzensiz_tavan"]))
         if m["heading_incoherence_ratio"] > C["baslik_tutarsiz_esik"]:
-            skor -= min(m["heading_incoherence_ratio"] * C["baslik_tutarsiz_kat"],
-                        C["baslik_tutarsiz_tavan"])
+            ceza("baslik_tutarsiz",
+                 min(m["heading_incoherence_ratio"] * C["baslik_tutarsiz_kat"],
+                     C["baslik_tutarsiz_tavan"]))
 
         # Sayfada hic metin yok ama bos da degil (gorsel/cizim var) -> metin dusmus
         if m["karakter"] < 30:
             return {"quality_score": 0.0, "critical_issue": "TOTAL_TEXT_DROPPED",
-                    "olculemedi": False}
+                    "olculemedi": False, "cezalar": cezalar}
 
         kritik = "NONE"
         if needs_ocr:
@@ -496,7 +516,10 @@ class PDFCritic:
             kritik = "TWO_COLUMN_CROSS_JUMP"
 
         return {"quality_score": max(0.0, min(100.0, round(skor, 1))),
-                "critical_issue": kritik, "olculemedi": False}
+                "critical_issue": kritik, "olculemedi": False,
+                # Hangi cezanin ne kadar dusurdugu. Skoru DEGISTIRMEZ; yalniz
+                # "bu sayfa neden dusuk puan aldi" sorusunu cevaplar.
+                "cezalar": cezalar}
 
     def belge_metrikleri(self, tam_metin: str) -> Dict[str, Any]:
         """D7: yalniz BELGE duzeyinde olculebilen iki metrik."""
@@ -547,6 +570,8 @@ class PDFCritic:
             sayfa_sonuc.append({
                 "sayfa_no": no,
                 "quality_score": s["quality_score"],
+                # Teshis: skoru hangi ceza ne kadar dusurdu. Karara girmez.
+                "cezalar": s.get("cezalar") or {},
                 "critical_issue": s["critical_issue"],
                 "olculemedi": s["olculemedi"],
                 "needs_ocr": bool(b.get("needs_ocr")),

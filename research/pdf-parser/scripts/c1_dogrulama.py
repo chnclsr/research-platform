@@ -15,7 +15,9 @@ sys.path.insert(0, os.path.join(BASE, "src"))
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from c1_metrik import METRIC_VERSION, metrikler  # noqa: E402
+from c1_metrik import (  # noqa: E402
+    METRIC_FINGERPRINT, METRIC_VERSION, MetrikOrtamiHatasi, kati_dogrula, metrikler,
+)
 from korpus_kaynak import KORPUS_KOK, METIN_REFERANSI, PDF_PARSE  # noqa: E402
 from uretim_yolu import ekle  # noqa: E402
 from c1_orneklem import sec as _sec  # noqa: E402
@@ -97,6 +99,8 @@ def _ozet(rows: list[dict]) -> dict:
     dogru = [r for r in routed if r["delta"]["heavy_minus_fast"] >= 0.02]
     return {
         "metric_version": METRIC_VERSION,
+        # Iki kosu ancak bu alan esitse karsilastirilabilir -- bkz. c1_metrik.
+        "metric_fingerprint": METRIC_FINGERPRINT,
         "documents": len(rows), "ok": len(tamam), "errors": len(rows) - len(tamam),
         "routed_heavy": len(routed), "heavy_gain_ge_0_02": len(heavy_wins),
         "route_precision_at_0_02": round(len(dogru) / len(routed), 4) if routed else None,
@@ -120,9 +124,21 @@ def main() -> int:
     p.add_argument("--skip-heavy", action="store_true")
     p.add_argument("--heavy-cache", help="c1_docling_cache.py cikti dizini")
     p.add_argument("--fail-fast", action="store_true")
+    p.add_argument("--gevsek-metrik", action="store_true",
+                   help="rapidfuzz yoksa da olc (sonuc onceki kosularla "
+                        "karsilastirilamaz; fingerprint farkli yazilir)")
     args = p.parse_args()
     if args.limit < 0:
         p.error("--limit negatif olamaz")
+
+    # Olcum ortami en basta dogrulanir: saatlerce kosup sonunda
+    # karsilastirilamaz sayilar uretmektense hemen durmak ucuz.
+    if not args.gevsek_metrik:
+        try:
+            kati_dogrula()
+        except MetrikOrtamiHatasi as exc:
+            print("Olcum ortami hatali: %s" % exc)
+            return 2
 
     records = _sec(_oku_jsonl(args.manifest), args.kimlik, args.limit, args.dataset)
     if not records:

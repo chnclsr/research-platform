@@ -216,6 +216,11 @@ class SmartRouterHatti:
                 "islenecek_motor": motor,
                 "karar_kaynagi": nedenler,
                 "quality_score": s["quality_score"],
+                # Hangi cezanin skoru ne kadar dusurdugu (critic.sayfa_skoru).
+                # Karara girmez -- `low_quality` gerekcesinin ARDINDAKI sebebi
+                # gorunur kilar; onsuz "neden dusuk puan" sorusu ancak kod
+                # okunarak cevaplanabiliyordu (rapor O.8.2).
+                "kalite_cezalari": s.get("cezalar") or {},
                 "critical_issue": s["critical_issue"],
                 "needs_ocr": s["needs_ocr"],
                 "has_table": s["has_table"],

@@ -12,6 +12,49 @@ from difflib import SequenceMatcher
 
 METRIC_VERSION = "c1_metrics_v1_2026-08-18"
 
+
+def _algoritma_sec():
+    """Karakter benzerligi hangi kutuphaneden gelecek -- import'ta BIR KEZ.
+
+    Cagri aninda try/except yapmak (2026-08-21 oncesi hali) hangi algoritmanin
+    kullanildigini kosu boyunca gizliyordu: rapidfuzz kurulu olmayan bir venv'de
+    olcum sessizce difflib'e dusuyor, METRIC_VERSION ayni kaliyor ve iki kosu
+    karsilastirilabilir GORUNUYORDU. Olculdu: ayni 201 belgenin 182'sinde utility
+    degisti, hicbiri parser davranisiyla ilgili degildi (rapor Bolum O.1).
+    """
+    try:
+        from rapidfuzz.distance import Levenshtein  # type: ignore
+        return "rapidfuzz", Levenshtein.normalized_similarity
+    except ImportError:
+        return "difflib", None
+
+
+#: Etkin algoritma ("rapidfuzz" | "difflib") ve varsa hizli uygulamasi.
+ALGORITMA, _LEVENSHTEIN = _algoritma_sec()
+
+#: Karsilastirilabilirligin gercek anahtari. METRIC_VERSION olcum TANIMINI,
+#: bu ise o tanimin bu makinede NASIL hesaplandigini soyler. Iki kosu ancak
+#: fingerprint'leri esitse yan yana konabilir.
+METRIC_FINGERPRINT = "%s+%s" % (METRIC_VERSION, ALGORITMA)
+
+
+class MetrikOrtamiHatasi(RuntimeError):
+    """Olcum ortami karsilastirilabilir sonuc uretemeyecek durumda."""
+
+
+def kati_dogrula() -> None:
+    """Fail-fast: rapidfuzz yoksa olcume hic baslama.
+
+    Bir C1 kosusu saatler surebilir ve sonunda uretilen sayilar onceki
+    kosularla karsilastirilamaz cikar. Basta durmak, sonda fark etmekten ucuz.
+    """
+    if ALGORITMA != "rapidfuzz":
+        raise MetrikOrtamiHatasi(
+            "rapidfuzz kurulu degil; olcum difflib'e duserdi ve onceki kosularla "
+            "karsilastirilamazdi (fingerprint=%s). Kur: pip install rapidfuzz -- "
+            "ya da bilerek farkli bir algoritmayla olcuyorsan --gevsek-metrik "
+            "bayragini kullan." % METRIC_FINGERPRINT)
+
 _IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 _HTML = re.compile(r"<[^>]+>")
 _PAGE = re.compile(r"(?mi)^\s*#\s+Page\s+\d+\s*$")
@@ -42,11 +85,10 @@ def _karakter_benzerligi(reference: str, prediction: str) -> tuple[float, str]:
         return 1.0, "empty-equal"
     if not reference or not prediction:
         return 0.0, "empty-mismatch"
-    try:
-        from rapidfuzz.distance import Levenshtein  # type: ignore
-        return float(Levenshtein.normalized_similarity(reference, prediction)), "rapidfuzz"
-    except ImportError:
-        return float(SequenceMatcher(None, reference, prediction, autojunk=False).ratio()), "difflib"
+    if _LEVENSHTEIN is not None:
+        return float(_LEVENSHTEIN(reference, prediction)), ALGORITMA
+    return (float(SequenceMatcher(None, reference, prediction, autojunk=False).ratio()),
+            ALGORITMA)
 
 
 def _token_f1(reference: str, prediction: str) -> float:
@@ -92,6 +134,7 @@ def metrikler(reference_markdown: str, prediction_markdown: str) -> dict:
     fayda = 0.45 * karakter + 0.40 * token + 0.05 * uzunluk + 0.10 * yapi
     return {
         "metric_version": METRIC_VERSION,
+        "metric_fingerprint": METRIC_FINGERPRINT,
         "char_similarity": round(karakter, 6),
         "char_algorithm": algoritma,
         "token_f1": round(token, 6),
