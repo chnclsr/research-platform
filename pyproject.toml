@@ -45,6 +45,21 @@ dependencies = [
 academic = [
   "paper-qa>=5",
 ]
+# The heavy half of smart_pdf. Declared here rather than in `dependencies` because it
+# pulls torch and lands at ~1.4 GB installed, plus ~0.5 GB of layout weights fetched on
+# first use -- a cost every install would otherwise pay, including ones that never parse
+# a PDF. Optional in packaging only, NOT in effect: without it the router still routes,
+# but the pages it routes have nowhere to go. They keep their fast-path text, get marked
+# `degraded` in provenance, and a fully scanned PDF is dropped by acquisition's
+# 400-character check. Every routing gain measured in reports/PDF_PARSER_V0.1.0_RC1_REPORT.md
+# assumes this is installed.
+#
+# Where it gets installed is an open decision (that report, section N.8): the image does
+# not install it today. For local work, an interpreter that has it can be named instead --
+# see SMART_ROUTER_DOCLING_PYTHON in .env.example.
+parsing = [
+  "docling>=2.120,<3",
+]
 dev = [
   "aiosqlite>=0.20,<1",
   "pytest>=8.3,<9",
