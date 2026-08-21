@@ -491,6 +491,9 @@ class AcquiredDocument(BaseModel):
     outgoing_links: list[str] = Field(default_factory=list)
     acquisition_method: str = "none"
     parser_id: str = ""
+    # Set by parsers that route work between engines: parse profile, per-page
+    # engine, and whether anything degraded. Empty for single-extractor parsers.
+    parse_provenance: dict[str, Any] = Field(default_factory=dict)
     # Structure the parser recovered separately from the prose. The same content is also
     # rendered inline in `content`, so passages stay self-contained; these give consumers
     # that need the grid rather than the markdown a direct handle.

@@ -82,7 +82,7 @@ def chunk_document(
                 chunk_index=len(passages),
                 section_path=section_path,
                 page_number=(
-                    int(match.group(1)) if (match := re.search(r"(?:^| > )Page (\d+)$", section_path))
+                    int(match.group(1)) if (match := re.search(r"(?:^| > )Page (\d+)(?:$| > )", section_path))
                     else None
                 ),
                 start_char=start,

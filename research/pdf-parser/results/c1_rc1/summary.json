@@ -1,0 +1,18 @@
+{
+  "metric_version": "c1_metrics_v1_2026-08-18",
+  "documents": 230,
+  "ok": 230,
+  "errors": 0,
+  "routed_heavy": 137,
+  "heavy_gain_ge_0_02": 77,
+  "route_precision_at_0_02": 0.4161,
+  "route_recall_at_0_02": 0.7403,
+  "mean_utility": {
+    "fast": 0.821874,
+    "heavy": 0.841164,
+    "routed": 0.842916
+  },
+  "run_id": "full_ocrturk_codex_20260818",
+  "engine": "docling persistent cache (configured cache directory)",
+  "manifest": "research/pdf-parser/out/korpus_envanteri.jsonl"
+}

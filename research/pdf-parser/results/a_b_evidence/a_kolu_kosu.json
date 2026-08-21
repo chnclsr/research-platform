@@ -1,0 +1,4501 @@
+[
+ {
+  "pdf_path": "corpus\\turkce_makale.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 6,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 83.2,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 88.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 77.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 93.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   }
+  ],
+  "belge": {
+   "quality_score": 76.5,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 6,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 0,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0,
+    "repetition_loop_ratio": 0.0641
+   }
+  },
+  "plan": {
+   "OCR": null,
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 1,
+    "argumanlar": [
+     {
+      "page_range": [
+       3,
+       4
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      3,
+      4
+     ]
+    ],
+    "maliyet": {
+     "cagri": 1,
+     "sayfa": 2,
+     "en_uzun_blok": 2
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.0054,
+  "ozet": {
+   "hizli_sayfa": 4,
+   "agir_sayfa": 2,
+   "ocr_sayfa": 0,
+   "hizli_oran": 0.6667,
+   "yalniz_kalite_yakaladi": 0,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 1
+  },
+  "sureler_ms": {
+   "inspector_ms": 29.7,
+   "kapi_ms": 54.6,
+   "critic_ms": 7.1
+  },
+  "ms_sayfa": {
+   "inspector_ms": 4.95,
+   "kapi_ms": 9.11,
+   "critic_ms": 1.18
+  },
+  "_belge": "turkce_makale"
+ },
+ {
+  "pdf_path": "corpus\\resnet_2sutun_gorsel.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 12,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 90.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 57.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 74.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 91.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 69.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 51.2,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 64.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 52.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   }
+  ],
+  "belge": {
+   "quality_score": 72.0,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 12,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 7,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0,
+    "repetition_loop_ratio": 0.028
+   }
+  },
+  "plan": {
+   "OCR": null,
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 2,
+    "argumanlar": [
+     {
+      "page_range": [
+       1,
+       9
+      ]
+     },
+     {
+      "page_range": [
+       11,
+       12
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      1,
+      9
+     ],
+     [
+      11,
+      12
+     ]
+    ],
+    "maliyet": {
+     "cagri": 2,
+     "sayfa": 11,
+     "en_uzun_blok": 9
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.4168,
+  "ozet": {
+   "hizli_sayfa": 1,
+   "agir_sayfa": 11,
+   "ocr_sayfa": 0,
+   "hizli_oran": 0.0833,
+   "yalniz_kalite_yakaladi": 2,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 2
+  },
+  "sureler_ms": {
+   "inspector_ms": 55.8,
+   "kapi_ms": 157.5,
+   "critic_ms": 19.7
+  },
+  "ms_sayfa": {
+   "inspector_ms": 4.65,
+   "kapi_ms": 13.13,
+   "critic_ms": 1.64
+  },
+  "_belge": "resnet_2sutun_gorsel"
+ },
+ {
+  "pdf_path": "corpus\\vgg_tablo_agirlikli.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 14,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 86.6,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 98.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 90.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 98.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 98.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 94.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 83.4,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 83.7,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 91.2,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 84.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 13,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 14,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 86.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   }
+  ],
+  "belge": {
+   "quality_score": 85.0,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 14,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 0,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0625,
+    "repetition_loop_ratio": 0.0249
+   }
+  },
+  "plan": {
+   "OCR": null,
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 4,
+    "argumanlar": [
+     {
+      "page_range": [
+       3,
+       3
+      ]
+     },
+     {
+      "page_range": [
+       6,
+       8
+      ]
+     },
+     {
+      "page_range": [
+       11,
+       12
+      ]
+     },
+     {
+      "page_range": [
+       14,
+       14
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      3,
+      3
+     ],
+     [
+      6,
+      8
+     ],
+     [
+      11,
+      12
+     ],
+     [
+      14,
+      14
+     ]
+    ],
+    "maliyet": {
+     "cagri": 4,
+     "sayfa": 7,
+     "en_uzun_blok": 3
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.007,
+  "ozet": {
+   "hizli_sayfa": 7,
+   "agir_sayfa": 7,
+   "ocr_sayfa": 0,
+   "hizli_oran": 0.5,
+   "yalniz_kalite_yakaladi": 0,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 4
+  },
+  "sureler_ms": {
+   "inspector_ms": 46.7,
+   "kapi_ms": 82.5,
+   "critic_ms": 12.4
+  },
+  "ms_sayfa": {
+   "inspector_ms": 3.34,
+   "kapi_ms": 5.89,
+   "critic_ms": 0.88
+  },
+  "_belge": "vgg_tablo_agirlikli"
+ },
+ {
+  "pdf_path": "corpus\\attention_tablo.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 15,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 97.2,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 99.3,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 86.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 97.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 90.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 13,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 92.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 14,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 77.2,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 15,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 77.2,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   }
+  ],
+  "belge": {
+   "quality_score": 99.3,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 15,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 0,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.03,
+    "repetition_loop_ratio": 0.0157
+   }
+  },
+  "plan": {
+   "OCR": null,
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 4,
+    "argumanlar": [
+     {
+      "page_range": [
+       1,
+       1
+      ]
+     },
+     {
+      "page_range": [
+       4,
+       6
+      ]
+     },
+     {
+      "page_range": [
+       8,
+       10
+      ]
+     },
+     {
+      "page_range": [
+       13,
+       15
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      1,
+      1
+     ],
+     [
+      4,
+      6
+     ],
+     [
+      8,
+      10
+     ],
+     [
+      13,
+      15
+     ]
+    ],
+    "maliyet": {
+     "cagri": 4,
+     "sayfa": 10,
+     "en_uzun_blok": 3
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.0321,
+  "ozet": {
+   "hizli_sayfa": 5,
+   "agir_sayfa": 10,
+   "ocr_sayfa": 0,
+   "hizli_oran": 0.3333,
+   "yalniz_kalite_yakaladi": 0,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 4
+  },
+  "sureler_ms": {
+   "inspector_ms": 64.6,
+   "kapi_ms": 235.2,
+   "critic_ms": 8.8
+  },
+  "ms_sayfa": {
+   "inspector_ms": 4.31,
+   "kapi_ms": 15.68,
+   "critic_ms": 0.59
+  },
+  "_belge": "attention_tablo"
+ },
+ {
+  "pdf_path": "corpus\\bert_2sutun_dipnot.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 16,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 79.3,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 65.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 60.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 79.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 70.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 13,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 36.4,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 14,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 15,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 59.2,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 16,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 70.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   }
+  ],
+  "belge": {
+   "quality_score": 82.2,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 16,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 6,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0098,
+    "repetition_loop_ratio": 0.0096
+   }
+  },
+  "plan": {
+   "OCR": null,
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 4,
+    "argumanlar": [
+     {
+      "page_range": [
+       3,
+       3
+      ]
+     },
+     {
+      "page_range": [
+       5,
+       9
+      ]
+     },
+     {
+      "page_range": [
+       12,
+       13
+      ]
+     },
+     {
+      "page_range": [
+       15,
+       16
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      3,
+      3
+     ],
+     [
+      5,
+      9
+     ],
+     [
+      12,
+      13
+     ],
+     [
+      15,
+      16
+     ]
+    ],
+    "maliyet": {
+     "cagri": 4,
+     "sayfa": 10,
+     "en_uzun_blok": 5
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.4426,
+  "ozet": {
+   "hizli_sayfa": 6,
+   "agir_sayfa": 10,
+   "ocr_sayfa": 0,
+   "hizli_oran": 0.375,
+   "yalniz_kalite_yakaladi": 0,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 4
+  },
+  "sureler_ms": {
+   "inspector_ms": 59.3,
+   "kapi_ms": 171.6,
+   "critic_ms": 15.8
+  },
+  "ms_sayfa": {
+   "inspector_ms": 3.71,
+   "kapi_ms": 10.73,
+   "critic_ms": 0.99
+  },
+  "_belge": "bert_2sutun_dipnot"
+ },
+ {
+  "pdf_path": "corpus\\sybil_tip_2sutun.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 17,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 55.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 64.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 55.5,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 74.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 82.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 59.2,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 64.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 63.3,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 13,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 14,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 95.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 15,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 87.3,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 16,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 17,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 88.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   }
+  ],
+  "belge": {
+   "quality_score": 56.3,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 17,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 9,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0993,
+    "repetition_loop_ratio": 0.0689
+   }
+  },
+  "plan": {
+   "OCR": null,
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 2,
+    "argumanlar": [
+     {
+      "page_range": [
+       1,
+       9
+      ]
+     },
+     {
+      "page_range": [
+       11,
+       17
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      1,
+      9
+     ],
+     [
+      11,
+      17
+     ]
+    ],
+    "maliyet": {
+     "cagri": 2,
+     "sayfa": 16,
+     "en_uzun_blok": 9
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.4312,
+  "ozet": {
+   "hizli_sayfa": 1,
+   "agir_sayfa": 16,
+   "ocr_sayfa": 0,
+   "hizli_oran": 0.0588,
+   "yalniz_kalite_yakaladi": 5,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 2
+  },
+  "sureler_ms": {
+   "inspector_ms": 45.5,
+   "kapi_ms": 147.7,
+   "critic_ms": 12.7
+  },
+  "ms_sayfa": {
+   "inspector_ms": 2.68,
+   "kapi_ms": 8.69,
+   "critic_ms": 0.74
+  },
+  "_belge": "sybil_tip_2sutun"
+ },
+ {
+  "pdf_path": "corpus\\gpt3_uzun_75sayfa.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 75,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 76.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 67.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 13,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 14,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 15,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 57.3,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 16,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 17,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 18,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 96.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 19,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 20,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 21,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 22,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 23,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 24,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 25,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 26,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 27,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 74.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 28,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "has_table_dusuk",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 29,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 42.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 30,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality",
+     "critical_CID_FONT_UNICODE_CORRUPTION"
+    ],
+    "quality_score": 40.0,
+    "critical_issue": "CID_FONT_UNICODE_CORRUPTION",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 31,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 32,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 33,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 34,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 35,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 36,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 78.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 37,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 38,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality",
+     "critical_CID_FONT_UNICODE_CORRUPTION"
+    ],
+    "quality_score": 56.1,
+    "critical_issue": "CID_FONT_UNICODE_CORRUPTION",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 39,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 40,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 41,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 42,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 43,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 44,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 45,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 95.6,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 46,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 95.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 47,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 48,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 95.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 49,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 74.7,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 50,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 51,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 75.9,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 52,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 53,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 60.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 54,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 95.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 55,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 56,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 75.2,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 57,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 58,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 59,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 60,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 61,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 62,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 63,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": false,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 64,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 65,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 66,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 67,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 68,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 69,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 95.4,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 70,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 71,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 72,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 73,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 74,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 75,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   }
+  ],
+  "belge": {
+   "quality_score": 100.0,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 75,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 17,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0206,
+    "repetition_loop_ratio": 0.0181
+   }
+  },
+  "plan": {
+   "OCR": {
+    "motor": "docling",
+    "cagri_sayisi": 1,
+    "argumanlar": [
+     {
+      "page_range": [
+       28,
+       28
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      28,
+      28
+     ]
+    ],
+    "maliyet": {
+     "cagri": 1,
+     "sayfa": 1,
+     "en_uzun_blok": 1
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   },
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 10,
+    "argumanlar": [
+     {
+      "page_range": [
+       8,
+       9
+      ]
+     },
+     {
+      "page_range": [
+       12,
+       13
+      ]
+     },
+     {
+      "page_range": [
+       15,
+       19
+      ]
+     },
+     {
+      "page_range": [
+       23,
+       23
+      ]
+     },
+     {
+      "page_range": [
+       26,
+       27
+      ]
+     },
+     {
+      "page_range": [
+       29,
+       30
+      ]
+     },
+     {
+      "page_range": [
+       37,
+       38
+      ]
+     },
+     {
+      "page_range": [
+       45,
+       49
+      ]
+     },
+     {
+      "page_range": [
+       51,
+       64
+      ]
+     },
+     {
+      "page_range": [
+       66,
+       66
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      8,
+      9
+     ],
+     [
+      12,
+      13
+     ],
+     [
+      15,
+      19
+     ],
+     [
+      23,
+      23
+     ],
+     [
+      26,
+      27
+     ],
+     [
+      29,
+      30
+     ],
+     [
+      37,
+      38
+     ],
+     [
+      45,
+      49
+     ],
+     [
+      51,
+      64
+     ],
+     [
+      66,
+      66
+     ]
+    ],
+    "maliyet": {
+     "cagri": 10,
+     "sayfa": 36,
+     "en_uzun_blok": 14
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.0614,
+  "ozet": {
+   "hizli_sayfa": 38,
+   "agir_sayfa": 36,
+   "ocr_sayfa": 1,
+   "hizli_oran": 0.5067,
+   "yalniz_kalite_yakaladi": 2,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 11
+  },
+  "sureler_ms": {
+   "inspector_ms": 128.5,
+   "kapi_ms": 304.4,
+   "critic_ms": 61.7
+  },
+  "ms_sayfa": {
+   "inspector_ms": 1.71,
+   "kapi_ms": 4.06,
+   "critic_ms": 0.82
+  },
+  "_belge": "gpt3_uzun_75sayfa"
+ },
+ {
+  "pdf_path": "corpus\\gpt4_uzun_gorsel.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 100,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 89.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 7,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 71.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 8,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 97.1,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 9,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 77.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 10,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 11,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 12,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 96.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 13,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 99.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 14,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 15,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 16,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 98.1,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 17,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 95.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 18,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 19,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 98.6,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 20,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 21,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 22,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 93.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 23,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 93.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 24,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 25,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 26,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 27,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 28,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 29,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 30,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 31,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 32,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 52.4,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 33,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 34,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 96.6,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 35,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 36,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 72.8,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 37,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 95.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 38,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 39,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 87.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 40,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 41,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 61.7,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 42,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 43,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 44,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 45,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 46,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 47,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 48,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 49,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 95.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 50,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 51,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 52,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 53,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 89.9,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 54,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 98.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 55,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 56,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 57,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 58,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 59,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 60,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 61,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 62,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 63,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 64,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 95.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 65,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 92.8,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 66,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 67,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk",
+     "low_quality"
+    ],
+    "quality_score": 67.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 68,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_yuksek"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "yuksek"
+   },
+   {
+    "sayfa_no": 69,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 70,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 71,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 72,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 60.5,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 73,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 74,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 75,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 66.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 76,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 74.7,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 77,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 65.0,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 78,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "low_quality"
+    ],
+    "quality_score": 59.1,
+    "critical_issue": "TWO_COLUMN_CROSS_JUMP",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 79,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": null,
+    "critical_issue": "BOS_SAYFA",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 80,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 81,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 82,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 83,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 84,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 85,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 86,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 87,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 88,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 89,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 98.3,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 90,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 91,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 92,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 86.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 93,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 94,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 95,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 96,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 85.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 97,
+    "yol": "HIZLI",
+    "islenecek_motor": "pdf-inspector",
+    "karar_kaynagi": [],
+    "quality_score": 92.5,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": false,
+    "has_figure": false,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 98,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 99,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 100.0,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   },
+   {
+    "sayfa_no": 100,
+    "yol": "AGIR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "has_table_dusuk"
+    ],
+    "quality_score": 90.7,
+    "critical_issue": "NONE",
+    "needs_ocr": false,
+    "has_table": true,
+    "has_figure": true,
+    "tablo_guven": "dusuk"
+   }
+  ],
+  "belge": {
+   "quality_score": 96.9,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 100,
+   "olculemeyen_sayfa": 1,
+   "esik_alti_sayfa": 23,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0257,
+    "repetition_loop_ratio": 0.0423
+   }
+  },
+  "plan": {
+   "OCR": {
+    "motor": "docling",
+    "cagri_sayisi": 1,
+    "argumanlar": [
+     {
+      "page_range": [
+       98,
+       98
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      98,
+      98
+     ]
+    ],
+    "maliyet": {
+     "cagri": 1,
+     "sayfa": 1,
+     "en_uzun_blok": 1
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   },
+   "AGIR": {
+    "motor": "docling",
+    "cagri_sayisi": 15,
+    "argumanlar": [
+     {
+      "page_range": [
+       3,
+       8
+      ]
+     },
+     {
+      "page_range": [
+       10,
+       14
+      ]
+     },
+     {
+      "page_range": [
+       26,
+       28
+      ]
+     },
+     {
+      "page_range": [
+       30,
+       33
+      ]
+     },
+     {
+      "page_range": [
+       35,
+       36
+      ]
+     },
+     {
+      "page_range": [
+       41,
+       41
+      ]
+     },
+     {
+      "page_range": [
+       48,
+       51
+      ]
+     },
+     {
+      "page_range": [
+       53,
+       54
+      ]
+     },
+     {
+      "page_range": [
+       57,
+       57
+      ]
+     },
+     {
+      "page_range": [
+       62,
+       63
+      ]
+     },
+     {
+      "page_range": [
+       65,
+       65
+      ]
+     },
+     {
+      "page_range": [
+       67,
+       68
+      ]
+     },
+     {
+      "page_range": [
+       71,
+       78
+      ]
+     },
+     {
+      "page_range": [
+       80,
+       83
+      ]
+     },
+     {
+      "page_range": [
+       99,
+       100
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      3,
+      8
+     ],
+     [
+      10,
+      14
+     ],
+     [
+      26,
+      28
+     ],
+     [
+      30,
+      33
+     ],
+     [
+      35,
+      36
+     ],
+     [
+      41,
+      41
+     ],
+     [
+      48,
+      51
+     ],
+     [
+      53,
+      54
+     ],
+     [
+      57,
+      57
+     ],
+     [
+      62,
+      63
+     ],
+     [
+      65,
+      65
+     ],
+     [
+      67,
+      68
+     ],
+     [
+      71,
+      78
+     ],
+     [
+      80,
+      83
+     ],
+     [
+      99,
+      100
+     ]
+    ],
+    "maliyet": {
+     "cagri": 15,
+     "sayfa": 47,
+     "en_uzun_blok": 8
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   }
+  },
+  "kuyruk_skoru": 0.1167,
+  "ozet": {
+   "hizli_sayfa": 52,
+   "agir_sayfa": 47,
+   "ocr_sayfa": 1,
+   "hizli_oran": 0.52,
+   "yalniz_kalite_yakaladi": 13,
+   "olculemeyen_sayfa": 1,
+   "agir_cagri_sayisi": 16
+  },
+  "sureler_ms": {
+   "inspector_ms": 153.4,
+   "kapi_ms": 372.7,
+   "critic_ms": 61.4
+  },
+  "ms_sayfa": {
+   "inspector_ms": 1.53,
+   "kapi_ms": 3.73,
+   "critic_ms": 0.61
+  },
+  "_belge": "gpt4_uzun_gorsel"
+ },
+ {
+  "pdf_path": "corpus\\taranmis_bert_2sutun_dipnot.pdf",
+  "parser_profile": "inspector_v1",
+  "router_version": "orchestrator_v1_2026-08-18",
+  "esik_version": "gate_v2_2026-08-18_A10_kalibre_edilmedi",
+  "kalite_esik": 75.0,
+  "yuksek_guven_yeter": false,
+  "sayfa_sayisi": 6,
+  "sayfalar": [
+   {
+    "sayfa_no": 1,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 2,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 3,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 4,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 5,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   },
+   {
+    "sayfa_no": 6,
+    "yol": "OCR",
+    "islenecek_motor": "docling",
+    "karar_kaynagi": [
+     "needs_ocr",
+     "low_quality",
+     "critical_TOTAL_TEXT_DROPPED"
+    ],
+    "quality_score": 0.0,
+    "critical_issue": "TOTAL_TEXT_DROPPED",
+    "needs_ocr": true,
+    "has_table": false,
+    "has_figure": true,
+    "tablo_guven": null
+   }
+  ],
+  "belge": {
+   "quality_score": 0.0,
+   "toplama": "sayfa skorlarinin medyani (KALIBRE EDILMEDI, plan D12)",
+   "sayfa_sayisi": 6,
+   "olculemeyen_sayfa": 0,
+   "esik_alti_sayfa": 6,
+   "belge_metrikleri": {
+    "running_header_leak_ratio": 0.0,
+    "repetition_loop_ratio": 0.0
+   }
+  },
+  "plan": {
+   "OCR": {
+    "motor": "docling",
+    "cagri_sayisi": 1,
+    "argumanlar": [
+     {
+      "page_range": [
+       1,
+       6
+      ]
+     }
+    ],
+    "bloklar": [
+     [
+      1,
+      6
+     ]
+    ],
+    "maliyet": {
+     "cagri": 1,
+     "sayfa": 6,
+     "en_uzun_blok": 6
+    },
+    "not": "ardisik aralik gerekiyor; gruplama %36 kazandiriyor (olculdu)"
+   },
+   "AGIR": null
+  },
+  "kuyruk_skoru": 0.203,
+  "ozet": {
+   "hizli_sayfa": 0,
+   "agir_sayfa": 0,
+   "ocr_sayfa": 6,
+   "hizli_oran": 0.0,
+   "yalniz_kalite_yakaladi": 0,
+   "olculemeyen_sayfa": 0,
+   "agir_cagri_sayisi": 1
+  },
+  "sureler_ms": {
+   "inspector_ms": 8.4,
+   "kapi_ms": 3.9,
+   "critic_ms": 0.1
+  },
+  "ms_sayfa": {
+   "inspector_ms": 1.4,
+   "kapi_ms": 0.65,
+   "critic_ms": 0.01
+  },
+  "_belge": "taranmis_bert_2sutun_dipnot"
+ }
+]

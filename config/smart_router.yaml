@@ -1,0 +1,320 @@
+# smart_router yönlendirme profili
+#
+# Bu dosya PDF'in hangi sayfasının ağır motora (Docling) gideceğini belirleyen
+# bütün eşikleri taşır. Buradaki her değer ÇIKTIYI DEĞİŞTİRİR: bir eşiği
+# oynatmak farklı sayfaları ağır yola yollar, bu da farklı metin ve farklı
+# `content_hash` demektir.
+#
+# Bu yüzden:
+#   * `esik_version` ELLE YAZILMAZ. Etkin ayarların sha256'sından türetilir
+#     (`ayarlar.py`), provenance'a yazılır. Eşik değişince sürüm kendiliğinden
+#     değişir, güncellemeyi unutmak mümkün değildir.
+#   * Bu dosya bir koşu başlarken bir kez okunur ve dondurulur. Çalışma anında
+#     değişmez — determinizm bir tercih değil, `registry.py`'nin şartı.
+#   * Dosya yoksa veya bozuksa kod gömülü varsayılanlara düşer ve uyarıyı
+#     provenance'a yazar. Tek yazım hatası PDF hattını durdurmaz.
+#
+# BURAYA KONMAYACAK OLANLAR:
+#   * `KRITIK_TETIKLEYICI` / `UYARI` kümeleri — bunlar sayı değil teşhis tanımı.
+#     "TOTAL_TEXT_DROPPED kritiktir" bir ayar değil, bir anlamdır.
+#   * `priority = 10` — registry sözleşmesi.
+#   * Eşzamanlılık, timeout, Docling köprüsü — bunlar çıktıyı değil dağıtımı
+#     ilgilendirir, `.env` ile yönetilir (SMART_ROUTER_MAX_CONCURRENT_HEAVY,
+#     SMART_ROUTER_DOCLING_PYTHON).
+#
+# Yolu `.env` içindeki `SMART_ROUTER_CONFIG_PATH` ile değiştirilebilir.
+
+profil_adi: gate_v2_kalibre_edilmedi
+
+# --------------------------------------------------------------------------
+# KAPI — sayfa başına sinyal eşikleri (eski gate.ESIK)
+# --------------------------------------------------------------------------
+kapi:
+  metin:
+    sayfa_min_karakter: 100      # altında sayfa "metinsiz" sayılır
+    bos_sayfa_karakter: 20       # altında ve görselsiz/çizimsizse "boş"
+    taranmis_kaplama: 0.50       # görsel sayfanın bu kadarını kaplıyorsa taranmış
+    bozuk_karakter_orani: 0.05
+
+  # Ölçüldü (261 + 200 sayfa, DUZELTME ONCESI): recall 0,93 / 0,98 · precision
+  # 0,55 / 0,51. Yüksek güven kademesi (inspector AND v2): precision 0,75 / 0,87.
+  # C2 taraması en iyi adayı inspector_and_v2 · ort 8 · dolu 6 · sütun 2 · satır 3
+  # (precision 0,833 · recall 0,896) buldu ama holdout olmadığı için UYGULANMADI.
+  #
+  # UYGULANDI (2026-08-20) — sekil vetosu + dolu_dikdortgen esigi yukseltildi:
+  # Kök neden: FP'lerin %70'i (53'ten 37'si, kendi korpus) pdf-inspector zaten
+  # "tablo yok" derken PyMuPDF'in ortogonal_cizgi sinyali buyuk diyagram/grafik
+  # sekillerinde (kume_kaplama 0,3-0,64) yanlislikla tetikleniyordu — cizgi
+  # sayisi 6'dan 4714'e kadar cikabiliyor, hepsi tablo sayiliyordu.
+  #
+  # OLCULDU (261 sayfa kendi + 200 sayfa resmi benchmark, ikisinde de):
+  #
+  #   kural                              kendi P/R      benchmark P/R
+  #   ----------------------------------  -------------  --------------
+  #   mevcut (OR, sekil_veto_kaplama=0)   0,551 / 0,929  0,506 / 0,976
+  #   tam veto (ort VE dolu bastirilir)   0,644 / 0,929  0,565 / 0,929
+  #   UYGULANAN (ort bastirilir, dolu     0,637 / 0,929  0,556 / 0,952
+  #   esigi 8->60 yukseltilir)
+  #
+  # "Tam veto" kendi korpusta bedavaydi ama benchmark'ta 2 gercek tabloyu
+  # kacirdi -- bu 2 sayfada tablo buyuk bir gorsel/golgeleme alaninin icinde
+  # (kume_kaplama 0,38-0,41) ama dolu_dikdortgen cok yuksekti (66, 105) --
+  # yani YOGUN dolu dikdortgen gercek tablo hucresi olabiliyor, tam bastirmak
+  # yanlis. Bu yuzden ortogonal_cizgi (diyagram/grafik cizgi sayisi) buyuk
+  # sekilde tamamen sayilmiyor, ama dolu_dikdortgen sayilmaya devam ediyor --
+  # yalniz esigi 8'den 60'a yukseltildi (cogu diyagramda 8-43 dolu dikdortgen
+  # var, gercek yogun tablo hucresi 60'in cok ustunde). Sonuc: precision hemen
+  # hemen ayni, ama benchmark recall'i 0,929'dan 0,952'ye cikti (kaybedilen
+  # 2 gercek tablodan biri geri kazanildi).
+  #
+  # KALAN ACIK: benchmark'ta hala 2 (once 1) kacirilan gercek tablo var --
+  # cogu taranmis/goruntu tabanli sayfalarda (PyMuPDF hic vektor bilgisi
+  # goremiyor) ya da cok buyuk gorsel icine gomulu. Bunlari yakalamak
+  # goruntu/OCR tabanli tablo tespiti gerektiriyor, esik ayariyla degil --
+  # ayri, daha buyuk bir is (entegrasyon_plani.md Bolum 17, "tablo tespiti").
+  tablo:
+    ortogonal_cizgi: 6
+    dolu_dikdortgen: 60
+    izgara_sutun: 3
+    izgara_satir: 4
+    izgara_bosluk: 12.0          # kelimeler arası bu boşluk hücre sınırı sayılır
+    izgara_y_tolerans: 3.0       # aynı satır sayılan y farkı
+    # Kume_kaplama bu esigin ustundeyse (buyuk sekil/diyagram), ortogonal_cizgi
+    # tablo sinyaline HIC KATILMAZ -- yalniz dolu_dikdortgen ve izgara kurallari
+    # gecerli kalir. 0 = veto kapali (eski davranis).
+    sekil_veto_kaplama: 0.15
+
+  # Ölçüldü (261 + 200 sayfa): recall 0,99 / 0,99 · precision 0,69 / 0,62
+  # Kural: cluster_drawings() OR get_images(full=True). Eski kural 0,63 / 0,76 idi.
+  sekil:
+    kume_kaplama: 0.03           # çizim kümesi sayfanın bu kadarını kaplıyorsa şekil
+
+# --------------------------------------------------------------------------
+# YÖNLENDİRME — hangi sayfa ağır motora gider
+# --------------------------------------------------------------------------
+# Kural: needs_ocr ∪ has_table ∪ {kalite < esik} ∪ {kritik teşhis}
+# has_figure TETİKLEYİCİ DEĞİLDİR (gate.sayfa_secici docstring'i, ölçümüyle).
+yonlendirme:
+  # KALİBRE EDİLMEDİ (plan D12). Ölçülen sayfa skoru dağılımı: medyan 95,0,
+  # 261 sayfanın 68'i bu eşiğin altında. Sayfa bazlı skorlar belge bazlıdan
+  # 9/9 belgede +9,9…+23,4 yüksek çıkıyor, yani 75 bu ölçekte düşük kalabilir.
+  kalite_esik: 75.0
+
+  # true = yalnız `tablo_guven == "yuksek"` sayfalar tabloyla tetiklenir.
+  # Bu bir KALİBRASYON anahtarıdır, çalışma anı bütçesi DEĞİLDİR (plan 8.3).
+  yuksek_guven_yeter: false
+
+  # Sayfa ağır motora YALNIZ düşük kalite skoru yüzünden gidiyorsa ve sayfada
+  # hiç vektörel çizim yoksa (bezier_egri == 0), gönderme.
+  #
+  # ÖLÇÜLDÜ (2026-08-21, rapor O.13) — üç veri ailesinde offline:
+  #
+  #   aile                   ΔNET      ağır çağrı   kaybedilen fayda
+  #   ---------------------|---------|------------|------------------
+  #   ocrturk (129)         +0,0273    58 -> 55     0,0000
+  #   opendataloader (72)   +0,3006    43 -> 32     0,0000
+  #   BİRLEŞİK (201)        +0,3279   101 -> 87     0,0000
+  #   kendi korpus (261 s.)     —     137 -> 115    boşa 28->10, gerekli 101->97
+  #
+  # precision 0,4059 -> 0,4713; recall 0,6508 DEĞİŞMİYOR. C1'de tek bir belge
+  # bile fayda kaybetmiyor: vetolanan 14 sayfanın hepsinde heavy zaten kötüydü.
+  #
+  # NEDEN BU BİÇİM: `quality_score`'un heavy'den fayda görmeyi öngörme gücü
+  # ocrturk'te AUC 0,5006 -- rastgele (Bölüm M'in 0,43-0,47 bulgusunun bağımsız
+  # tekrarı). Ama kalite gerekçesini yapısal bir koşulla birleştirmek ayırıcı:
+  # vektörel çizimi olmayan sayfa düz metindir. Eşik duyarlılığı da temiz --
+  # bezier < 0/1/2 aynı sonucu veriyor, bozulma 5'ten sonra başlıyor.
+  #
+  # ELENEN ALTERNATİF: `karakter < 1500 VE çizim yok` C1'de çok daha iyi
+  # görünüyordu (NET +1,3035) ama kendi korpusumuzda kestiği 8 çağrının 8'i de
+  # GEREKLİ çıktı ve 5 tablo kaçırttı -- C1'e aşırı uyum. Üç korpusta birden
+  # sınanmasaydı yanlış kural seçilecekti.
+  #
+  # ŞİMDİLİK KAPALI (false). Aday aynı korpusta arandı ve aynı korpusta iyi
+  # çıktı; Q13 gereği bu kabul sayılmaz, dokunulmamış kaynak-aile holdout'u
+  # şart. Açmak için bu anahtarı true yap ve `ayarlar.py`'deki gömülü
+  # varsayılanı BİRLİKTE güncelle.
+  kalite_vetosu_cizimsiz: false
+
+# --------------------------------------------------------------------------
+# BİRLEŞTİRME — ağır motorun çıktısı kabul edilir mi
+# --------------------------------------------------------------------------
+birlestirme:
+  # Ağır sayfa yalnız `heavy_skor >= fast_skor - tolerans` ise kabul edilir.
+  # 0.0 = ölü bant yok, bugünkü davranış ve bugüne kadarki bütün ölçümlerin
+  # varsayımı.
+  #
+  # TARANDI (2026-08-19, 9 belge / 261 sayfa / 139 karantina adayı):
+  #
+  #   tolerans | karantina | bunun berabere olanı | gerçek düşüş
+  #   ---------|-----------|----------------------|-------------
+  #      0.00  |    37     |         16           |     21
+  #      0.05  |    28     |          7           |     21
+  #      0.10  |    19     |          0           |     19
+  #      0.25  |    10     |          0           |     10
+  #      0.50  |     6     |          0           |      6
+  #      1.00  |     2     |          0           |      2
+  #
+  # "Berabere" = |heavy − fast| < 0,1 puan. 0,0'da karantinaya alınan 37 sayfanın
+  # medyan farkı yalnız −0,110; en küçüğü −0,0100. Yani kararların yaklaşık yarısı
+  # üçüncü ondalıkta veriliyor ve o sayfada Docling'in tablo grid'i de düşüyor.
+  #
+  # 0.10 bütün berabereleri eliyor ve 19 gerçek düşüşün hepsini tutuyor — takas
+  # değil, bedava. Tek büyük regresyon (resnet s.5, −22,38) 2,0'a kadar yakalanmaya
+  # devam ediyor.
+  #
+  # UYGULANDI (2026-08-20): 0.10'a çekildi. Yukarıdaki tarama zaten burada
+  # duruyordu ("bedava" satırı) ama önceki oturum davranış değişikliği riskini
+  # gerekçe göstererek 0.0'da bırakmıştı. Bugünkü karar: 16 "berabere" sayfa
+  # (fark < 0,1 puan) istatistiksel gürültü seviyesinde, mevcut corruption
+  # skoru bu farkları güvenilir ayıramıyor; 19 gerçek düşüşün hepsi (resnet
+  # s.5, -22,38 dahil) tolerans=0.10'da hâlâ yakalanıyor. Elle doğrulama:
+  # `entegrasyon_plani.md` Bölüm 17, madde #1.
+  #
+  # UYGULANDI (2026-08-21): 0.10 -> 5.0. Yukarıdaki 2026-08-19 taraması yalnız
+  # karantina SAYISINI ölçebiliyordu; kendi korpusumuzda metin referansı yok,
+  # yani "reddedilen sayfa gerçekten kötü müydü" sorusu orada cevaplanamıyor.
+  # C1'de (metin referanslı, 201 belge) cevaplanabildi -- karantina karar
+  # karnesi, `research/pdf-parser/scripts/karantina_olc.py`:
+  #
+  #   * ağır motora giden 101 sayfada 8 red: 3 doğru, 5 YANLIŞ (isabet 0,375)
+  #   * skor farkı ile gerçek fayda korelasyonu r = -0,063 (ters ve sıfıra yakın)
+  #   * sayfaların %74'ünde skor farkı TAM SIFIR -- sinyal hiç konuşmuyor
+  #   * net etki -0,1943: mekanizma kurtardığından fazlasını atıyor
+  #
+  # Tolerans taraması (`c1_tarama.py`, aynı 201 belge / 261 sayfa):
+  #
+  #   tolerans | C1 karantina | C1 kaçırılan fayda | C1 NET  | kendi korpus
+  #   ---------|--------------|--------------------|---------|-------------
+  #      0.1   |      8       |      0,3814        | +2,9433 |  7
+  #      1.0   |      3       |      0,1421        | +2,9956 |  4
+  #      5.0   |      1       |      0,0458        | +3,0919 |  4
+  #     10.0   |      1       |      0,0458        | +3,0919 |  4
+  #     1000   |      0       |      0,0000        | +3,1377 |  3
+  #
+  # 5.0 seçildi çünkü zararlı olan, skor karşılaştırmasının KÜÇÜK FARK BANDI:
+  # C1'deki 5 yanlış red -0,300 … -2,280 aralığında, kendi korpusumuzda gpt3
+  # s56/60/61 -0,15 … -0,83 ile reddediliyor. 5.0 bu bandı kapatırken elle
+  # doğrulanmış vakaların HEPSİNİ tutuyor: resnet s.5 (-20,81, gerçek
+  # private-use-area glyph regresyonu) ve gpt4 s48/57/67 (içerik-kaybı
+  # kuralı, ayrı mekanizma, dokunulmadı). Tamamen kapatmak (1000) C1'de en iyi
+  # NET'i veriyor ama bu dördünü birden kaçırırdı.
+  #
+  # `precision`/`recall` DEĞİŞMEZ -- karantina route kararından sonra çalışır.
+  # Veri aileleri çelişmiyor: ocrturk NET artıyor, opendataloader_bench'te hiç
+  # red olmadığı için sabit.
+  #
+  # 5.0 bir "doğru eşik" DEĞİL, iki korpusta da zarar vermeyen en geniş bant.
+  # C1'de 5.0'da hayatta kalan tek red (data_115, -20,580) hâlâ YANLIŞ (gerçek
+  # fayda +0,0458) -- yani büyüklük tek başına ayırt edici değil. Kalıcı çözüm
+  # corruption skoru yerine gerçek faydayla korele bir sinyal: rapor O.9/O.11.
+  karantina_tolerans: 5.0
+
+  # Fast metin kullanılabilirken (bos degil), heavy'nin markdown-arindirilmis
+  # uzunlugu fast'inkinin bu orandan AZ ise heavy katastrofik sayilir --
+  # corruption skoru ne derse desin reddedilir. Tek yonlu: yalniz heavy KUCUKSE
+  # tetiklenir, buyukse (orn. Docling'in matrisi tabloya acmasi) hic bakilmaz.
+  #
+  # OLCULDU (2026-08-20, ayni 261 sayfa + Codex'in 3 bagimsiz internet PDF'i):
+  # Codex'in EUSO bulgusu (oran 0,528, %47,2 gercek icerik kaybi, corruption
+  # skoru bunu KABUL etmisti) bu korumanin GEREKCESI. Ama kendi korpusumuzda
+  # ayni oran araliginda (0,387-0,389, attention_tablo s.14/15) heavy'nin
+  # KESINLIKLE DAHA IYI oldugu iki sayfa var -- fast orada bozuk/tekrarli metin
+  # (bir dikkat-gorsellestirmesi resminden OCR artigi), heavy dogru sekilde
+  # temiz bir sekil basligi veriyor. Ikincil bir ayirt edici sinyal (fast'in
+  # kendi tekrar orani, fast'in kalite skoru) bu iki sinifi GUVENILIR sekilde
+  # ayirmiyor -- ikisi de denendi, ikisi de karisik cikti.
+  #
+  # Bu yuzden esik MUHAFAZAKAR secildi: kendi korpusumuzda 0,18 ve alti TAMAMI
+  # (4/4) dogrulanmis gercek kayip, 0,237 ve ustu bilinen en az bir dogrulanmis
+  # iyi karar iceriyor (0,387-0,389). 0,20 ikisinin arasinda, hicbir bilinen
+  # iyi karari bozmuyor.
+  #
+  # BILEREK YAKALANMIYOR: Codex'in EUSO'su (0,528) bu esikle KATASTROFIK
+  # SAYILMAZ -- 0,20'nin cok ustunde. Bunu 0,60'a cekmek EUSO'yu yakalardi ama
+  # attention_tablo s.14/15'i de (dogrulanmis iyi karar) yanlislikla
+  # reddederdi -- olcumle kanitlandi, kabul edilmedi. Ikinci bir sinyal
+  # (fast'in kendi tutarliligi) olmadan 0,20-0,55 araligi guvenle kapatilamaz;
+  # ayri bir is (entegrasyon_plani.md Bolum 17, madde #1 devami).
+  icerik_kaybi_esik: 0.20
+
+  # `smart_pdf._page_scorer` — karantina kararının verildiği bozulma skoru.
+  # `critic_ceza`'dan AYRI olması bilinçli: o bir sayfayı notlandırır, bu iki
+  # motorun aynı sayfa için ürettiği iki metni karşılaştırır.
+  #
+  # DİKKAT — ölçülmüş bir tutarsızlık: aynı iki sinyal `critic_ceza`'da farklı
+  # katsayılarla duruyor (unicode 10,0 ve gibberish ×300 orada; 20,0 ve ×100
+  # burada). Hangisinin doğru olduğu kalibrasyon sorusu (plan D12).
+  corruption:
+    gibberish_kat: 100.0
+    unicode_ceza: 20.0
+
+# --------------------------------------------------------------------------
+# CRITIC CEZA KATSAYILARI — kalite skorunun kendisi (eski critic.SAYFA_CEZA)
+# --------------------------------------------------------------------------
+# KALİBRE EDİLMEDİ. Bu değerler `evaluate()`'in DÜZ METNE göre ayarlanmış
+# değerlerinden taşındı; plan D12 markdown ve SAYFA ölçeğinde yeniden
+# kalibrasyon şart koşuyor (sayfa başına metin az, oranların varyansı yüksek).
+#
+# Her metrik: skor 100'den başlar, `esik` aşılırsa
+#     ceza = min((olculen - esik) * kat, tavan)
+# kadar düşer.
+#
+# MİMARİ NOT (2026-08-20, dış inceleme + kendi ölçümümüz): `quality_score`,
+# heavy'nin gerçekten fayda sağlayıp sağlamadığını neredeyse rastgele
+# seviyesinde tahmin ediyor — 221 belgelik C1 korpusunda AUC ~0,43-0,47
+# (0,5 = rastgele), bağımsız iki yöntemle ölçüldü. Bunun nedeni tasarım:
+# bu skor "fast metin bozuk mu" sorusuna cevap vermek için var (text drop,
+# boş çıktı, unicode/CID bozulması, gibberish, çözülemeyen formül gibi
+# yüksek güvenli sinyaller), "Docling daha mı iyi olur" sorusuna değil —
+# ikinci soru router'ın table/OCR/layout/şekil sinyalleriyle cevaplaması
+# gereken AYRI bir iş. Kalite eşiği (75) kalibre edilene kadar bu skoru
+# öncelik/provenance sinyali olarak kullanmak makul, ama tek başına route
+# kararını sürükleyen ana sinyal olması KANITLA DESTEKLENMİYOR. Ayrıntı:
+# entegrasyon_plani.md Bölüm 17 (critic kapısı).
+#
+# dangling VE hyphen sinyalleri belge-düzeyi dev/holdout ayrımıyla ayrı ayrı
+# denendi (221 belge, gerçek utility etiketiyle, tek faktör bir kerede):
+#   - hyphen kapatmak: DEV'de precision +0,018, recall DEĞİŞMEDİ (0,769→0,769).
+#     Tek holdout'ta (n=66) hiçbir kararı DEĞİŞTİRMEDİ. UYGULANDI (kat 1.5 → 0.0),
+#     GEÇERLİ (aşağıdaki geri alma yalnız dangling'i kapsıyor).
+#   - dangling kapatmak: önce 20-bölünmelik sağlamlık testiyle "net pozitif"
+#     görünüp UYGULANDI (kat 160→0.0), SONRA GERİ ALINDI (2026-08-20, aynı gün
+#     içinde, dış inceleme + bağımsız belge-düzeyi doğrulama sonrası):
+#     20 bölünmenin hepsi AYNI 221 belgelik havuzdan üretilen ÖRTÜŞEN alt
+#     örneklerdi — bağımsız holdout değil, tek-holdout gürültüsünü azaltan
+#     ama korpus-düzeyi genellemeyi KANITLAMAYAN bir sağlamlık testi. Ortalama
+#     "-0,3 belge/bölünme" TP kaybı rakamı, kaybın GERÇEKTE nerede yoğunlaştığını
+#     gizledi. Belge-düzeyinde ayrıştırınca: v3→v4 arası kaçan 20 heavy
+#     çağrısından 5'i utility'de +0,040/+0,056/+0,089/+0,174/+0,202 GERÇEK
+#     fayda kaybıydı (0,02 eşiğinin çok üzerinde, "sınır vaka" değil) ve
+#     beşinin de TAM AYNI imzası vardı: critical_issue=TWO_COLUMN_CROSS_JUMP +
+#     has_figure=true + has_table=false (örn. data_26: iki sütunlu şiirde fast
+#     parser okuma sırasını karıştırıyor, Docling doğru okuyor). "Yakalanan
+#     pozitif utility oranı" 0,770→0,706'ya düştü. Yani dangling tamamen
+#     gürültü değil — TWO_COLUMN_CROSS_JUMP+figür kombinasyonunda GERÇEK bir
+#     layout sorununun ZAYIF bir vekili. Doğru düzeltme onu sıfırlamak değil,
+#     PyMuPDF blok koordinatlarından bu deseni doğrudan yakalayan bir geometrik
+#     sinyal geliştirmek (bkz. entegrasyon_plani.md 17.2h madde 1, hâlâ açık).
+#     GERİ ALINDI (kat 0.0 → 160.0). Ayrıntı: entegrasyon_plani.md 17.2i.
+critic_ceza:
+  char_drop:        {esik: 0.10, kat: 120.0, tavan: 45.0}
+  gibberish:        {esik: 0.02, kat: 300.0, tavan: 25.0}
+  # UYGULANDI (2026-08-20) kat 160.0->0.0, SONRA GERİ ALINDI (2026-08-20)
+  # kat 0.0->160.0. Gerekçe: yukarıdaki MİMARİ NOT (belge-düzeyi doğrulama,
+  # 5 belgede utility kaybı 0,04-0,20, hepsi TWO_COLUMN_CROSS_JUMP+figür).
+  dangling:         {esik: 0.08, kat: 160.0, tavan: 35.0}
+  broken:           {esik: 0.35, kat: 50.0,  tavan: 15.0}
+  # UYGULANDI (2026-08-20): kat 1.5 -> 0.0. Gerekçe ve ölçüm yukarıdaki
+  # MİMARİ NOT'ta. `esik`/`tavan` bilerek bırakıldı (kat=0 iken hiç etkileri
+  # yok) -- kalibrasyon geçmişi ve olası gelecekteki yeniden açma için kayıt.
+  hyphen:           {esik: 3.0,  kat: 0.0,   tavan: 15.0}
+  orphan:           {esik: 5.0,  kat: 1.0,   tavan: 10.0}
+  latex:            {kat: 5.0,   tavan: 20.0}
+  tablo_duzensiz:   {esik: 0.15, kat: 40.0,  tavan: 15.0}
+  baslik_tutarsiz:  {esik: 0.20, kat: 30.0,  tavan: 10.0}
+
+  # Eşiksiz, sabit cezalar
+  sabit:
+    scanned: 60.0
+    unicode_bozuk: 10.0          # D6: ikili varlık sinyali (kalibre edilmedi)

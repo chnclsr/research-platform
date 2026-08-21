@@ -4,6 +4,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
+# The threshold profile smart_router reads at import. Two lines, not one: the file has to
+# be in the image AND findable. ayarlar.varsayilan_yol() walks four levels up from its own
+# module, which lands on the repository root in a source checkout but on the interpreter's
+# lib directory once pip has installed the package into site-packages -- so the copied file
+# would sit at /app/config while the router looked somewhere else entirely. Naming the path
+# outright removes the arithmetic. Without both, the router silently falls back to its
+# embedded defaults and writes an esik_version nobody chose into every document's
+# provenance.
+COPY config ./config
+ENV SMART_ROUTER_CONFIG_PATH=/app/config/smart_router.yaml
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-cache-dir .

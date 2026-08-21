@@ -1,0 +1,44 @@
+{
+ "ortam": {
+  "makine": "PC_6605",
+  "islemci": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "python": "3.12.7",
+  "os": "Windows-11-10.0.26200-SP0",
+  "torch": "2.13.0+cu132",
+  "cuda_var": true,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "gpu_bellek_gb": 8.0,
+  "cuda_surum": "13.2",
+  "docling": "2.120.3"
+ },
+ "device": "cuda",
+ "threads": 28,
+ "runs": 1,
+ "isinma_sn": 15.32,
+ "belgeler": [
+  {
+   "belge": "turkce_makale",
+   "sayfa": 6,
+   "sure_sn": 7.246,
+   "ms_sayfa": 1207.6,
+   "tum_kosular_sn": [
+    7.246
+   ],
+   "karakter": 55746,
+   "markdown_sha256": "0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d"
+  }
+ ],
+ "toplam_sn": 7.2,
+ "toplam_sayfa": 6,
+ "ortalama_ms_sayfa": 1207.7,
+ "determinizm": {
+  "belge": "turkce_makale",
+  "kosu": 3,
+  "hepsi_ayni": true,
+  "ozetler": [
+   "0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+   "0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+   "0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d"
+  ]
+ }
+}

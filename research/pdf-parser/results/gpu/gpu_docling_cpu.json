@@ -1,0 +1,122 @@
+{
+ "ortam": {
+  "makine": "PC_6605",
+  "islemci": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "python": "3.12.7",
+  "os": "Windows-11-10.0.26200-SP0",
+  "torch": "2.13.0+cu132",
+  "cuda_var": true,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "gpu_bellek_gb": 8.0,
+  "cuda_surum": "13.2",
+  "docling": "2.120.3"
+ },
+ "device": "cpu",
+ "threads": 28,
+ "runs": 1,
+ "isinma_sn": 25.33,
+ "belgeler": [
+  {
+   "belge": "turkce_makale",
+   "sayfa": 6,
+   "sure_sn": 16.764,
+   "ms_sayfa": 2794.0,
+   "tum_kosular_sn": [
+    16.764
+   ],
+   "karakter": 55746,
+   "markdown_sha256": "0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d"
+  },
+  {
+   "belge": "resnet_2sutun_gorsel",
+   "sayfa": 12,
+   "sure_sn": 14.813,
+   "ms_sayfa": 1234.4,
+   "tum_kosular_sn": [
+    14.813
+   ],
+   "karakter": 64377,
+   "markdown_sha256": "edf5f143e78fc6ca675c8d1e77c6b87f0e23f43e3b9eb2d4e80e506dfb006437"
+  },
+  {
+   "belge": "vgg_tablo_agirlikli",
+   "sayfa": 14,
+   "sure_sn": 38.398,
+   "ms_sayfa": 2742.7,
+   "tum_kosular_sn": [
+    38.398
+   ],
+   "karakter": 66944,
+   "markdown_sha256": "9616d52a70604e676307cd8b2409d5d8cfced22f24d7b9be71cd77ba25999a0d"
+  },
+  {
+   "belge": "attention_tablo",
+   "sayfa": 15,
+   "sure_sn": 16.983,
+   "ms_sayfa": 1132.2,
+   "tum_kosular_sn": [
+    16.983
+   ],
+   "karakter": 48957,
+   "markdown_sha256": "19e695f78c33569a86613ce5903b10006d01f80b8e830f790e0d7d7d42ab8f24"
+  },
+  {
+   "belge": "bert_2sutun_dipnot",
+   "sayfa": 16,
+   "sure_sn": 19.485,
+   "ms_sayfa": 1217.8,
+   "tum_kosular_sn": [
+    19.485
+   ],
+   "karakter": 70235,
+   "markdown_sha256": "e7a30118d29070650f21f6ea2dce8c664e713f2d6edc2931fa071a1978ffa061"
+  },
+  {
+   "belge": "sybil_tip_2sutun",
+   "sayfa": 17,
+   "sure_sn": 34.121,
+   "ms_sayfa": 2007.1,
+   "tum_kosular_sn": [
+    34.121
+   ],
+   "karakter": 70649,
+   "markdown_sha256": "0c8fea95fa776c73c40541f030ea653bdc6bd5222755818159c94672138ba478"
+  },
+  {
+   "belge": "gpt3_uzun_75sayfa",
+   "sayfa": 75,
+   "sure_sn": 158.987,
+   "ms_sayfa": 2119.8,
+   "tum_kosular_sn": [
+    158.987
+   ],
+   "karakter": 333822,
+   "markdown_sha256": "7e5d811f5b040f538d68e350e4c0feffeabc8ffff732cf50a732e07fc44264e8"
+  },
+  {
+   "belge": "gpt4_uzun_gorsel",
+   "sayfa": 100,
+   "sure_sn": 64.055,
+   "ms_sayfa": 640.5,
+   "tum_kosular_sn": [
+    64.055
+   ],
+   "karakter": 289542,
+   "markdown_sha256": "9d6006de15e18a7837711f921efae83299a5ce6a09f6a244d65e929d8ac6b7b6"
+  },
+  {
+   "belge": "taranmis_bert_2sutun_dipnot",
+   "sayfa": 6,
+   "sure_sn": 41.956,
+   "ms_sayfa": 6992.6,
+   "tum_kosular_sn": [
+    41.956
+   ],
+   "karakter": 24963,
+   "markdown_sha256": "b765b23905220883505ee060f9d4ebf55f00c2ff96d4b69181febabdd3daa1d1"
+  }
+ ],
+ "toplam_sn": 405.6,
+ "toplam_sayfa": 261,
+ "ortalama_ms_sayfa": 1553.9
+}

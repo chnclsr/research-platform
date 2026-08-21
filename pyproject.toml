@@ -17,6 +17,14 @@ dependencies = [
   "langgraph>=1.0,<2",
   "mcp>=1.27,<2",
   "minio>=7.2,<8",
+  # Exact pin, not a range: this is the smart_router fast path AND the source
+  # of every gate.py signal (table/figure/OCR detection). It was never a
+  # declared dependency before 2026-08-20 -- installed ad hoc in dev venvs
+  # only, absent here, so a real deployment would silently run the whole
+  # pipeline on the unmeasured PyMuPDF fallback (inspector.py's
+  # PyMuPDFFallback) with no error, just a name change in provenance nobody
+  # was watching for. All of today's measurements assume 1.14.1.
+  "pdf-inspector==1.14.1",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "pypdf>=5.1,<7",
@@ -36,6 +44,21 @@ dependencies = [
 [project.optional-dependencies]
 academic = [
   "paper-qa>=5",
+]
+# The heavy half of smart_pdf. Declared here rather than in `dependencies` because it
+# pulls torch and lands at ~1.4 GB installed, plus ~0.5 GB of layout weights fetched on
+# first use -- a cost every install would otherwise pay, including ones that never parse
+# a PDF. Optional in packaging only, NOT in effect: without it the router still routes,
+# but the pages it routes have nowhere to go. They keep their fast-path text, get marked
+# `degraded` in provenance, and a fully scanned PDF is dropped by acquisition's
+# 400-character check. Every routing gain measured in reports/PDF_PARSER_V0.1.0_RC1_REPORT.md
+# assumes this is installed.
+#
+# Where it gets installed is an open decision (that report, section N.8): the image does
+# not install it today. For local work, an interpreter that has it can be named instead --
+# see SMART_ROUTER_DOCLING_PYTHON in .env.example.
+parsing = [
+  "docling>=2.120,<3",
 ]
 dev = [
   "aiosqlite>=0.20,<1",
