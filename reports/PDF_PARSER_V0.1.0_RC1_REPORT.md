@@ -1993,6 +1993,83 @@ korpusumuzdaki −20,81 ise gerçek bir bozulma. Yani büyüklük bile tek baş�
 ayırt edici değil; 5,0 bir "doğru eşik" değil, **iki korpusta da zarar vermeyen
 en geniş bant**. Kalıcı çözüm hâlâ O.10.3'teki sinyal değişimi.
 
+## O.12 Yeni Tabanla Yeniden Ölçüm — Karantina Düzeltmesi Dangling'in Hükmünü Değiştirdi (2026-08-21)
+
+`karantina_tolerans` 0,1 → 5,0 uygulandıktan sonra O.2 ve O.6'daki bütün ablation
+koşuları **yeni tabanla tekrarlandı**. Sebebi yalnız tutarlılık değildi: bir
+ayarın hükmü, sistemin geri kalanına bağlı (M.1'in "etkileşim etkisi" dersi).
+Tekrarlamak gerekti ve gerçekten değiştirdi.
+
+### O.12.1 dangling'in işareti döndü
+
+| | eski taban (tolerans 0,1) | yeni taban (tolerans 5,0) |
+|---|---|---|
+| `dangling.kat → 0` birleşik ΔNET | **+0,0373** (geri almak iyi) | **−0,2241** (geri almak KÖTÜ) |
+| ocrturk | −0,2634 | **−0,5247** |
+| opendataloader_bench | +0,3006 | +0,3006 |
+
+Mekanizma: eski tabanda karantina, dangling'in ürettiği ek ağır çağrıların
+getirdiği faydayı yutuyordu (`data_161` +0,1737, `data_117` +0,0561,
+`data_163` +0,0402 — üçü de karantinada bloke, O.3). Ölü bant genişleyince o
+fayda elde kalmaya başladı ve dangling'in katkısı görünür oldu.
+
+Bu, **O.3'teki "dangling'i 0'a çek" önerisinin ikinci kez ve farklı bir
+gerekçeyle düşmesi** demek. O.8.3'te öneri "birleşik sayı veri karışımına
+bağımlı" diye geri çekilmişti; şimdi birleşik sayının kendisi de ters yöne
+dönüyor. `dangling.kat = 160,0` kararı yerinde kalıyor — artık iki ayrı
+gerekçeyle.
+
+Aileler hâlâ çelişiyor (ocrturk −0,5247 / opendataloader +0,3006), yani bu bir
+"160 doğru değer" ilanı değil; ama en azından mevcut değer artık birleşik
+metrikte de savunulabilir durumda.
+
+### O.12.2 Yeni tabanda ablation tablosu
+
+Taban: heavy 101, precision 0,4059, recall 0,6508, NET **+3,0919**
+(ocrturk +4,0760 / opendataloader −0,9842).
+
+| Geri alınan değişiklik | Δheavy | ΔNET | ocrturk | opendataloader | hüküm |
+|---|---|---|---|---|---|
+| `dangling.kat → 0` | −20 | −0,2241 | −0,5247 | +0,3006 | tut (aileler çelişiyor) |
+| `dolu_dikdortgen → 8` | +9 | −0,2008 | −0,0792 | −0,1216 | tut |
+| `sekil_veto → 0` | +6 | −0,1319 | −0,0934 | −0,0386 | tut |
+| `karantina_tolerans → 0` | 0 | −0,0865 | −0,3038 | +0,2174 | tut (aileler çelişiyor) |
+| `hyphen.kat → 1,5` | +4 | −0,0684 | −0,0129 | −0,0555 | tut |
+| `icerik_kaybi_esik → 0` | 0 | 0,0000 | 0,0000 | 0,0000 | C1'de ölçülemiyor |
+
+**Altı ayarın altısında da geri almak zararlı** — yani mevcut config, bu iki
+korpusta ölçülebilen ayar uzayında yerel bir optimumda duruyor. Kendi
+korpusumuzda taban karantina 7 → **4**, geri kalan her şey aynı (ağır 137,
+boşa 28, kaçırılan 3, tablo 65/37/5).
+
+### O.12.3 Karantina karnesi, düzeltme sonrası
+
+| | tolerans 0,1 | tolerans 5,0 |
+|---|---|---|
+| Red | 8 (5 yanlış / 3 doğru) | **1 (1 yanlış / 0 doğru)** |
+| Red isabeti | 0,3750 | **0,0000** |
+| Kaybedilen fayda | 0,3814 | **0,0458** |
+| NET | −0,1943 | **−0,0458** |
+| Korelasyon r | −0,063 | −0,063 (değişmedi) |
+| Skor farkı tam sıfır | %74 | %74 (değişmedi) |
+
+Zarar 4 kat azaldı ama **sıfırlanmadı**: hayatta kalan tek red hâlâ yanlış
+(`data_115`, gerçek fayda +0,0458). Korelasyon ve sessizlik oranı hiç
+değişmedi — beklendiği gibi, çünkü tolerans sinyali düzeltmez, yalnız etki
+alanını daraltır. Karantina sinyalinin yerine gerçek faydayla korele bir ölçüt
+koymak (O.9, O.11) hâlâ açık madde; ama artık aciliyeti düştü: potansiyel
+kazanç 0,3814'ten 0,0458'e indi.
+
+### O.12.4 Ders
+
+Bir ayarın ablation hükmü, ölçüldüğü tabana bağlı. Aynı deney (`dangling → 0`)
+aynı korpusta, aynı gün, yalnız başka bir ayar değiştiği için **+0,0373'ten
+−0,2241'e** döndü. Bundan sonra: **config değiştiğinde ablation ve tarama
+sonuçları bayatlar, yeniden koşulmadan yorumlanamaz.** Kullanılan scriptler
+(`c1_ablation.py`, `korpus_ablation.py`, `karantina_olc.py`) bunu ucuzlatmak
+için var; deney açıklamaları da bu yüzden başlangıç değerini değil hedef
+değeri yazıyor ("`dangling.kat -> 0.0`", "160 -> 0" değil).
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production

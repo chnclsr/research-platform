@@ -47,19 +47,21 @@ SONUC = os.path.join(BASE, "out", "korpus_ablation")
 
 #: c1_ablation.py ile AYNI liste olmali -- iki korpus ayni deneyi kosmazsa
 #: yan yana konamaz.
+#: Aciklamalar HEDEF degeri yazar, "X -> Y" yazmaz -- taban zaman icinde
+#: degisiyor, sabit bir baslangic etiketi ilk degismede yalan soylerdi.
 DENEYLER = [
     ("bugun", "bugunku sistem (referans)", None, None),
-    ("tablo_esigi", "dolu_dikdortgen 60 -> 8",
+    ("tablo_esigi", "dolu_dikdortgen -> 8",
      ["kapi", "tablo", "dolu_dikdortgen"], 8),
-    ("sekil_veto", "sekil_veto_kaplama 0.15 -> 0.0",
+    ("sekil_veto", "sekil_veto_kaplama -> 0.0",
      ["kapi", "tablo", "sekil_veto_kaplama"], 0.0),
-    ("karantina", "karantina_tolerans 0.1 -> 0.0",
+    ("karantina", "karantina_tolerans -> 0.0",
      ["birlestirme", "karantina_tolerans"], 0.0),
-    ("icerik_kaybi", "icerik_kaybi_esik 0.20 -> 0.0",
+    ("icerik_kaybi", "icerik_kaybi_esik -> 0.0",
      ["birlestirme", "icerik_kaybi_esik"], 0.0),
-    ("hyphen", "hyphen.kat 0.0 -> 1.5",
+    ("hyphen", "hyphen.kat -> 1.5",
      ["critic_ceza", "hyphen", "kat"], 1.5),
-    ("dangling", "dangling.kat 160.0 -> 0.0",
+    ("dangling", "dangling.kat -> 0.0",
      ["critic_ceza", "dangling", "kat"], 0.0),
 ]
 
