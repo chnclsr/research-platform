@@ -40,9 +40,9 @@ reproducible deliverables.
 
 ![Research Platform End-to-End System Architecture & Database Lifecycle](docs/diagrams/e2e-system-flow.svg)
 
-> **Detailed Architectural Specifications:**
-> - Complete subsystem breakdowns, data dictionaries, and state machine transitions: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
-> - Standalone browser-based interactive diagram with light/dark theme toggles: **[system_architecture_diagram.html](./system_architecture_diagram.html)**
+> **Architectural Specifications & Interactive Explorers:**
+> - Complete subsystem breakdowns, 14-node LangGraph state machine, Smart Router pipeline, and database dictionaries: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+> - Standalone browser-based interactive diagram with real-time light/dark theme toggles: **[system_architecture_diagram.html](./system_architecture_diagram.html)**
 
 | View | Focus & Coverage | Architectural Subsystems |
 |---|---|---|
@@ -53,12 +53,12 @@ reproducible deliverables.
 
 ---
 
-## One workstation, an office-wide research service
+## One Workstation, an Office-Wide Research Service
 
 The network-facing MCP and control surfaces are authenticated and CIDR-restricted. Database,
 object-storage, and model services remain private to the host.
 
-## Research lifecycle
+## Research Lifecycle & Stage Flow
 
 ![ResearchPipeline stage flow: collection round, coverage decision and recovery loop](docs/diagrams/pipeline-flow.svg)
 
