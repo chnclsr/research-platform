@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from conftest import api_headers, ensure_test_user, acting_principal
+from fake_redis import FakeRedis
 from research_platform.api import _reconcile_interrupted_runs, app
 from research_platform.db import SessionLocal, create_schema
 from research_platform.repository import Repository
@@ -98,21 +99,6 @@ async def test_startup_reconciles_queued_and_cancel_requested_runs():
         cancelled = await repo.create_run(protocol)
         await repo.update_run(cancelled.id, status=RunStatus.CANCEL_REQUESTED.value)
 
-    class FakeRedis:
-        def __init__(self):
-            self.enqueued = []
-            self.removed = []
-
-        async def enqueue_job(self, function, run_id, **kwargs):
-            self.enqueued.append((function, run_id, kwargs))
-            return object()
-
-        async def zrem(self, key, value):
-            self.removed.append(("zrem", key, value))
-
-        async def delete(self, *keys):
-            self.removed.append(("delete", *keys))
-
     redis = FakeRedis()
     fake_app = SimpleNamespace(state=SimpleNamespace(redis=redis))
     await _reconcile_interrupted_runs(fake_app)
@@ -122,7 +108,4 @@ async def test_startup_reconciles_queued_and_cancel_requested_runs():
         cancelled_row = await repo.get_run(cancelled.id)
         assert cancelled_row.status == RunStatus.CANCELLED.value
     assert any(run_id == queued.id for _, run_id, _ in redis.enqueued)
-    assert any(
-        item[0] == "zrem" and item[2] == f"run:{cancelled.id}"
-        for item in redis.removed
-    )
+    assert any(job_id == f"run:{cancelled.id}" for _, job_id in redis.removed)

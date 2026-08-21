@@ -72,6 +72,7 @@ async def start_research(
     title: str = "Agent research request",
     output_mode: Literal["raw", "result", "both"] = "both",
     max_sources: int | None = None,
+    priority: Literal["normal", "urgent"] = "normal",
     planning_questions: bool = False,
     plan_review: bool = True,
     source_review: bool = False,
@@ -85,6 +86,11 @@ async def start_research(
     With `plan_review` left on, the run stops at `awaiting_input` before it searches and
     publishes a plan; approve or revise it with `respond_to_research_checkpoint`. Pass
     false only for unattended runs -- the run then records a `plan_skipped` event.
+
+    `priority` picks the queue band. An `urgent` run goes ahead of every waiting normal
+    one and pauses a running normal one to take the worker; use it for work that is
+    genuinely time-critical, because the run it displaces resumes from its last
+    checkpoint and redoes whatever that stage had done since.
     """
     protocol = ResearchProtocol(
         title=title,
@@ -101,7 +107,7 @@ async def start_research(
             outline_review=outline_review,
         ),
     )
-    run = await _client().start(protocol)
+    run = await _client().start(protocol, priority=priority)
     return run
 
 

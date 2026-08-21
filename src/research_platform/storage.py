@@ -51,6 +51,33 @@ class ObjectStore:
             response.close()
             response.release_conn()
 
+    async def list_keys(self, prefix: str) -> list[str]:
+        """Every object under a prefix.
+
+        Purging a run has to reach objects the database never names: source snapshots are
+        keyed by content hash under ``<run_id>/sources/`` and only the run that wrote them
+        knows they exist.
+        """
+        if self.settings.testing:
+            root = self.local_root / prefix
+            if not root.exists():
+                return []
+            return [
+                str(path.relative_to(self.local_root)).replace("\\", "/")
+                for path in root.rglob("*")
+                if path.is_file()
+            ]
+
+        def _walk() -> list[str]:
+            return [
+                item.object_name
+                for item in self.client.list_objects(
+                    self.settings.minio_bucket, prefix=prefix, recursive=True
+                )
+            ]
+
+        return await asyncio.to_thread(_walk)
+
     async def delete(self, key: str) -> None:
         if self.settings.testing:
             path = self.local_root / key

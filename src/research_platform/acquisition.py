@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import ipaddress
+import logging
 import socket
 import time
 from collections import defaultdict
@@ -15,6 +16,25 @@ from .config import Settings
 from .normalization import canonicalize_url, detect_document_type, detect_language
 from .parsers import ParsedDocument, ParserRegistry, build_parser_registry
 from .schemas import AcquiredDocument, ConnectorCandidate
+
+logger = logging.getLogger(__name__)
+
+
+def _provenance_note(parsed: ParsedDocument) -> str:
+    """Whatever the parser said about its own run, for the fallback log line.
+
+    Read defensively: `parse_provenance` is not a field every parser build carries, and a
+    diagnostic must never be the thing that raises.
+    """
+    provenance = getattr(parsed, "parse_provenance", None)
+    if not isinstance(provenance, dict):
+        return ""
+    interesting = {
+        key: provenance[key]
+        for key in ("degraded", "notes", "engine", "pages_routed")
+        if provenance.get(key)
+    }
+    return f" provenance={interesting}" if interesting else ""
 
 
 PAYWALL_MARKERS = (
@@ -74,6 +94,22 @@ class DomainLimiter:
             self.last_access[domain] = time.monotonic()
 
 
+# Politeness is a property of the machine, not of a run. One limiter per AcquisitionService
+# meant that with N runs in flight the same publisher was hit N times faster -- domain_delay_s
+# silently became domain_delay_s / N. The reactive 429 backoff in the connectors is not a
+# substitute: by the time it fires, the requests have already gone out.
+_SHARED_LIMITERS: dict[float, DomainLimiter] = {}
+
+
+def shared_domain_limiter(delay_s: float) -> DomainLimiter:
+    """The process-wide limiter for this delay, created once."""
+    limiter = _SHARED_LIMITERS.get(delay_s)
+    if limiter is None:
+        limiter = DomainLimiter(delay_s)
+        _SHARED_LIMITERS[delay_s] = limiter
+    return limiter
+
+
 class AcquisitionService:
     def __init__(
         self,
@@ -82,7 +118,7 @@ class AcquisitionService:
         parsers: ParserRegistry | None = None,
     ):
         self.settings, self.client = settings, client
-        self.limiter = DomainLimiter(settings.domain_delay_s)
+        self.limiter = shared_domain_limiter(settings.domain_delay_s)
         self.parsers = parsers or build_parser_registry()
         # Filled from the protocol's ParserSelection; empty means fully deterministic.
         self.parser_overrides: dict[str, str] = {}
@@ -260,12 +296,32 @@ class AcquisitionService:
                 )
                 if parser is None:
                     return None
-                parsed = parser.parse(response.content, url=current, content_type=ctype)
+                # Parsing is synchronous and can be expensive -- a page router or an OCR
+                # pass costs seconds per page. _direct() runs acquisition_concurrency of
+                # these at once, so doing it on the event loop stalls every other download
+                # in flight, not just this one.
+                parsed = await asyncio.to_thread(
+                    parser.parse, response.content, url=current, content_type=ctype
+                )
                 if len(parsed.text.strip()) < 400:
+                    # Said once, here: the fallback ladder replaces `parsed`, and the
+                    # alternatives carry no provenance of their own, so if the document is
+                    # dropped further down there is otherwise nothing left explaining why
+                    # the parser that should have handled it did not.
+                    logger.info(
+                        "parser %s returned %d chars for %s (%s); trying alternatives%s",
+                        parser.id,
+                        len(parsed.text.strip()),
+                        current,
+                        document_type,
+                        _provenance_note(parsed),
+                    )
                     for alt in self.parsers.candidates(document_type, ctype, response.content):
                         if alt.id != parser.id:
                             try:
-                                alt_parsed = alt.parse(response.content, url=current, content_type=ctype)
+                                alt_parsed = await asyncio.to_thread(
+                                    alt.parse, response.content, url=current, content_type=ctype
+                                )
                                 if len(alt_parsed.text.strip()) >= 400:
                                     parsed = alt_parsed
                                     break

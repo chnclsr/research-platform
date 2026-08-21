@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from .capacity import model_lease
 from .config import Settings
 from .schemas import AcquiredDocument, ExtractedClaim
 
@@ -48,6 +49,13 @@ class OllamaProvider(LLMProvider):
         self.settings, self.client = settings, client
 
     async def complete_json(self, system: str, user: str) -> Any:
+        # One GPU, so one model call at a time whatever else the worker is running. Taken
+        # around the whole call rather than each POST inside it, so a single logical
+        # completion is never interleaved with another run's.
+        async with model_lease():
+            return await self._complete_json(system, user)
+
+    async def _complete_json(self, system: str, user: str) -> Any:
         if self.settings.llm_think and self.settings.llm_reason_then_format:
             return await self._reason_then_format(system, user)
         started = time.perf_counter()

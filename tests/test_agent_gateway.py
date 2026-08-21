@@ -314,6 +314,7 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     class FakeGateway:
         def __init__(self):
             self.protocols = []
+            self.priorities = []
             self.actors = []
 
         def for_actor(self, actor_user_id):
@@ -322,8 +323,9 @@ async def test_telegram_research_waits_for_inline_duration_selection():
             self.actors.append(actor_user_id)
             return self
 
-        async def start(self, protocol):
+        async def start(self, protocol, *, priority="normal"):
             self.protocols.append(protocol)
+            self.priorities.append(priority)
             return {"id": "RUN1"}
 
     # The bot now needs to know whose research a message creates, so the Telegram
@@ -377,8 +379,21 @@ async def test_telegram_research_waits_for_inline_duration_selection():
         "data": callback_data,
         "message": {"message_id": 99, "chat": {"id": 11, "type": "private"}},
     })
+    # Urgency is the last unanswered question, so the run still has not started.
+    assert bot.gateway.protocols == []
+    picker = client.posts[-1][1]["json"]["reply_markup"]["inline_keyboard"]
+    callback_data = picker[0][0]["callback_data"]
+    assert callback_data.startswith("research_prio:")
+
+    await bot._handle_callback(client, {
+        "id": "CALLBACK2",
+        "from": {"id": 7},
+        "data": callback_data,
+        "message": {"message_id": 100, "chat": {"id": 11, "type": "private"}},
+    })
 
     assert len(bot.gateway.protocols) == 1
+    assert bot.gateway.priorities == ["normal"]
     assert bot.gateway.protocols[0].budget.max_wall_minutes == 30
     assert bot.gateway.protocols[0].budget.max_sources is None
     assert bot.gateway.protocols[0].interaction_language == "tr"
@@ -389,10 +404,12 @@ async def test_telegram_research_waits_for_inline_duration_selection():
     await bot._handle(client, {
         "from": {"id": 7},
         "chat": {"id": 11, "type": "private"},
-        "text": "/research both 2 --lang en lung cancer detection by CT",
+        "text": "/research both 2 --lang en --urgent lung cancer detection by CT",
     })
     assert len(bot.gateway.protocols) == 1
     assert bot.gateway.protocols[0].budget.max_wall_minutes == 2
+    # Language, duration and urgency all answered on the command line: nothing left to ask.
+    assert bot.gateway.priorities[-1] == "urgent"
     assert bot.gateway.protocols[0].primary_question == "lung cancer detection by CT"
     assert bot.gateway.protocols[0].interaction_language == "en"
     assert bot.gateway.protocols[0].report_language == "en"

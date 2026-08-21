@@ -362,6 +362,13 @@ class DeliveryMode(StrEnum):
 
 class ResearchRunCreate(BaseModel):
     protocol: ResearchProtocol
+    # Scheduling, kept beside the protocol rather than inside it: the protocol is the
+    # document approved at the plan gate and describes what to research, not when.
+    priority: Literal["normal", "urgent"] = "normal"
+
+
+class RunPriorityRequest(BaseModel):
+    priority: Literal["normal", "urgent"]
 
 
 class HitlRespondRequest(BaseModel):
@@ -392,6 +399,10 @@ class RunView(BaseModel):
     id: str
     status: RunStatus
     current_stage: str
+    priority: Literal["normal", "urgent"] = "normal"
+    # Filled in while the scheduler is holding this run back for an urgent one, so a
+    # client can say why a run stopped on its own rather than showing a bare "paused".
+    preempted_at: datetime | None = None
     protocol: ResearchProtocol
     round_number: int = 0
     sources_count: int = 0

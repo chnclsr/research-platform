@@ -7,6 +7,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Index,
     Integer,
     String,
     Text,
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import JSON
 
+from .capacity import startup_ceiling
 from .config import get_settings
 
 
@@ -31,6 +33,9 @@ class Base(DeclarativeBase):
 
 class ResearchRunRow(Base):
     __tablename__ = "research_runs"
+    # Both scheduler questions -- "is an urgent run queued?" and "which normal run is
+    # running?" -- filter on status and priority together.
+    __table_args__ = (Index("ix_research_runs_status_priority", "status", "priority"),)
 
     id: Mapped[str] = mapped_column(String(26), primary_key=True)
     # Who may see this run. Every creation path must supply one; reads are filtered by
@@ -38,6 +43,19 @@ class ResearchRunRow(Base):
     # this table both through the API and directly.
     owner_id: Mapped[str | None] = mapped_column(String(26), index=True, nullable=True)
     status: Mapped[str] = mapped_column(String(40), index=True)
+    # Scheduling, not research: which band this run waits in. Deliberately a column and
+    # not a protocol field -- the protocol describes what to research and is what the user
+    # approves at the plan gate, while "is an urgent run waiting?" is a query the
+    # scheduler runs on every tick.
+    priority: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="normal", default="normal"
+    )
+    # Set only when the scheduler paused this run to let an urgent one through. What
+    # separates it from a pause the user asked for: without the distinction, auto-resume
+    # would restart runs somebody deliberately stopped.
+    preempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     current_stage: Mapped[str] = mapped_column(String(80), default="INIT")
     protocol: Mapped[dict] = mapped_column(json_type())
     state: Mapped[dict] = mapped_column(json_type(), default=dict)
@@ -301,7 +319,14 @@ class TelegramIdentityRow(Base):
 
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+# Sized from the parallel-run ceiling: each run holds its pipeline session and opens
+# short-lived control and checkpoint sessions beside it, so the default 5+10 pool is the
+# next thing to run out once more than one run executes at a time.
+_POOL_KWARGS: dict = {} if settings.database_url.startswith("sqlite") else {
+    "pool_size": max(10, startup_ceiling(settings) * 5),
+    "max_overflow": max(10, startup_ceiling(settings) * 3),
+}
+engine = create_async_engine(settings.database_url, pool_pre_ping=True, **_POOL_KWARGS)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

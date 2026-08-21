@@ -9,12 +9,6 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import uvicorn
-from arq.constants import (
-    default_queue_name,
-    in_progress_key_prefix,
-    job_key_prefix,
-    retry_key_prefix,
-)
 from arq.connections import RedisSettings, create_pool
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
@@ -22,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from .auth import API_KEY_SCHEME, AuthError, Principal
+from .capacity import measure, plan_capacity
 from .config import Settings, get_settings
 from .connectors import build_registry
 from .db import SessionLocal, create_schema, get_session
@@ -29,7 +24,9 @@ from .embeddings import EmbeddingClient
 from .identity import principal_from_api_key, principal_from_user_id
 from .parsers import build_parser_registry
 from .passages import retrieve_passages
+from .queueing import discard_run_jobs, enqueue_run, normalize_priority, rescore_run
 from .repository import ActorRequired, Repository, RunAccessDenied
+from .scheduler import preempt_for
 from .paperqa_adapter import paperqa2_health
 from .schemas import (
     ArtifactView,
@@ -37,6 +34,7 @@ from .schemas import (
     DeliveryMode,
     HitlRespondRequest,
     ResearchRunCreate,
+    RunPriorityRequest,
     RunStatus,
     RunView,
     SourceFamily,
@@ -153,13 +151,7 @@ async def _reconcile_interrupted_runs(app: FastAPI) -> None:
         return
 
     async def discard_stable_job(run_id: str) -> None:
-        job_id = f"run:{run_id}"
-        await redis.zrem(default_queue_name, job_id)
-        await redis.delete(
-            f"{job_key_prefix}{job_id}",
-            f"{in_progress_key_prefix}{job_id}",
-            f"{retry_key_prefix}{job_id}",
-        )
+        await discard_run_jobs(redis, run_id)
 
     async with SessionLocal() as session:
         # Startup reconciliation sweeps the whole queue regardless of who owns what.
@@ -186,11 +178,7 @@ async def _reconcile_interrupted_runs(app: FastAPI) -> None:
 
         queued = await repo.list_runs_by_statuses({RunStatus.QUEUED.value})
         for row in queued:
-            await redis.enqueue_job(
-                "execute_research_run",
-                row.id,
-                _job_id=f"run:{row.id}",
-            )
+            await enqueue_run(redis, row.id, row.priority)
 
 
 @asynccontextmanager
@@ -323,7 +311,15 @@ async def health(request: Request) -> dict:
     except Exception:
         checks["minio"] = "unavailable"
     required_ok = checks["database"] == "ok" and checks["redis"] == "ok"
-    return {"status": "healthy" if required_ok else "degraded", "checks": checks}
+    return {
+        "status": "healthy" if required_ok else "degraded",
+        "checks": checks,
+        # Answers "why is my run not starting" without a shell: how many runs fit right
+        # now and which resource is the one saying no.
+        "capacity": plan_capacity(
+            await measure(settings, request.app.state.http)
+        ).as_dict(),
+    }
 
 
 @app.post("/v1/research-runs", response_model=RunView, dependencies=[Depends(resolve_principal)])
@@ -335,7 +331,7 @@ async def create_research_run(
     if redis is None and not settings.testing:
         raise HTTPException(status_code=503, detail="Redis queue unavailable; run was not created")
     try:
-        row = await repo.create_run(body.protocol)
+        row = await repo.create_run(body.protocol, priority=body.priority)
     except ActorRequired as exc:
         # The shared service token identifies a service, not a person, and a run with
         # no owner would be invisible to everyone but an admin. Callers using the
@@ -346,11 +342,7 @@ async def create_research_run(
         ) from exc
     if redis is not None:
         try:
-            queued = await redis.enqueue_job(
-                "execute_research_run",
-                row.id,
-                _job_id=f"run:{row.id}",
-            )
+            queued = await enqueue_run(redis, row.id, row.priority)
             if queued is None:
                 raise RuntimeError("ARQ rejected the research job")
         except Exception as exc:
@@ -363,6 +355,10 @@ async def create_research_run(
                 status_code=503,
                 detail="Research queue rejected the run",
             ) from exc
+        # Outside the guard above on purpose: the run is queued and valid either way.
+        # Failing to make room for it is a scheduling disappointment, not a reason to
+        # fail the run the caller just created.
+        await preempt_for(repo.session, row.id, row.priority)
     elif not settings.testing:
         await repo.update_run(
             row.id,
@@ -437,7 +433,7 @@ async def resume_research_run(
             {"previous_error": previous_error},
         )
     try:
-        queued = await redis.enqueue_job("execute_research_run", run_id)
+        queued = await enqueue_run(redis, run_id, row.priority)
         if queued is None:
             raise RuntimeError("ARQ rejected the resumed research job")
     except Exception as exc:
@@ -450,6 +446,9 @@ async def resume_research_run(
             status_code=503,
             detail="Research queue rejected the resumed run",
         ) from exc
+    # A resumed run rejoins the queue in its own band, so an urgent one resuming has to
+    # make room for itself the same way a new urgent run would.
+    await preempt_for(repo.session, run_id, row.priority)
     return repo.run_view(row)
 
 
@@ -513,10 +512,11 @@ async def respond_to_hitl(
             "response": response,
         },
     )
-    queued = await redis.enqueue_job("execute_research_run", run_id)
+    queued = await enqueue_run(redis, run_id, row.priority)
     if queued is None:
         await repo.update_run(run_id, status=RunStatus.PAUSED.value)
         raise HTTPException(status_code=503, detail="Research queue rejected the HITL response")
+    await preempt_for(repo.session, run_id, row.priority)
     return repo.run_view(row)
 
 
@@ -546,6 +546,39 @@ async def cancel_research_run(run_id: str, repo: Repository = Depends(repository
     row = await repo.update_run(run_id, status=status)
     if status == RunStatus.CANCELLED.value:
         await repo.event(run_id, "cancelled", {"stage": row.current_stage, "before_start": True})
+    return repo.run_view(row)
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/priority",
+    response_model=RunView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def set_research_run_priority(
+    run_id: str,
+    body: RunPriorityRequest,
+    request: Request,
+    repo: Repository = Depends(repository),
+) -> RunView:
+    """Move a run between the two bands after it was created.
+
+    Only while it is waiting. Re-banding a run that already holds the worker changes
+    nothing about when it runs, and demoting one would be a confusing way to ask for a
+    pause -- that is what the pause endpoint is for.
+    """
+    row = await _required_run(run_id, repo)
+    if row.status not in {RunStatus.QUEUED.value, RunStatus.PAUSED.value}:
+        raise HTTPException(
+            status_code=409, detail=f"Cannot change priority of a run in {row.status}"
+        )
+    priority = normalize_priority(body.priority)
+    row = await repo.update_run(run_id, priority=priority)
+    await repo.event(run_id, "priority_changed", {"priority": priority})
+    redis = await _connect_redis(request.app, attempts=1)
+    if redis is not None:
+        # A paused run has no queued job to move; it enters its new band when it resumes.
+        await rescore_run(redis, run_id, priority)
+        await preempt_for(repo.session, run_id, priority)
     return repo.run_view(row)
 
 

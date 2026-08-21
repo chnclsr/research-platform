@@ -2,10 +2,22 @@ from __future__ import annotations
 
 from .base import DocumentParser, ParserHealth
 from .html import HtmlParser
-from .pdf import PdfParser, PyMuPdfParser, PyPdfParser
+from .pdf import PyMuPdfParser, PyPdfParser
 from .structured import PlainTextParser
 
 
+# Priority scale. `candidates()` sorts by (-priority, id), so two parsers on the same
+# level are separated by their id alphabetically -- which is a coin toss dressed up as a
+# rule. The levels are therefore spaced, and what each one means is written down:
+#
+#   0  = fallback, used only when nothing else accepts the document (pypdf, plain_text)
+#   10 = default single-pass extractor for a type (pymupdf_fast, html_structured)
+#   20 = page router, deliberately ahead of the single-pass extractor (smart_pdf)
+#
+# The scale exists because two branches independently moved a parser to 10 without either
+# doing anything wrong, and the tie put the router behind the plain extractor: no error,
+# no exception, page routing simply switched itself off. A parser that has to sit off
+# these levels should say why in a comment next to its `priority`.
 class ParserRegistry:
     """
     Deterministic parser lookup, mirroring ConnectorRegistry in connectors/registry.py.

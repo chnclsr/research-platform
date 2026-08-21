@@ -1,10 +1,10 @@
 # `developments` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.10.7`
+Platform sürümü: `v0.12.0`
 
-Belge sürümü: `12.8`
+Belge sürümü: `12.11`
 
-Son güncelleme: `2026-08-20`
+Son güncelleme: `2026-08-21`
 
 ## Kapsam
 
@@ -2138,6 +2138,80 @@ kopyala, bir yapıştır. Önerilen komut duruma göre seçiliyor: biten koşuda
 | Başkasının düğmesi | Reddediliyor |
 | Bot yeniden başlamışsa | Düğme `/respond` komutunu tekrarlıyor |
 | HTML reddedilirse | Aynı mesaj düz metin olarak yeniden gidiyor |
+
+---
+
+## 24. Öncelikli koşu kuyruğu (v0.11.0)
+
+Kuyruk ilk gelen ilk hizmet alır düzenindeydi; acil bir soru 180 dakikalık bir koşunun
+arkasında bekliyordu. Tek arq kuyruğunun içinde iki skor bandı açıldı, çalışan normal koşu
+acil bir koşu için duraklatılıyor ve acil iş bitince kendiliğinden devam ediyor. Aciliyet
+Telegram, MCP, Langflow ve panelden alınıyor.
+
+Şema göçü içerdiği ve birden çok servisi kapsadığı için ayrıntı ve gerekçeler kendi
+raporunda: [PRIORITY_QUEUE_V0.11.0_IMPLEMENTATION_REPORT.md](PRIORITY_QUEUE_V0.11.0_IMPLEMENTATION_REPORT.md).
+
+> **Not:** Bu bölüm 13. bölümdeki redaksiyon kararını bilinçli olarak genişletir — ekip
+> görünümüne `priority` eklendi. Gerekçe kendi raporundadır.
+
+---
+
+## 25. Donanıma göre paralel koşular (v0.12.0)
+
+Worker `max_jobs = 1` ile çalışıyordu; bir koşunun duvar saatinin büyük kısmı ağ ve CPU
+işinde geçtiği için bu, GPU'nun ihtiyaç duyduğundan çok daha geniş bir sınırdı. Paralel
+koşu sayısı artık elle seçilmiyor, her kabulde canlı ölçümden hesaplanıyor: uygun RAM,
+o anki CPU yükü ve Ollama'nın bildirdiği yerleşik VRAM. Model çağrıları süreç genelinde
+tek sıraya alındı, böylece paralellik tek GPU'yu darboğaza sokmuyor ve karta aynı anda
+birden fazla model yüklenmiyor. Eşzamanlı olan **koşulardır, koşunun içi değil**: tek bir
+araştırma bu sürümde daha hızlı bitmiyor.
+
+Paralelliğin ortaya çıkardığı üç kusur da kapatıldı: koşu başına kurulan `DomainLimiter`
+(nezaket sınırını koşu sayısına bölüyordu), varsayılan veritabanı havuzu ve cron işlerinin
+`max_jobs` yüzünden bir koşu çalışırken hiç çalışmaması.
+
+Ayrıntı ve gerekçeler kendi raporunda:
+[PARALLEL_RUNS_V0.12.0_IMPLEMENTATION_REPORT.md](PARALLEL_RUNS_V0.12.0_IMPLEMENTATION_REPORT.md).
+
+> **Not:** 24. bölümdeki önceleme kuralları bu bölümde güncellendi — acil koşu artık yalnız
+> boş slot yokken bir koşuyu duraklatıyor.
+
+---
+
+## 26. Koşuyu izsiz silme: `research-admin purge-runs`
+
+Panel deneme amaçlı başlatılıp iptal edilen koşularla dolmuştu. İptal etmek koşuyu
+bitiriyor ama **silmiyor**: satır panelde durmaya, pasajları corpus havuzunda kalmaya ve
+anlık görüntüleri nesne deposunda yer kaplamaya devam ediyor.
+
+**Neden elle SQL değil.** `research_runs` ile çocuk tabloları arasında yabancı anahtar
+yok — `run_id` yalnız indekslenmiş bir kolon, dolayısıyla veritabanı seviyesinde cascade
+yok. Koşu satırını elle silmek, hiçbir şeyin bir daha ulaşamayacağı binlerce satır bırakır.
+Ölçülen: 19 iptal koşusu için 17 494 kaynak ilişkisi, 4 011 frontier, 2 657 olay, 2 315
+pasaj, 575 kanıt bağı, 561 iddia, 355 kaynak sürümü, 352 kaynak, 103 checkpoint.
+
+`Repository.purge_run` bunların hepsini adıyla siliyor, çocuklardan ebeveynlere doğru;
+`ObjectStore.list_keys` ise `<run_id>/sources/` altındaki anlık görüntüleri buluyor —
+bunlar içerik özetiyle adlandırıldığı için veritabanında adları geçmiyor.
+
+**Pasajlar da gidiyor.** Onlar sonraki koşuları tohumlayan corpus havuzu
+(`list_corpus_passages`), yani bir koşuyu silmek metnini o havuzdan da çekiyor. Terk
+edilmiş bir koşu için istenen tam da bu; tamamlanmış bir koşu için iki kez düşünmeli.
+
+Komut varsayılan olarak **silmiyor**: eşleşenleri listeleyip `--yes` bekliyor. Elle
+yazılmış bir kimlik, on dokuz yanlış koşunun gittiğini sonradan öğrenmek için kötü bir yol.
+
+```powershell
+docker compose exec api research-admin purge-runs --status cancelled
+docker compose exec api research-admin purge-runs --status cancelled --yes
+docker compose exec api research-admin purge-runs --run-id 01M0... --yes
+```
+
+`purge_run` bir `run_id` aldığı için sahiplik metasınıfı onu da otomatik koruyor;
+başkasının koşusunu silmek reddediliyor (`tests/test_run_ownership.py`).
+
+**Uygulandı:** 19 iptal koşusu silindi, nesne deposundan 317 nesne kalktı, artık hiçbir
+tabloda sahipsiz satır yok.
 
 ---
 

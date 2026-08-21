@@ -4,26 +4,10 @@ import pytest
 
 from research_platform.db import SessionLocal, create_schema
 from conftest import acting_principal
+from fake_redis import FakeRedis
 from research_platform.repository import Repository
 from research_platform.schemas import ResearchProtocol, RunStatus
 from research_platform.worker import _recover_interrupted_jobs
-
-
-class FakeRedis:
-    def __init__(self):
-        self.deleted: list[tuple[str, ...]] = []
-        self.removed: list[tuple[str, str]] = []
-        self.enqueued: list[tuple[str, str, str | None]] = []
-
-    async def zrem(self, queue: str, job_id: str):
-        self.removed.append((queue, job_id))
-
-    async def delete(self, *keys: str):
-        self.deleted.append(keys)
-
-    async def enqueue_job(self, function: str, run_id: str, _job_id: str | None = None):
-        self.enqueued.append((function, run_id, _job_id))
-        return object()
 
 
 @pytest.mark.asyncio
