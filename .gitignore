@@ -17,3 +17,6 @@ insti_patch.zip
 .codex-docx-review/
 CLAUDE.md
 .claude/
+# Ekran görüntüleri ve tek seferlik sunum çıktıları. docs/diagrams/ depoda kalır --
+# README onlara bağlanıyor; buradakiler yalnız o günkü ekranı gösteriyor.
+docs/reports/
