@@ -36,6 +36,9 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 21 | Telegram: dil seçimi, şıklı planlama söyleşisi | `3f3077e` |
 | 22 | Bağlayıcı kapsam soruları, plan düğmeleri, koşu adı | `3f3077e` |
 | 23 | Koşu adı kimliğin yerini tutuyor, `/kosular` | `3f3077e` |
+| 24 | Öncelikli koşu kuyruğu (kendi raporu var) | `9b1c887` |
+| 25 | Donanıma göre paralel koşular (kendi raporu var) | `9b1c887` |
+| 26 | Koşuyu izsiz silme: `research-admin purge-runs` | `9b1c887` |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
