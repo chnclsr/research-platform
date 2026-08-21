@@ -138,7 +138,45 @@ birlestirme:
   # skoru bu farkları güvenilir ayıramıyor; 19 gerçek düşüşün hepsi (resnet
   # s.5, -22,38 dahil) tolerans=0.10'da hâlâ yakalanıyor. Elle doğrulama:
   # `entegrasyon_plani.md` Bölüm 17, madde #1.
-  karantina_tolerans: 0.1
+  #
+  # UYGULANDI (2026-08-21): 0.10 -> 5.0. Yukarıdaki 2026-08-19 taraması yalnız
+  # karantina SAYISINI ölçebiliyordu; kendi korpusumuzda metin referansı yok,
+  # yani "reddedilen sayfa gerçekten kötü müydü" sorusu orada cevaplanamıyor.
+  # C1'de (metin referanslı, 201 belge) cevaplanabildi -- karantina karar
+  # karnesi, `research/pdf-parser/scripts/karantina_olc.py`:
+  #
+  #   * ağır motora giden 101 sayfada 8 red: 3 doğru, 5 YANLIŞ (isabet 0,375)
+  #   * skor farkı ile gerçek fayda korelasyonu r = -0,063 (ters ve sıfıra yakın)
+  #   * sayfaların %74'ünde skor farkı TAM SIFIR -- sinyal hiç konuşmuyor
+  #   * net etki -0,1943: mekanizma kurtardığından fazlasını atıyor
+  #
+  # Tolerans taraması (`c1_tarama.py`, aynı 201 belge / 261 sayfa):
+  #
+  #   tolerans | C1 karantina | C1 kaçırılan fayda | C1 NET  | kendi korpus
+  #   ---------|--------------|--------------------|---------|-------------
+  #      0.1   |      8       |      0,3814        | +2,9433 |  7
+  #      1.0   |      3       |      0,1421        | +2,9956 |  4
+  #      5.0   |      1       |      0,0458        | +3,0919 |  4
+  #     10.0   |      1       |      0,0458        | +3,0919 |  4
+  #     1000   |      0       |      0,0000        | +3,1377 |  3
+  #
+  # 5.0 seçildi çünkü zararlı olan, skor karşılaştırmasının KÜÇÜK FARK BANDI:
+  # C1'deki 5 yanlış red -0,300 … -2,280 aralığında, kendi korpusumuzda gpt3
+  # s56/60/61 -0,15 … -0,83 ile reddediliyor. 5.0 bu bandı kapatırken elle
+  # doğrulanmış vakaların HEPSİNİ tutuyor: resnet s.5 (-20,81, gerçek
+  # private-use-area glyph regresyonu) ve gpt4 s48/57/67 (içerik-kaybı
+  # kuralı, ayrı mekanizma, dokunulmadı). Tamamen kapatmak (1000) C1'de en iyi
+  # NET'i veriyor ama bu dördünü birden kaçırırdı.
+  #
+  # `precision`/`recall` DEĞİŞMEZ -- karantina route kararından sonra çalışır.
+  # Veri aileleri çelişmiyor: ocrturk NET artıyor, opendataloader_bench'te hiç
+  # red olmadığı için sabit.
+  #
+  # 5.0 bir "doğru eşik" DEĞİL, iki korpusta da zarar vermeyen en geniş bant.
+  # C1'de 5.0'da hayatta kalan tek red (data_115, -20,580) hâlâ YANLIŞ (gerçek
+  # fayda +0,0458) -- yani büyüklük tek başına ayırt edici değil. Kalıcı çözüm
+  # corruption skoru yerine gerçek faydayla korele bir sinyal: rapor O.9/O.11.
+  karantina_tolerans: 5.0
 
   # Fast metin kullanılabilirken (bos degil), heavy'nin markdown-arindirilmis
   # uzunlugu fast'inkinin bu orandan AZ ise heavy katastrofik sayilir --

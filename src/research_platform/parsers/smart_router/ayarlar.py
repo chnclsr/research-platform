@@ -80,12 +80,14 @@ VARSAYILAN: Dict[str, Any] = {
         "yuksek_guven_yeter": False,
     },
     "birlestirme": {
-        # UYGULANDI (2026-08-20): 0.1. YAML profili bozuk/eksikse sistem bu
-        # gömülü varsayılana düşüyor (ayarlar.py docstring'i, "SAFE ABSENCE") --
-        # bu yüzden YAML'daki 0.1 ile burası birlikte güncellenmezse, config
-        # kaybı sessizce eski (0.0) davranışa geri döner. Gerekçe ve ölçüm:
-        # config/smart_router.yaml + entegrasyon_plani.md Bölüm 17 madde #1.
-        "karantina_tolerans": 0.1,
+        # UYGULANDI (2026-08-20): 0.1, sonra (2026-08-21) 0.1 -> 5.0. YAML
+        # profili bozuk/eksikse sistem bu gömülü varsayılana düşüyor
+        # (ayarlar.py docstring'i, "SAFE ABSENCE") -- bu yüzden YAML'daki değer
+        # ile burası birlikte güncellenmezse, config kaybı sessizce eski
+        # davranışa geri döner. `tests/test_parsers.py` bu eşitliği test eder.
+        # Gerekçe ve ölçüm: config/smart_router.yaml (karantina karar karnesi:
+        # 8 redin 5'i yanlış, r=-0,063, net -0,1943) + rapor O.9/O.11.
+        "karantina_tolerans": 5.0,
         # UYGULANDI (2026-08-20): heavy/fast markdown-arindirilmis uzunluk
         # orani bunun altindaysa (fast kullanilabilirken) heavy katastrofik
         # sayilir. Gerekce, olcum ve bilerek yakalanmayan Codex/EUSO vakasi

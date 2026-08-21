@@ -1454,6 +1454,545 @@ Not: bu depoda **GitHub Actions yok**. N.7/E'deki koruma testleri ancak biri
 `pytest` koştuğunda konuşur; merge incelemesinde bunu koşmak bir alışkanlık
 meselesi, otomatik değil.
 
+## O. 20 Ağustos Değişikliklerinin Tek Tek Ölçümü — M.2 Geri Alması Yanlıştı (2026-08-21)
+
+20 Ağustos'ta arka arkaya yapılan ayar değişiklikleri (tablo eşiği, şekil vetosu,
+karantina toleransı, içerik-kaybı kuralı, hyphen, dangling) o gün **birlikte**
+ölçülmüştü. Bu bölüm her birini **tek tek** ölçer: `research/pdf-parser/scripts/c1_ablation.py`,
+201 belgelik C1 alt kümesi (Docling cache'i olan belgeler), leave-one-out —
+temel her zaman bugünkü tam sistem, her koşuda yalnız bir parametre 20 Ağustos
+öncesi değerine döner. Yöntem bilerek böyle: M.1'de izole ablation'ın etkileşimi
+gizlediği zaten ölçülmüştü.
+
+### O.1 Ölçüm hijyeni — iki koşu karşılaştırılabilir değildi
+
+İlk replay (v5) `rapidfuzz` kurulu olmayan bir venv'de koştu ve
+`c1_metrik.py::_karakter_benzerligi` sessizce `difflib`'e düştü. `METRIC_VERSION`
+aynı kaldığı için fark sürüm etiketinden görünmüyordu; 201 belgenin **182'sinde**
+fast utility, 178'inde heavy utility kaydı — hiçbiri parser davranışıyla ilgili
+değildi. Doğrulama: fast markdown çıktıları iki koşuda **birebir aynıydı**
+(0/201 dosya farklı), yani fark tamamen metrik katmanındaydı.
+
+Koşu `rapidfuzz 3.14.5` (v4 ile aynı sürüm) kurulup tekrarlandı (v6) ve
+fast/heavy utility farkı **0 belgeye** düştü — yalnız route kararı değişti.
+**Açık madde:** `char_algorithm` alanı predictions'a yazılıyor ama
+`METRIC_VERSION`'a girmiyor; ortam farkının sürüm etiketinden görünmesi için
+bunun düzeltilmesi gerekiyor.
+
+### O.2 Leave-one-out sonuçları (201 belge)
+
+Taban: heavy çağrısı 101, precision 0,4059, recall 0,6508, NET 2,9433.
+NET = `toplam(routed_utility − fast_utility)`. Pozitif ΔNET, o değişikliği
+**geri almanın** daha iyi olduğu anlamına gelir.
+
+| Geri alınan değişiklik | Δheavy | ΔNET | Hüküm |
+|---|---|---|---|
+| `karantina_tolerans` 0,1 → 0,0 | 0 | **+0,0621** | aşağıya bakınız — sayı "geri al" diyor, tavsiye edilmedi |
+| `dangling.kat` 160 → 0 | **−20** | **+0,0373** | **geri alınmalı (M.2 iptal)** |
+| `icerik_kaybi_esik` 0,20 → 0,0 | 0 | 0,0000 | C1'de hiç tetiklenmiyor — **ölçülmedi** |
+| `sekil_veto_kaplama` 0,15 → 0,0 | +6 | −0,0386 | değişiklik faydalı, tutuldu |
+| `hyphen.kat` 0,0 → 1,5 | +4 | −0,0684 | değişiklik faydalı, tutuldu |
+| `dolu_dikdortgen` 60 → 8 | +9 | −0,1074 | 20 Ağustos'un **en değerli** değişikliği |
+
+### O.3 M.2 neden yanlış yöne gitti — metrik asimetrisi
+
+M.2, `dangling` cezasını geri alma kararını "yakalanan pozitif utility oranı"na
+dayandırmıştı (0,770 → 0,706). Bu metrik burada bağımsız doğrulandı ve **yönü
+teyit edildi**: 201 belgede 0,6815 → 0,7158, yani geri alma bu metriğe göre
+gerçekten iyileşme.
+
+Sorun metriğin tanımında: `sum(max(delta, 0))` — yalnız **pozitif** deltaları
+toplar, gereksiz bir heavy çağrısının verdiği zararı hiç saymaz. Aynı 20 belge
+NET ile tartıldığında tablo tersine dönüyor: **3 kazanç, 10 kayıp, 7 nötr,
+toplam −0,0373**. Kayıpların 8'i `opendataloader_bench`, hepsinde
+`heavy_gain` zaten negatifti (−0,019 … −0,053) — dangling cezası bu sayfaların
+kalitesini düşük gösterip heavy'e yolladı, heavy daha kötü çıktı.
+
+Üstüne, M.2'nin gerekçesi olarak sayılan 5 belgeden **üçü faydayı hiç almıyor**:
+`data_161` (+0,1737), `data_117` (+0,0561), `data_163` (+0,0402) heavy'e
+gönderiliyor, heavy referansa göre daha iyi çıkıyor, **ama merge karantinası
+reddediyor** ve elde kalan sıfır oluyor. Gerçek kazanç yalnız `data_26`
+(+0,2016) ve `data_69` (+0,0891). Yani M.2'nin dayandığı somut vakaların %60'ı
+sistemde zaten gerçekleşmiyordu.
+
+**Bu bölümde `dangling.kat` 160,0 → 0,0 önerilmişti (NET +0,0373 ve 20 daha az
+ağır çağrı). Öneri O.8'deki bağımsız incelemeden sonra GERİ ÇEKİLDİ — uygulanmadı,
+config `dangling.kat = 160,0` olarak kaldı.** Kısaca sebebi: +0,0373 birleşik bir
+sayı ve veri karışımına bağımlı; veri ailesine ayrıldığında iki ters yönlü büyük
+etkinin artığı olduğu görülüyor (O.8.3). Ayrıntı O.8'de. M.2'de yazılan "dangling gerçek bir layout sorununun vekili" gözlemi
+yanlış değil — ama vekil olarak taşıdığı sinyal, yol açtığı yanlış
+yönlendirmelerin maliyetini karşılamıyor. Doğru çözüm hâlâ Bölüm M'de duran
+geometrik layout sinyali.
+
+### O.4 Karantina — ham sayı "geri al" diyor, tavsiye edilmedi
+
+`karantina_tolerans` 0,1 → 0,0 en büyük ΔNET'i veriyor (+0,0621), buna rağmen
+değiştirilmedi. Gerekçe:
+
+Toleransı 0,0'a çekmek karantinalı belgeyi 8 → 15'e, karantinanın **kaçırdığı
+faydayı** 0,3814 → 0,5830'a çıkarıyor. NET'i iyileştirme sebebi isabet değil,
+daha çok reddetmesi — yani doğru sayfaları da beraberinde atıyor.
+
+**Düzeltme (O.6'daki ölçümden sonra):** bu kararın ilk gerekçesi "değişiklik
+261 sayfalık etiketli sette elle doğrulanmıştı, C1'deki tek metrikle üstü
+çizilemez" idi. O gerekçe **yanlıştı**. O.6'da ölçüldü: `karantina_tolerans`
+0,0 → 0,1 değişikliğinin kendi korpusumuzdaki payı **tek bir sayfa**. Bölüm
+I'de kaydedilen 37 → 9 düşüşü toleranstan değil, aynı gün yapılan diğer iki
+düzeltmeden (formül-kaybı katastrofik red kuralı + gibberish'in `Sm` Unicode
+kategorisini meşru sayması) geliyor. Yani tolerans 0,1 **hiçbir korpusta
+doğrulanmadı**; yalnız C1'de ölçülebilir bir zarar veriyor. Yukarıdaki
+"daha çok reddediyor" itirazı geçerli kalıyor, ama bu artık zayıf bir
+gerekçe — doğrusu toleransı ayrı ele alıp karantina sinyaliyle birlikte
+yeniden ölçmek.
+
+**Asıl bulgu eşikte değil sinyalde:** karantina kararı `merge.py`'nin
+corruption-only skoruna bakıyor ve bu skor C1'de referans utility ile ters
+çalışıyor. `data_161`'de red gerekçesi `skor_farki_red (-0,450)` iken aynı sayfa
+referansa göre **+0,1737** daha iyiydi; `data_163`'te gerekçe `-2,280`, gerçek
+fayda **+0,0402**. Bugünkü sistemde karantinanın toplam kaçırdığı fayda
+**0,3814** — 8 belgenin 5'inde red yanlış (115, 117, 161, 163, 179), 3'ünde
+doğru (62, 116, 180). Bu, `dangling`'den daha büyük bir açık ve ayrı bir
+düzeltme konusu.
+
+### O.5 Bu koşunun kapsamadıkları
+
+Kapsanan: `gate.py` route kararı, `critic.py` kalite skoru, `merge.py`
+birleştirme/karantina, fast path (pdf-inspector) — 201 gerçek PDF üzerinde.
+Kapsanmayan, açıkça:
+
+* `smart_pdf._run_heavy_pages` — replay kendi `birlestir()` çağrısını yapar.
+  (Bu yol Bölüm J'de 3 internet PDF'inde bridged Docling ile koşulmuştu; C1
+  ölçeğinde hiç koşulmadı.)
+* Docling'in gerçek süresi — cache'ten okundu, `duration_ms` başka bir makinenin
+  ölçümü. Bu makinede ölçülen tek süre fast+gate+critic+merge: medyan **21,5 ms**,
+  p90 ~**60 ms**.
+* GPU determinizm (Ek E) — bu makinede CUDA yok.
+* 179 belge — Docling cache'i yok, kapsam dışı.
+
+### O.6 Aynı ablation kendi korpusumuzda — değişiklikler bir korpusa mı uyduruldu
+
+O.2'nin tek başına cevaplayamadığı soru: bu ayarlar C1'e mi uyduruldu, yoksa
+gerçekten genel mi? Aynı altı deney kendi 9 belgelik / 261 sayfalık korpusumuzda
+tekrarlandı (`research/pdf-parser/scripts/korpus_ablation.py`).
+
+İki korpus aynı soruyu **soramaz**, bu yüzden metrikler farklı: C1'de metin
+referansı var (utility ölçülebiliyor) ama sayfa görüntüsü üzerinden tablo/şekil
+doğruluğu yok; kendi korpusumuzda tam tersi — utility yok, ama tablo/şekil için
+gümüş referans (MinerU+Docling anlaşması) ve boşa ağır çağrı sayısı var.
+Karşılaştırılan şey mutlak sayılar değil, **yön**.
+
+| Geri alınan değişiklik | Kendi korpus (261 sayfa) | C1 (201 belge) | Hizalama |
+|---|---|---|---|
+| `dolu_dikdortgen` 60 → 8 | +3 tablo FP | ΔNET −0,1074 | aynı yön |
+| `sekil_veto_kaplama` 0,15 → 0,0 | **+16 tablo FP**, +8 ağır, +5 boşa | ΔNET −0,0386 | aynı yön |
+| `hyphen.kat` 0,0 → 1,5 | +2 ağır, +1 boşa | ΔNET −0,0684 | aynı yön |
+| `dangling.kat` 160 → 0 | **−26 ağır, −18 boşa, −3 karantina**, tablo FP değişmedi | ΔNET +0,0373, −20 ağır | aynı yön |
+| `karantina_tolerans` 0,1 → 0,0 | +1 karantina, başka hiçbir şey | ΔNET +0,0621 | kendi korpusta **etkisiz** |
+| `icerik_kaybi_esik` 0,20 → 0,0 | −3 karantina (kural aktif) | 0,0000 (hiç tetiklenmiyor) | C1'de **etkisiz** |
+
+**Sonuç: aşırı uyum bulgusu yok.** Dört değişiklikten hiçbiri iki korpusta ters
+yön göstermiyor. Kalan ikisi çelişmiyor, birbirini **tamamlıyor** — her biri
+yalnız bir korpusta ölçülebiliyor, diğerinde ölü:
+
+* `icerik_kaybi_esik` kendi korpusumuzda 3 sayfada gerçekten çalışıyor, C1'de
+  hiç tetiklenmiyor. Kural kendi korpusunda doğrulandı, C1'de **doğrulanamadı** —
+  ikisi de dürüst ifade; "genel geçer" denemez.
+* `karantina_tolerans` hiçbir korpusta faydası ölçülmedi (O.4'teki düzeltme).
+
+**`dangling.kat = 0` iki korpusta birden kazandırıyor** ve etkisi kendi
+korpusumuzda C1'dekinden çarpıcı biçimde büyük: ağır sayfa 137 → 111 (%19
+azalma), **boşa ağır çağrı 28 → 10 (%64 azalma)**, karantina 7 → 4, tablo
+TP/FP/FN hiç değişmeden. Bu, O.3'teki öneriyi bağımsız bir korpusla
+destekliyor — M.2'nin geri alması yalnız C1'de değil, kendi korpusumuzda da
+sistemi kötüleştirmiş.
+
+### O.7 İnceleme arayüzü
+
+`research/pdf-parser/scripts/c1_arayuz.py` → `html/c1_arayuz.html`. C1'de metin
+referansı olduğu için `hata_arayuzu.py`'nin cevaplayamadığı soru burada
+ölçülebiliyor: karar referansa göre doğru muydu. Belge başına yol kararı ve
+gerekçesi, karantina hükmü ve utility maliyeti, üç motorun çıktısı yan yana,
+iki koşu karşılaştırması ve O.2 tablosu tek sayfada.
+
+Sayfa görüntüleri `hata_arayuzu.py` ile aynı kalıpta üretiliyor (PyMuPDF,
+ZOOM 1,5 ≈ 108 dpi, JPEG) → `html/c1_gorsel/` (201 kare, 26 MB). Orijinal
+sayfaya bakmadan cevaplanamayan sorular — "bu sayfada gerçekten tablo var
+mıydı", "karantinanın attığı metin gerçekten bozuk muydu" — böylece C1'de de
+gözle kontrol edilebiliyor. Görüntü çerçevesi kararı taşıyor: ağır motora giden
+sayfa mavi, karantinada reddedilen kırmızı çerçeveli.
+
+## O.8 Bağımsız İnceleme — O.3'teki Öneri Geri Çekildi (2026-08-21)
+
+O.2-O.7'deki ölçümler bağımsız olarak yeniden değerlendirildi ve üç somut hata
+bulundu. Üçü de burada **kendi verimizle yeniden ölçülerek** doğrulandı; hepsi
+çıktı. Sonuç: `dangling.kat` 160 → 0 önerisi geri çekildi, config davranışı
+değişmedi (`dangling.kat = 160,0`, `kalite_esik = 75,0`).
+
+### O.8.1 `KACIRILDI` sayım hatası — kaçırılan tablo görünmüyordu
+
+`korpus_ablation.py::olc()` yönlendirme hükümlerini sayarken `yon_KACAN`
+okuyor; `hata_arayuzu.py::_yonlendirme` ise `"KACIRILDI"` üretiyor. Anahtar hiç
+eşleşmediği için kaçırılan tablo sayısı **her koşuda sessizce 0** çıktı. Doğru
+sayımla:
+
+| | `dangling=160` | `dangling=0` |
+|---|---|---|
+| KACIRILDI (kaçırılan tablo sayfası) | **3** | **4** |
+| BOSA | 28 | 10 |
+| GEREKLI | 101 | 93 |
+
+O.6'da "tablo TP/FP/FN hiç değişmiyor" denmişti; bu doğru ama **eksikti** —
+TP/FP/FN sabit kalırken kaçırılan tablo sayfası 3'ten 4'e çıkıyor. Sıfır olan
+bir sayı, ölçülmediği için sıfır görünüyordu. Düzeltilecek ve bir regresyon
+testiyle bağlanacak.
+
+### O.8.2 Fazla `low_quality` üretiminin sebebi eşik değil, dangling ağırlığı
+
+Kendi korpusumuzda **yalnız** `low_quality` gerekçesiyle ağır motora giden 26
+sayfa tek tek çözümlendi (ceza dökümü `sayfa_skoru` ile birebir aynı
+formüllerden hesaplandı; 26 sayfanın hiçbirinde gate'in skoruyla fark yok):
+
+* 26 sayfanın **26'sında** dangling cezası var.
+* **25'inde tek ceza dangling** (kalan 1 sayfada dangling + gibberish).
+* **17 sayfa tam 65,0 puanda** — `dangling_tavan = 35,0` doluyor ve skorlar tek
+  bir noktada yığılıyor.
+
+Bu, `kalite_esik`'i 65'e indirmenin neden uçurum yarattığını açıklıyor: 75 → 65
+aralığında bu 17 sayfa hep birlikte taraf değiştiriyor, kademeli bir geçiş yok.
+Yani "fazla `low_quality` üretiliyor" sorununun kaynağı global eşik değil,
+dangling ağırlığının tek başına 35 puan taşıyabilmesi.
+
+### O.8.3 Dangling'in etkisi veri setine göre TERS yönde
+
+O.2'nin birleşik NET'i veri ailesine ayrıldığında:
+
+| Veri seti | NET (`dangling=160`) | NET (`dangling=0`) | ΔNET |
+|---|---|---|---|
+| ocrturk (129 belge, TR) | 3,9275 | 3,6641 | **−0,2634** |
+| opendataloader_bench (72, EN) | −0,9842 | −0,6835 | **+0,3006** |
+| **Toplam (201)** | 2,9433 | 2,9806 | +0,0373 |
+
+Route kararı değişen 20 belgede ham heavy faydası: ocrturk **+0,5247**,
+opendataloader **−0,3006**.
+
+**O.3'teki önerinin kusuru buydu.** +0,0373 iki ters yönlü büyük etkinin küçük
+artığı — korpustaki TR/EN oranı değişseydi işaret de değişirdi. Üstelik
+opendataloader NET'i zaten **negatif** (−0,98): `dangling=0`'ın oradaki
+"kazancı", İngilizce'de hâlihazırda zarar veren yönlendirmenin zararını
+azaltmaktan geliyor (Bölüm 5.4/9'daki İngilizce precision 0,088 bulgusu), bir
+iyileşme değil. Bundan sonra hiçbir eşik kararı yalnız birleşik NET'e
+dayandırılmayacak; ocrturk / opendataloader / kendi korpus ayrı raporlanacak.
+
+### O.8.4 Karar ve sıradaki iş
+
+Config **değişmedi**: `dangling.kat = 160,0`, `kalite_esik = 75,0`. Sıra:
+
+1. `KACIRILDI` sayımını düzelt + regresyon testi (O.8.1).
+2. `c1_metrik.py` rapidfuzz yoksa fail-fast; `char_algorithm` run
+   fingerprint'ine girsin, farklı algoritmalı koşular karşılaştırılamasın (O.1).
+3. `sayfa_skoru` ceza dökümünü de döndürsün, iki arayüzde de görünsün (O.8.2) —
+   `quality_score` değişmez, yalnız görünürlük eklenir.
+4. `dangling.kat ∈ {0, 40, 80, 120, 160}` taraması (`kalite_esik = 75` sabit),
+   her aday için ağır çağrı / yalnız-low_quality çağrısı / boşa heavy /
+   kaçırılan tablo / precision / recall / NET / karantinanın kabul-reddettiği
+   fayda, **veri seti ayrı ayrı**.
+5. Seçilen dangling ağırlığıyla `kalite_esik ∈ {68, 70, 72, 75}` taraması.
+   68 bir aday olarak duruyor (C1: route 101 → 94, precision 0,4059 → 0,4255,
+   recall 0,6508 → 0,6349, NET 2,9433 → 3,0868) ama **production kararı
+   değil** — 65 onaylanmadı, O.8.2'deki yığılma yüzünden.
+6. Nihai değeri kaynak-aile bazlı, dokunulmamış holdout'ta doğrula. Aynı
+   korpusta hem değer seçip hem başarı ilan etme (Q13).
+7. Karar verildiğinde `config/smart_router.yaml` + `ayarlar.py::VARSAYILAN`
+   **aynı anda**; ardından parser testleri (şu an 64/64), C1 replay, kendi
+   korpus replay.
+
+Uzun vadeli yön değişmedi ve bu ölçümlerle güçlendi: dangling'i ağır bir kalite
+cezası olarak kullanmak yerine PyMuPDF blok koordinatlarından gerçek
+iki-sütun/okuma-sırası sinyali üretmek. Dangling ölçülmeye ve provenance'a
+yazılmaya devam etsin, ama tek başına yönlendirmeyi sürüklemesin.
+
+## O.9 Karantina Karar Karnesi — Sorun Eşikte Değil, Sinyalde (2026-08-21)
+
+O.4'te "karantina sinyali yanlış çalışıyor olabilir" denmişti ama bu bir gözlemdi,
+ölçüm değildi. `research/pdf-parser/scripts/karantina_olc.py` ile ölçüldü: C1'de
+ağır motora giden **101 sayfanın** her biri için karar üretimden okundu (gerçek
+`birlestir()` çağrıldı, taklit edilmedi) ve referansa göre gerçek fayda
+hesaplandı.
+
+```
+                        | gercekte IYI (>=0,02) | gercekte KOTU
+    --------------------+-----------------------+---------------
+    karantina KABUL etti|   36  dogru kabul     |   57  yanlis kabul
+    karantina REDDETTI  |    5  YANLIS RED      |    3  dogru red
+```
+
+| Ölçüt | Değer |
+|---|---|
+| Red isabeti (doğru red / tüm redler) | **0,3750** |
+| Skor farkı ↔ gerçek fayda korelasyonu | **r = −0,0630** |
+| Skor farkı **tam sıfır** olan sayfa | **75 / 101 (%74)** |
+| Yanlış redde kaybedilen fayda | 0,3814 |
+| Doğru redde kurtarılan fayda | 0,1871 |
+| **NET (kurtarılan − kaybedilen)** | **−0,1943** |
+
+Yanlış redler (hepsi ocrturk; `opendataloader_bench`'in 43 ağır sayfasında hiç
+red yok):
+
+| Belge | skor farkı | gerçek fayda |
+|---|---|---|
+| data_161 | −0,450 | **+0,1737** |
+| data_179 | −0,300 | +0,0656 |
+| data_117 | −1,080 | +0,0561 |
+| data_115 | **−20,580** | +0,0458 |
+| data_163 | −2,280 | +0,0402 |
+
+**Sonuç: sorun `karantina_tolerans` değil, karar verilen sinyalin kendisi.**
+Üç ayrı kanıt:
+
+1. Sayfaların **%74'ünde skor farkı tam sıfır** — bozulma skoru fast ile heavy
+   arasında hiçbir ayrım üretmiyor, karar fiilen "tolerans içinde kaldı" diye
+   veriliyor.
+2. Konuştuğu %26'da gerçek faydayla ilişkisi **yok** (r = −0,063), üstelik işaret
+   ters. `data_115` bunun uç örneği: sinyalin en güçlü konuştuğu sayfa
+   (−20,580) gerçekte kazançlı (+0,0458).
+3. Net etki **negatif** (−0,1943): mekanizma kurtardığından fazlasını atıyor.
+
+Eşiği oynatmak bu üçünü de değiştirmez, yalnız hataların İYİ/KÖTÜ arasındaki
+dağılımını kaydırır — O.4'teki "0,0'a dönmek karantinalıyı 8→15, kaçırılan
+faydayı 0,3814→0,5830 yapıyor" ölçümü zaten bunun göstergesiydi.
+
+**Ölçüm sırasında düzeltilen bir hata:** ilk koşumda skor farkının işareti ters
+alınmıştı. `merge.py`'nin sözleşmesi "higher being better" (docstring) ve
+`fark = heavy_skor − fast_skor` (`_karar_ver`). Düzeltilince korelasyon
++0,063 → **−0,063** oldu; yani sinyal yalnızca ayrım gücünden yoksun değil,
+zayıf da olsa yanlış yöne bakıyor. Ayrıca ilk sürüm merge kararını taklit
+ediyordu ve gerçek red sayısını tutturamamıştı (5 yerine 8); üretimin
+`birlestir()` fonksiyonu çağrılınca sayı predictions'takiyle birebir oturdu
+(0,3814). **Ders, O.1'dekiyle aynı:** üretim davranışını yeniden yazmak yerine
+üretim fonksiyonunu çağır.
+
+## O.10 Ölçüm Altyapısı Düzeltmeleri ve Dangling Taraması (2026-08-21)
+
+O.8.4'teki plan uygulandı. Routing davranışı **değişmedi**: `dangling.kat = 160,0`,
+`kalite_esik = 75,0`, `esik_version = gate_v2_kalibre_edilmedi_1154727b`, YAML ile
+gömülü varsayılan senkron. Parser testleri 64/64, yeni testlerle birlikte 72/72.
+
+### O.10.1 Yapılan düzeltmeler
+
+| # | Düzeltme | Doğrulama |
+|---|---|---|
+| 1 | `korpus_ablation.olc()` artık `KACIRILDI` okuyor (`KACAN` değil); tanınmayan hüküm sessiz kalmıyor, uyarı basıyor | `research/pdf-parser/tests/test_korpus_ablation.py` — 3 test. Biri `_yonlendirme`'nin girdi uzayını gezip ürettiği her hükmün sayım tarafında tanındığını doğrular, yani anahtar kayması bir daha sessizce sıfır üretemez |
+| 2 | `c1_metrik` algoritmayı **import'ta bir kez** seçiyor; `METRIC_FINGERPRINT` eklendi; `c1_dogrulama` rapidfuzz yoksa **fail-fast** (`--gevsek-metrik` ile bilerek geçilebilir) | rapidfuzz'sız bir venv'de `kati_dogrula()` gerçekten durdu; fingerprint `…+difflib` yazdı. `c1_arayuz` iki koşunun fingerprint'i farklıysa kırmızı uyarı basıyor |
+| 3 | `critic.sayfa_skoru` ceza dökümünü de döndürüyor (`cezalar`), `orchestrator` sayfa kaydına taşıyor | `tests/test_critic_ceza_dokumu.py` — 5 test; biri `100 − Σceza == quality_score` eşitliğini bağlıyor. Tam sistem replay'inde davranış birebir aynı: ağır 137, boşa 28, kaçırılan 3 |
+| 4 | Ceza dökümü iki arayüzde de görünüyor (tek ceza varsa kırmızı rozet) | Üretim verisinde doğrulandı: 26 low_quality sayfasının **26'sında** döküm var, **25'inde tek ceza dangling** — O.8.2'deki iddia bağımsız olarak çıktı |
+| 5 | `c1_ablation` her ölçümü veri ailesi bazında da veriyor, aileler ters yön gösterirse `AILELER CELISIYOR` diye işaretliyor | Üç deneyde çelişki çıktı: `dangling`, `karantina` ve — daha önce fark edilmemiş — `tablo_esigi` |
+
+Ayrıştırma yapılınca tabandaki uçurum da görünür oldu:
+
+| Veri ailesi | belge | heavy | precision | recall | NET |
+|---|---|---|---|---|---|
+| ocrturk | 129 | 58 | 0,5690 | 0,6346 | **+3,9275** |
+| opendataloader_bench | 72 | 43 | **0,1860** | 0,7273 | **−0,9842** |
+
+Yani birleşik `precision = 0,4059` iki çok farklı rejimin ortalaması; İngilizce
+tarafta yönlendirme hâlâ net zarar veriyor (Bölüm 5.4/9'daki bulgunun güncel hâli).
+
+### O.10.2 Dangling taraması — çıkış kriteri devreye girdi
+
+`research/pdf-parser/scripts/c1_tarama.py` ile `dangling.kat ∈ {0, 80, 160}`,
+`kalite_esik = 75` sabit, tam sistem replay'i. Tarama bilerek bir **teşhis**
+aracı olarak kuruldu: kabul çubuğu (`precision ≥ 0,50` **ve** `recall ≥ 0,60`,
+**her veri ailesinde birden**) hiçbir adayda tutmazsa sonuç "bu ayar bu sorunu
+çözmüyor" olarak kaydedilir ve holdout hiç koşulmaz.
+
+**ocrturk (129 belge)**
+
+| dangling.kat | heavy | yalnız low_quality | boşa | precision | recall | NET | karantina kaybı |
+|---|---|---|---|---|---|---|---|
+| 0 | 49 | 0 | 21 | 0,5714 | 0,5385 | +3,6641 | 0,1114 |
+| 80 | 55 | 6 | 24 | 0,5636 | 0,5962 | +3,8471 | 0,3412 |
+| **160** | 58 | 9 | 25 | 0,5690 | 0,6346 | **+3,9275** | 0,3814 |
+
+**opendataloader_bench (72 belge)**
+
+| dangling.kat | heavy | yalnız low_quality | boşa | precision | recall | NET |
+|---|---|---|---|---|---|---|
+| 0 | 32 | 0 | 24 | 0,2500 | 0,7273 | −0,6835 |
+| **80** | 33 | 1 | 25 | 0,2424 | 0,7273 | **−0,6706** |
+| 160 | 43 | 11 | 35 | **0,1860** | 0,7273 | −0,9842 |
+
+**kendi korpus (9 belge / 261 sayfa)**
+
+| dangling.kat | ağır | yalnız low_quality | boşa | kaçırılan tablo | tablo FP/FN |
+|---|---|---|---|---|---|
+| **0** | 111 | 0 | **10** | 4 | 37 / 5 |
+| 80 | 126 | 15 | 22 | 4 | 37 / 5 |
+| 160 | 137 | 26 | 28 | **3** | 37 / 5 |
+
+**Sonuç: `ayar_bu_sorunu_cozmuyor — holdout koşulmayacak`.** Gerekçeler:
+
+1. **Üç ailenin üç farklı optimumu var**: ocrturk 160, opendataloader 80, kendi
+   korpus 0. Tek bir değer üçünü birden optimize edemez — O.8.3'teki "birleşik
+   sonuca göre karar verme" uyarısı artık üç veri noktasıyla sabitlendi.
+2. **Kabul çubuğunu hiçbir aday geçmiyor.** ocrturk'te 160 geçiyor
+   (0,5690 / 0,6346) ama opendataloader'da precision hiçbir değerde **0,25'i**
+   aşmıyor — kapı 0,50. Ayarın erişemeyeceği bir açık.
+3. **Takas kötü.** Kendi korpusta 0 → 160 geçişi **18 fazla boşa ağır çağrı**
+   getiriyor, karşılığında kurtardığı **1 kaçırılan tablo**. Tablo TP/FP/FN
+   üç değerde de aynı (37/5): dangling tablo tespitine hiç dokunmuyor, yalnız
+   `low_quality` çağrısı üretiyor (kendi korpusta 0 → 26, C1'de 0 → 20).
+4. Birleşik NET'in en yükseği aslında **80** (+3,1764; 160'ta 2,9433, 0'da
+   2,9806) — yani ne mevcut değer ne de O.3'te önerilen değer. Bu bile tek
+   başına birleşik metriğin karar için yetersiz olduğunu gösteriyor: aynı sayı
+   ocrturk'te 80'i 160'ın altına, opendataloader'da üstüne koyuyor.
+
+`kalite_esik` taraması (O.8.4 madde 5) **koşulmadı**: dangling ağırlığı
+seçilemediği için üzerine eşik taraması yapmak dayanaksız olurdu. Aynı gerekçeyle
+holdout da koşulmadı.
+
+**Karar: `dangling.kat` ve `kalite_esik` değişmiyor.** `dangling.kat = 160,0` ve
+`kalite_esik = 75,0` yerinde kalıyor — bu bir "160 doğru değer" ilanı değil,
+"eşik ayarıyla daha iyisi gösterilemedi, o yüzden davranış değiştirilmiyor"
+kaydıdır. (Aynı gün `karantina_tolerans` ayrı bir ölçümle 0,1 → 5,0 değişti;
+gerekçesi ve doğrulaması O.11.2'de.)
+
+### O.10.3 Sıradaki iş — sinyal değişimi
+
+Üç ölçüm aynı yeri işaret ediyor:
+
+* `quality_score`'un öngörü gücü rastgele seviyesinde (AUC 0,43-0,47, Bölüm M) ve
+  düşük skorların kaynağı neredeyse tamamen dangling (26 sayfanın 25'i tek ceza).
+* Karantinanın baktığı bozulma skoru sayfaların **%74'ünde hiç konuşmuyor**,
+  konuştuğunda gerçek faydayla ilişkisi yok (r = −0,063), net etkisi **−0,1943**
+  (O.9).
+* Dangling ağırlığı hiçbir değerde kabul çubuğunu geçmiyor (bu bölüm).
+
+Yani hem gate hem merge, taşıyamayacakları sinyallere dayanıyor. Bölüm 9/M/M.2'de
+zaten en yüksek öncelik olarak duran iki iş artık ölçümle destekli:
+
+1. **Geometrik layout sinyali** — PyMuPDF blok koordinatlarından iki-sütun /
+   okuma-sırası tespiti. dangling bunun zayıf vekili; doğrudan ölçüldüğünde
+   punctuation'a bağlı olmadığı için veri ailesine göre ters dönmesi beklenmez.
+   Hedef örnekler M.2'de adlandırıldı (`data_26`, `data_161`, `data_69`,
+   `data_117`, `data_163`).
+2. **Karantina sinyali** — corruption skoru yerine gerçek fayda ile korele bir
+   ölçüt. Kazanç potansiyeli (0,3814 kaybın geri alınması) tüm eşik
+   taramasından beklenenden büyük.
+
+Dangling ölçülmeye ve provenance'a yazılmaya devam ediyor — artık ceza dökümüyle
+birlikte görünür — ama tek başına yönlendirmeyi sürüklememeli.
+
+## O.11 Karantina Çıkarılmalı mı — ve Yönlendirmenin Taban Çizgileri (2026-08-21)
+
+### O.11.1 Yönlendirme, "hep fast" ve "hep heavy" yanında nerede duruyor
+
+Bugüne kadar hiç ölçülmemiş bir referans: yönlendirme yapmasaydık ne olurdu.
+NET = `toplam(seçilen_utility − fast_utility)`, dolayısıyla "hep fast" tanım
+gereği 0.
+
+| Veri ailesi | belge | hep fast | mevcut politika | hep heavy | ağır çağrı |
+|---|---|---|---|---|---|
+| ocrturk | 129 | 0,0000 | +3,9275 | **+4,0458** | 58 / 129 |
+| opendataloader_bench | 72 | **0,0000** | −0,9842 | −1,1844 | 43 / 72 |
+| **TOPLAM** | 201 | 0,0000 | **+2,9433** | +2,8615 | 101 / 201 |
+
+Üç okuma:
+
+* **Türkçe tarafta yönlendirme kaliteyi biraz düşürüyor, maliyeti yarıya
+  indiriyor.** "Hep heavy" +4,0458 ile mevcut politikadan iyi; aradaki fark
+  0,1183 ve karşılığında ağır motor çağrısı 129 → 58.
+* **İngilizce tarafta en iyi politika heavy'yi hiç çağırmamak.** Hem mevcut
+  (−0,9842) hem "hep heavy" (−1,1844) sıfırın altında; Docling o belgelerde
+  fast'tan daha kötü metin üretiyor.
+* Belge dağılımı bunu açıklıyor: 63 belgede heavy belirgin iyi (≥+0,02),
+  **69 belgede belirgin kötü** (≤−0,02), 69'unda fark önemsiz. En kötüler
+  `data_53` (−0,668), `data_162` (−0,221), `01030000000044` (−0,185).
+
+Yani "bir yere varamazsak" durumunda elimizde ölçülmüş bir geri çekilme planı
+var: korpus tipine göre sabit politika (born-digital İngilizce → fast, taranmış
+Türkçe → heavy). Bu bir başarısızlık değil, ölçüme dayalı bir sadeleştirme.
+
+### O.11.2 Karantina: tamamen çıkarmak değil, gürültü bandını kapatmak
+
+Karantina iki ayrı mekanizmadan oluşuyor ve ikisi farklı davranıyor. Kendi
+korpusumuzda kırılım ölçüldü (skor karşılaştırmasını fiilen kapatmak için
+`karantina_tolerans` büyütüldü, sonra `icerik_kaybi_esik` de kapatıldı):
+
+| Yapılandırma | kendi korpus karantina |
+|---|---|
+| mevcut (tolerans 0,1) | 7 |
+| skor karşılaştırması kapalı | **3** |
+| o da + içerik-kaybı kuralı kapalı | **0** |
+
+Yani 7'nin **4'ü skor farkından**, **3'ü içerik-kaybı kuralından** geliyor.
+Tolerans taraması ikisini birden ayırıyor:
+
+**C1 (201 belge)**
+
+| tolerans | karantina | kaçırılan fayda | NET |
+|---|---|---|---|
+| 0,1 (mevcut) | 8 | 0,3814 | +2,9433 |
+| 1,0 | 3 | 0,1421 | +2,9956 |
+| **5,0** | **1** | **0,0458** | **+3,0919** |
+| 10,0 | 1 | 0,0458 | +3,0919 |
+| 1000 (kapalı) | 0 | 0,0000 | +3,1377 |
+
+**kendi korpus (261 sayfa)**
+
+| tolerans | karantina | hangileri |
+|---|---|---|
+| 0,1 | 7 | resnet s5 (−20,81) + gpt3 s56/60/61 (−0,22 / −0,83 / −0,15) + gpt4 s48/57/67 (içerik kaybı) |
+| **1,0 – 10,0** | **4** | resnet s5 + gpt4 s48/57/67 |
+| 1000 | 3 | yalnız gpt4 s48/57/67 |
+
+**Cevap: karantinayı tamamen çıkarmak mantıklı değil, mevcut haliyle tutmak da
+savunulamaz.** Tamamen kapatmak kendi korpusumuzda dört elle doğrulanmış vakayı
+birden kaçırır: `resnet_2sutun_gorsel` s5 (Bölüm I'de "private-use-area glyph
+kirliliği" diye doğrulanmış gerçek regresyon) ve `gpt4_uzun_gorsel` s48/57/67
+(içerik-kaybı kuralının yakaladığı gerçek kayıplar — C1'de bu kural hiç
+tetiklenmiyor, yani zarar da vermiyor).
+
+Zararlı olan, skor karşılaştırmasının **küçük fark bandı**. C1'de reddedilen 8
+sayfanın 5'i yanlış ve red gerekçeleri −0,300 … −2,280 aralığında;
+kendi korpusumuzda gpt3'ün üç sayfası −0,15 … −0,83 ile reddediliyor. Bu
+aralıkta skor farkı gerçek faydayla ilişkisiz (O.9: r = −0,063, sayfaların
+%74'ünde fark tam sıfır).
+
+**UYGULANDI (2026-08-21): `karantina_tolerans` 0,1 → 5,0.** `config/smart_router.yaml`
+ve `ayarlar.py::VARSAYILAN` aynı anda değiştirildi (ikisinin ayrılması daha önce
+bir kez sessiz davranış değişikliğine yol açmıştı; `tests/test_parsers.py` bu
+eşitliği test ediyor). `esik_version` `…_1154727b` → `…_c7c247b8`.
+
+Uygulama sonrası uçtan uca doğrulama — geçici profille yapılan tarama koşusuyla
+**birebir** tuttu:
+
+| | beklenen (tarama) | ölçülen (config uygulandı) |
+|---|---|---|
+| C1 NET | +3,0919 | **+3,0919** |
+| C1 karantina | 1 | **1** |
+| C1 belge farkı | 0 | **0** |
+| C1 precision / recall | 0,4059 / 0,6508 | **0,4059 / 0,6508** (değişmedi) |
+| ocrturk NET | — | 3,9275 → **4,0760** |
+| opendataloader NET | — | −0,9842 (**sabit**) |
+| kendi korpus karantina | 4 | **4** |
+| kendi korpus ağır / boşa / kaçırılan | 137 / 28 / 3 | **137 / 28 / 3** (değişmedi) |
+
+Kendi korpusumuzda karantinada kalanlar: `resnet_2sutun_gorsel` s5 (−20,81) ve
+`gpt4_uzun_gorsel` s48/57/67 — yani elle doğrulanmış dört vakanın **hepsi**.
+Serbest kalan: `gpt3_uzun_75sayfa` s56/60/61 (−0,22 / −0,83 / −0,15), gürültü
+bandı. Testler 72/72 (parser 64/64).
+
+Not: `precision` / `recall` beklendiği gibi hiç değişmedi — karantina route
+kararından sonra çalışır. Veri aileleri **çelişmiyor**: ocrturk'te NET artıyor,
+opendataloader'da hiç red olmadığı için sabit. Bugün ölçülen tek çelişkisiz
+kazanç bu oldu.
+
+Dürüst kalan pürüz: C1'de tolerans 5,0'da hayatta kalan tek red `data_115`
+(skor farkı −20,580) ve o **yanlış** (gerçek fayda +0,0458). Kendi
+korpusumuzdaki −20,81 ise gerçek bir bozulma. Yani büyüklük bile tek başına
+ayırt edici değil; 5,0 bir "doğru eşik" değil, **iki korpusta da zarar vermeyen
+en geniş bant**. Kalıcı çözüm hâlâ O.10.3'teki sinyal değişimi.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
