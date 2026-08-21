@@ -123,11 +123,11 @@ To ensure that heavy OCR/layout models never corrupt clean text, all heavy outpu
 ### Verification Rules & Thresholds
 
 1. **Content Loss Guard (`_icerik_kaybi_var`):**
-   $$\text{len}(\text{text}_{\text{heavy}}) < 0.50 \times \text{len}(\text{text}_{\text{fast}})$$
+   `len(text_heavy) < 0.50 * len(text_fast)`  
    If heavy engine output drops more than 50% of the character volume, the output is rejected immediately to protect against truncated tables or dropped text blocks.
 
 2. **Dead Band Degradation Tolerance (`dead_band = 5.0`):**
-   $$\text{score}(\text{text}_{\text{heavy}}) < \text{score}(\text{text}_{\text{fast}}) - 5.0$$
+   `score(text_heavy) < score(text_fast) - 5.0`  
    A calibrated margin of 5.0 prevents false rejections caused by minor stylistic variations while catching severe font glyph corruption (which typically drops scores by >20 points).
 
 3. **Fallback Safety Contract:**
