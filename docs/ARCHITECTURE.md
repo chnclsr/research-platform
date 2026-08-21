@@ -1,21 +1,34 @@
 # Research Platform System Architecture & Subsystems Specification
 
-This document provides the formal architectural specification of Research Platform (v0.10.7+), detailing the end-to-end data lifecycle, LangGraph orchestration runtime, the Smart Router hybrid PDF parsing pipeline, quarantine safety gates, and persistent storage schemas.
+This document provides the formal architectural specification of Research Platform (v0.10.7+), detailing the workstation deployment model, entrypoint gateways, LangGraph state machine, the Smart Router hybrid PDF parsing pipeline, quarantine safety gates, and persistent storage schemas.
 
 For a standalone browser-based interactive view with real-time light/dark theme toggles and tabbed navigation, see [system_architecture_diagram.html](../system_architecture_diagram.html).
 
 ---
 
-## 1. End-to-End System & Database Lifecycle
+## 1. Workstation Deployment & Infrastructure Tier
 
-The platform is designed as an office-grade, local-first evidence engine. Workloads originate from user touchpoints (Telegram bot, Operations web console, REST API, or MCP clients like Codex/Claude) and flow through a deterministic state machine before committing to ACID relational tables, S3 object storage, and vector indexes.
+The platform transforms a single workstation (e.g. NVIDIA RTX 4060 with 8 GB VRAM) into a secure, multi-client evidence engine. Network-facing entry gateways authenticate incoming requests and dispatch asynchronous research jobs to host-isolated background workers.
+
+![Research Platform Workstation Architecture](diagrams/system-architecture.svg)
+
+### Ingress & Security Model
+- **Authenticated Gateways:** The MCP server (`:8010`), Telegram bot, and Operations Console (`:8020`) authenticate requests using individual API keys (`BEARER rp_...`).
+- **Private Host Tier:** The Redis task queue, PostgreSQL database, MinIO object store, and Ollama inference engine are bound to loopback/private Docker networks, inaccessible to external networks.
+- **Asynchronous Execution:** The Research API (`:8000`) enqueues long-running research tasks onto Redis as ARQ jobs, which are processed by dedicated pipeline workers.
+
+---
+
+## 2. End-to-End Data & Storage Lifecycle
+
+Workloads flow from user interfaces through the LangGraph runtime, engage the Smart Router for structured document parsing, and commit to relational tables, S3 object storage, and vector indexes.
 
 ![End-to-End System Flow](diagrams/e2e-system-flow.svg)
 
 ### Subsystem Breakdown
 
 1. **Client & Ingress Layer:**
-   - **Telegram Interface (`telegram_bot.py`):** Accepts `/research` commands, streams live progress via WebSockets/polling, handles Human-In-The-Loop (HITL) button interactions, and delivers completed Word (`.docx`) deliverables directly to users.
+   - **Telegram Interface (`telegram_bot.py`):** Accepts `/research` commands, streams live progress, handles Human-In-The-Loop (HITL) button interactions, and delivers completed Word (`.docx`) deliverables directly to users.
    - **Operations Console (`control_panel.py`):** FastAPI-powered web console providing real-time Server-Sent Events (SSE), research run tracking, and configuration management.
    - **Admin CLI & REST API (`admin_cli.py`, `api.py`):** Programmatic endpoints (`POST /api/v1/research/start`) for headless orchestration.
 
@@ -34,7 +47,19 @@ The platform is designed as an office-grade, local-first evidence engine. Worklo
 
 ---
 
-## 2. LangGraph 14-Node State Machine
+## 3. Research Lifecycle & Multi-Round Exploration
+
+Collection does not stop merely because an initial source was discovered. The platform performs multi-round exploration governed by collection time budgets and saturation gates.
+
+![Research Lifecycle Stage Flow](diagrams/pipeline-flow.svg)
+
+### Gating and Stopping Rules
+- **Collection Budget (`max_wall_minutes`):** Serves as a search budget rather than an immediate kill switch. When exhausted, new searches stop while ongoing normalization, evidence extraction, audit, and synthesis run to completion.
+- **Saturation Gate:** Evaluates whether subsequent search rounds produce novel claims or redundant citations before terminating collection.
+
+---
+
+## 4. LangGraph 14-Node State Machine
 
 The research execution graph is implemented with LangGraph `StateGraph`, maintaining deterministic state transitions, human checkpointing, and conditional recovery loops.
 
@@ -62,7 +87,7 @@ The research execution graph is implemented with LangGraph `StateGraph`, maintai
 
 ---
 
-## 3. Smart Router & Hybrid PDF Parsing Pipeline
+## 5. Smart Router & Hybrid PDF Parsing Pipeline
 
 PDF documents exhibit high variability, ranging from simple clean text to complex multi-column layouts with dense tables and scanned images. The Smart Router architecture isolates heavy compute resources while guaranteeing extraction quality.
 
@@ -91,7 +116,7 @@ PDF documents exhibit high variability, ranging from simple clean text to comple
 
 ---
 
-## 4. Quarantine Gate & Decision Matrix
+## 6. Quarantine Gate & Decision Matrix
 
 To ensure that heavy OCR/layout models never corrupt clean text, all heavy outputs pass through a deterministic verification gate.
 
@@ -113,7 +138,7 @@ To ensure that heavy OCR/layout models never corrupt clean text, all heavy outpu
 
 ---
 
-## 5. Database Schema & Data Dictionary
+## 7. Database Schema & Data Dictionary
 
 ### Core Tables
 
@@ -164,7 +189,7 @@ Stores synthesized deliverables and reproduction metadata.
 
 ---
 
-## 6. Verification and Test Coverage
+## 8. Verification and Test Coverage
 
 The platform architecture is continuously verified by automated unit and integration tests covering:
 - Parser priority selection and fallback cascades (`test_parsers.py`).

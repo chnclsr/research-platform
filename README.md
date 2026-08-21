@@ -55,6 +55,8 @@ reproducible deliverables.
 
 ## One Workstation, an Office-Wide Research Service
 
+![Research Platform system architecture: entry gateways, core services, data and collection tier](docs/diagrams/system-architecture.svg)
+
 The network-facing MCP and control surfaces are authenticated and CIDR-restricted. Database,
 object-storage, and model services remain private to the host.
 
