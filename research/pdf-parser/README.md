@@ -39,6 +39,8 @@ gerekmiyor.
 | **Ölçümler** | 8 grafik — süre, ligatür, tireleme, başlık, kaynakça filtresi |
 | **MinerU** | MinerU'ya özel inceleme + pipeline vs 1,2B VLM tablo karşılaştırması |
 
+![PDF Parser Benchmark Karşılaştırması](../../docs/assets/pdf-parser-benchmark-comparison.svg)
+
 ---
 
 ## En önemli bulgu: bölüm yolunda bölüm adı yok

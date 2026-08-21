@@ -114,6 +114,10 @@ PDF documents exhibit high variability, ranging from simple clean text to comple
    - Rejects degraded outputs into quarantine and maintains clean fast text.
    - Wraps sections using `nest_under_page()`: prepends `# Page N` at root and shifts document headings to `##` level, reducing section path loss from **98% to 0%**.
 
+### Empirical Benchmark & Defect Measurement
+
+![PDF Parser Benchmark & Engine Comparison](assets/pdf-parser-benchmark-comparison.svg)
+
 ---
 
 ## 6. Quarantine Gate & Decision Matrix

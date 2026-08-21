@@ -109,6 +109,12 @@ contribution used by that theme.
 
 ![Study-to-theme evidence contribution matrix](docs/assets/theme-evidence-map-production-example.png)
 
+### Structure-Aware Parsing & Extraction Benchmark
+
+The platform replaces legacy flat text extraction with a selective hybrid parser architecture. Benchmark measurements across 261 test pages evaluate extraction latency, ligature defect elimination, and heading context preservation:
+
+![PDF Parser Benchmark and Engine Comparison](docs/assets/pdf-parser-benchmark-comparison.svg)
+
 These examples are intentionally not presented as “perfect scores.” All three reached full
 claim-audit coverage, but the strict stopping policy classified them as
 `completed_incomplete` when family, branch, or estimated-completeness gates remained unmet.

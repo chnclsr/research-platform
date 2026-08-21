@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 700; font-size: 16px; fill: #0f172a; }
+      .sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 500; font-size: 12px; fill: #64748b; }
+      .label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-weight: 600; font-size: 13px; fill: #1e293b; }
+      .val { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; font-size: 12px; }
+      
+      .bar-pypdf { fill: #94a3b8; }
+      .bar-inspector { fill: #10b981; }
+      .bar-docling { fill: #8b5cf6; }
+      .bar-mineru { fill: #f97316; }
+      
+      .pill-badge { font-family: ui-monospace, monospace; font-weight: 700; font-size: 11px; fill: #ffffff; }
+      .tag { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="100%" height="100%" class="bg" rx="16" />
+
+  <!-- Header -->
+  <text x="40" y="45" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="20" fill="#0f172a">PDF Parser Benchmark &amp; Engine Comparison (Corpus Evaluation)</text>
+  <text x="40" y="68" class="sub">Empirical measurements across 9 challenging multi-column, table-dense, and scanned test papers (261 pages)</text>
+
+  <!-- Panel 1: Extraction Speed (Per Page Latency) -->
+  <g transform="translate(40, 100)">
+    <rect width="540" height="240" rx="12" class="card" />
+    <text x="20" y="32" class="title">Processing Latency per Page (Lower is Better)</text>
+    <text x="20" y="50" class="sub">Median execution time on workstation hardware</text>
+
+    <!-- pdf-inspector -->
+    <text x="20" y="90" class="label">pdf-inspector (Fast Path)</text>
+    <rect x="200" y="76" width="12" height="20" rx="4" class="bar-inspector" />
+    <text x="220" y="91" class="val" fill="#10b981">2.6 ms <tspan font-weight="500" fill="#64748b">(7.7x faster than baseline)</tspan></text>
+
+    <!-- pypdf -->
+    <text x="20" y="130" class="label">pypdf (Baseline)</text>
+    <rect x="200" y="116" width="60" height="20" rx="4" class="bar-pypdf" />
+    <text x="270" y="131" class="val" fill="#475569">20.0 ms</text>
+
+    <!-- Docling -->
+    <text x="20" y="170" class="label">Docling (Layout + Tables)</text>
+    <rect x="200" y="156" width="220" height="20" rx="4" class="bar-docling" />
+    <text x="430" y="171" class="val" fill="#8b5cf6">1,550 ms <tspan font-weight="500" fill="#64748b">(GPU accelerated)</tspan></text>
+
+    <!-- MinerU -->
+    <text x="20" y="210" class="label">MinerU (Heavy Fallback)</text>
+    <rect x="200" y="196" width="310" height="20" rx="4" class="bar-mineru" />
+    <text x="518" y="211" class="val" fill="#f97316">7,660 ms</text>
+  </g>
+
+  <!-- Panel 2: Section Path & Heading Preservation -->
+  <g transform="translate(620, 100)">
+    <rect width="540" height="240" rx="12" class="card" />
+    <text x="20" y="32" class="title">Section Path Information Loss (Lower is Better)</text>
+    <text x="20" y="50" class="sub">Passages missing section context (e.g. only "# Page N" without section title)</text>
+
+    <!-- Baseline pypdf -->
+    <text x="20" y="100" class="label">Baseline (pypdf)</text>
+    <rect x="180" y="85" width="300" height="26" rx="6" fill="#ef4444" />
+    <text x="490" y="103" class="val" fill="#ef4444">98% Loss</text>
+    <text x="180" y="125" class="sub">335 of 343 chunks lost section hierarchy</text>
+
+    <!-- Smart Router -->
+    <text x="20" y="175" class="label">Smart Router (nest_under_page)</text>
+    <rect x="180" y="160" width="8" height="26" rx="4" fill="#10b981" />
+    <text x="198" y="178" class="val" fill="#10b981">0% Loss <tspan font-weight="500" fill="#059669">(Full context preserved: "3 Method &gt; Page 5")</tspan></text>
+    <text x="180" y="200" class="sub">0 of 398 chunks lost section hierarchy</text>
+  </g>
+
+  <!-- Panel 3: Ligature & Hyphenation Extraction Defects -->
+  <g transform="translate(40, 370)">
+    <rect width="540" height="230" rx="12" class="card" />
+    <text x="20" y="32" class="title">Ligature Defects in 8 Papers (Lower is Better)</text>
+    <text x="20" y="50" class="sub">Unconverted "ﬁ ﬂ ﬀ" corrupting lexical keyword search and exact quoting</text>
+
+    <g transform="translate(20, 75)">
+      <text x="0" y="25" class="label">pypdf (Baseline)</text>
+      <rect x="160" y="8" width="310" height="24" rx="4" fill="#ef4444" opacity="0.85" />
+      <text x="480" y="25" class="val" fill="#ef4444">1,360 errors</text>
+
+      <text x="0" y="70" class="label">opendataloader</text>
+      <rect x="160" y="53" width="220" height="24" rx="4" fill="#94a3b8" />
+      <text x="390" y="70" class="val" fill="#475569">884 errors</text>
+
+      <text x="0" y="115" class="label">pdf-inspector</text>
+      <rect x="160" y="98" width="8" height="24" rx="4" fill="#10b981" />
+      <text x="178" y="115" class="val" fill="#10b981">0 errors (100% clean Unicode conversion)</text>
+    </g>
+  </g>
+
+  <!-- Panel 4: Smart Router Page-Level Triage Distribution -->
+  <g transform="translate(620, 370)">
+    <rect width="540" height="230" rx="12" class="card" />
+    <text x="20" y="32" class="title">Smart Router Selective Routing Efficiency</text>
+    <text x="20" y="50" class="sub">Elimination of redundant GPU calls on text-only pages</text>
+
+    <!-- Fast Path Clean -->
+    <g transform="translate(20, 75)">
+      <rect width="230" height="120" rx="10" fill="rgba(16, 185, 129, 0.08)" stroke="#10b981" stroke-width="1.5" />
+      <text x="16" y="30" font-family="-apple-system, sans-serif" font-weight="700" font-size="14" fill="#10b981">44% Fast Path Exit</text>
+      <text x="16" y="52" class="sub">Text-only, clean vector-less pages</text>
+      <text x="16" y="75" class="val" fill="#0f172a">Latency: 2.6 ms/page</text>
+      <text x="16" y="95" class="sub">Zero GPU VRAM consumed</text>
+    </g>
+
+    <!-- Heavy Route Selective -->
+    <g transform="translate(270, 75)">
+      <rect width="230" height="120" rx="10" fill="rgba(139, 92, 246, 0.08)" stroke="#8b5cf6" stroke-width="1.5" />
+      <text x="16" y="30" font-family="-apple-system, sans-serif" font-weight="700" font-size="14" fill="#8b5cf6">56% Heavy Deep Parsing</text>
+      <text x="16" y="52" class="sub">Tables, scanned text, layout OCR</text>
+      <text x="16" y="75" class="val" fill="#0f172a">Docling Table Extraction</text>
+      <text x="16" y="95" class="sub">Quarantine tolerance: 5.0</text>
+    </g>
+  </g>
+</svg>
