@@ -13,12 +13,6 @@
     <a href="system_architecture_diagram.html"><img src="https://img.shields.io/badge/architecture-Interactive%20Diagram-6366f1.svg?style=flat-square" alt="Architecture"></a>
   </p>
 
-  <br>
-
-  <h1>Research Platform</h1>
-  <h3>Autonomous Deep Research Engine with Traceable Claim-to-Evidence Provenance</h3>
-  <p><em>The Local-First Evidence &amp; Consensus Infrastructure for AI Agents and Office Workstations</em></p>
-
   <p align="center">
     <b>Multi-Source Discovery</b> • <b>Claim Extraction</b> • <b>Contradiction Auditing</b> • <b>Passage Verification</b> • <b>Multi-Round Saturation</b>
     <br>
