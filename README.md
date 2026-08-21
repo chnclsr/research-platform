@@ -1,22 +1,39 @@
-# Research Platform
+<div align="center">
+  <img src="docs/assets/banner.svg" alt="Research Platform Banner" width="100%">
 
-> A local-first evidence engine for AI agents and office teams.
+  <br>
 
-**Platform version:** `0.9.1`
+  <p align="center">
+    <a href="https://github.com/chnclsr/research-platform"><img src="https://img.shields.io/badge/version-v0.12.0-3b82f6.svg?style=flat-square" alt="Version"></a>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square" alt="Python"></a>
+    <a href="tests/"><img src="https://img.shields.io/badge/tests-412%20passed-10b981.svg?style=flat-square" alt="Tests"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-emerald.svg?style=flat-square" alt="License"></a>
+    <a href="docs/ARCHITECTURE.md"><img src="https://img.shields.io/badge/hardware-RTX%204060%208GB%20%2B%20CPU-8b5cf6.svg?style=flat-square" alt="Hardware"></a>
+    <a href="docs/ARCHITECTURE.md"><img src="https://img.shields.io/badge/connectors-27%20active-f59e0b.svg?style=flat-square" alt="Connectors"></a>
+    <a href="system_architecture_diagram.html"><img src="https://img.shields.io/badge/architecture-Interactive%20Diagram-6366f1.svg?style=flat-square" alt="Architecture"></a>
+  </p>
 
-**Document version:** `6.0`
+  <br>
 
-**Last updated:** `2026-07-30`
+  <h1>Research Platform</h1>
+  <h3>Autonomous Deep Research Engine with Traceable Claim-to-Evidence Provenance</h3>
+  <p><em>The Local-First Evidence &amp; Consensus Infrastructure for AI Agents and Office Workstations</em></p>
 
-Research Platform turns a single office workstation into a shared, auditable research
-service. Codex, Claude, Telegram users, and the built-in operations console can all submit
-work to the same evidence pipeline and request the result, the raw research corpus, or both.
+  <p align="center">
+    <b>Multi-Source Discovery</b> • <b>Claim Extraction</b> • <b>Contradiction Auditing</b> • <b>Passage Verification</b> • <b>Multi-Round Saturation</b>
+    <br>
+    <b>LangGraph 14-Node State Machine</b> • <b>Smart PDF Layout Router</b> • <b>Hardware-Aware Capacity (v0.12.0)</b> • <b>Zero Vendor Lock-In</b>
+    <br>
+    <b>PostgreSQL Checkpoints</b> • <b>MinIO S3 Snapshot Store</b> • <b>Qdrant Vector DB</b> • <b>MCP Gateway (:8010)</b> • <b>Telegram Bot</b>
+  </p>
+</div>
 
-The current deployment runs its language, embedding, and figure-understanding workloads
-locally on one **NVIDIA RTX 4060 with 8 GB VRAM**. It does not try to replace a stronger
-general-purpose agent. It gives that agent a durable research back end: broad discovery,
-source acquisition, provenance, passage-level evidence, coverage diagnostics, and
-reproducible deliverables.
+---
+
+> **Ingest global academic literature, patents, regulatory filings, and web intelligence across 27 connectors.**  
+> Research Platform turns a single office workstation into an auditable, high-throughput evidence service. Codex, Claude, Telegram users, and operations consoles submit complex research inquiries to a deterministic 14-node LangGraph pipeline, executing structure-aware parsing, passage-level quote audits, and cross-source synthesis with zero hallucinations.
+
+The local deployment hosts its language, embedding, and figure-understanding models on a single **NVIDIA RTX 4060 (8 GB VRAM)** with CPU capacity auto-scaling. It does not replace general-purpose reasoning agents; it equips them with a durable research back end: broad multi-source discovery, provenance validation, verifiable citations, coverage diagnostics, and publication-ready deliverables.
 
 ## What we built
 

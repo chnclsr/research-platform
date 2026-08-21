@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+
+    <!-- Accent Glow -->
+    <radialGradient id="glow" cx="25%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35" />
+      <stop offset="50%" stop-color="#6366f1" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Logo Gradients -->
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+
+    <linearGradient id="nodeGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+
+    <linearGradient id="nodeGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+
+    <linearGradient id="nodeGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- Grid Pattern -->
+    <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(255, 255, 255, 0.04)" stroke-width="1" />
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="url(#bgGrad)" rx="16" />
+  <rect width="100%" height="100%" fill="url(#glow)" rx="16" />
+  <rect width="100%" height="100%" fill="url(#grid)" rx="16" />
+
+  <!-- Outer Border -->
+  <rect x="1" y="1" width="1198" height="358" rx="15" fill="none" stroke="rgba(255, 255, 255, 0.12)" stroke-width="1.5" />
+
+  <!-- Left: Logo Icon Composition -->
+  <g transform="translate(100, 70)">
+    <!-- Outer Shield Halo -->
+    <circle cx="110" cy="110" r="92" fill="rgba(59, 130, 246, 0.08)" stroke="rgba(96, 165, 250, 0.25)" stroke-width="1.5" stroke-dasharray="4,4" />
+    <circle cx="110" cy="110" r="76" fill="rgba(15, 23, 42, 0.85)" stroke="rgba(255, 255, 255, 0.15)" stroke-width="1.2" />
+
+    <!-- Connecting Edges -->
+    <line x1="80" y1="80" x2="140" y2="75" stroke="#60a5fa" stroke-width="2.5" stroke-opacity="0.8" />
+    <line x1="80" y1="80" x2="65" y2="135" stroke="#60a5fa" stroke-width="2.5" stroke-opacity="0.8" />
+    <line x1="140" y1="75" x2="155" y2="130" stroke="#a855f7" stroke-width="2.5" stroke-opacity="0.8" />
+    <line x1="65" y1="135" x2="110" y2="155" stroke="#34d399" stroke-width="2.5" stroke-opacity="0.8" />
+    <line x1="155" y1="130" x2="110" y2="155" stroke="#a855f7" stroke-width="2.5" stroke-opacity="0.8" />
+    <line x1="80" y1="80" x2="110" y2="110" stroke="#38bdf8" stroke-width="2.5" stroke-opacity="0.9" />
+    <line x1="140" y1="75" x2="110" y2="110" stroke="#818cf8" stroke-width="2.5" stroke-opacity="0.9" />
+    <line x1="155" y1="130" x2="110" y2="110" stroke="#c084fc" stroke-width="2.5" stroke-opacity="0.9" />
+    <line x1="65" y1="135" x2="110" y2="110" stroke="#34d399" stroke-width="2.5" stroke-opacity="0.9" />
+    <line x1="110" y1="155" x2="110" y2="110" stroke="#34d399" stroke-width="2.5" stroke-opacity="0.9" />
+
+    <!-- Center Node (Synthesis Core) -->
+    <circle cx="110" cy="110" r="15" fill="url(#logoGrad)" stroke="#ffffff" stroke-width="2.5" />
+
+    <!-- Graph Nodes -->
+    <circle cx="80" cy="80" r="10" fill="url(#nodeGrad1)" stroke="#ffffff" stroke-width="2" />
+    <circle cx="140" cy="75" r="11" fill="url(#nodeGrad2)" stroke="#ffffff" stroke-width="2" />
+    <circle cx="155" cy="130" r="9" fill="url(#nodeGrad2)" stroke="#ffffff" stroke-width="2" />
+    <circle cx="65" cy="135" r="9" fill="url(#nodeGrad3)" stroke="#ffffff" stroke-width="2" />
+    <circle cx="110" cy="155" r="10" fill="url(#nodeGrad3)" stroke="#ffffff" stroke-width="2" />
+
+    <!-- Orbiting Accent Sparkles -->
+    <circle cx="185" cy="95" r="3.5" fill="#38bdf8" />
+    <circle cx="45" cy="90" r="2.5" fill="#a855f7" />
+    <circle cx="130" cy="195" r="3" fill="#34d399" />
+  </g>
+
+  <!-- Right: Title, Subtitle, and Value Proposition -->
+  <g transform="translate(360, 95)">
+    <!-- Main Title -->
+    <text x="0" y="45" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="46" fill="#ffffff" letter-spacing="-0.03em">
+      Research Platform
+    </text>
+
+    <!-- Subtitle / Tagline -->
+    <text x="0" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="20" fill="#94a3b8" letter-spacing="-0.01em">
+      Autonomous Deep Research &amp; Claim-to-Evidence Consensus Engine
+    </text>
+
+    <!-- Secondary descriptive pitch -->
+    <text x="0" y="112" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="14.5" fill="#cbd5e1">
+      Multi-source academic &amp; regulatory literature discovery, full passage citation audits,
+    </text>
+    <text x="0" y="134" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="400" font-size="14.5" fill="#cbd5e1">
+      and structure-aware hybrid PDF routing engineered for local workstation GPUs.
+    </text>
+
+    <!-- Feature Badges Row -->
+    <g transform="translate(0, 162)">
+      <!-- Badge 1 -->
+      <rect x="0" y="0" width="132" height="28" rx="14" fill="rgba(59, 130, 246, 0.15)" stroke="#3b82f6" stroke-width="1.2" />
+      <text x="66" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#93c5fd" text-anchor="middle">27 CONNECTORS</text>
+
+      <!-- Badge 2 -->
+      <rect x="142" y="0" width="156" height="28" rx="14" fill="rgba(168, 85, 247, 0.15)" stroke="#a855f7" stroke-width="1.2" />
+      <text x="220" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#d8b4fe" text-anchor="middle">LANGGRAPH 14-NODE</text>
+
+      <!-- Badge 3 -->
+      <rect x="308" y="0" width="160" height="28" rx="14" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" stroke-width="1.2" />
+      <text x="388" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#6ee7b7" text-anchor="middle">SMART PDF ROUTER</text>
+
+      <!-- Badge 4 -->
+      <rect x="478" y="0" width="150" height="28" rx="14" fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b" stroke-width="1.2" />
+      <text x="553" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#fcd34d" text-anchor="middle">ZERO HALLUCINATION</text>
+
+      <!-- Badge 5 -->
+      <rect x="638" y="0" width="120" height="28" rx="14" fill="rgba(239, 68, 68, 0.15)" stroke="#ef4444" stroke-width="1.2" />
+      <text x="698" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#fca5a5" text-anchor="middle">LOCAL GPU TIER</text>
+    </g>
+  </g>
+</svg>
