@@ -232,6 +232,97 @@ C araçları `scripts/c1_*.py`, `scripts/c2_kalibrasyon.py` ve
 `scripts/korpus_*.py`; küçük ölçüm kanıtları `results/c1_rc1/` altındadır.
 Ham corpus ve çalışma çıktıları Git'e girmez.
 
+## Research Agent Entegrasyonu ve Aktör Rolleri
+
+Agent verileri kazıyıp lokalde topladıktan sonra ayrıştırma (parse) zincirindeki aktörler ve sorumlulukları:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. RESEARCH AGENT (pipeline.py & acquisition.py)                            │
+│                                                                             │
+│   [ LangGraph: ACQUIRE ] ──(URL / PDF Baytları)──► [ AcquisitionService ]   │
+│                                                              │              │
+│                                                   (select("pdf"))           │
+│                                                              ▼              │
+│                                                    [ ParserRegistry ]       │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ (SmartPdfParser seçilir)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. SMART ROUTER (smart_router/)                                             │
+│                                                                             │
+│   [ Ham PDF ] ──► [ Fast Path: pdf-inspector ] (2.6 ms/sayfa, tüm belge)    │
+│                           │                                                 │
+│             ┌─────────────┴─────────────┐                                   │
+│             ▼                           ▼                                   │
+│     [ gate.py (Kapı) ]        [ critic.py (Denetçi) ]                       │
+│     • needs_ocr               • quality_score (0-100)                       │
+│     • has_table               • critical_issues                             │
+│     • has_figure                        │                                   │
+│             └─────────────┬─────────────┘                                   │
+│                           ▼                                                 │
+│               [ sayfa_secici (pages.py) ]                                   │
+└──────────────┬───────────────────────────────────────────────┬──────────────┘
+               │                                               │
+               │ (Sorunlu / Tablolu Sayfalar)                  │ (Temiz Sayfalar %44+)
+               ▼                                               │
+┌──────────────────────────────────────────────┐               │
+│ 3. AĞIR MOTOR HATTI (engines.py)             │               │
+│                                              │               │
+│   [ _AGIR_KAPI (Semaphore) ]                 │               │
+│         │                                    │               │
+│         ▼                                    │               │
+│   [ Docling Engine ] ─(Hata/Timeout)─► [ MinerU ]            │
+│         │                                    │               │
+└─────────┼────────────────────────────────────┘               │
+          │                                                    │
+          ▼                                                    │
+┌──────────────────────────────────────────────────────────────┴──────────────┐
+│ 4. GÜVENLİK, KARANTİNA & BİRLEŞTİRME (merge.py)                             │
+│                                                                             │
+│   [ Docling Çıktısı ] ──► [ İçerik Kaybı Denetimi ] (>%50 kayıp var mı?)    │
+│                                    │ (Kayıp Yok)                            │
+│                                    ▼                                        │
+│                           [ Bozulma Skoru Kıyası ]                          │
+│                                    │                                        │
+│               ┌────────────────────┴────────────────────┐                   │
+│               ▼ (Bozuksa)                               ▼ (Temizse)         │
+│     [ Karantina / Red ]                       [ Heavy Kabul ]               │
+│   (Hızlı yol metni korunur)                 (Docling metni alınır)          │
+│               └────────────────────┬────────────────────┘                   │
+│                                    ▼                                        │
+│                   [ birlestir() & sayfa_basliklariyla() ]                   │
+│                   • # Page N başlığı en tepeye sabitlenir                   │
+│                   • Belge içi başlıklar ## düzeyine kaydırılır              │
+└────────────────────────────────────┬────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 5. DOWNSTREAM AGENT VERİ TÜKETİMİ                                           │
+│                                                                             │
+│   [ ParsedDocument ] ──► [ passages.py (chunk_document) ]                   │
+│                                    │                                        │
+│                                    ▼                                        │
+│                        [ Embeddings & Vektör DB ]                           │
+│                                    │                                        │
+│                                    ▼                                        │
+│                           [ LLM Rapor Sentezi ]                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Aktörler ve İletişim Rolleri
+
+- **Research Agent (`pipeline.py`):** `ACQUIRE` aşamasında keşfedilen URL veya kaynak nesnesini `AcquisitionService`'e gönderir.
+- **`AcquisitionService` (`acquisition.py`):** İndirdiği içeriğin `pdf` olduğunu anlar ve `ParserRegistry`'ye *"Bana bu doküman türü için en uygun parser'ı ver"* der.
+- **`ParserRegistry` (`registry.py`):** Sistemde kayıtlı parser'lar arasından en yüksek önceliğe sahip olan `SmartPdfParser`'ı seçip döndürür.
+- **`SmartPdfParser` (`smart_pdf.py`):** Baytları geçici bir PDF dosyasına yazar ve ana yönlendirme yöneticisi olan `SmartRouterHatti`'yi tetikler.
+- **`SmartRouterHatti` (`smart_router/orchestrator.py`):**
+  - `pdf-inspector` ile belgenin tamamını hızlıca metne döker.
+  - `gate.py` ve `critic.py` ile sayfaları tarayarak hangi sayfaların Docling'e gitmesi gerektiğine karar verir.
+- **`DoclingEngine` (`smart_router/engines.py`):** Yalnızca router'ın seçtiği sayfaları derinlemesine işler (tabloları çıkarır, OCR yapar).
+- **`merge.py` (Karantina & Güvenlik):** Docling'in getirdiği metni hızlı metinle kıyaslar; bozulma veya içerik kaybı yoksa kabul eder, varsa karantinaya alıp hızlı metni korur ve sayfaları `# Page N` formatında birleştirir.
+
+
 ## Sayfa sayfa inceleme arayüzü
 
 `scripts/hata_arayuzu.py` 9 belgelik korpusun 261 sayfasını tek HTML'de gözle
