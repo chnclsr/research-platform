@@ -2,7 +2,7 @@
 
 > **Kaynak:** `src/research_platform/parsers/`, kod okunarak çıkarıldı.
 
-Üretimde kayıtlı parser `smart_pdf` (öncelik 10), tek belgeyi tek motora göndermek
+Üretimde kayıtlı parser `smart_pdf` (öncelik 20), tek belgeyi tek motora göndermek
 yerine **her sayfayı ayrı yönlendirir**: ucuz bir denetimden geçirir, yalnız sorunlu
 sayfaları pahalı motora yollar, ikisini geri birleştirir.
 

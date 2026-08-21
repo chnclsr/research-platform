@@ -64,7 +64,7 @@
 
   <rect class="n-box accent" x="650" y="52" width="280" height="160" rx="4"/>
   <text class="n-title" x="662" y="74">SmartPdfParser</text>
-  <text class="n-sub accent" x="662" y="92">id="smart_pdf" &#183; priority=10</text>
+  <text class="n-sub accent" x="662" y="92">id="smart_pdf" &#183; priority=20</text>
   <text class="n-sub" x="662" y="110">+parse() +available()</text>
   <text class="n-sub" x="662" y="126">+can_parse() +health()</text>
   <text class="n-sub" x="662" y="142">-_run_heavy_pages()</text>

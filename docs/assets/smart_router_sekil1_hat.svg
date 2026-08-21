@@ -38,7 +38,7 @@
 
   <!-- dis kapsayici -->
   <rect class="grp" x="210" y="104" width="950" height="690" rx="6"/>
-  <text class="grp-label" x="226" y="122">parsers/smart_pdf.py &#8212; SmartPdfParser.parse() &#183; priority 10</text>
+  <text class="grp-label" x="226" y="122">parsers/smart_pdf.py &#8212; SmartPdfParser.parse() &#183; priority 20</text>
 
   <!-- ic grup: hizli hat -->
   <rect class="grp" x="230" y="138" width="910" height="152" rx="4"/>
