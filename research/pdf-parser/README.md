@@ -234,6 +234,8 @@ Ham corpus ve çalışma çıktıları Git'e girmez.
 
 ## Research Agent Entegrasyonu ve Aktör Rolleri
 
+> 🗺️ **İnteraktif Mimari Şeması:** [system_architecture_diagram.html](../../system_architecture_diagram.html) dosyasını tarayıcınızda açarak tüm uçtan uca veri akışını, LangGraph durum makinesini ve Smart Router karantina ağacını canlı inceleyebilirsiniz.
+
 Agent verileri kazıyıp lokalde topladıktan sonra ayrıştırma (parse) zincirindeki aktörler ve sorumlulukları:
 
 ```text

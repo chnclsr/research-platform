@@ -36,6 +36,26 @@ reproducible deliverables.
   console.
 - `raw`, `result`, and `both` delivery contracts for downstream agents.
 
+## 🗺️ Interactive System Architecture & Pipeline Explorer
+
+[![Interactive Architecture](https://img.shields.io/badge/Architecture-Interactive_SVG_Explorer-f97316?style=for-the-badge&logo=diagramsdotnet&logoColor=white)](./system_architecture_diagram.html)
+[![LangGraph StateGraph](https://img.shields.io/badge/LangGraph-14_Node_State_Machine-3b82f6?style=for-the-badge&logo=langchain&logoColor=white)](./system_architecture_diagram.html)
+[![Smart Router Engine](https://img.shields.io/badge/Smart_Router-Priority_20_Hybrid-10b981?style=for-the-badge)](./system_architecture_diagram.html)
+[![ACID & Vector DB](https://img.shields.io/badge/Storage-PostgreSQL_+_MinIO_+_Qdrant-8b5cf6?style=for-the-badge&logo=postgresql&logoColor=white)](./system_architecture_diagram.html)
+
+> 🚀 **[Open Interactive System Architecture Diagram (`system_architecture_diagram.html`)](./system_architecture_diagram.html)**
+> 
+> *A standalone, zero-dependency interactive SVG architecture explorer built with editorial design principles ([cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design)). Supports live Light/Dark mode toggling and 4 deep-dive interactive tabs.*
+
+| Tab | Focus & Coverage | Key Architectural Components |
+|---|---|---|
+| **1. End-to-End User & DB Flow** | Full lifecycle from user prompt to database persistence | Telegram / Web UI → LangGraph → Parser Registry → PostgreSQL (`runs`, `sources`, `passages`, `evidences`) + MinIO S3 Snapshot + Qdrant Vector DB |
+| **2. LangGraph 14-Node State Machine** | Complete state transitions & recovery loops | `VALIDATE_PROTOCOL` (HITL) → `DECOMPOSE` → `SEARCH` → `ACQUIRE` → `CHUNK_INDEX` → `AUDIT` → `CHECK_COVERAGE` (`expand` recovery loop / `finish`) → `SYNTHESIZE_EXPORT` |
+| **3. Smart Router Deep-Dive** | Hybrid PDF parsing pipeline | Fast path (`pdf-inspector` 2.6 ms/page) → Gate & Critic (`critic_ceza_dokumu`, non-drawing quality veto) → `_AGIR_KAPI` Semaphore → Docling (1.55s/page) → Quarantine & `# Page N` nesting |
+| **4. Quarantine & Decision Matrix** | Safety gates & fallback decision tree | Page triage flowchart, 5.0 dead band tolerance check, $>50\%$ text loss gate, acceptance vs fast fallback |
+
+---
+
 ## One workstation, an office-wide research service
 
 ![Research Platform system architecture: entry gateways, core services, data and collection tier](docs/diagrams/system-architecture.svg)
