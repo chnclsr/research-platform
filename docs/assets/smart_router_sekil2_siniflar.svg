@@ -1,0 +1,205 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 1160" width="1180" height="1160" role="img" aria-label="DocumentParser soyut sinifindan SmartPdfParser turer; SmartPdfParser ParsedDocument uretir, ParsedDocument ParsedTable listesini icerir; smart_router paketinde SmartRouterHatti GirisKapisi ve PDFCritic'i kompozisyonla tutar ve PdfInspectorAdapter'i cagirir, GirisKapisi de ayni adaptorun tablo ve OCR listelerine bagimlidir; engines.py'de DoclingEngine ve MinerUEngine EngineResult uretir, merge.py bunlari MergedDocument icinde MergedPage listesine birlestirir; Ayarlar tum karar noktalarina esik degeri saglar.">
+  <style>
+    .bg      { fill: #fdfbf6; }
+    .n-box   { fill: #f0ebdf; stroke: #57513f; stroke-width: 1; }
+    .n-box.accent { stroke: #bf4a19; stroke-width: 1.4; }
+    .n-box.dim    { stroke-dasharray: 4 3; opacity: .7; }
+    .n-title { font: 600 12.5px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #221f19; }
+    .n-sub   { font: 10.5px ui-monospace, Consolas, "Liberation Mono", monospace; fill: #635c4c; }
+    .n-sub.accent { fill: #bf4a19; }
+    .grp       { fill: none; stroke: #cfc7b4; stroke-dasharray: 3 3; }
+    .grp-label { font: 10px ui-monospace, Consolas, monospace; letter-spacing: .05em;
+                 text-transform: uppercase; fill: #635c4c; }
+    .edge         { stroke: #635c4c; stroke-width: 1.1; fill: none; }
+    .edge.accent  { stroke: #bf4a19; stroke-width: 1.4; }
+    .edge.dashed  { stroke-dasharray: 4 3; }
+    .e-label { font: 10px ui-monospace, Consolas, monospace; fill: #635c4c;
+               paint-order: stroke; stroke: #fdfbf6; stroke-width: 3.4px; stroke-linejoin: round; }
+    .e-label.accent { fill: #bf4a19; }
+  </style>
+  <defs>
+    <marker id="s2arrM" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#635c4c"/>
+    </marker>
+    <marker id="s2arrA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#bf4a19"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1180" height="1160"/>
+
+  <!-- GRUP 1: base.py -->
+  <rect class="grp" x="20" y="20" width="570" height="300" rx="4"/>
+  <text class="grp-label" x="34" y="38">parsers/base.py &#8212; s&#246;zle&#351;me</text>
+
+  <rect class="n-box" x="40" y="52" width="230" height="116" rx="4"/>
+  <text class="n-sub" x="52" y="70">&#171;abstract&#187;</text>
+  <text class="n-title" x="52" y="88">DocumentParser</text>
+  <text class="n-sub" x="52" y="106">id &#183; document_types</text>
+  <text class="n-sub" x="52" y="122">priority &#183; capabilities</text>
+  <text class="n-sub" x="52" y="138">+can_parse() +available()</text>
+  <text class="n-sub" x="52" y="154">+health() +parse()* {abstract}</text>
+
+  <rect class="n-box" x="40" y="196" width="230" height="104" rx="4"/>
+  <text class="n-title" x="52" y="216">ParsedDocument</text>
+  <text class="n-sub" x="52" y="234">text:str &#183; parser_id:str</text>
+  <text class="n-sub" x="52" y="250">tables:list[ParsedTable]</text>
+  <text class="n-sub" x="52" y="266">page_count:int|None</text>
+  <text class="n-sub" x="52" y="282">parse_provenance:dict</text>
+
+  <rect class="n-box" x="340" y="196" width="230" height="104" rx="4"/>
+  <text class="n-title" x="352" y="216">ParsedTable</text>
+  <text class="n-sub" x="352" y="234">section_path:str</text>
+  <text class="n-sub" x="352" y="250">headers:list[str]</text>
+  <text class="n-sub" x="352" y="266">rows:list[list[str]]</text>
+  <text class="n-sub" x="352" y="282">+to_markdown()</text>
+
+  <polygon points="270,248 282,242 294,248 282,254" fill="#635c4c"/>
+  <path class="edge" d="M294,248 H340"/>
+  <text class="e-label" x="300" y="240">tables</text>
+
+  <!-- GRUP 2: smart_pdf.py -->
+  <rect class="grp" x="630" y="20" width="530" height="232" rx="4"/>
+  <text class="grp-label" x="644" y="38">parsers/smart_pdf.py &#8212; giri&#351; noktas&#305;</text>
+
+  <rect class="n-box accent" x="650" y="52" width="280" height="160" rx="4"/>
+  <text class="n-title" x="662" y="74">SmartPdfParser</text>
+  <text class="n-sub accent" x="662" y="92">id="smart_pdf" &#183; priority=20</text>
+  <text class="n-sub" x="662" y="110">+parse() +available()</text>
+  <text class="n-sub" x="662" y="126">+can_parse() +health()</text>
+  <text class="n-sub" x="662" y="142">-_run_heavy_pages()</text>
+  <text class="n-sub" x="662" y="158">-_page_scorer()</text>
+  <text class="n-sub" x="662" y="174">-_provenance()</text>
+  <text class="n-sub" x="662" y="190">-_spill_to_disk()</text>
+
+  <path class="edge" d="M650,110 H290"/>
+  <polygon points="270,110 288,102 288,118" fill="#fdfbf6" stroke="#635c4c" stroke-width="1"/>
+  <text class="e-label" x="430" y="102">&#171;inherits&#187;</text>
+
+  <path class="edge dashed" d="M650,186 H155 V192" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="430" y="178">creates</text>
+
+  <!-- GRUP 3: smart_router cekirdegi -->
+  <rect class="grp" x="20" y="356" width="1140" height="372" rx="4"/>
+  <text class="grp-label" x="34" y="374">smart_router/ &#8212; y&#246;nlendirme &#231;ekirde&#287;i</text>
+
+  <rect class="n-box" x="40" y="412" width="260" height="160" rx="4"/>
+  <text class="n-title" x="52" y="434">SmartRouterHatti</text>
+  <text class="n-sub" x="52" y="452">kalite_esik:float</text>
+  <text class="n-sub" x="52" y="468">yuksek_guven_yeter:bool</text>
+  <text class="n-sub" x="52" y="484">kapi:GirisKapisi</text>
+  <text class="n-sub" x="52" y="500">critic:PDFCritic</text>
+  <text class="n-sub" x="52" y="518">+calistir()</text>
+  <text class="n-sub" x="52" y="536">&#8594; orchestrator.py</text>
+
+  <rect class="n-box" x="340" y="412" width="260" height="160" rx="4"/>
+  <text class="n-sub" x="352" y="430">&#171;static / adapter&#187;</text>
+  <text class="n-title" x="352" y="448">PdfInspectorAdapter</text>
+  <text class="n-sub" x="352" y="468">+extract_pages()</text>
+  <text class="n-sub" x="352" y="484">+extract_text()</text>
+  <text class="n-sub" x="352" y="500">+available() +surum()</text>
+  <text class="n-sub" x="352" y="516">yedek &#8594; PyMuPDFFallback</text>
+  <text class="n-sub" x="352" y="532">&#8594; InspectorSonuc (1-tabanl&#305;)</text>
+
+  <rect class="n-box" x="640" y="412" width="250" height="160" rx="4"/>
+  <text class="n-title" x="652" y="434">GirisKapisi</text>
+  <text class="n-sub" x="652" y="452">esik:dict[str,float]</text>
+  <text class="n-sub" x="652" y="468">+bayrakla()</text>
+  <text class="n-sub" x="652" y="484">-_cizim() -_izgara()</text>
+  <text class="n-sub" x="652" y="502">&#8594; dict[int,SayfaBayrak]</text>
+  <text class="n-sub" x="652" y="518">{needs_ocr, has_table,</text>
+  <text class="n-sub" x="652" y="534">has_figure, tablo_guven}</text>
+
+  <rect class="n-box" x="930" y="412" width="210" height="160" rx="4"/>
+  <text class="n-title" x="942" y="434">PDFCritic</text>
+  <text class="n-sub" x="942" y="452">fallback_threshold:float</text>
+  <text class="n-sub" x="942" y="468">ceza:dict</text>
+  <text class="n-sub" x="942" y="486">+evaluate()</text>
+  <text class="n-sub" x="942" y="502">+evaluate_pages()</text>
+  <text class="n-sub" x="942" y="518">+sayfa_metrikleri()</text>
+  <text class="n-sub" x="942" y="534">+sayfa_skoru() &#8594; cezalar</text>
+
+  <path class="edge dashed" d="M700,412 V396 H520 V408" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="545" y="390">pages_with_tables &#183; pages_needing_ocr</text>
+
+  <path class="edge dashed" d="M230,572 V604 H470 V580" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="280" y="598">extract_pages()</text>
+
+  <polygon points="200,572 209,582 200,592 191,582" fill="#635c4c"/>
+  <path class="edge" d="M200,592 V632 H765 V576"/>
+  <text class="e-label" x="430" y="626">kapi &#9670; kompozisyon</text>
+
+  <polygon points="170,572 179,582 170,592 161,582" fill="#635c4c"/>
+  <path class="edge" d="M170,592 V660 H1035 V576"/>
+  <text class="e-label" x="600" y="654">critic &#9670; kompozisyon</text>
+
+  <path class="edge accent" d="M930,150 H1150 V760" marker-end="url(#s2arrA)"/>
+  <text class="e-label accent" x="1000" y="142">-_run_heavy_pages()</text>
+  <text class="e-label accent" x="980" y="752">a&#287;&#305;r sayfalar &#8594; motorlar</text>
+
+  <!-- GRUP 4: engines + merge -->
+  <rect class="grp" x="20" y="768" width="1140" height="232" rx="4"/>
+  <text class="grp-label" x="34" y="786">smart_router/engines.py + merge.py &#8212; a&#287;&#305;r motor &amp; birle&#351;tirme</text>
+
+  <rect class="n-box" x="40" y="808" width="196" height="120" rx="4"/>
+  <text class="n-title" x="52" y="830">DoclingEngine</text>
+  <text class="n-sub" x="52" y="848">timeout_s</text>
+  <text class="n-sub" x="52" y="864">python_path</text>
+  <text class="n-sub" x="52" y="880">+available()</text>
+  <text class="n-sub" x="52" y="896">+extract()</text>
+  <text class="n-sub" x="52" y="912">in-process / bridged</text>
+
+  <rect class="n-box dim" x="282" y="808" width="186" height="120" rx="4"/>
+  <text class="n-title" x="294" y="830">MinerUEngine</text>
+  <text class="n-sub" x="294" y="848">+available()=False</text>
+  <text class="n-sub" x="294" y="864">+extract()</text>
+  <text class="n-sub" x="294" y="880">cli_arguments() haz&#305;r</text>
+  <text class="n-sub" x="294" y="896">ko&#351;turulmad&#305;</text>
+
+  <rect class="n-box" x="508" y="808" width="186" height="120" rx="4"/>
+  <text class="n-sub" x="520" y="828">&#171;dataclass&#187;</text>
+  <text class="n-title" x="520" y="846">EngineResult</text>
+  <text class="n-sub" x="520" y="864">engine &#183; pages</text>
+  <text class="n-sub" x="520" y="880">tables &#183; device</text>
+  <text class="n-sub" x="520" y="896">ok &#183; degraded</text>
+  <text class="n-sub" x="520" y="912">error &#183; mode</text>
+
+  <rect class="n-box" x="732" y="808" width="186" height="120" rx="4"/>
+  <text class="n-sub" x="744" y="828">&#171;dataclass&#187;</text>
+  <text class="n-title" x="744" y="846">MergedDocument</text>
+  <text class="n-sub" x="744" y="864">pages:[MergedPage]</text>
+  <text class="n-sub" x="744" y="880">quarantined_pages</text>
+  <text class="n-sub" x="744" y="896">fallback_pages</text>
+  <text class="n-sub" x="744" y="912">degraded:bool</text>
+
+  <rect class="n-box" x="954" y="808" width="186" height="120" rx="4"/>
+  <text class="n-sub" x="966" y="828">&#171;dataclass&#187;</text>
+  <text class="n-title" x="966" y="846">MergedPage</text>
+  <text class="n-sub" x="966" y="864">page_no &#183; text</text>
+  <text class="n-sub" x="966" y="880">engine &#183; fell_back</text>
+  <text class="n-sub" x="966" y="896">karar_gerekcesi</text>
+
+  <path class="edge dashed" d="M468,868 H504" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="470" y="860">&#252;retir</text>
+
+  <path class="edge" d="M138,928 V948 H586 V932" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="300" y="942">produces</text>
+
+  <path class="edge" d="M650,928 V964 H825 V932" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="670" y="958">merge.birlestir()</text>
+
+  <polygon points="918,868 930,862 942,868 930,874" fill="#635c4c"/>
+  <path class="edge" d="M942,868 H954"/>
+  <text class="e-label" x="920" y="858">pages</text>
+
+  <!-- Ayarlar -->
+  <rect class="n-box" x="440" y="1040" width="300" height="76" rx="4"/>
+  <text class="n-title" x="452" y="1062">Ayarlar / AYAR</text>
+  <text class="n-sub" x="452" y="1080">config/smart_router.yaml</text>
+  <text class="n-sub" x="452" y="1096">esik_version = sha256[:8]</text>
+
+  <path class="edge dashed" d="M560,1040 V1024 H28 V734" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="60" y="1018">&#8594; Gate &#183; Critic &#183; Orchestrator (e&#351;ik, veto)</text>
+  <path class="edge dashed" d="M620,1040 V1024 H860 V1004" marker-end="url(#s2arrM)"/>
+  <text class="e-label" x="880" y="1018">&#8594; merge (tolerans &#183; kay&#305;p e&#351;i&#287;i)</text>
+</svg>

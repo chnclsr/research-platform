@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 900" width="1180" height="900" role="img" aria-label="Acquisition SmartPdfParser'i cagirir; SmartPdfParser dosyayi diske doker ve orchestrator'i calistirir; orchestrator sirayla inspector, gate ve critic'i cagirip sayfa_secici ile agir sayfalari belirler ve kalite vetosunu uygular; SmartPdfParser agir sayfalari DoclingEngine'e gonderir, sonucu merge.birlestir() ile hizli sayfalarla birlestirir ve ParsedDocument olarak acquisition'a doner.">
+  <style>
+    .bg      { fill: #fdfbf6; }
+    .n-box   { fill: #f0ebdf; stroke: #57513f; stroke-width: 1; }
+    .n-box.accent { stroke: #bf4a19; stroke-width: 1.4; }
+    .n-title { font: 600 12.5px -apple-system, "Segoe UI", Roboto, sans-serif; fill: #221f19; }
+    .grp     { fill: none; stroke: #cfc7b4; stroke-dasharray: 3 3; }
+    .edge         { stroke: #635c4c; stroke-width: 1.1; fill: none; }
+    .edge.accent  { stroke: #bf4a19; stroke-width: 1.4; }
+    .edge.dashed  { stroke-dasharray: 4 3; }
+    .e-label { font: 10px ui-monospace, Consolas, monospace; fill: #635c4c;
+               paint-order: stroke; stroke: #fdfbf6; stroke-width: 3.4px; stroke-linejoin: round; }
+    .e-label.accent { fill: #bf4a19; }
+    .lifeline  { stroke: #57513f; stroke-dasharray: 3 3; stroke-width: 1; }
+    .self-loop { fill: none; stroke: #635c4c; stroke-width: 1.1; }
+    .self-loop.accent { stroke: #bf4a19; }
+  </style>
+  <defs>
+    <marker id="s3arrM" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#635c4c"/>
+    </marker>
+    <marker id="s3arrA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#bf4a19"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1180" height="900"/>
+
+  <rect class="n-box" x="15" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="80" y="43" text-anchor="middle">Acquisition</text>
+  <rect class="n-box accent" x="160" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="225" y="43" text-anchor="middle">SmartPdfParser</text>
+  <rect class="n-box" x="305" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="370" y="43" text-anchor="middle">Orchestrator</text>
+  <rect class="n-box" x="450" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="515" y="43" text-anchor="middle">Inspector</text>
+  <rect class="n-box" x="595" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="660" y="43" text-anchor="middle">Gate</text>
+  <rect class="n-box" x="740" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="805" y="43" text-anchor="middle">Critic</text>
+  <rect class="n-box" x="885" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="950" y="43" text-anchor="middle">DoclingEngine</text>
+  <rect class="n-box" x="1030" y="20" width="130" height="36" rx="4"/>
+  <text class="n-title" x="1095" y="43" text-anchor="middle">Merge</text>
+
+  <line class="lifeline" x1="80"   y1="56" x2="80"   y2="800"/>
+  <line class="lifeline" x1="225"  y1="56" x2="225"  y2="800"/>
+  <line class="lifeline" x1="370"  y1="56" x2="370"  y2="800"/>
+  <line class="lifeline" x1="515"  y1="56" x2="515"  y2="800"/>
+  <line class="lifeline" x1="660"  y1="56" x2="660"  y2="800"/>
+  <line class="lifeline" x1="805"  y1="56" x2="805"  y2="800"/>
+  <line class="lifeline" x1="950"  y1="56" x2="950"  y2="800"/>
+  <line class="lifeline" x1="1095" y1="56" x2="1095" y2="800"/>
+
+  <path class="edge" d="M80,96 H221" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="88" y="88">1 &#183; parse(content, url)</text>
+
+  <path class="self-loop" d="M228,132 h36 v18 h-36" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="270" y="126">2 &#183; _spill_to_disk()</text>
+
+  <path class="edge" d="M225,180 H366" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="233" y="172">3 &#183; calistir(path, metin_dahil=True)</text>
+
+  <path class="edge" d="M370,222 H511" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="378" y="214">4 &#183; extract_pages(path)</text>
+
+  <path class="edge dashed" d="M515,264 H374" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="382" y="256">5 &#183; InspectorSonuc(pages, &#8230;)</text>
+
+  <path class="edge" d="M370,306 H656" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="378" y="298">6 &#183; bayrakla(path, insp)</text>
+
+  <path class="edge dashed" d="M660,348 H374" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="382" y="340">7 &#183; {sayfa_no: SayfaBayrak}</text>
+
+  <path class="edge" d="M370,390 H801" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="378" y="382">8 &#183; evaluate_pages(pages, bayraklar)</text>
+
+  <path class="edge dashed" d="M805,432 H374" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="382" y="424">9 &#183; quality_score &#183; cezalar &#183; critical_issue</text>
+
+  <path class="self-loop accent" d="M373,468 h36 v18 h-36" marker-end="url(#s3arrA)"/>
+  <text class="e-label accent" x="415" y="462">10 &#183; sayfa_secici() &#8594; a&#287;&#305;r_sayfalar</text>
+  <text class="e-label accent" x="415" y="478">yaln&#305;z low_quality + &#231;izim yok &#8594; geri &#231;ek</text>
+
+  <path class="edge dashed accent" d="M370,516 H229" marker-end="url(#s3arrA)"/>
+  <text class="e-label" x="238" y="508">11 &#183; karar plan&#305; + h&#305;zl&#305;-yol metni</text>
+
+  <path class="edge" d="M225,558 H946" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="233" y="550">12 &#183; extract(path, a&#287;&#305;r_sayfalar)</text>
+
+  <path class="edge dashed" d="M950,600 H229" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="237" y="592">13 &#183; EngineResult(pages, tables, device)</text>
+
+  <path class="edge" d="M225,642 H1091" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="233" y="634">14 &#183; birlestir(fast_pages, results, score=_page_scorer)</text>
+
+  <path class="edge dashed" d="M1095,684 H229" marker-end="url(#s3arrM)"/>
+  <text class="e-label" x="237" y="676">15 &#183; MergedDocument(pages, quarantined, degraded)</text>
+
+  <path class="edge dashed accent" d="M225,726 H84" marker-end="url(#s3arrA)"/>
+  <text class="e-label accent" x="92" y="718">16 &#183; ParsedDocument(text, tables, parse_provenance)</text>
+
+  <rect class="grp" x="20" y="822" width="660" height="56" rx="4"/>
+  <text class="e-label" x="34" y="844">not &#8212; a&#287;&#305;r_sayfalar bo&#351; ise: 12&#8211;15. ad&#305;mlar atlan&#305;r;</text>
+  <text class="e-label" x="34" y="862">merge yaln&#305;z h&#305;zl&#305;-yol sayfalar&#305;n&#305; "# Page N" ba&#351;l&#305;&#287;&#305;yla sarar.</text>
+</svg>

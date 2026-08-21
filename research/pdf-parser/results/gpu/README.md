@@ -5,7 +5,7 @@
 Ortam: PC_6605 · RTX 4060 8 GB · CUDA 13.2 · torch 2.13.0+cu132 ·
 Docling 2.120.3 · Python 3.12.7.
 
-Yorumu ve kararları `reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` bölüm **E, F, G**
+Yorumu ve kararları `previous_reports/PDF_PARSER_V0.1.0_RC1_REPORT.md` bölüm **E, F, G**
 içinde. Buradaki dosyalar o bölümlerin dayandığı ham sayılar.
 
 ## Ne nerede
