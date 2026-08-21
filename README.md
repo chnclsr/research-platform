@@ -13,13 +13,43 @@
     <a href="system_architecture_diagram.html"><img src="https://img.shields.io/badge/architecture-Interactive%20Diagram-6366f1.svg?style=flat-square" alt="Architecture"></a>
   </p>
 
-  <p align="center">
-    <b>Multi-Source Discovery</b> • <b>Claim Extraction</b> • <b>Contradiction Auditing</b> • <b>Passage Verification</b> • <b>Multi-Round Saturation</b>
-    <br>
-    <b>LangGraph 14-Node State Machine</b> • <b>Smart PDF Layout Router</b> • <b>Hardware-Aware Capacity (v0.12.0)</b> • <b>Zero Vendor Lock-In</b>
-    <br>
-    <b>PostgreSQL Checkpoints</b> • <b>MinIO S3 Snapshot Store</b> • <b>Qdrant Vector DB</b> • <b>MCP Gateway (:8010)</b> • <b>Telegram Bot</b>
-  </p>
+  <table align="center" width="100%">
+    <thead>
+      <tr>
+        <th width="33%" align="center">Discovery &amp; Evidence</th>
+        <th width="33%" align="center">Orchestration &amp; Parsing</th>
+        <th width="33%" align="center">Storage &amp; Access Tier</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr valign="top">
+        <td>
+          <b>27 Connectors (9 Families)</b><br>
+          Academic, Patents, Regs &amp; Web<br><br>
+          <b>Multi-Round Saturation</b><br>
+          Frontier &amp; Citation Expansion<br><br>
+          <b>Claim-to-Passage Audits</b><br>
+          Contradiction &amp; Direction Maps
+        </td>
+        <td>
+          <b>LangGraph 14-Node Engine</b><br>
+          HITL Gate &amp; Recovery Loops<br><br>
+          <b>Smart PDF Layout Router</b><br>
+          Fast Path (2.6ms) + Docling Gating<br><br>
+          <b>Hardware Capacity Engine</b><br>
+          Dynamic GPU VRAM &amp; CPU Sizing
+        </td>
+        <td>
+          <b>PostgreSQL Relational Core</b><br>
+          Deterministic State Checkpoints<br><br>
+          <b>MinIO S3 Snapshot Store</b><br>
+          Immutable BLOB &amp; Figure Vault<br><br>
+          <b>Qdrant Vector Engine</b><br>
+          Dense Hybrid Passage Retrieval
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 ---
