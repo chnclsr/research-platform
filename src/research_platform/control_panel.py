@@ -31,6 +31,7 @@ from sqlalchemy import select
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auth import Principal, verify_secret
+from .capacity import measure, plan_capacity
 from .config import get_settings
 from .control_panel_auth import (
     audit,
@@ -337,6 +338,10 @@ async def _run_snapshot(
                 if row.created_at and row.updated_at
                 else 0.0,
                 "queue_position": queue_positions.get(row.id),
+                "priority": row.priority,
+                # A run that stopped on its own reads as a mystery unless the panel can
+                # say the scheduler did it to make room for an urgent one.
+                "preempted_at": row.preempted_at.isoformat() if row.preempted_at else None,
                 "progress_percent": pipeline_progress(row.current_stage, row.status),
             }
         )
@@ -438,6 +443,10 @@ async def _system_telemetry() -> dict[str, Any]:
             "percent": disk.percent,
         },
         "gpus": await _gpu_snapshot(),
+        # How many runs the machine will carry right now and which resource decides it.
+        # Without the reason the number is untunable: "3" says nothing about whether more
+        # RAM or fewer background processes would change it.
+        "capacity": plan_capacity(await measure()).as_dict(),
     }
 
 
@@ -937,7 +946,7 @@ async def logout() -> RedirectResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.10.7"}
+    return {"status": "healthy", "service": "research-control-panel", "version": "0.12.0"}
 
 
 @app.get("/api/session")
@@ -1044,6 +1053,31 @@ async def system_action(
             return {"ok": True, "action": action, "message": output.strip()}
         finally:
             action_state.update({"busy": False, "action": None})
+
+
+@app.post("/api/runs/{run_id}/priority")
+async def run_priority(
+    run_id: str, body: dict[str, Any], principal: Principal = Depends(require_csrf)
+) -> dict[str, Any]:
+    """Move a waiting run between the queue bands.
+
+    Declared before the generic action route so ``priority`` is not swallowed by its
+    Literal, which would answer 422 instead of doing the thing.
+    """
+    try:
+        response = await _api_request(
+            "POST",
+            f"/v1/research-runs/{run_id}/priority",
+            principal,
+            timeout=10,
+            json_body={"priority": body.get("priority")},
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
+    if not response.is_success:
+        detail = response.json().get("detail", response.text[:500])
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
 
 
 @app.post("/api/runs/{run_id}/{action}")

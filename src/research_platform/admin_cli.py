@@ -17,7 +17,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import func, select, update
 
+from .auth import Principal
+from .config import get_settings
 from .db import ApiKeyRow, ResearchRunRow, SessionLocal, TelegramIdentityRow, UserRow
+from .repository import Repository
+from .storage import ObjectStore
 from .identity import (
     IdentityError,
     create_user,
@@ -274,6 +278,55 @@ async def _assign_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _purge_runs(args: argparse.Namespace) -> int:
+    """Erase runs and every trace of them -- rows, snapshots, artifacts.
+
+    Separate from cancelling: a cancelled run still occupies the panel, the corpus pool
+    and the object store. This is for the ones nobody will look at again, and it cannot
+    be undone.
+    """
+    settings = get_settings()
+    store = ObjectStore(settings)
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=Principal.system())
+        statement = select(ResearchRunRow.id, ResearchRunRow.status)
+        if args.run_id:
+            statement = statement.where(ResearchRunRow.id.in_(args.run_id))
+        elif args.status:
+            statement = statement.where(ResearchRunRow.status.in_(args.status))
+        else:
+            print("Bir secim belirt: --run-id ya da --status.", file=sys.stderr)
+            return 1
+        targets = list(await session.execute(statement))
+        if not targets:
+            print("Silinecek kosu yok.")
+            return 0
+        if not args.yes:
+            # The listing is the confirmation: an id typed by hand is a poor way to find
+            # out afterwards that the wrong nineteen runs are gone.
+            for run_id, status in targets:
+                print(f"  {run_id}  {status}")
+            print(f"\n{len(targets)} kosu ve butun izleri silinecek. Onaylamak icin --yes ekle.")
+            return 1
+
+        totals: dict[str, int] = {}
+        objects = 0
+        for run_id, _status in targets:
+            removed = await repo.purge_run(run_id)
+            for key, value in removed.items():
+                totals[key] = totals.get(key, 0) + value
+            # Snapshots are keyed by content hash under the run's own prefix and
+            # artifacts under runs/<id>/; neither is fully named in the database.
+            for prefix in (f"{run_id}/", f"runs/{run_id}/"):
+                for key in await store.list_keys(prefix):
+                    await store.delete(key)
+                    objects += 1
+
+    summary = ", ".join(f"{name} {count}" for name, count in sorted(totals.items()) if count)
+    print(f"{len(targets)} kosu silindi: {summary}, nesne deposu {objects}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="research-admin",
@@ -341,6 +394,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     telegram_list = sub.add_parser("list-telegram", help="Telegram eslemelerini listele")
     telegram_list.set_defaults(handler=_list_telegram)
+
+    purge = sub.add_parser(
+        "purge-runs", help="Kosulari ve butun izlerini kalici olarak sil"
+    )
+    purge.add_argument("--run-id", nargs="*", default=[])
+    purge.add_argument(
+        "--status", nargs="*", default=[], help="Ornek: --status cancelled failed"
+    )
+    purge.add_argument("--yes", action="store_true", help="Onay istemeden sil")
+    purge.set_defaults(handler=_purge_runs)
 
     assign = sub.add_parser("assign-runs", help="Kosularin sahibini degistir")
     assign.add_argument("email", help="Hedef kullanici")

@@ -152,6 +152,22 @@ class Settings(BaseSettings):
     acquisition_concurrency: int = Field(4, ge=1, le=16)
     domain_delay_s: float = Field(0.5, ge=0)
     allow_private_networks: bool = False
+
+    # How many runs may execute at once is measured, not configured -- see capacity.py.
+    # What is configured here is the *budget* each run is assumed to need and the headroom
+    # the machine keeps for itself. These are safety parameters: raising them lowers
+    # concurrency, and none of them is a policy cap on how many runs may start.
+    run_memory_budget_gb: float = Field(2.5, gt=0, le=64)
+    run_cpu_budget: float = Field(3.0, gt=0, le=32)
+    # Never spend the last of the machine: what stays free for the OS, Docker itself and
+    # everything that is not this platform.
+    ram_reserve_gb: float = Field(4.0, ge=0, le=64)
+    cpu_headroom: float = Field(0.2, ge=0.0, le=0.9)
+    # The worker container has no nvidia-smi, so the card's size is stated once; what the
+    # models actually occupy is read live from Ollama.
+    gpu_vram_total_gb: float = Field(8.0, gt=0, le=256)
+    gpu_vram_margin_gb: float = Field(0.7, ge=0, le=16)
+    capacity_poll_s: float = Field(15.0, ge=1.0, le=300.0)
     testing: bool = False
 
 

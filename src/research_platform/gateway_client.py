@@ -41,11 +41,30 @@ class ResearchGatewayClient:
         clone.headers = {**self.headers, "X-Actor-User": actor_user_id}
         return clone
 
-    async def start(self, protocol: ResearchProtocol) -> dict[str, Any]:
+    async def start(
+        self,
+        protocol: ResearchProtocol,
+        *,
+        priority: str = "normal",
+    ) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
             response = await client.post(
                 f"{self.base_url}/v1/research-runs",
-                json={"protocol": protocol.model_dump(mode="json")},
+                json={
+                    "protocol": protocol.model_dump(mode="json"),
+                    # Beside the protocol, not inside it: how urgent a run is says nothing
+                    # about what it researches.
+                    "priority": priority,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def set_priority(self, run_id: str, priority: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/research-runs/{run_id}/priority",
+                json={"priority": priority},
             )
             response.raise_for_status()
             return response.json()

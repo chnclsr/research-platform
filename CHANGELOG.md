@@ -1,15 +1,71 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.10.7`
+Platform sürümü: `v0.12.0`
 
-Belge sürümü: `6.3`
+Belge sürümü: `6.5`
 
-Son güncelleme: `2026-08-20`
+Son güncelleme: `2026-08-21`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
 [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.12.0 — 2026-08-21
+
+- **Birden fazla araştırma aynı anda koşabiliyor.** Kaç tanesinin koşacağı elle
+  ayarlanmıyor: her koşu başlamadan önce makinenin o anki uygun RAM'i, CPU yükü ve
+  Ollama'nın bildirdiği yerleşik VRAM'i ölçülüp hesaplanıyor. Donanım dört-beş koşu
+  taşıyorsa dört-beş koşu başlıyor; makinede başka bir iş yükselirse sayı kendiliğinden
+  düşüyor. Bu makinede ölçülen değer 3-4 ve sınırlayıcı CPU.
+- Makine asla son kaynağına kadar doldurulmuyor: işletim sistemine ayrılan bir RAM rezervi
+  ve CPU payı var, ve bir koşu bu rezervi yiyecekse başlatılmıyor. Yer açılana kadar
+  sırada bekliyor — çalışan hiçbir koşu kapasite için durdurulmuyor.
+- **Model çağrıları tek sırada.** Paralel koşular GPU'yu aynı anda kullanmıyor; her LLM ve
+  embedding çağrısı sırasını bekliyor. Karta aynı anda birden fazla model yüklenmiyor —
+  kaç koşu çalışırsa çalışsın kaplanan VRAM aynı. Kazanç buradan geliyor: bir koşu kaynak
+  toplarken diğeri analiz ediyor. Sırada beklemek çağrının zaman aşımı bütçesini yemiyor.
+- Eşzamanlı olan **koşular**, koşunun içi değil: tek bir araştırma bu sürümde daha hızlı
+  bitmiyor, yalnız ikincisi birincinin bitmesini beklemiyor. İki koşu aynı anda analiz
+  aşamasındaysa örtüşme olmaz, sırayla ilerlerler.
+- Panelde ve `/health` çıktısında kaç paralel koşuya izin verildiği ve **hangi kaynağın
+  sınırladığı** görünüyor.
+- Acil koşu artık yalnız boş yer yokken bir koşuyu duraklatıyor; yer varsa kimseyi
+  durdurmadan başlıyor.
+- **Koşular kalıcı olarak silinebiliyor.** `research-admin purge-runs --status cancelled`
+  bir koşunun bütün izini kaldırıyor: kaynaklar, pasajlar, iddialar, kanıt bağları,
+  olaylar, checkpoint'ler ve nesne deposundaki anlık görüntüler. İptal etmek koşuyu
+  bitiriyordu ama panelde, corpus havuzunda ve diskte bırakıyordu. Komut önce eşleşenleri
+  listeliyor; silmek için `--yes` gerekiyor.
+- Paralellikle birlikte ortaya çıkan üç kusur giderildi: aynı yayıncıya gidiş hızını
+  sınırlayan bekleme koşu başına kuruluyordu ve koşu sayısına bölünüyordu (artık ortak);
+  veritabanı bağlantı havuzu paralel koşulara göre büyütüldü; ve bir araştırma çalışırken
+  zamanlanmış bakım işleri (HITL zaman aşımı, öncelenen koşuyu devam ettirme) hiç
+  çalışmıyordu.
+
+## v0.11.0 — 2026-08-21
+
+- **Acil koşular sırada öne geçiyor.** Kuyruk artık iki bantlı: acil olarak başlatılan bir
+  araştırma bekleyen bütün normal koşuların önüne geçiyor, normal koşular onlardan sonra
+  işleme alınıyor. Acil koşular kendi aralarında yine ilk gelen ilk hizmet alır düzeninde.
+- **O sırada çalışan normal koşu duraklatılıyor.** Acil koşu geldiğinde çalışan koşu
+  saniyeler içinde duruyor, acil olan bitince kendiliğinden kaldığı yerden devam ediyor.
+  Duraklatılan koşu son aşama checkpoint'inden devam ettiği için o aşamada yapılan işin bir
+  kısmı yeniden yapılıyor — acil işin saatlerce beklemesine tercih edildi.
+- Panelde acil koşularda ⚡ rozeti, öncelik için duraklatılmış koşularda gerekçe görünüyor;
+  kendiliğinden duran bir koşu artık açıklamasız değil.
+- **Aciliyet başlatırken soruluyor.** Telegram'da süre adımından sonra `● Normal` / `⚡ Acil`
+  düğmesi geliyor (`--acil` yazarsanız adım atlanıyor). MCP aracında `priority`, Langflow
+  bileşeninde `Priority` listesi, panelde "Acile al / Normale al" düğmesi var.
+- Sırada bekleyen bir koşunun önceliği sonradan değiştirilebiliyor:
+  Telegram'da `/oncelik <ad|run_id> acil|normal`, panelde düğme. Çalışan bir koşuda
+  reddediliyor — sırasını değiştirmediği için yanıltıcı olurdu.
+- Ekip görünümünde başkalarının koşularının aciliyeti görünüyor; sıranın neden ilerlemediği
+  aksi hâlde açıklanamıyordu. Başlık, soru ve koşu kimliği hâlâ sızmıyor.
+- Kuyruğa girişin beş ayrı yolu tek yerde toplandı. Yan etkisi: `resume` ve HITL yanıtı
+  yollarında koşuların iş kimliği rastgele üretiliyordu, bu yüzden bu koşular iptal
+  edildiğinde kuyruktaki işleri kaldırılamıyor ve panelde sıra numaraları görünmüyordu;
+  ikisi de düzeldi.
 
 ## v0.10.7 — 2026-08-20
 

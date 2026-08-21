@@ -60,6 +60,9 @@ class StartResearchRun(Component):
     name = "StartResearchRun"
     inputs = [
         DataInput(name="protocol", display_name="Protocol", required=True),
+        # Queue band, not a research parameter: urgent goes ahead of every waiting normal
+        # run and pauses a running one to take the worker.
+        DropdownInput(name="priority", display_name="Priority", options=["normal", "urgent"], value="normal"),
         StrInput(name="api_url", display_name="API URL", value=os.getenv("RESEARCH_API_URL", "http://api:8000")),
         StrInput(name="api_token", display_name="API Token", value=os.getenv("RESEARCH_API_TOKEN", ""), advanced=True),
     ]
@@ -69,7 +72,9 @@ class StartResearchRun(Component):
         payload = self.protocol.data if hasattr(self.protocol, "data") else self.protocol
         response = httpx.post(
             f"{self.api_url.rstrip('/')}/v1/research-runs",
-            headers=_headers(self.api_token), json={"protocol": payload}, timeout=30,
+            headers=_headers(self.api_token),
+            json={"protocol": payload, "priority": self.priority or "normal"},
+            timeout=30,
         )
         response.raise_for_status()
         return Data(data=response.json())

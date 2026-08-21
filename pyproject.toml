@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "research-platform"
-version = "0.10.7"
+version = "0.12.0"
 description = "Local-first, multi-source evidence research platform"
 requires-python = ">=3.11"
 dependencies = [

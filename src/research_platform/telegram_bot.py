@@ -19,6 +19,7 @@ from .db import SessionLocal
 from .gateway_client import ResearchGatewayClient
 from .identity import consume_telegram_link_code, principal_from_telegram
 from .normalization import detect_language
+from .queueing import NORMAL, PRIORITIES, URGENT, normalize_priority
 from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 from .scoping import slugify
 
@@ -32,10 +33,12 @@ MESSAGES = {
         "help": """Research Platform komutları:
 /baglan <kod>   — Telegram hesabınızı platform hesabınıza bağlar
 /whoami
-/research [raw|result|both] [dakika|--minutes N] [--dil tr|en] [--hitl] [--plansiz] [--sources N] <soru>
-                  önce dil ve süre sorulur, sonra araştırmayı daraltan sorular gelir;
+/research [raw|result|both] [dakika|--minutes N] [--dil tr|en] [--acil] [--hitl] [--plansiz] [--sources N] <soru>
+                  önce dil, süre ve aciliyet sorulur, sonra araştırmayı daraltan sorular gelir;
                   plan onayınıza sunulmadan arama başlamaz (--plansiz bunu atlar)
 /kosular          son koşularınızı adlarıyla listeler
+/oncelik <ad|run_id> acil|normal
+                  bekleyen bir koşuyu acile alır ya da geri çeker
 Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
 /status <run_id>
 /respond <run_id> approve|reject|answer|include ...
@@ -55,6 +58,15 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
         "choose_duration": "Araştırma süresini seçin:\nKaynak sayısı süre boyunca "
                            "sınırsızdır; coverage yeterli olursa araştırma daha erken "
                            "tamamlanabilir.",
+        "choose_priority": "Aciliyet seviyesi:\nAcil koşular sırada öne geçer ve o anda "
+                           "çalışan normal bir koşuyu duraklatır; duraklatılan koşu, acil "
+                           "olan bitince son checkpoint'inden devam eder.",
+        "priorities": {"normal": "● Normal", "urgent": "⚡ Acil"},
+        "priority_label": "Öncelik",
+        "priority_usage": "Kullanım: /oncelik <ad|run_id> acil|normal",
+        "priority_invalid": "Öncelik yalnız acil ya da normal olabilir.",
+        "priority_set": "{run_id}: öncelik {priority}.",
+        "priority_flag_invalid": "--oncelik yalnız acil veya normal olabilir.",
         "starting": "Araştırma başlatılıyor…",
         "no_permission": "Araştırma yetkiniz yok.",
         "invalid_choice": "Geçersiz seçim.",
@@ -75,7 +87,8 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
                      "3. Buraya /baglan <kod> yazın (ya da paneldeki bağlantıya tıklayın)\n\n"
                      "Panel hesabınız yoksa yöneticinizden hesap açmasını isteyin.",
         "whoami": "Telegram user_id: {user_id}\nTelegram chat_id: {chat_id}",
-        "started": "Run başlatıldı: {run_id}\nTeslim modu: {mode}\nToplama bütçesi: "
+        "started": "Run başlatıldı: {run_id}\nTeslim modu: {mode} · Öncelik: {priority}\n"
+                   "Toplama bütçesi: "
                    "{minutes} dk; süre dolunca eldeki kaynakların analizi ve rapor "
                    "üretimi tamamlanır.\n{sources} kaynak, {rounds} tur{gate}\n"
                    "Durum için: /status {run_id}",
@@ -177,11 +190,13 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
         "help": """Research Platform commands:
 /baglan <code>  — links your Telegram account to your platform account
 /whoami
-/research [raw|result|both] [minutes|--minutes N] [--lang tr|en] [--hitl] [--plansiz] [--sources N] <question>
-                  language and duration are asked first, then a few questions that narrow
+/research [raw|result|both] [minutes|--minutes N] [--lang tr|en] [--urgent] [--hitl] [--plansiz] [--sources N] <question>
+                  language, duration and urgency are asked first, then a few questions that narrow
                   the research; no search starts before you approve the plan (--plansiz
                   skips that)
 /runs             lists your recent runs by name
+/priority <name|run_id> urgent|normal
+                  moves a waiting run into the other queue band
 In the commands below you can use the run's name instead of <run_id>.
 /status <run_id>
 /respond <run_id> approve|reject|answer|include ...
@@ -201,6 +216,15 @@ In the commands below you can use the run's name instead of <run_id>.
         "choose_duration": "Choose the research duration:\nThe source count is unlimited "
                            "within that time; the run can finish earlier if coverage is "
                            "sufficient.",
+        "choose_priority": "Urgency:\nAn urgent run goes ahead of everything waiting and "
+                           "pauses a running normal one; the paused run continues from its "
+                           "last checkpoint once the urgent one is done.",
+        "priorities": {"normal": "● Normal", "urgent": "⚡ Urgent"},
+        "priority_label": "Priority",
+        "priority_usage": "Usage: /priority <name|run_id> urgent|normal",
+        "priority_invalid": "Priority accepts only urgent or normal.",
+        "priority_set": "{run_id}: priority {priority}.",
+        "priority_flag_invalid": "--priority accepts only urgent or normal.",
         "starting": "Starting the research…",
         "no_permission": "You are not allowed to start research here.",
         "invalid_choice": "Invalid choice.",
@@ -221,7 +245,8 @@ In the commands below you can use the run's name instead of <run_id>.
                      "3. Send /baglan <code> here (or use the link in the panel)\n\n"
                      "If you have no panel account, ask your administrator for one.",
         "whoami": "Telegram user_id: {user_id}\nTelegram chat_id: {chat_id}",
-        "started": "Run started: {run_id}\nDelivery mode: {mode}\nCollection budget: "
+        "started": "Run started: {run_id}\nDelivery mode: {mode} · Priority: {priority}\n"
+                   "Collection budget: "
                    "{minutes} min; when it runs out, what was collected is analysed and "
                    "reported.\n{sources} sources, {rounds} rounds{gate}\n"
                    "Status: /status {run_id}",
@@ -421,6 +446,21 @@ def language_keyboard(request_id: str) -> dict:
     }
 
 
+def priority_keyboard(request_id: str, language: str = "tr") -> dict:
+    text = text_for(language)
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": text["priorities"][value],
+                    "callback_data": f"research_prio:{request_id}:{value}",
+                }
+                for value in (NORMAL, URGENT)
+            ]
+        ]
+    }
+
+
 def duration_keyboard(request_id: str, language: str = "tr") -> dict:
     text = text_for(language)
     return {
@@ -455,6 +495,28 @@ def take_language_flag(parts: list[str]) -> tuple[list[str], str | None]:
             continue
         index += 1
     return tokens, language
+
+
+_PRIORITY_WORDS = {
+    "acil": URGENT, "urgent": URGENT, "yuksek": URGENT, "high": URGENT,
+    "normal": NORMAL, "standart": NORMAL, "low": NORMAL, "dusuk": NORMAL,
+}
+
+
+def read_priority(word: str) -> str | None:
+    """The urgency a person typed, in either language, or None if it is not one."""
+    return _PRIORITY_WORDS.get(str(word).strip().casefold().replace("ı", "i").replace("ü", "u"))
+
+
+def take_priority_flag(parts: list[str]) -> tuple[list[str], str | None]:
+    """Pull `--acil` / `--urgent` out of the command, leaving the rest untouched.
+
+    A bare switch rather than a flag with a value: nobody types `--oncelik normal`, and
+    the button asks anyone who does not use the switch.
+    """
+    tokens = [item for item in parts if item not in {"--acil", "--urgent"}]
+    chosen = URGENT if len(tokens) != len(parts) else None
+    return tokens, chosen
 
 
 def parse_research_request(
@@ -769,10 +831,11 @@ class TelegramResearchBot:
         user_id: int,
         protocol: ResearchProtocol,
         gateway: ResearchGatewayClient,
+        priority: str = NORMAL,
     ) -> None:
         language = protocol.display_language()
         text = text_for(language)
-        run = await gateway.start(protocol)
+        run = await gateway.start(protocol, priority=priority)
         budget = protocol.budget
         if protocol.hitl.plan_review or protocol.hitl.planning_questions:
             self.watched_runs[run["id"]] = {
@@ -793,6 +856,7 @@ class TelegramResearchBot:
             text["started"].format(
                 run_id=run["id"],
                 mode=label_of(text, "mode", protocol.output_mode),
+                priority=text["priorities"][normalize_priority(priority)],
                 minutes=budget.max_wall_minutes,
                 sources=budget.max_sources or text["sources_unlimited"],
                 rounds=budget.max_rounds,
@@ -824,10 +888,11 @@ class TelegramResearchBot:
         protocol: ResearchProtocol,
         *,
         explicit_minutes: bool,
+        priority: str | None,
         language: str,
     ) -> None:
         request_id = self._remember_request(
-            message, protocol, explicit_minutes=explicit_minutes
+            message, protocol, explicit_minutes=explicit_minutes, priority=priority
         )
         await self._send_message(
             client,
@@ -841,14 +906,30 @@ class TelegramResearchBot:
         client: httpx.AsyncClient,
         message: dict,
         protocol: ResearchProtocol,
+        priority: str | None = None,
+    ) -> None:
+        language = protocol.display_language()
+        request_id = self._remember_request(message, protocol, priority=priority)
+        await self._send_message(
+            client,
+            int((message.get("chat") or {}).get("id", 0)),
+            text_for(language)["choose_duration"],
+            reply_markup=duration_keyboard(request_id, language),
+        )
+
+    async def _offer_priority(
+        self,
+        client: httpx.AsyncClient,
+        message: dict,
+        protocol: ResearchProtocol,
     ) -> None:
         language = protocol.display_language()
         request_id = self._remember_request(message, protocol)
         await self._send_message(
             client,
             int((message.get("chat") or {}).get("id", 0)),
-            text_for(language)["choose_duration"],
-            reply_markup=duration_keyboard(request_id, language),
+            text_for(language)["choose_priority"],
+            reply_markup=priority_keyboard(request_id, language),
         )
 
     async def _answer_callback(
@@ -907,7 +988,11 @@ class TelegramResearchBot:
                 client, callback_id, parts, chat_id, user_id, message
             )
             return
-        if len(parts) != 3 or parts[0] not in {"research_time", "research_lang"}:
+        if len(parts) != 3 or parts[0] not in {
+            "research_time",
+            "research_lang",
+            "research_prio",
+        }:
             await self._answer_callback(
                 client, callback_id, text_for(client_language)["invalid_choice"]
             )
@@ -933,14 +1018,29 @@ class TelegramResearchBot:
             )
             await self._answer_callback(client, callback_id, "✓")
             await self._clear_markup(client, chat_id, int(message.get("message_id", 0)))
-            if pending.get("explicit_minutes"):
-                await self._launch(client, chat_id, user_id, protocol)
-            else:
+            follow_up = {"chat": chat, "from": user}
+            if not pending.get("explicit_minutes"):
                 await self._offer_duration(
-                    client,
-                    {"chat": chat, "from": user},
-                    protocol,
+                    client, follow_up, protocol, pending.get("priority")
                 )
+            elif pending.get("priority"):
+                await self._launch(
+                    client, chat_id, user_id, protocol, pending["priority"]
+                )
+            else:
+                await self._offer_priority(client, follow_up, protocol)
+            return
+
+        if parts[0] == "research_prio":
+            language = protocol.display_language()
+            if parts[2] not in PRIORITIES:
+                await self._answer_callback(
+                    client, callback_id, text_for(language)["invalid_choice"]
+                )
+                return
+            await self._answer_callback(client, callback_id, text_for(language)["starting"])
+            await self._clear_markup(client, chat_id, int(message.get("message_id", 0)))
+            await self._launch(client, chat_id, user_id, protocol, parts[2])
             return
 
         language = protocol.display_language()
@@ -954,10 +1054,14 @@ class TelegramResearchBot:
                 client, callback_id, text_for(language)["expired_choice"], alert=True
             )
             return
-        await self._answer_callback(client, callback_id, text_for(language)["starting"])
+        await self._answer_callback(client, callback_id, "✓")
         protocol.budget = protocol.budget.model_copy(update={"max_wall_minutes": minutes})
         await self._clear_markup(client, chat_id, int(message.get("message_id", 0)))
-        await self._launch(client, chat_id, user_id, protocol)
+        # Urgency was given on the command line, or it is the last thing left to ask.
+        if pending.get("priority"):
+            await self._launch(client, chat_id, user_id, protocol, pending["priority"])
+        else:
+            await self._offer_priority(client, {"chat": chat, "from": user}, protocol)
 
     async def _launch(
         self,
@@ -965,6 +1069,7 @@ class TelegramResearchBot:
         chat_id: int,
         user_id: int,
         protocol: ResearchProtocol,
+        priority: str = NORMAL,
     ) -> None:
         language = protocol.display_language()
         actor_id = await self._resolve_actor(user_id)
@@ -973,7 +1078,12 @@ class TelegramResearchBot:
             return
         try:
             await self._start_research(
-                client, chat_id, user_id, protocol, self.gateway.for_actor(actor_id)
+                client,
+                chat_id,
+                user_id,
+                protocol,
+                self.gateway.for_actor(actor_id),
+                normalize_priority(priority),
             )
         except (httpx.HTTPError, ValueError) as exc:
             await self._send_message(
@@ -1049,13 +1159,16 @@ class TelegramResearchBot:
         lines = [strings["runs_header"], ""]
         for run in runs:
             label = run_label(run)
+            # The badge is display only and must stay out of the command line below --
+            # the label there has to be exactly what /status will be asked to resolve.
+            badge = "⚡ " if normalize_priority(run.get("priority")) == URGENT else ""
             verb = "/get" if run.get("status") in finished else "/status"
             # The command goes inside <code>: Telegram turns a bare /command into a link
             # but drops everything after it, so tapping one would leave the label behind.
             # A code span copies the whole line instead.
             lines.append(
                 strings["runs_row"].format(
-                    label=html.escape(label),
+                    label=badge + html.escape(label),
                     status=label_of(strings, "status", run.get("status")),
                     stage=label_of(strings, "stage", run.get("current_stage")),
                     date=run_moment(run),
@@ -1354,6 +1467,7 @@ class TelegramResearchBot:
         try:
             if command == "/research":
                 research_parts, flag_language = take_language_flag(parts[1:])
+                research_parts, flag_priority = take_priority_flag(research_parts)
                 explicit_minutes = has_explicit_duration(research_parts)
                 hitl_enabled = "--hitl" in research_parts
                 # The plan gate is on unless the person starting the run says otherwise.
@@ -1392,20 +1506,47 @@ class TelegramResearchBot:
                         outline_review=hitl_enabled,
                     ),
                 )
+                # Each step is skipped only when the command already answered it.
                 if flag_language is None:
                     await self._offer_language(
                         client,
                         message,
                         protocol,
                         explicit_minutes=explicit_minutes,
+                        priority=flag_priority,
                         language=language,
                     )
-                elif explicit_minutes:
-                    await self._launch(client, chat_id, telegram_user_id, protocol)
+                elif not explicit_minutes:
+                    await self._offer_duration(client, message, protocol, flag_priority)
+                elif flag_priority:
+                    await self._launch(
+                        client, chat_id, telegram_user_id, protocol, flag_priority
+                    )
                 else:
-                    await self._offer_duration(client, message, protocol)
+                    await self._offer_priority(client, message, protocol)
             elif command in {"/kosular", "/runs"} and len(parts) == 1:
                 await self._list_runs(client, chat_id, gateway, strings)
+            elif command in {"/oncelik", "/priority"}:
+                if len(parts) != 3:
+                    raise ValueError(strings["priority_usage"])
+                priority = read_priority(parts[2])
+                if priority is None:
+                    raise ValueError(strings["priority_invalid"])
+                run_id = await self._resolve_run(
+                    client, chat_id, gateway, parts[1], strings
+                )
+                if run_id is None:
+                    return
+                run = await gateway.set_priority(run_id, priority)
+                strings = text_for(reply_language(run=run, message=message))
+                await self._send_message(
+                    client,
+                    chat_id,
+                    strings["priority_set"].format(
+                        run_id=run_label(run),
+                        priority=strings["priorities"][normalize_priority(priority)],
+                    ),
+                )
             elif command == "/status" and len(parts) == 2:
                 run_id = await self._resolve_run(
                     client, chat_id, gateway, parts[1], strings

@@ -256,6 +256,7 @@ async def test_panel_shows_other_peoples_active_runs_without_their_content():
         "status",
         "current_stage",
         "queue_position",
+        "priority",
         "elapsed_seconds",
     }
     assert theirs.id not in json.dumps(snapshot)

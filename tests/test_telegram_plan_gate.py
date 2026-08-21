@@ -12,7 +12,8 @@ class FakeGateway:
     def __init__(self, responses):
         self.responses = list(responses)
 
-    async def start(self, protocol):
+    async def start(self, protocol, *, priority="normal"):
+        self.started_priority = priority
         return {"id": "RUN1", "status": "queued"}
 
     async def status(self, run_id):
@@ -653,3 +654,50 @@ def test_only_a_ulid_shaped_argument_skips_the_lookup():
     assert looks_like_run_id("ai_in_lung_ct") is False
     assert looks_like_run_id("artificial_intelligence_last_3m") is False
     assert looks_like_run_id("01M0FGKAVQA2J90FYRWHWDPPK") is False
+
+
+class PriorityGateway(RunsGateway):
+    def __init__(self, runs):
+        super().__init__(runs)
+        self.priorities = []
+
+    async def set_priority(self, run_id, priority):
+        self.priorities.append((run_id, priority))
+        return {"id": run_id, "status": "queued",
+                "protocol": {"label": "ai_in_lung_ct", "interaction_language": "tr"}}
+
+
+@pytest.mark.asyncio
+async def test_a_waiting_run_can_be_moved_between_bands_by_name():
+    gateway = PriorityGateway([_run("01M0FGKAVQA2J90FYRWHWDPPKD", "ai_in_lung_ct")])
+    bot = _bot_with(gateway)
+    await bot._handle(None, _message("/oncelik ai_in_lung_ct acil"))
+    assert gateway.priorities == [("01M0FGKAVQA2J90FYRWHWDPPKD", "urgent")]
+    assert "acil" in bot.sent[-1][1].casefold()
+
+    # Both languages of the word, and the English command name.
+    await bot._handle(None, _message("/priority ai_in_lung_ct normal"))
+    assert gateway.priorities[-1] == ("01M0FGKAVQA2J90FYRWHWDPPKD", "normal")
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_urgency_word_changes_nothing():
+    gateway = PriorityGateway([_run("01M0FGKAVQA2J90FYRWHWDPPKD", "ai_in_lung_ct")])
+    bot = _bot_with(gateway)
+    await bot._handle(None, _message("/oncelik ai_in_lung_ct cok_acil"))
+    assert gateway.priorities == []
+    # And an unknown run is refused before the priority call is made at all.
+    await bot._handle(None, _message("/oncelik yok_boyle_bir_sey acil"))
+    assert gateway.priorities == []
+
+
+@pytest.mark.asyncio
+async def test_the_listing_marks_urgent_runs_without_breaking_their_command():
+    urgent = _run("01M0FGKAVQA2J90FYRWHWDPPKD", "ai_in_lung_ct")
+    urgent["priority"] = "urgent"
+    bot = _bot_with(RunsGateway([urgent]))
+    await bot._handle(None, _message("/kosular"))
+    listing = bot.sent[-1][1]
+    assert "⚡" in listing
+    # The badge is display only: the command has to stay resolvable as typed.
+    assert "<code>/status ai_in_lung_ct</code>" in listing

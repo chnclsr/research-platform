@@ -33,6 +33,7 @@ from .db import (
     UserRow,
 )
 from .normalization import canonicalize_url
+from .queueing import NORMAL, URGENT, normalize_priority
 from .schemas import (
     AcquiredDocument,
     ConnectorCandidate,
@@ -167,6 +168,11 @@ class TeamActivity:
     current_stage: str
     queue_position: int | None
     elapsed_seconds: float
+    # Deliberately widens the redaction this type was built for. Without it a normal-band
+    # run sits at position 2 with no explanation of why the number never moves, which is
+    # the same misreading -- "the platform is broken rather than busy" -- that made this
+    # cross-owner view necessary in the first place. It carries no identity.
+    priority: str = NORMAL
 
 
 class CheckpointTooLarge(RuntimeError):
@@ -254,7 +260,11 @@ class Repository(metaclass=_OwnershipEnforced):
             raise RunAccessDenied(run_id)
 
     async def create_run(
-        self, protocol: ResearchProtocol, *, owner_id: str | None = None
+        self,
+        protocol: ResearchProtocol,
+        *,
+        owner_id: str | None = None,
+        priority: str = NORMAL,
     ) -> ResearchRunRow:
         """Create a run owned by ``owner_id``, defaulting to the acting user.
 
@@ -274,6 +284,7 @@ class Repository(metaclass=_OwnershipEnforced):
             id=new_id(),
             owner_id=resolved_owner,
             status=RunStatus.QUEUED.value,
+            priority=normalize_priority(priority),
             current_stage="INIT",
             protocol=protocol.model_dump(mode="json"),
             state={},
@@ -316,6 +327,67 @@ class Repository(metaclass=_OwnershipEnforced):
         )
         return list(rows)
 
+    async def running_normal_run(self) -> ResearchRunRow | None:
+        """The normal-priority run currently holding the worker, if there is one.
+
+        Scheduling is a platform-level decision, so like the other whole-queue reads this
+        is admin/system only -- it deliberately crosses the ownership boundary, and the
+        caller that acts on it is the scheduler, never a request handler acting for a user.
+        """
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        return await self.session.scalar(
+            select(ResearchRunRow)
+            .where(
+                ResearchRunRow.status == RunStatus.RUNNING.value,
+                ResearchRunRow.priority == NORMAL,
+            )
+            .order_by(ResearchRunRow.created_at)
+        )
+
+    async def running_run_count(self) -> int:
+        """How many runs hold a slot right now, across every owner."""
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        rows = await self.session.scalars(
+            select(ResearchRunRow.id).where(ResearchRunRow.status == RunStatus.RUNNING.value)
+        )
+        return len(list(rows))
+
+    async def urgent_work_pending(self) -> bool:
+        """Whether an urgent run is queued or running -- the gate on resuming a preempted one."""
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        found = await self.session.scalar(
+            select(ResearchRunRow.id)
+            .where(
+                ResearchRunRow.priority == URGENT,
+                ResearchRunRow.status.in_(
+                    {RunStatus.QUEUED.value, RunStatus.RUNNING.value}
+                ),
+            )
+            .limit(1)
+        )
+        return found is not None
+
+    async def preempted_runs(self) -> list[ResearchRunRow]:
+        """Runs the scheduler paused, oldest first. Never ones their owner paused."""
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        rows = await self.session.scalars(
+            select(ResearchRunRow)
+            .where(
+                ResearchRunRow.status == RunStatus.PAUSED.value,
+                ResearchRunRow.preempted_at.is_not(None),
+            )
+            .order_by(ResearchRunRow.preempted_at)
+        )
+        return list(rows)
+
     async def list_runs(self, *, limit: int = 50) -> list[ResearchRunRow]:
         """Runs visible to the actor: their own, or all of them for an admin."""
         actor = self.require_actor()
@@ -351,6 +423,7 @@ class Repository(metaclass=_OwnershipEnforced):
                 ResearchRunRow.created_at,
                 ResearchRunRow.updated_at,
                 UserRow.display_name,
+                ResearchRunRow.priority,
             )
             .outerjoin(UserRow, UserRow.id == ResearchRunRow.owner_id)
             .where(
@@ -367,7 +440,7 @@ class Repository(metaclass=_OwnershipEnforced):
             .order_by(ResearchRunRow.created_at)
         )
         activity = []
-        for run_id, status, stage, created_at, updated_at, display_name in rows:
+        for run_id, status, stage, created_at, updated_at, display_name, priority in rows:
             elapsed = (
                 max(0.0, (updated_at - created_at).total_seconds())
                 if created_at and updated_at
@@ -381,6 +454,7 @@ class Repository(metaclass=_OwnershipEnforced):
                     # Resolved in here so the run id never crosses the return boundary.
                     queue_position=positions.get(run_id),
                     elapsed_seconds=round(elapsed, 2),
+                    priority=normalize_priority(priority),
                 )
             )
         return activity
@@ -422,6 +496,8 @@ class Repository(metaclass=_OwnershipEnforced):
             id=row.id,
             status=RunStatus(row.status),
             current_stage=row.current_stage,
+            priority=normalize_priority(row.priority),
+            preempted_at=row.preempted_at,
             protocol=ResearchProtocol.model_validate(row.protocol),
             round_number=row.round_number,
             sources_count=row.sources_count,
@@ -1168,6 +1244,56 @@ class Repository(metaclass=_OwnershipEnforced):
         return list(
             await self.session.scalars(select(ArtifactRow).where(ArtifactRow.run_id == run_id))
         )
+
+    async def purge_run(self, run_id: str) -> dict[str, int]:
+        """Erase a run and everything that only exists because of it.
+
+        There are no database-level cascades on these tables -- run_id is an indexed
+        column, not a foreign key -- so every child has to be named here. That is the
+        risk this method exists to contain: a caller deleting the run row by hand leaves
+        thousands of orphans behind that nothing will ever look at again.
+
+        The object store is not touched here; it has its own client and the caller owns
+        it. :meth:`artifact_keys` and the ``<run_id>/`` snapshot prefix are what to remove
+        there.
+
+        **Passages go too.** They are the corpus pool that seeds later runs
+        (``list_corpus_passages``), so purging a run also withdraws its text from that
+        pool. For an abandoned run that is the point; for a completed one, think twice.
+        """
+        source_ids = select(SourceRow.id).where(SourceRow.run_id == run_id)
+        version_ids = select(SourceVersionRow.id).where(
+            SourceVersionRow.source_id.in_(source_ids)
+        )
+        claim_ids = select(ClaimRow.id).where(ClaimRow.run_id == run_id)
+
+        # Children before parents, so a failure halfway through cannot leave a row whose
+        # own parent is already gone and which nothing can find any more.
+        removed: dict[str, int] = {}
+        for name, statement in (
+            ("evidence", delete(EvidenceRow).where(EvidenceRow.claim_id.in_(claim_ids))),
+            ("passages", delete(PassageRow).where(PassageRow.source_version_id.in_(version_ids))),
+            ("source_versions", delete(SourceVersionRow).where(
+                SourceVersionRow.source_id.in_(source_ids)
+            )),
+            ("claims", delete(ClaimRow).where(ClaimRow.run_id == run_id)),
+            ("sources", delete(SourceRow).where(SourceRow.run_id == run_id)),
+            ("source_relations", delete(SourceRelationRow).where(
+                SourceRelationRow.run_id == run_id
+            )),
+            ("figure_observations", delete(FigureObservationRow).where(
+                FigureObservationRow.run_id == run_id
+            )),
+            ("frontier", delete(FrontierRow).where(FrontierRow.run_id == run_id)),
+            ("artifacts", delete(ArtifactRow).where(ArtifactRow.run_id == run_id)),
+            ("checkpoints", delete(CheckpointRow).where(CheckpointRow.run_id == run_id)),
+            ("events", delete(EventRow).where(EventRow.run_id == run_id)),
+            ("run", delete(ResearchRunRow).where(ResearchRunRow.id == run_id)),
+        ):
+            result = await self.session.execute(statement)
+            removed[name] = result.rowcount or 0
+        await self.session.commit()
+        return removed
 
     async def delete_artifacts(self, run_id: str, names: set[str]) -> None:
         if not names:

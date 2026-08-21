@@ -131,6 +131,10 @@ def test_team_activity_exposes_exactly_the_reviewed_fields():
         "status",
         "current_stage",
         "queue_position",
+        # Reviewed and admitted with the priority queue: a normal-band run otherwise sits
+        # at position 2 with nothing explaining why the number never moves, which is the
+        # misreading this whole view exists to prevent. It names no research.
+        "priority",
         "elapsed_seconds",
     }
 
@@ -400,3 +404,96 @@ async def test_a_personal_api_key_owns_what_it_starts():
         # ...and invisible to anybody else.
         with pytest.raises(RunAccessDenied):
             await Repository(session, actor=intruder).get_run(run_id)
+
+
+@pytest.mark.asyncio
+async def test_purging_a_run_leaves_no_orphans():
+    """Deleting the run row by hand would leave thousands of rows nothing can reach:
+    run_id is an indexed column here, not a foreign key, so there are no cascades."""
+    from sqlalchemy import select
+
+    from research_platform.db import (
+        ClaimRow,
+        EventRow,
+        PassageRow,
+        ResearchRunRow,
+        SourceRow,
+        SourceVersionRow,
+    )
+    from research_platform.schemas import AcquiredDocument, ConnectorCandidate, ResearchProtocol
+
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=owner)
+        row = await repo.create_run(
+            ResearchProtocol(
+                title="Purge target",
+                primary_question="Does purging a run remove everything it created?",
+                budget={"max_wall_minutes": 30},
+            )
+        )
+        await repo.event(row.id, "stage", {"stage": "SEARCH"})
+        await repo.checkpoint(row.id, "SEARCH", {"run_id": row.id})
+        source, version = await repo.save_document(
+            row.id,
+            AcquiredDocument(
+                candidate=ConnectorCandidate(
+                    connector_id="web_search",
+                    family="web",
+                    title="A document",
+                    url="https://example.org/doc",
+                ),
+                success=True,
+                access_status="open",
+                content="text " * 200,
+                content_hash="b" * 64,
+                acquisition_method="fixture",
+            ),
+        )
+        assert version is not None
+
+        removed = await repo.purge_run(row.id)
+        assert removed["run"] == 1
+        assert removed["sources"] >= 1
+        assert removed["events"] >= 1
+
+        for model, column in (
+            (ResearchRunRow, ResearchRunRow.id),
+            (SourceRow, SourceRow.run_id),
+            (EventRow, EventRow.run_id),
+            (ClaimRow, ClaimRow.run_id),
+        ):
+            assert list(await session.scalars(select(model).where(column == row.id))) == []
+        # The children reached only through their parent are gone too.
+        assert list(
+            await session.scalars(
+                select(SourceVersionRow).where(SourceVersionRow.source_id == source.id)
+            )
+        ) == []
+        assert list(
+            await session.scalars(
+                select(PassageRow).where(PassageRow.source_version_id == version.id)
+            )
+        ) == []
+
+
+@pytest.mark.asyncio
+async def test_purging_someone_elses_run_is_refused():
+    """purge_run takes a run_id, so the ownership metaclass guards it like every other."""
+    from research_platform.auth import Principal
+    from research_platform.schemas import ResearchProtocol
+
+    await create_schema()
+    async with SessionLocal() as session:
+        keeper = Repository(session, actor=owner)
+        row = await keeper.create_run(
+            ResearchProtocol(
+                title="Not yours",
+                primary_question="Can a stranger erase this run?",
+                budget={"max_wall_minutes": 30},
+            )
+        )
+        stranger = Repository(session, actor=Principal.user("SOMEONEELSE"))
+        with pytest.raises(RunAccessDenied):
+            await stranger.purge_run(row.id)
+        assert await keeper.get_run(row.id) is not None
