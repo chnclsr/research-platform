@@ -22,12 +22,12 @@ belge, ne benchmark. Bu çalışma o boşluğu dolduruyor.
 
 ---
 
-## 🖥 Görsel arayüz
+## Görsel Analiz Arayüzü
 
 Bütün karşılaştırmalar tarayıcıda incelenebilir. Boyutu (140 MB) depo geçmişine
 girmesin diye **Release eki** olarak duruyor:
 
-**[→ pdf-parser-arayuz.zip indir](https://github.com/chnclsr/research-platform/releases/download/pdf-parser-arayuz-v1/pdf-parser-arayuz.zip)**
+**[pdf-parser-arayuz.zip İndir](https://github.com/chnclsr/research-platform/releases/download/pdf-parser-arayuz-v1/pdf-parser-arayuz.zip)**
 
 Zip'i açıp `html/index.html` dosyasına çift tıklayın. Sunucu, kurulum ve internet
 gerekmiyor.
