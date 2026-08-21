@@ -1301,6 +1301,159 @@ kurulmadı — bir sonraki oturumun kapsamı.
 
 Ayrıntı: `entegrasyon_plani.md` Bölüm 17.2i.
 
+## N. `developments` ile Uyum Denetimi (2026-08-21)
+
+`origin/developments` bu dalla aynı tabandan (`fc3199d`, 2026-08-18) ayrıldı ve
+o günden beri 10 commit aldı; bu dal 27 commit aldı. Uyum, tahmin edilerek
+değil **deneme merge'i yapılıp test koşularak** ölçüldü (geçici worktree,
+merge sonrası silindi).
+
+### N.1 Ölçülen sonuç
+
+Deneme merge'i 3 kod dosyasında çakıştı, gerisi otomatik birleşti:
+
+| Dosya | Neden |
+|---|---|
+| `parsers/registry.py` | iki taraf da `build_parser_registry()` satırını değiştirdi |
+| `acquisition.py` | ikisi de `< 400` karakter dalını değiştirdi |
+| `tests/test_parsers.py` | ikisi de parser kimlik beklentilerini değiştirdi |
+
+Çakışmalar en bariz şekilde (iki tarafın birleşimi) çözülüp tüm süit
+koşuldu: **323 geçti, 1 başarısız**. Tek başarısız test
+`test_registry_exposes_parsers_by_id` — `developments`'ın sabit parser
+kümesi beklentisi `smart_pdf`'i tanımıyor. Yani `schemas.py`, `repository.py`,
+`pipeline.py`, `base.py`, `config.py`, `pyproject.toml` katmanlarında
+**yapısal uyumsuzluk yok**; `parse_provenance` ve `tables` alanları
+`developments`'ın dokunmadığı yerlerden geçtiği için sorunsuz birleşiyor.
+
+### N.2 Asıl uyumsuzluk: seçim sırası
+
+`developments` `PdfParser`'ı ikiye böldü — `PyMuPdfParser` (id
+`pymupdf_fast`, **priority 10**) ve `PyPdfParser` (id `pypdf`, priority 0);
+`HtmlParser` de `html` → `html_structured`, priority 0 → 10 oldu.
+`SmartPdfParser` da priority 10. `ParserRegistry` `(-priority, id)` ile
+sıraladığı için eşitlik alfabetik bozuluyor.
+
+Birleşik registry üzerinde ölçüldü:
+
+```
+kayıtlı parserlar: ['html_structured', 'pymupdf_fast', 'pypdf', 'smart_pdf', 'plain_text']
+PDF adayları:      ['pymupdf_fast', 'smart_pdf', 'pypdf']
+PDF için SEÇİLEN:  pymupdf_fast
+override {pdf:pdf}      -> pymupdf_fast
+override {pdf:smart_pdf} -> smart_pdf
+```
+
+Yani merge sonrası **smart_pdf varsayılan yolda hiç çağrılmaz**; yalnız
+protokolde açık `ParserSelection` override'ı verilirse devreye girer.
+Sessiz bir gerileme: hata vermez, sadece sayfa yönlendirme kapanır.
+Düzeltme bu dalda: `SmartPdfParser.priority = 20`.
+
+### N.3 `developments`'ın yeni yedek merdiveni
+
+`acquisition.py`'de yeni bir dal var: birincil parser 400 karakterin altında
+kalırsa `registry.candidates()` üzerinden diğer parser'lar sırayla denenir.
+Bu, bu daldaki "ucuz önce, pahalı gerekirse" tasarımıyla aynı yönde — ama
+iki nokta var:
+
+1. Yedek çağrılar **senkron**; bu dal birincil `parser.parse`'ı
+   `asyncio.to_thread`'e almıştı. Merge'de yedek döngü de thread'e alınmalı,
+   yoksa taranmış bir PDF'te `smart_pdf` yedek olarak event loop'u
+   saniyelerce/dakikalarca kilitler.
+2. Yedek parse `parse_provenance`'ı taşımaz (yedek parser'ların provenance'ı
+   boş), yani düşen belgenin izi kaybolur. Bu dalın `degraded` log'u ile
+   birleştirilmeli.
+
+### N.4 Uyumsuz olmayan, doğrulanan kısımlar
+
+- `control_panel_metrics.py` parser kimliğini sabit listeden değil
+  `parser_id` alanından okuyor → `smart_pdf` panelde kendiliğinden görünür.
+- `research_plan.py` onay ekranında parser listesini
+  `build_parser_registry().parsers` üzerinden üretiyor → kayıt yeterli.
+- `pipeline.py` edinim telemetrisine `parser_id` ekledi; bu dalın
+  `provenance` yazımıyla çakışmıyor.
+- `reports/` dizini `developments`'ta `previous_reports/`'a taşınmış. Git bunu
+  "dosya konumu" çakışması olarak işaretliyor; bu rapor **güncel** olduğu için
+  `reports/` altında kalmalı, `previous_reports/`'a taşınmamalı.
+
+### N.5 Bu dalın dışında kalan, ayrıca ölçülen iki dağıtım açığı
+
+- `Dockerfile` `config/` dizinini imaja **kopyalamıyor**;
+  `docker-compose.yml` de mount etmiyor. Dahası — bu ilk teşhis eksikti —
+  **kopyalamak tek başına yetmiyor**. `ayarlar.varsayilan_yol()` kendi
+  modülünden dört seviye yukarı çıkıyor; kaynak checkout'unda bu depo kökü
+  demek, ama `pip install .` paketi `site-packages`'a koyduğunda aynı aritmetik
+  yorumlayıcının `lib` dizinine düşüyor:
+
+  ```
+  depo (editable): /app/src/research_platform/parsers/smart_router/ayarlar.py
+          arıyor → /app/config/smart_router.yaml                        ✔
+  docker:          /usr/local/lib/python3.12/site-packages/research_platform/...
+          arıyor → /usr/local/lib/python3.12/config/smart_router.yaml   ✘
+  COPY ile dosya → /app/config/smart_router.yaml
+  ```
+
+  Yani `COPY config ./config` yanına `ENV SMART_ROUTER_CONFIG_PATH` da
+  gerekiyor. Bölüm D'nin "eşik dosyada" kararını dağıtımda sessizce geçersiz
+  kılan tam olarak bu.
+- `docling` hâlâ `pyproject.toml`'da beyan edilmiş bir bağımlılık değil
+  (`pdf-inspector==1.14.1` 2026-08-20'de eklendi). Depo `.venv`'inde
+  ikisi de kurulu değil; `smart_pdf.available()` bunu dürüstçe raporluyor:
+  `fast path DEGRADED to PyMuPDFFallback ... TEXT ONLY -- no heavy engine`.
+
+### N.6 `developments`'ta bu dalı ilgilendiren davranış değişiklikleri
+
+Parser dışı ama uçtan uca koşuyu etkiler:
+
+- `ResearchProtocol.budget` ve `ResearchBudget.max_wall_minutes` artık
+  **zorunlu** (varsayılanları kaldırıldı) — budget'sız protokol kuran her
+  betik doğrulamada patlar.
+- `HitlConfig.plan_review` varsayılanı `False` → **`True`**. Yani koşu
+  arama başlamadan önce insan onayı bekleyip `AWAITING_INPUT`'a düşer.
+  Otomatik uçtan uca ölçüm koşusu artık `hitl.plan_review=false` göndermeli.
+- Araştırma İngilizce yürütülüyor; `report_language` `Literal["tr","en"]`.
+
+### N.7 Uygulanan düzeltmeler (2026-08-21, aynı gün)
+
+Yukarıdaki bulguların merge'i beklemeyen kısmı uygulandı. Her biri ayrı ayrı
+ölçüldü; hiçbiri `smart_router/` tasarımına dokunmuyor.
+
+| # | Değişiklik | Doğrulama |
+|---|---|---|
+| A | Platform `.venv`'ine `pdf-inspector==1.14.1` kuruldu (dar komut, tek paket) | health: `DEGRADED to PyMuPDFFallback` → `fast path via pdf-inspector 1.14.1` |
+| B | `.env.example`: docling köprüsünün kapsayıcıda çalışmadığı yazıldı; `SMART_ROUTER_CONFIG_PATH` yorum satırına alındı | boş `env_file` değerinin imaj ENV'ini gölgelemesi engellendi |
+| C | `SmartPdfParser.priority` 10 → 20 | 269 test geçti |
+| D | `Dockerfile`: `COPY config ./config` **+** `ENV SMART_ROUTER_CONFIG_PATH=/app/config/smart_router.yaml` | ENV yolu ile `esik_version` = `gate_v2_kalibre_edilmedi_1154727b`, uyarı yok; yanlış yolda çökmüyor, uyarı kaydedip gömülü varsayılana düşüyor |
+| E | İki koruma testi eklendi: `test_smart_pdf_stays_the_default_pdf_parser`, `test_the_fast_path_runs_the_real_inspector` | 267 → 269 test |
+
+E'deki ilk test bilerek **kendi fonksiyonunda** duruyor. Aynı iddia zaten
+`test_registry_selects_deterministically_by_document_type` içinde bir satır
+olarak vardı, ama o test merge'de çakışan üç dosyadan birinde; "theirs" ile
+çözülen bir çakışma korumayı sessizce silerdi. Ayrı fonksiyon kaybolmuyor.
+
+Ruff, değişen dosyalarda öncesi ve sonrası **aynı 9 uyarıyı** veriyor — yeni
+uyarı girmedi. (Depo genelindeki 491 uyarı bu çalışmadan önce de vardı.)
+
+**Uygulanmayanlar ve neden:** `acquisition.py` ve `tests/test_parsers.py`
+çakışma çözümleri merge anının işi, bugün yapılacak bir şey yok.
+`uv pip install -e .` çalıştırılmadı — kurulu 40+ paketi yeniden çözerdi;
+dar komut ölçülerek yeterli olduğu görüldü. `.env` oluşturulmadı: içinde
+parola/anahtar alanları var, kullanıcının kararı.
+
+### N.8 Açık kalan mimari karar — ağır yol production'da nerede duruyor
+
+`SMART_ROUTER_DOCLING_PYTHON` ile ayrı venv köprüsü **yerel geliştirme
+kalıbı**; ölçüldü ve çalışıyor (`heavy path via docling (bridged via ...)`).
+Kapsayıcıda ikinci bir venv yok, docling de beyan edilmiş bağımlılık değil —
+yani sunucuda ağır yol **hiç yok**, taranmış PDF'ler acquisition'ın 400
+karakter kapısında düşer. Bu, bir satırla kapanan bir açık değil: docling'i
+imaja koymak imajı GB'larca büyütür, alternatifi ayrı bir servis/sidecar.
+Karar mentör/ekip düzeyinde; `.env.example` artık bunu açıkça söylüyor.
+
+Not: bu depoda **GitHub Actions yok**. N.7/E'deki koruma testleri ancak biri
+`pytest` koştuğunda konuşur; merge incelemesinde bunu koşmak bir alışkanlık
+meselesi, otomatik değil.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production

@@ -62,6 +62,42 @@ def test_registry_selects_deterministically_by_document_type():
     assert registry.select("image", "image/png", b"\x89PNG") is None
 
 
+def test_smart_pdf_stays_the_default_pdf_parser():
+    """
+    priority is a number two branches edit independently, and a tie is broken
+    alphabetically rather than raised on.
+
+    Measured 2026-08-21: developments moved PyMuPdfParser to the same priority
+    10, "pymupdf_fast" sorted first, and every PDF stopped reaching the router.
+    Nothing failed -- page routing was simply off. The assertion inside
+    test_registry_selects_deterministically_by_document_type covers this too,
+    but that test sits in one of the three files that conflict on every merge
+    with developments, so the guarantee gets its own function that a conflict
+    resolution cannot quietly drop.
+    """
+    chosen = build_parser_registry().select("pdf", "application/pdf", b"%PDF-1.4")
+    assert chosen.id == "smart_pdf", (
+        f"PDFs are going to {chosen.id}; SmartPdfParser.priority no longer outranks it"
+    )
+
+
+def test_the_fast_path_runs_the_real_inspector():
+    """
+    pdf-inspector is a declared dependency, not an optional extra: every gate.py
+    signal -- table, figure, OCR -- comes from it, and every threshold in the RC1
+    measurements assumes it. Missing, the router degrades to PyMuPDFFallback and
+    keeps going on an unmeasured heuristic; provenance records it, but nothing
+    fails. Measured 2026-08-21: the platform venv had it missing because nobody
+    reinstalled after the pin landed on 2026-08-20.
+    """
+    from research_platform.parsers.smart_router.inspector import PdfInspectorAdapter
+
+    assert PdfInspectorAdapter.available(), (
+        f"pdf-inspector is not installed ({PdfInspectorAdapter.import_hatasi()}); "
+        "run: uv pip install 'pdf-inspector==1.14.1'"
+    )
+
+
 # CODEX-2026-08-18: The smart parser must decline PDFs when its router import
 # failed, otherwise its priority turns a usable plain parse into empty text.
 def test_registry_falls_back_when_smart_router_is_unavailable(monkeypatch):

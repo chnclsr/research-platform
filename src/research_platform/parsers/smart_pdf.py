@@ -54,9 +54,15 @@ class SmartPdfParser(DocumentParser):
     id = "smart_pdf"
     document_types = ("pdf",)
     capabilities = ("text", "pages")
-    # ParserRegistry.select() sorts by (-priority, id), so a tie with PdfParser
-    # would hand the document to "pdf" on the alphabetical tiebreak.
-    priority = 10
+    # ParserRegistry.select() sorts by (-priority, id), so ties break
+    # alphabetically -- and "pymupdf_fast" < "smart_pdf". Measured 2026-08-21:
+    # developments raised PyMuPdfParser and HtmlParser from 0 to 10, which makes
+    # 10 the baseline every parser now sits at rather than a level that outranks
+    # anything. At 10 this parser stopped being selected at all: no error, page
+    # routing simply off. 20 means "routes rather than just extracts".
+    # test_smart_pdf_stays_the_default_pdf_parser keeps the next priority change
+    # from being silent.
+    priority = 20
 
     # CODEX-2026-08-18: Registry selection does not consult health(). If the
     # router package itself failed to import, decline the document so PdfParser
