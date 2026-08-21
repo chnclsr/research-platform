@@ -2070,6 +2070,114 @@ sonuçları bayatlar, yeniden koşulmadan yorumlanamaz.** Kullanılan scriptler
 için var; deney açıklamaları da bu yüzden başlangıç değerini değil hedef
 değeri yazıyor ("`dangling.kat -> 0.0`", "160 -> 0" değil).
 
+## O.13 Yapısal Veto — Ayrım Gücü Ölçümü ve İlk Aday (2026-08-21)
+
+O.11.1 en büyük açığı adlandırmıştı: `opendataloader_bench` ailesinde
+yönlendirme net zarar veriyor (NET −0,9842; 43 ağır çağrının 35'i boşa). Bölüm
+9/M'deki P0 maddesi bunun için "yapısal heavy'den-fayda-düşük vetosu" öneriyordu.
+İlk adım kural yazmak değil, **ayrım gücü var mı** ölçmek oldu
+(`research/pdf-parser/scripts/sinyal_ayrim.py`).
+
+### O.13.1 Sinyallerin ayrım gücü — aileler farklı sinyallere tepki veriyor
+
+Ağır motora giden 101 sayfa, etiket "heavy gerçekten daha iyiydi (≥0,02)",
+ölçüt AUC (0,50 = ayrım yok):
+
+| Sinyal | ocrturk (33 iyi / 25 kötü) | opendataloader (8 iyi / 35 kötü) |
+|---|---|---|
+| `ortogonal_cizgi` | **0,7691** | 0,6071 |
+| `bezier_egri` | 0,6388 | **0,8268** |
+| `karakter` | 0,4642 | **0,7357** |
+| `izgara_satir` | 0,2915 (ters) | 0,3446 (ters) |
+| `kalite_skoru` | **0,5006** | 0,6286 |
+| `toplam_ceza` | **0,4994** | 0,3714 |
+
+İki şey öne çıkıyor:
+
+* **`quality_score` ocrturk'te tam olarak rastgele** (AUC 0,5006) — Bölüm M'nin
+  0,43-0,47 bulgusunu bağımsız olarak, yalnız ağır motora giden sayfalarda
+  yeniden üretiyor. Yönlendirmeyi sürükleyen sinyal, sürüklediği kararı
+  öngörmüyor.
+* **Vektörel çizim ve ortogonal çizgi gerçek bilgi taşıyor**, ve hangisinin
+  taşıdığı aileye göre değişiyor.
+
+İkili bayraklarda en çarpıcı bulgu: `opendataloader`'da **yalnız `low_quality`
+gerekçesiyle** ağır motora giden **11 sayfanın 11'inde de heavy faydasız**
+(0/11); aynı kural `ocrturk`'te 9 sayfanın 5'inde doğru (5/9). Tek başına bu
+0/11, o ailedeki taban orana (0,186) göre yaklaşık %10 olasılıkla tesadüf —
+güçlü değil ama yön belirtiyor.
+
+### O.13.2 Aday vetoların offline denemesi
+
+Veto yalnızca ağır motora giden bir sayfayı geri çekebilir, yeni sayfa
+ekleyemez; dolayısıyla etkisi mevcut koşudan birebir hesaplanabilir
+(`scripts/veto_dene.py`) — her aday için tam replay koşmaya gerek yok. Kabul
+ölçütü bilerek katı tutuldu: **hiçbir veri ailesinde NET düşürmemek**, birleşik
+iyileşme tek başına yeterli sayılmadı (O.8.3).
+
+| Aday | ocrturk ΔNET | opendataloader ΔNET | Birleşik ΔNET |
+|---|---|---|---|
+| `lq_tek` (yalnız low_quality) | **−0,5247** | +0,3006 | −0,2241 |
+| **`lq_tek_cizimsiz`** (+ `bezier_egri == 0`) | **+0,0273** | **+0,3006** | **+0,3279** |
+| `lq_tek_tablosuz` | −0,5247 | +0,3006 | −0,2241 |
+| `cizimsiz_tablosuz` | −0,8611 | +0,0465 | −0,8146 |
+| `kisa_sayfa` (<1500 karakter) | −0,5477 | **+1,0783** | +0,5306 |
+| `yogun_izgara` (`izgara_satir ≥ 8`) | −0,2285 | +0,3504 | +0,1219 |
+
+`kisa_sayfa` opendataloader'da NET'i tek başına **pozitife çeviriyor**
+(−0,9842 → +0,0941) ama ocrturk'e zarar veriyor — yine aynı çelişki deseni.
+Katı ölçütü geçen **tek aday `lq_tek_cizimsiz`** oldu:
+
+> Sayfa ağır motora *yalnızca* düşük kalite skoru yüzünden gidiyorsa **ve**
+> sayfada hiç vektörel çizim yoksa (`bezier_egri == 0`), gönderme.
+
+| | taban | veto sonrası |
+|---|---|---|
+| Birleşik NET | +3,0919 | **+3,4198** |
+| ağır çağrı | 101 | **87** (−14) |
+| precision | 0,4059 | **0,4713** |
+| recall | 0,6508 | **0,6508** (değişmedi) |
+| kaybedilen fayda | — | **0,0000** |
+
+C1'de tek bir belge bile fayda kaybetmiyor: vetolanan 14 sayfanın hepsinde heavy
+zaten daha kötüydü.
+
+### O.13.3 Üçüncü aile — kendi korpusumuz
+
+Aynı kural 261 sayfalık korpusumuzda (metin referansı yok, ama tablo/şekil için
+gümüş referans var):
+
+| | önce | sonra |
+|---|---|---|
+| BOŞA ağır çağrı | 28 | **10** (−18) |
+| GEREKLİ ağır çağrı | 101 | 97 (−4) |
+| ağır sayfa | 137 | 115 |
+
+Takas 4,5:1 — 18 gereksiz çağrı engelleniyor, 4 gerekli çağrı kaybediliyor.
+**Dürüst pürüz:** vetolanan 22 sayfadan biri (`gpt3_uzun_75sayfa` s12)
+`tablo_hukmu = FN` taşıyor, yani kaçırılan tablo sayısı 3 → 4 çıkar. C1'deki
+"sıfır kayıp" tablosu burada geçerli değil.
+
+### O.13.4 Durum: aday var, karar yok
+
+`lq_tek_cizimsiz` üç veri ailesinde de savunulabilir görünen ilk kural — ve
+dikkat çekici biçimde, dangling tartışmasının doğru çözümü olabilir: kalite
+sinyalini tamamen kapatmak (O.3, iki kez düştü) yerine **yapısal bir koşulla
+sınırlamak**. Vektörel çizim varlığı "burada gerçekten karmaşık bir düzen var"
+demek; yoksa düz metindir ve ağır motorun katacağı bir şey yoktur.
+
+**Uygulanmadı.** Sebepleri:
+
+1. Aday **aynı korpusta arandı ve aynı korpusta iyi çıktı**. Q13 gereği bu
+   "kabul edildi" sayılamaz; dokunulmamış, kaynak-aile bazlı bir holdout şart.
+2. Kural `gate.py`'de kod değişikliği ister (YAML'dan ayarlanamaz), ve offline
+   simülasyon yalnız tek sayfalı belgelerde tam doğru — kendi korpusumuz çok
+   sayfalı, oradaki gerçek etki ancak replay ile ölçülür.
+3. `bezier_egri == 0` eşiği bir seçim; 0 dışındaki değerler denenmedi.
+
+Sıradaki iş bu üç maddedir; sırasıyla holdout kurmak, `gate.py`'ye kuralı
+eklemek ve iki korpusta gerçek replay koşmak.
+
 ## 12. Son Cümle
 
 Bu çalışma yalnız bir parser karşılaştırması olarak kalmadı. Gerçek production
