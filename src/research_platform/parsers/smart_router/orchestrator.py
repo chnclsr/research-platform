@@ -158,7 +158,10 @@ class SmartRouterHatti:
         # `extract_pages()` cagrisini yapiyordu; ayni PDF inspector'dan iki kez
         # geciyordu ve olculen kapi maliyeti bu fazladan gecisi iceriyordu.
         t0 = time.perf_counter()
-        bayraklar = self.kapi.bayrakla(pdf_path, insp=insp)
+        source_text_by_page: Optional[Dict[int, str]] = {} if metin_dahil else None
+        bayraklar = self.kapi.bayrakla(
+            pdf_path, insp=insp, source_text_by_page=source_text_by_page,
+        )
         sure["kapi_ms"] = (time.perf_counter() - t0) * 1000
 
         # --- 3) critic CIKISTA, sayfa sayfa (D2 + E1 + D3)
@@ -266,6 +269,9 @@ class SmartRouterHatti:
         }
         if metin_dahil:
             sonuc["sayfa_metni"] = {s.sayfa_no: s.markdown for s in insp.pages}
+            # Internal parse payload. Strings keep this mode JSON-serialisable;
+            # SmartPdfParser consumes and removes it before provenance is built.
+            sonuc["_source_text_by_page"] = source_text_by_page or {}
         return sonuc
 
 

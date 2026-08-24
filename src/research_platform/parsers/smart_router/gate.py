@@ -63,7 +63,7 @@ from typing import Any, Dict, List, Optional
 import pymupdf
 
 from .ayarlar import AYAR
-from .inspector import InspectorSonuc, PdfInspectorAdapter, PROFIL_INSPECTOR
+from .inspector import PROFIL_INSPECTOR, InspectorSonuc, PdfInspectorAdapter
 
 # --------------------------------------------------------------------------
 # ESIKLER — degerler `config/smart_router.yaml` icinde, gomulu varsayilanlar
@@ -272,7 +272,9 @@ class GirisKapisi:
 
     # -------------------------------------------------------------- ana akis
     def bayrakla(self, pdf_path: str,
-                 insp: Optional[InspectorSonuc] = None) -> Dict[int, SayfaBayrak]:
+                 insp: Optional[InspectorSonuc] = None,
+                 source_text_by_page: Optional[Dict[int, str]] = None,
+                 ) -> Dict[int, SayfaBayrak]:
         """Belgenin her sayfasi icin bayrak uretir. Anahtar 1-TABANLI sayfa no.
 
         `insp`: cagiran taraf inspector'i ZATEN kosturduysa sonucunu buraya
@@ -294,6 +296,11 @@ class GirisKapisi:
                 no = i + 1
                 alan = max(page.rect.width * page.rect.height, 1.0)
                 metin = page.get_text()
+                # Reuse the extraction the gate already needs. The smart parser
+                # uses this page-local source as a lexical verifier after merge,
+                # without opening the PDF or calling get_text() a second time.
+                if source_text_by_page is not None:
+                    source_text_by_page[no] = metin
                 karakter = len(metin.strip())
 
                 # full=True SART: full=False ile get_image_bbox her seferinde

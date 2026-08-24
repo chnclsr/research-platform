@@ -32,6 +32,11 @@ try:
         ENGINE_VERSION, DoclingEngine, EngineResult, HttpDoclingEngine, MinerUEngine,
     )
     from .smart_router.gate import ESIK_VERSION
+    from .smart_router.lexical import (
+        LEXICAL_NORMALIZER_VERSION,
+        build_lexical_reference,
+        repair_ligatures,
+    )
     from .smart_router.merge import MergedDocument, birlestir, sayfa_basliklariyla
 
     _ROUTER_IMPORT_ERROR: str = ""
@@ -152,6 +157,21 @@ class SmartPdfParser(DocumentParser):
             decision = SmartRouterHatti().calistir(path, metin_dahil=True)
             gate_ms = (time.perf_counter() - started) * 1000
             merged = self._run_heavy_pages(path, decision)
+            source_text_by_page = decision.pop("_source_text_by_page", {})
+            try:
+                decision["lexical_normalization"] = self._normalize_ligatures(
+                    merged, source_text_by_page,
+                )
+            except Exception as exc:
+                # Cleanup must not make an otherwise usable parse disappear.
+                # Keep the selected engine text and expose the skipped step.
+                logger.exception("smart_pdf lexical normalization failed for %s", url)
+                decision["lexical_normalization"] = {
+                    "version": LEXICAL_NORMALIZER_VERSION,
+                    "applied": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "repairs": 0,
+                }
             toplam_ms = (time.perf_counter() - started) * 1000
         except Exception as exc:
             # A truncated or mislabelled download must not abort acquisition -- the
@@ -261,6 +281,7 @@ class SmartPdfParser(DocumentParser):
             "engine_durations_ms": merged.engine_durations_ms,
             "fallback_pages": merged.fallback_pages,
             "quarantined_pages": merged.quarantined_pages,
+            "lexical_normalization": decision.get("lexical_normalization") or {},
             "pages": [
                 {"page": page.page_no, "engine": page.engine,
                  "decision": page.decision, "fell_back": page.fell_back,
@@ -268,6 +289,52 @@ class SmartPdfParser(DocumentParser):
                  "karar_gerekcesi": page.karar_gerekcesi}
                 for page in merged.pages
             ],
+        }
+
+    def _normalize_ligatures(
+        self, merged: MergedDocument, source_text_by_page: dict[int, str],
+    ) -> dict:
+        """Repair each selected fast/heavy page against its PDF source."""
+
+        single = split = ambiguous = 0
+        changed_pages: list[int] = []
+        by_engine: dict[str, int] = {}
+        referenced_pages = 0
+        repaired: dict[int, str] = {}
+        for page in merged.pages:
+            source_text = source_text_by_page.get(page.page_no)
+            if source_text is None:
+                continue
+            referenced_pages += 1
+            result = repair_ligatures(
+                page.text, build_lexical_reference(source_text),
+            )
+            if result.repairs:
+                repaired[page.page_no] = result.text
+                changed_pages.append(page.page_no)
+                by_engine[page.engine] = by_engine.get(page.engine, 0) + result.repairs
+            single += result.single_token
+            split += result.split_token
+            ambiguous += result.ambiguous
+
+        # Written only once every page has been repaired without raising. A
+        # normalizer that fails on page 20 of 43 must leave the merged document
+        # exactly as it found it, so the fail-open branch's "applied: false" is
+        # the whole truth rather than half of one.
+        for page in merged.pages:
+            if page.page_no in repaired:
+                page.text = repaired[page.page_no]
+
+        return {
+            "version": LEXICAL_NORMALIZER_VERSION,
+            "applied": True,
+            "referenced_pages": referenced_pages,
+            "repairs": single + split,
+            "single_token": single,
+            "split_token": split,
+            "ambiguous": ambiguous,
+            "changed_pages": changed_pages,
+            "repairs_by_engine": by_engine,
         }
 
     def _run_heavy_pages(self, path: str, decision: dict) -> MergedDocument:
