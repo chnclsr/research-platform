@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.13.0`
 
-Belge sürümü: `6.6`
+Belge sürümü: `6.11`
 
-Son güncelleme: `2026-08-21`
+Son güncelleme: `2026-08-24`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -12,8 +12,21 @@ Ayrıntılı gerekçeler ve ölçümler
 ve [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md](DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
 
-## v0.13.0 — 2026-08-21
+## v0.13.0 — 2026-08-24
 
+- **Sistem mimarisi diyagramı güncel çalışma biçimini gösteriyor.** Langflow ve panel
+  girişleri, sahiplik korumalı API, acil/normal Redis öncelikleri, kapasite kapılı paralel
+  koşular, Git/Jina dahil edinim kümesi ve ayrı Docling GPU servisi eklendi. Diyagram
+  Cezeri Robot'un koyu kömür ve camgöbeği renkleriyle yenilendi.
+- **GitHub repository URL'leri artık akıllı işleniyor.** Bir depo HTML sayfası gibi
+  kazınmak yerine `--depth 1` ile geçici alana klonlanıyor; README, manifest ve kaynak
+  dosyaları commit kimliğiyle birlikte yapılandırılmış metne dönüşüyor. Başarı, hata,
+  zaman aşımı ve iptal yollarının tamamında klon ve çalışan Git süreci temizleniyor;
+  işleyici başarısız olursa mevcut HTTP fallback zinciri devam ediyor.
+- **Bot korumasına veya boş JavaScript kabuğuna takılan sayfalar için Jina Reader
+  fallback'i eklendi.** Doğrudan indirme, AgentSearch ve Crawl4AI başarısız olursa
+  anahtarsız browser motoru deneniyor; o da başarısızsa mevcut Scrapling yolu devam
+  ediyor. Dış servis kapatılabilir veya self-host endpoint'e yönlendirilebilir.
 - **PDF'lerin ağır ayrıştırma yolu artık gerçekten koşuyor.** Sayfa yönlendirme zaten
   vardı ama gönderdiği sayfaları alacak bir motor hiçbir yerde çalışmıyordu: 12 gerçek
   koşu PDF'i üzerinde ölçüldüğünde 372 sayfanın 138'i ağır motora yönlendiriliyor ve
@@ -44,6 +57,15 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   bilgisi vardı; şimdi hangi parser'ın seçildiği, hangi motorun kaç sayfayı ürettiği,
   hangi cihazda ve hangi sürümle ürettiği kayıtta. Bir belgenin metnini yeniden
   üretmek isteyen biri için gereken bilgi buydu.
+- README ve mimari belgelerdeki akış diyagramları güncel boru hattı, Smart PDF Router ve
+  karantina kararlarını aynı terimlerle gösterecek biçimde yenilendi.
+- Geliştirici ve ajan işletim yönergeleri tek kaynak olarak `AGENTS.md` altında toplandı;
+  dal, rebuild, yedekleme ve dağıtım tuzakları artık ayrı kopyalarda ayrışmıyor.
+- PDF ayrıştırma raporu artık `--fast` ile nihai metni Inspector'da kalan sayfaları,
+  `--all` ile bütün PDF sayfalarını gösterebiliyor. Inspector sayfaları hiç
+  yönlendirilmemiş, ağır motor fallback'i veya kalite karantinası olarak ayrılıyor.
+  Rapor adı seçim modunu otomatik taşıyor (`_fast.md`, `_heavy.md`, `_all.md` veya
+  `_page-3-8.md`); farklı görünümler artık aynı hedef verilse bile birbirini ezmiyor.
 
 ## v0.12.0 — 2026-08-21
 

@@ -1,6 +1,6 @@
 # Açık İşler
 
-`developments` branch'inde bilinen, henüz kapatılmamış işler. Ayrıntılı gerekçeler
+`developments-supplementer` branch'inde bilinen, henüz kapatılmamış işler. Ayrıntılı gerekçeler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
@@ -24,11 +24,14 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 10 | Eklenti B — yetenek pazarlığı | Gereksiz ayrıştırma maliyeti | Bekliyor |
 | 11 | Eklenti C — `parse_document` MCP aracı | Ajanın teşhis yeteneği | Bekliyor |
 | 12 | Panel `native` modda hâlâ zararlı | Yanlış modda çakışma | Belgelendi |
-| 13 | Tek bir belgenin kaydı tüm koşuyu düşürüyor | Toplanan her şey kaybolur | **Yüksek** |
+| 13 | Yedekleme çıktısı dosya sistemi düzeyinde ayrılmış değil | Aynı makinedeki kullanıcılar tüm raporları okuyabilir | Orta |
+| 14 | Tek bir belgenin kaydı tüm koşuyu düşürüyor | Toplanan her şey kaybolur | **Yüksek** |
 | 15 | Kanıt çıkarımında bütçe karakterle ölçülüyor | Latin dışı metinde 0 iddia | **Yüksek** |
 | 16 | CPU/GPU aynı PDF'ten farklı `content_hash` üretir | İki kurulumda iki sürüm | Düşük |
 | 17 | Docling imajı 11,9 GB, geçişli bağımlılıklar kilitsiz | Disk + build kayması | Orta |
 | 18 | Docling + Ollama kartı aynı anda paylaşınca ne olur, denenmedi | Olası VRAM thrash | Orta |
+| 19 | Anonim Jina Reader dış servis sınırı | 429 riski + hedef URL üçüncü tarafa gider | Düşük |
+| 20 | Metadata'sız GitHub adayında boyut sınırı klon sonrası | Büyük repo geçici ağ/disk tüketebilir | Düşük |
 
 ---
 
@@ -196,7 +199,7 @@ Ayrıntı: kökteki raporun 14. bölümü ve
 [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 "Kalan sınırlar".
 
-## 13. Tek bir belgenin kaydı tüm koşuyu düşürüyor
+## 14. Tek bir belgenin kaydı tüm koşuyu düşürüyor
 
 **Durum:** `pipeline.py` NORMALIZE içinde belgeleri sırayla `repo.save_document()` ile
 yazıyor ve bu çağrı korumasız. Tek bir belgede veritabanının reddettiği bir şey olması —
@@ -317,6 +320,39 @@ kartta LLM + embedding + docling dar bir alan ve `model_lease()` docling'i kapsa
 thrash olup olmadığı ancak ikisi aynı anda çalışırken görülür. Ölçümdeki 46 MiB tabanı,
 Ollama'nın o an hiçbir modeli yerleşik tutmadığını da gösteriyor — yani bu ölçüm en iyi
 hâli, en kötü hâli değil.
+
+## 19. Anonim Jina Reader dış servis sınırı
+
+**Durum:** Jina Reader anahtarsız kullanılıyor ve yalnız `direct`, AgentSearch ile
+Crawl4AI başarısız olduktan sonra çağrılıyor. Jina'nın kendi belgesine göre anonim trafik
+en sıkı kota havuzundadır; yoğun kullanımda 429 görülebilir. Ayrıca hedef URL ve Jina'nın
+o URL'den aldığı içerik dış bir hizmetin işleme sınırına girer.
+
+**Mevcut koruma:** Hedef URL önce SSRF/public-IP kontrolünden geçer; hedef site çerezleri,
+Authorization başlığı veya başka kimlik bilgileri Jina'ya aktarılmaz. Jina hatası koşuyu
+düşürmez, Scrapling'e devam eder. Dış çağrı `ENABLE_JINA_READER_FALLBACK=false` ile
+kapatılabilir; `JINA_READER_URL` self-host Reader'a çevrilebilir.
+
+**Yapılacak:** Gerçek koşu telemetrisinde anlamlı bir 429 oranı görülmeden credential
+eklenmeyecek. Kota sorun olursa önce self-host endpoint, gerekirse ayrıca opsiyonel Jina
+API anahtarı desteği değerlendirilecek.
+
+## 20. Metadata'sız GitHub adayında boyut sınırı klon sonrası
+
+**Durum:** GitHub connector'ından gelen adaylarda API'nin `size` alanı kullanılarak
+100 MiB sınırı klondan önce uygulanıyor. Başka bir connector'ın bulduğu GitHub URL'sinde
+bu metadata yoksa `git clone --depth 1` checkout boyutunu önceden güvenilir biçimde
+bilmiyor; sınır klon tamamlandıktan sonra `.git` dahil dizin boyutunda uygulanabiliyor.
+
+**Mevcut koruma:** Klon 90 saniyede kesiliyor, alt modüller alınmıyor, Git LFS smudge
+kapalı ve checkout 100 MiB'ı aşınca içerik işlenmeden reddediliyor. Başarı, hata, timeout
+ve iptal yollarında geçici dizin temizleniyor. Bu sınır kalıcı veri şişmesine yol açmaz,
+ama tek çağrı sırasında ağ ve geçici disk tüketimi yaratabilir.
+
+**Yapılacak:** Gerçek koşularda bu sınıra çarpan repository görülürse klondan önce
+GitHub repository metadata'sı sorgulanacak; kimliksiz API kotasını tüketmemek için şu an
+her GitHub URL'sine ek bir istek konmadı. Gerekirse object filtering/partial clone ayrıca
+ölçülecek.
 
 ## Kapsam dışı bırakılanlar
 

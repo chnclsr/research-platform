@@ -9,6 +9,8 @@ heavy engine actually produced. That is one command's worth of work spread over 
 
     inspect_bundle.py 01M0SBTA6MQ07ETFHPKAJQH9HZ            # routing summary
     inspect_bundle.py 01M0SBTA6MQ07ETFHPKAJQH9HZ --heavy    # + every heavy page's markdown
+    inspect_bundle.py 01M0SBTA6MQ07ETFHPKAJQH9HZ --fast     # + every retained fast page
+    inspect_bundle.py 01M0SBTA6MQ07ETFHPKAJQH9HZ --all      # + every PDF page
     inspect_bundle.py raw_bundle.zip --page 6               # one page, with its reason
     inspect_bundle.py raw_bundle.zip --out pages/           # one .md per page, to diff
     inspect_bundle.py raw_bundle.zip --pdf inputs/          # the bytes the engine got
@@ -19,6 +21,10 @@ second lookup is the one that matters in practice: the sync is a scheduled task,
 that finished minutes ago is not on disk yet, and "wait for the next sync" is the opposite
 of one command. Storage copies land in outputs/.bundles/ so a second look is instant. A
 path is used as given, and may be the bundle zip or the bare jsonl.
+
+Markdown report names carry the selection mode automatically: `--fast --md report.md`
+writes `report_fast.md`, while `--heavy` writes `report_heavy.md`. Directory targets use
+the same rule. A suffix the caller already supplied is not duplicated.
 
 The page markdown printed here is the MERGED text, which is the engine's own output with
 one transformation: `merge.nest_under_page()` pushes each page's headings down a level so
@@ -57,6 +63,7 @@ CACHE_DIR = os.path.join("outputs", ".bundles")
 #: `sayfa_basliklariyla()` emits exactly this, and passages.py parses it back out.
 PAGE_HEADING = re.compile(r"(?m)^# Page (\d+)$")
 RUN_ID = re.compile(r"^[0-9A-Z]{26}$")
+FAST_ENGINE = "pdf-inspector"
 
 
 def _output_dir() -> str:
@@ -196,18 +203,53 @@ def _timing(parse: dict) -> str | None:
     return " · ".join(parcalar)
 
 
+def _fast_state(page: dict) -> str | None:
+    """Why the final page still belongs to the fast extractor, if it does.
+
+    `decision` says the router wanted a heavy comparison; `fell_back` says the engine
+    did not deliver one. A routed page that did deliver but still ends up on the fast
+    engine was quarantined by the output check. Keeping these cases separate is the
+    useful part of `--fast`: "Inspector page" otherwise hides two degraded paths among
+    the ordinary untouched pages.
+    """
+    if page.get("engine") != FAST_ENGINE:
+        return None
+    if page.get("fell_back"):
+        return "fallback"
+    if page.get("decision"):
+        return "quarantined"
+    return "untouched"
+
+
 def _label(number: int, by_number: dict) -> str:
     page = by_number.get(number) or {}
     engine = page.get("engine") or "?"
     reason = json.dumps(page.get("decision") or [])
-    fell = " FELL BACK" if page.get("fell_back") else ""
-    return f"page {number} | {engine} | {reason}{fell}"
+    state = _fast_state(page)
+    parts = [f"page {number}", engine]
+    if state:
+        parts.append(state)
+    parts.append(reason)
+    if page.get("karar_gerekcesi"):
+        parts.append(str(page["karar_gerekcesi"]))
+    return " | ".join(parts)
+
+
+def _selection_requested(args: argparse.Namespace) -> bool:
+    return bool(args.page or args.heavy or args.fast or args.all)
 
 
 def _wanted(markdown: dict, by_number: dict, args: argparse.Namespace) -> list[int]:
     """Which pages the caller asked to see, in page order."""
     if args.page:
         return [number for number in sorted(set(args.page)) if number in markdown]
+    if args.all:
+        return sorted(markdown)
+    if args.fast:
+        return [
+            number for number in sorted(markdown)
+            if _fast_state(by_number.get(number) or {}) is not None
+        ]
     heavy = [n for n in sorted(markdown) if (by_number.get(n) or {}).get("decision")]
     if args.heavy:
         return heavy
@@ -218,7 +260,7 @@ def _wanted(markdown: dict, by_number: dict, args: argparse.Namespace) -> list[i
 
 
 def _show_pages(markdown: dict, by_number: dict, args: argparse.Namespace) -> None:
-    if not (args.page or args.heavy):
+    if not _selection_requested(args):
         return
     for number in _wanted(markdown, by_number, args):
         print("\n" + "-" * 78)
@@ -278,9 +320,15 @@ def _report(record: dict, args: argparse.Namespace) -> None:
 
     pages = parse.get("pages") or []
     routed = [page for page in pages if page.get("decision")]
+    retained_fast = [page for page in pages if _fast_state(page)]
+    fast_states = {
+        state: sum(_fast_state(page) == state for page in retained_fast)
+        for state in ("untouched", "fallback", "quarantined")
+    }
     by_number = {page["page"]: page for page in pages}
     print(f"  pages {len(pages)} | routed heavy {len(routed)} "
           f"| engines {parse.get('engine_counts')}")
+    print(f"  retained fast {len(retained_fast)} | states {fast_states}")
     print(f"  device {parse.get('engine_devices')} | degraded={parse.get('degraded')}")
     if parse.get("engine_build"):
         print(f"  build {parse['engine_build']}")
@@ -343,9 +391,17 @@ def _markdown_report(record: dict, args: argparse.Namespace) -> list[str]:
 
     pages = parse.get("pages") or []
     routed = [page for page in pages if page.get("decision")]
+    retained_fast = [page for page in pages if _fast_state(page)]
+    fast_states = {
+        state: sum(_fast_state(page) == state for page in retained_fast)
+        for state in ("untouched", "fallback", "quarantined")
+    }
     by_number = {page["page"]: page for page in pages}
     lines += [
         f"- pages: {len(pages)} · routed heavy: {len(routed)}",
+        f"- retained fast: {len(retained_fast)} · "
+        f"untouched: {fast_states['untouched']} · fallback: {fast_states['fallback']} · "
+        f"quarantined: {fast_states['quarantined']}",
         f"- engines: `{parse.get('engine_counts')}`",
         f"- device: `{parse.get('engine_devices')}` · degraded: `{parse.get('degraded')}`",
     ]
@@ -377,23 +433,52 @@ def _markdown_report(record: dict, args: argparse.Namespace) -> list[str]:
     for number in _wanted(markdown, by_number, args):
         page = by_number.get(number) or {}
         reasons = ", ".join(page.get("decision") or []) or "fast path"
-        lines += ["", f"## Page {number} — {page.get('engine') or 'pdf-inspector'} "
-                      f"({reasons})", "", markdown[number]]
+        details = [_fast_state(page), reasons, page.get("karar_gerekcesi")]
+        detail = " · ".join(str(item) for item in details if item)
+        lines += ["", f"## Page {number} — {page.get('engine') or FAST_ENGINE} "
+                      f"({detail})", "", markdown[number]]
     lines.append("")
     return lines
 
 
-def _md_target(destination: str, target: str) -> str:
+def _mode_suffix(args: argparse.Namespace) -> str:
+    """Stable filename suffix for the page selection represented by this report."""
+    if args.page:
+        pages = "-".join(str(number) for number in sorted(set(args.page)))
+        return f"_page-{pages}"
+    if args.heavy:
+        return "_heavy"
+    if args.fast:
+        return "_fast"
+    if args.all:
+        return "_all"
+    return ""
+
+
+def _append_mode(path: str, suffix: str) -> str:
+    """Insert the mode before the extension, without producing `_fast_fast.md`."""
+    if not suffix:
+        return path
+    stem, extension = os.path.splitext(path)
+    if stem.endswith(suffix):
+        return path
+    return f"{stem}{suffix}{extension}"
+
+
+def _md_target(destination: str, target: str, args: argparse.Namespace) -> str:
     """A directory destination names the file after the run, a file path is taken as given.
 
     Reports are read one run at a time but written over and over, and the obvious habit
-    -- always `--md outputs/report.md` -- silently overwrites the previous run's report
-    with no warning. Pointing at a directory removes the choice: the run names the file.
+    -- always `--md outputs/report.md` -- used to let `--fast` and `--heavy` silently
+    overwrite one another. The selection suffix is applied to both explicit filenames
+    and directory-derived names; pointing at a directory additionally lets the run name
+    the file.
     """
+    suffix = _mode_suffix(args)
     if not (destination.endswith(("/", "\\")) or os.path.isdir(destination)):
-        return destination
+        return _append_mode(destination, suffix)
     stem = target if RUN_ID.match(target) else os.path.basename(target).split(".")[0]
-    return os.path.join(destination, f"{stem}.md")
+    return os.path.join(destination, f"{stem}{suffix}.md")
 
 
 def main() -> None:
@@ -401,12 +486,17 @@ def main() -> None:
         description="Which pages went to the heavy engine, and what it produced.",
     )
     parser.add_argument("target", help="run id, bundle zip, or 13_raw_sources.jsonl")
-    parser.add_argument("--page", type=int, action="append", metavar="N",
-                        help="print this page's markdown (repeatable)")
-    parser.add_argument("--heavy", action="store_true",
-                        help="print the markdown of every heavy-routed page")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--page", type=int, action="append", metavar="N",
+                           help="print this page's markdown (repeatable)")
+    selection.add_argument("--heavy", action="store_true",
+                           help="print the markdown of every heavy-routed page")
+    selection.add_argument("--fast", action="store_true",
+                           help="print every page whose final text came from pdf-inspector")
+    selection.add_argument("--all", action="store_true",
+                           help="print every PDF page")
     parser.add_argument("--out", metavar="DIR",
-                        help="write one .md per page into DIR (all pages, or --heavy only)")
+                        help="write one .md per page into DIR (all pages, or selection only)")
     parser.add_argument("--pdf", metavar="DIR",
                         help="write the bytes the heavy engine received into DIR")
     parser.add_argument("--refresh", action="store_true",
@@ -429,7 +519,7 @@ def main() -> None:
     if args.md == "-":
         print(document)
         return
-    target = _md_target(args.md, args.target)
+    target = _md_target(args.md, args.target, args)
     # Written here rather than left to a shell redirect: PowerShell picks its own
     # encoding for `>` and a UTF-16 markdown file is a bad surprise.
     os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)

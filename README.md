@@ -96,10 +96,12 @@ The local deployment hosts its language, embedding, and figure-understanding mod
 
 ## One Workstation, an Office-Wide Research Service
 
-![Research Platform system architecture: entry gateways, core services, data and collection tier](docs/diagrams/system-architecture.svg)
+![Research Platform system architecture: authenticated entry gateways, owner-scoped core, data, acquisition and compute services](docs/diagrams/system-architecture.svg)
 
-The network-facing MCP and control surfaces are authenticated and CIDR-restricted. Database,
-object-storage, and model services remain private to the host.
+Authenticated MCP, Telegram, control-panel, and Langflow entrypoints converge on the
+owner-scoped API. Redis separates urgent and normal work; the capacity-gated worker overlaps
+runs while serializing model calls, and keeps PostgreSQL, MinIO, acquisition, Docling, and
+Ollama behind the service boundary.
 
 ## Research Lifecycle & Stage Flow
 
@@ -198,6 +200,8 @@ and one command turns the record into a readable report:
 ```bash
 python scripts/inspect_bundle.py <run_id>                              # routing summary
 python scripts/inspect_bundle.py <run_id> --heavy                      # + each heavy page
+python scripts/inspect_bundle.py <run_id> --fast                       # + pages kept by Inspector
+python scripts/inspect_bundle.py <run_id> --all                        # + every PDF page
 python scripts/inspect_bundle.py <run_id> --heavy --md outputs/reports # markdown per run
 python scripts/inspect_bundle.py <run_id> --pdf outputs/inputs         # the bytes sent
 ```
@@ -205,7 +209,10 @@ python scripts/inspect_bundle.py <run_id> --pdf outputs/inputs         # the byt
 The run id is enough: the bundle is looked up in the report-sync folder and then in
 object storage, so a run that finished a minute ago can be inspected without waiting for
 the next sync. Pointing `--md` at a directory names the file after the run instead of
-overwriting the previous report.
+overwriting the previous report. The selection is appended automatically: `--fast`
+writes `_fast.md`, `--heavy` writes `_heavy.md`, `--all` writes `_all.md`, and explicit
+page selections write `_page-3-8.md`. The same suffixing applies when `--md` receives an
+explicit filename, and an already present suffix is not duplicated.
 
 The report answers four questions per source:
 
@@ -213,6 +220,7 @@ The report answers four questions per source:
 |---|---|
 | which pages went to the heavy engine | with the reason -- `has_table_yuksek`, `low_quality`, `needs_ocr` |
 | what it produced | the page markdown, tables included |
+| which pages stayed with Inspector | `untouched`, heavy-engine `fallback`, or output-check `quarantined` |
 | where it ran | device and the docling/torch/GPU build that produced the text |
 | what it cost | parse time split into routing and heavy engine |
 

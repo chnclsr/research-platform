@@ -48,6 +48,17 @@ evidence-ready passage ve /v1/corpus/search API
 > [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](../DEVELOPMENTS_IMPLEMENTATION_REPORT.md) 8. ve
 > 9. bölümler.
 
+> **Not (2026-08-24):** Edinim zinciri yeniden genişledi. Güncel son bölüm
+> `Crawl4AI → Jina Reader → Scrapling` sırasındadır. Jina Reader anonim ve zorla browser
+> motoruyla çalışan dış fallback'tir; ayrıntı için aktif geliştirme raporunun 32. bölümüne
+> bakınız.
+
+> **Not (2026-08-24):** GitHub repository URL'leri artık genel HTTP zincirinden önce
+> `git clone --depth 1` ile geçici alana alınır; izlenen README, manifest ve kaynak dosyaları
+> commit kimliğiyle yapılandırılmış metne dönüşür. İşlem bittiğinde geçici checkout
+> temizlenir, başarısızlıkta yukarıdaki genel zincir devam eder. Ayrıntı için aktif
+> geliştirme raporunun 33. bölümüne bakınız.
+
 ## Akademik katman
 
 - OpenAlex DOI, abstract, OA location, version ve reference metadata sağlar.

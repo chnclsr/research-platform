@@ -67,6 +67,15 @@ class Settings(BaseSettings):
     frontier_max_links_per_document: int = Field(50, ge=0, le=500)
     frontier_max_depth: int = Field(2, ge=0, le=5)
     local_corpus_results: int = Field(8, ge=0, le=50)
+    enable_github_repository_handler: bool = True
+    github_clone_timeout_s: float = Field(90.0, ge=10.0, le=300.0)
+    github_repository_max_bytes: int = Field(100 * 1024 * 1024, ge=1024 * 1024)
+    github_repository_max_files: int = Field(200, ge=1, le=2000)
+    github_repository_max_file_bytes: int = Field(512 * 1024, ge=4096)
+    github_repository_max_chars: int = Field(2_000_000, ge=10_000, le=10_000_000)
+    enable_jina_reader_fallback: bool = True
+    jina_reader_url: str = "https://r.jina.ai"
+    jina_reader_timeout_s: float = Field(90.0, ge=10.0, le=180.0)
     enable_scrapling_fallback: bool = True
     openai_compatible_url: str | None = None
     openai_compatible_api_key: str | None = None

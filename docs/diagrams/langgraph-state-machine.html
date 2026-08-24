@@ -336,7 +336,7 @@
           <h3>ACQUIRE and the parser</h3>
         </div>
         <ul>
-          <li>Five fetch strategies in order — <code>_direct</code>, scholarly metadata, agentsearch, crawl4ai, scrapling; first success wins</li>
+          <li>Seven fetch strategies in order — GitHub repository snapshot, <code>_direct</code>, scholarly metadata, agentsearch, crawl4ai, Jina Reader, scrapling; first success wins</li>
           <li>Anything under 400 characters is dropped, which is why a scanned PDF with no heavy engine disappears here</li>
           <li><code>ParserRegistry.select()</code> picks <code>SmartPdfParser</code> (priority 20); the heavy re-extraction it calls out to runs in the <code>docling</code> service</li>
           <li><code>content_hash</code> is the sha256 of the parsed text, so parsing has to be deterministic</li>

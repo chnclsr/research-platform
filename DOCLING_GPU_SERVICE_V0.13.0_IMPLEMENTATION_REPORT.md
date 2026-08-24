@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.13.0`
 
-Belge sürümü: `1.0`
+Belge sürümü: `1.1`
 
-Tarih: `2026-08-21`
+Tarih: `2026-08-24`
 
 ## Gerekçe
 

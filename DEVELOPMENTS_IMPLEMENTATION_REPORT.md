@@ -1,14 +1,14 @@
-# `developments` Branch Değişiklik Raporu
+# `developments-supplementer` Branch Değişiklik Raporu
 
 Platform sürümü: `v0.13.0`
 
-Belge sürümü: `12.12`
+Belge sürümü: `12.17`
 
-Son güncelleme: `2026-08-21`
+Son güncelleme: `2026-08-24`
 
 ## Kapsam
 
-Bu belge `developments` branch'inde yapılan tüm değişiklikleri tutar. Yeni iş yapıldıkça
+Bu belge `developments-supplementer` branch'inde yapılan tüm değişiklikleri tutar. Yeni iş yapıldıkça
 yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 
 | # | İş | Commit |
@@ -39,7 +39,14 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 24 | Öncelikli koşu kuyruğu (kendi raporu var) | `9b1c887` |
 | 25 | Donanıma göre paralel koşular (kendi raporu var) | `9b1c887` |
 | 26 | Koşuyu izsiz silme: `research-admin purge-runs` | `9b1c887` |
-| 27 | Ağır PDF yolu: docling GPU servisi (kendi raporu var) | _commit bekliyor_ |
+| 27 | Ağır PDF yolu: docling GPU servisi (kendi raporu var) | `e102cd3` |
+| 28 | Akış diyagramlarının güncel mimariye uyarlanması | `f330659` |
+| 29 | PDF ayrıştırma teşhis raporu ve süre kaydı | `dbb7e43` |
+| 30 | Ajan yönergelerinin `AGENTS.md` altında tekleştirilmesi | `dc9b544` |
+| 31 | PDF raporunda sayfa seçimleri ve çakışmayan mod adları | _çalışma ağacı_ |
+| 32 | Jina Reader browser fallback'i | _çalışma ağacı_ |
+| 33 | GitHub URL akıllı repository işleyicisi | _çalışma ağacı_ |
+| 34 | Sistem mimarisi diyagramının güncel mimari ve Cezeri derisiyle yenilenmesi | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2225,6 +2232,208 @@ tabloda sahipsiz satır yok.
 
 ---
 
+## 28. Akış diyagramlarının güncel mimariye uyarlanması
+
+README ile mimari belgelerdeki akış çizimleri, çalışan sistemin güncel bileşenleriyle
+eşitlendi. Uçtan uca sistem akışı ve LangGraph durum makinesi hem SVG hem etkileşimli HTML
+olarak yenilendi; diyagramlar Smart PDF Router, karantina kararı ve ayrı Docling servisini
+aynı adlarla gösteriyor. Diyagram giriş noktaları `docs/diagrams/README.md` altında
+toplandı ve kök README güncel çizimlere bağlandı.
+
+Bu değişiklik yalnız belgelemedir; çalışma zamanı davranışını değiştirmez.
+
+---
+
+## 29. PDF ayrıştırma teşhis raporu ve süre kaydı
+
+Bir koşunun PDF'lerinin neden ağır yola yönlendirildiğini yalnız veritabanı ve manifestoyu
+elle birleştirerek anlamak gerekiyordu. `scripts/inspect_bundle.py <run_id> --heavy --md
+<dizin>` artık yönlendirme gerekçelerini, motor sonuçlarını, cihaz/build bilgisini ve
+belge başına süreleri tek raporda topluyor.
+
+Ayrıştırma provenance'ına toplam süre, yönlendirme süresi ve ağır motor süresi eklendi;
+teslimat manifestosu bu alanları dışa aktarıyor. Böylece edinim süresindeki yavaşlığın
+indirmeden mi yoksa ayrıştırmadan mı geldiği koşu sonrasında ölçülebiliyor. Değişiklik
+`tests/test_parsers.py` ve `tests/test_export_manifest.py` kapsamıyla doğrulandı.
+
+---
+
+## 30. Ajan yönergelerinin `AGENTS.md` altında tekleştirilmesi
+
+Depo işletim ve geliştirme kuralları daha önce ajana özgü ikinci bir dosyayla
+ayrışabiliyordu. `AGENTS.md` artık tek kalıcı kaynak; eski ikinci kopya kaldırıldı ve
+gitignore, yerel ajan çalışma dosyalarını kaynak kontrolüne almadan bu tek kaynağı
+izleyecek biçimde güncellendi.
+
+Aktif dal, Docker rebuild zorunluluğu, profilli Telegram botu, GPU'lu Docling dağıtımı,
+kişisel MCP anahtarları ve güvenli yedekleme yolu aynı belgede tutuluyor. Bu değişiklik
+çalışma zamanı davranışını değiştirmez; sonraki geliştirmelerde yanlış işletim adımı
+riskini azaltır.
+
+---
+
+## 31. PDF raporunda Inspector'da kalan sayfaların gösterilmesi
+
+`inspect_bundle.py --heavy` ağır motora yönlendirilen sayfaları gösteriyordu; nihai metni
+`pdf-inspector` tarafından üretilen sayfaları tek seçimle rapora alma yolu yoktu. `--out`
+bütün sayfaları ayrı dosyalara çıkarabiliyordu, ancak okunabilir stdout/Markdown raporunda
+aynı seçimi yapmıyordu.
+
+Yeni `--fast`, nihai motoru `pdf-inspector` olan bütün sayfaları seçiyor ve neden orada
+kaldıklarını üç durumla ayırıyor:
+
+| Durum | Anlamı |
+|---|---|
+| `untouched` | Sayfa ağır motora hiç yönlendirilmedi |
+| `fallback` | Ağır motor çağrıldı ama kullanılabilir sayfa döndürmedi |
+| `quarantined` | Ağır çıktı geldi, kalite kontrolü reddetti ve hızlı metin korundu |
+
+`--all` bütün PDF sayfalarını aynı rapor biçiminde gösteriyor. `--page`, `--heavy`,
+`--fast` ve `--all` birbirini dışlayan açık seçimler; eski `--out`-tek-başına davranışı
+bütün sayfaları yazmaya devam ediyor. Sayfa başlığında yönlendirme gerekçesinin yanında
+birleştirme kararının `karar_gerekcesi` alanı da gösteriliyor.
+
+`--md` hedefinde seçim modu dosya adına otomatik ekleniyor. Hem dizin hedefinde hem açık
+dosya adında `--fast` → `_fast.md`, `--heavy` → `_heavy.md`, `--all` → `_all.md` ve
+`--page 3 --page 8` → `_page-3-8.md`. Kullanıcı son eki zaten yazdıysa yinelenmiyor.
+Seçimsiz özet raporunun eski adı korunuyor. Böylece aynı taban hedefle art arda üretilen
+görünümler birbirini sessizce ezmiyor.
+
+Doğrulama `tests/test_inspect_bundle.py` içindedir: final motor seçimi, üç Inspector
+durumu, mevcut `--heavy` anlamının korunması, `--all`, Markdown içeriği, dizin ve açık
+dosya hedeflerinin farklı ad üretmesi ve hazır son eklerin yinelenmemesi ayrı ayrı
+denetlenir.
+
+---
+
+## 32. Jina Reader browser fallback'i
+
+Doğrudan HTTP, AgentSearch `/read` ve Crawl4AI'nin boş ya da başarısız döndüğü sayfalar
+artık son yerel HTTP yolu olan Scrapling'den önce Jina Reader ile deneniyor. Güncel sıra:
+
+```text
+direct → scholarly_metadata → agentsearch_read → crawl4ai → jina_reader → scrapling
+```
+
+Reader çağrısı hedef URL'yi `JINA_READER_URL` altına ekliyor ve `X-Engine: browser`
+başlığıyla JavaScript çalıştıran motoru açıkça istiyor. API anahtarı veya hedef siteye ait
+çerez/kimlik bilgisi gönderilmiyor. Hedef URL, zincire girmeden önce mevcut public-IP,
+şema, port ve URL-credential denetiminden geçmiş oluyor.
+
+Koruma sınırları diğer edinim yollarıyla aynı tutuldu: 25 MiB indirme sınırı uygulanıyor,
+400 karakterin altındaki yanıt belge sayılmıyor ve HTTP/zaman aşımı hatası koşuyu
+düşürmeden Scrapling'e geçiriliyor. Dış servis istenmezse
+`ENABLE_JINA_READER_FALLBACK=false`; self-host kurulum için `JINA_READER_URL`
+değiştirilebilir. Varsayılan dış çağrı bütçesi 90 saniye ve
+`JINA_READER_TIMEOUT_S` ile ayarlanabilir.
+
+Bu değişiklik, tarihsel `COLLECTION_ARCHITECTURE_REPORT` içindeki güncel-zincir notunu
+bilinçli olarak aşar; tarihsel metin değiştirilmedi, altına yeni tarihli not eklendi.
+
+**Doğrulama:**
+
+- Jina isteğinin tam URL'yi koruduğu, browser motorunu zorladığı, `Authorization`
+  göndermediği, kapalı ayarın deneme kaydı üretmediği ve başarıdan sonra Scrapling'in
+  çalışmadığı üç yeni testle doğrulandı.
+- Hedefli paket: `18 passed`; tam paket: `437 passed`.
+- Değiştirilen Python dosyaları için hedefli Ruff temiz.
+- `docker compose up -d --build` tamamlandı; worker container'ı altı basamaklı sırayı ve
+  etkin `https://r.jina.ai` ayarını okuyor.
+- Anahtarsız gerçek smoke testinde browser-forced Wikipedia isteği `HTTP 200`,
+  `195476` karakter ve `text/plain` döndürdü.
+
+---
+
+## 33. GitHub URL akıllı repository işleyicisi
+
+GitHub repository URL'leri artık genel web sayfası gibi kazınmıyor. Edinim katmanı
+`github.com/<owner>/<repo>` biçimini ve aynı repository altındaki `tree`, `blob`, `issues`
+gibi yolları repository köküne çözüyor; ardından geçici dizine aşağıdaki sınırlı klonu
+alıyor:
+
+```text
+git clone --depth 1 --single-branch --no-tags
+```
+
+İşleyici önce README'leri, sonra bilinen manifest/yapılandırma dosyalarını, ardından
+izlenen kaynak dosyalarını seçiyor. Yalnız `git ls-files` çıktısındaki düzenli metin
+dosyaları okunuyor; symlink'ler, binary içerik, vendor/build/cache dizinleri, dosya başına
+ve toplam metin sınırını aşan içerik atlanıyor. Çıktı; repository URL'si, kesin commit
+kimliği, seçilen dosya listesi ve dosya sınırlarıyla deterministik Markdown'a dönüşüyor.
+Acquisition provenance'ı commit'i, checkout boyutunu, eklenen/atlanan dosyaları,
+kırpılma durumunu ve temizliğin doğrulandığını kaydediyor.
+
+Yeni edinim sırası şöyledir:
+
+```text
+github_repository → direct → scholarly_metadata → agentsearch_read → crawl4ai → jina_reader → scrapling
+```
+
+GitHub işleyicisi yalnız tanınan repository URL'lerinde sıraya giriyor. Klonlama veya
+metin üretimi başarısız olursa koşu düşmüyor; mevcut doğrudan HTTP zinciri devam ediyor.
+Varsayılan sınırlar 90 saniye, 100 MiB checkout, 200 dosya, dosya başına 512 KiB ve toplam
+2.000.000 karakterdir. GitHub connector'ının verdiği repository `size` metadata'sı varsa
+100 MiB sınırı indirmeden önce de uygulanıyor. Gerekli `git` istemcisi uygulama imajına
+eklendi.
+
+### Temizleme garantisi
+
+Her klon için ayrı `research-github-*` geçici dizini açılıyor ve başarı, hata, timeout ile
+async iptal yollarının tamamı `finally` bloğunda temizleniyor. Timeout veya iptalde çalışan
+Git süreci önce öldürülüp bekleniyor; salt-okunur dosyalar izin düzeltmeli `rmtree` ile üç
+kez deneniyor. Temizleme ayrıca cancellation'dan korunuyor ve ancak başarıyla bittikten
+sonra belge `cleanup_confirmed=true` ile dönebiliyor. Alt modüller klonlanmıyor ve Git LFS
+smudge kapalı tutuluyor.
+
+**Doğrulama:**
+
+- URL ayrıştırma, seçim/biçimlendirme, klon hatası, async iptal, süreç öldürme, geçici
+  dizin temizliği, acquisition önceliği ve HTTP fallback'i yeni testlerle kapsandı.
+- GitHub/Jina/relevance/plan hedefli paketi: `39 passed`; tam paket: `447 passed`.
+- Yeni kod ve hedef değişiklikler için Ruff (acquisition'ın mevcut `BLE001`/`S110`
+  borcu hariç), `docker compose config --quiet` ve `git diff --check` temiz.
+- `docker compose up -d --build` tamamlandı. Worker içinde `/usr/bin/git`, etkin ayarlar
+  ve yedi basamaklı edinim sırası doğrulandı; tüm servisler ayakta, Docling dahil health
+  taşıyan servisler sağlıklı.
+- Gerçek `brcrusoe72/agent-search` smoke testinde `--depth 1` klonundan commit
+  `7830af0efded9dfe0d632c461d7b919de8726f5d`, 57 dosya ve 466.461 karakter üretildi.
+  `cleanup_confirmed=True`; işlem öncesi/sonrası `research-github-*` dizin farkı `[]`.
+
+Bu değişiklik, tarihsel `COLLECTION_ARCHITECTURE_REPORT` içindeki edinim zinciri kararını
+GitHub repository URL'leri için bilinçli olarak özelleştirir. Tarihsel akış korunmuş,
+altına yeni tarihli not eklenmiştir. Metadata'sız adaylarda boyutun ancak klondan sonra
+kesinleşmesi sınırı [OPEN_ITEMS.md](OPEN_ITEMS.md) 20. maddede izleniyor.
+
+---
+
+## 34. Sistem mimarisi diyagramının güncel mimari ve Cezeri derisiyle yenilenmesi
+
+Kök README'deki “One Workstation, an Office-Wide Research Service” bölümünde kullanılan
+sistem mimarisi diyagramı güncel compose ve host kurulumunu gösterecek biçimde yeniden
+çizildi; bölümün açıklama metni de aynı mimariye eşitlendi. Önce Türkçe HTML kaynak
+güncellendi, ardından aynı geometri İngilizce bağımsız SVG'ye aktarıldı. Eski diyagramdaki
+"koşular sırayla işlenir" notu kaldırıldı; v0.12.0'daki canlı kapasite kapısı altında
+paralel koşular ve süreç genelinde serileştirilen model çağrıları birlikte gösteriliyor.
+
+Güncel görünüm ayrıca operasyon yüzeylerinde panel ile Langflow'u, Repository katmanındaki
+sahiplik korumasını, Redis'in acil/normal önceliklerini, Git/Jina dahil edinim kümesini ve
+v0.13.0'da eklenen ayrı Docling GPU servisini kapsıyor. Panelin API'yi atlayan doğrudan
+veritabanı okuması ile Ollama'nın compose dışındaki host yerleşimi korunuyor.
+
+Görsel dil, depo kökündeki `.diagram-design` işaretçisinin seçtiği `cezeri` profiline
+taşındı. Koyu tuvalde Cezeri'nin kömür rengi zemin, açık mürekkep, camgöbeği vurgu ve açık
+mavi bağlantı karşılıkları; düğüm adlarında Raleway, teknik etiketlerde Geist Mono
+kullanılıyor. Çalışma yalnız belge ve diyagram dosyalarını değiştiriyor; çalışan servislere
+etkisi yoktur.
+
+**Doğrulama:** Eklentinin erişilebilirlik/güvenlik self-check'i HTML ve SVG için temiz;
+geometri denetimi sıfır kırpılmış etiket bildiriyor. SVG sıkı XML olarak ayrıştırıldı,
+ilk çocuklarının `title`/`desc` olduğu ve Türkçe kaynakla dışa aktarılan İngilizce sürümün
+geometrisinin eş olduğu doğrulandı. Son görünüm 1280×720 başsız Chrome render'ında elle
+incelendi.
+
+---
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her
@@ -2232,4 +2441,3 @@ madde için ölçümler ve yapılacak iş. Bu raporda bölüm bölüm dağılmı
 notlarının toplandığı yer orası; yeni bir sınır tespit edildiğinde oraya eklenmeli.
 
 Bu bölümü burada çoğaltmıyoruz — iki listenin zamanla birbirinden ayrışması kaçınılmazdı.
-

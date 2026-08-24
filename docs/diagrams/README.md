@@ -30,11 +30,13 @@ yedeklerine düşerler. Yerleşim buna göre paylıdır.
 
 ## Tema
 
-`langgraph-state-machine` ve `e2e-system-flow`, `diagram-design` eklentisinin **Cezeri
-Robot** derisiyle üretilir: kağıt `#f2f5f7`, mürekkep `#1b242c`, vurgu `#0090ba`, bağlantı
-`#04253c`. Palet <https://www.cezerirobot.com/tr/> adresinden ve marka logosundan
-örneklenmiştir; metin ailesi sitenin yüklediği **Raleway**'dir. Marka monospace
-taşımadığı için `Geist Mono` korunmuştur.
+`system-architecture`, `langgraph-state-machine` ve `e2e-system-flow`, `diagram-design`
+eklentisinin **Cezeri Robot** derisiyle üretilir. Açık zeminde kağıt `#f2f5f7`, mürekkep
+`#1b242c`, vurgu `#0090ba`, bağlantı `#04253c`; sistem mimarisinin koyu sürümünde bunların
+profildeki karşılıkları `#1b242c`, `#f2f5f7`, `#2bb3d8` ve `#8ec6de` kullanılır. Palet
+<https://www.cezerirobot.com/tr/> adresinden ve marka logosundan örneklenmiştir; metin
+ailesi sitenin yüklediği **Raleway**'dir. Marka monospace taşımadığı için `Geist Mono`
+korunmuştur.
 
 Deri, depo kökündeki `.diagram-design` işaretçisiyle seçilir (`profile: cezeri`); profilin
 kendisi `~/.diagram-design/profiles/cezeri.md` altındadır ve depoda **değildir**. Başka bir

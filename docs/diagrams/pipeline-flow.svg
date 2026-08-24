@@ -60,7 +60,7 @@
   <text x="256" y="385" fill="#8e98ac" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">NODE</text>
   <text x="464" y="396" fill="rgba(245,245,245,0.08)" font-size="20" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">03</text>
   <text x="352" y="404" fill="#f5f5f5" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ACQUIRE</text>
-  <text x="352" y="420" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">crawl4ai · parsers/</text>
+  <text x="352" y="420" fill="#bfc0c0" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">git clone · crawl4ai · Jina · parsers/</text>
 
   <rect x="232" y="472" width="240" height="72" rx="6" fill="#2d3142"/>
   <rect x="232" y="472" width="240" height="72" rx="6" fill="#393e53" stroke="#f5f5f5" stroke-width="1"/>

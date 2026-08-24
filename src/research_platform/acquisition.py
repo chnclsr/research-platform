@@ -13,6 +13,11 @@ from urllib.parse import urljoin, urlparse, urlsplit
 import httpx
 
 from .config import Settings
+from .github_repository import (
+    GitHubRepositoryError,
+    clone_and_render_repository,
+    parse_github_repository_url,
+)
 from .normalization import canonicalize_url, detect_document_type, detect_language
 from .parsers import ParsedDocument, ParserRegistry, build_parser_registry
 from .schemas import AcquiredDocument, ConnectorCandidate
@@ -50,10 +55,12 @@ class UnsafeUrlError(ValueError):
 # The order AcquisitionService.acquire() falls through, named so the pre-run plan can state
 # it without restating it. Zotero candidates short-circuit before any of these.
 ACQUISITION_STRATEGY_ORDER = (
+    "github_repository",
     "direct",
     "scholarly_metadata",
     "agentsearch_read",
     "crawl4ai",
+    "jina_reader",
     "scrapling",
 )
 
@@ -155,6 +162,10 @@ class AcquisitionService:
         except Exception as exc:
             return AcquiredDocument(candidate=candidate, success=False, error=str(exc), strategies_tried=tried)
 
+        github = await self._github_repository(url, candidate, tried)
+        if github and github.success:
+            return github
+
         direct = await self._direct(url, candidate, tried)
         if direct and direct.success:
             return direct
@@ -171,12 +182,16 @@ class AcquisitionService:
         if crawl and crawl.success:
             return crawl
 
+        jina = await self._jina_reader(url, candidate, tried)
+        if jina and jina.success:
+            return jina
+
         scrapling = await self._scrapling(url, candidate, tried)
         if scrapling and scrapling.success:
             return scrapling
 
-        error = (scrapling or crawl or agent or direct).error if (
-            scrapling or crawl or agent or direct
+        error = (scrapling or jina or crawl or agent or direct or github).error if (
+            scrapling or jina or crawl or agent or direct or github
         ) else "No strategy succeeded"
         return AcquiredDocument(
             candidate=candidate, success=False, access_status="unavailable",
@@ -263,6 +278,77 @@ class AcquisitionService:
             content_hash=hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None,
             strategies_tried=tried.copy(), error="Paywall detected" if restricted else None,
         )
+
+    async def _github_repository(
+        self, url: str, candidate: ConnectorCandidate, tried: list[str],
+    ) -> AcquiredDocument | None:
+        ref = parse_github_repository_url(url)
+        if ref is None or not self.settings.enable_github_repository_handler:
+            return None
+        tried.append("github_repository")
+        try:
+            reported_size = candidate.metadata.get("size")
+            if reported_size is not None:
+                try:
+                    reported_bytes = int(reported_size) * 1024
+                except (TypeError, ValueError):
+                    reported_bytes = 0
+                if reported_bytes > self.settings.github_repository_max_bytes:
+                    raise GitHubRepositoryError(
+                        "GitHub reports a repository size above the clone limit"
+                    )
+            snapshot = await clone_and_render_repository(
+                ref,
+                timeout_s=self.settings.github_clone_timeout_s,
+                max_repository_bytes=self.settings.github_repository_max_bytes,
+                max_files=self.settings.github_repository_max_files,
+                max_file_bytes=self.settings.github_repository_max_file_bytes,
+                max_chars=self.settings.github_repository_max_chars,
+            )
+            candidate.metadata.update(
+                {
+                    "content_scope": "repository_readme_manifests_and_source",
+                    "repository_commit": snapshot.commit,
+                    "repository_files_included": list(snapshot.included_files),
+                    "repository_files_skipped": snapshot.skipped_files,
+                    "repository_snapshot_truncated": snapshot.truncated,
+                }
+            )
+            parsed = ParsedDocument(
+                text=snapshot.markdown,
+                document_type="text",
+                parser_id="github_repository_structured",
+                canonical_url=ref.web_url,
+                parse_provenance={
+                    "engine": "git",
+                    "clone_depth": 1,
+                    "commit": snapshot.commit,
+                    "checkout_bytes": snapshot.checkout_bytes,
+                    "files_included": len(snapshot.included_files),
+                    "files_skipped": snapshot.skipped_files,
+                    "truncated": snapshot.truncated,
+                    "cleanup_confirmed": snapshot.cleanup_confirmed,
+                },
+            )
+            return self._document(
+                candidate,
+                snapshot.markdown,
+                "github_repository",
+                tried,
+                "text/markdown",
+                document_type="text",
+                final_url=ref.web_url,
+                canonical_url=ref.web_url,
+                parsed=parsed,
+            )
+        except (GitHubRepositoryError, OSError) as exc:
+            logger.warning("GitHub repository acquisition failed for %s: %s", ref.web_url, exc)
+            return AcquiredDocument(
+                candidate=candidate,
+                success=False,
+                strategies_tried=tried.copy(),
+                error=str(exc),
+            )
 
     async def _direct(self, url: str, candidate: ConnectorCandidate, tried: list[str]) -> AcquiredDocument | None:
         tried.append("direct")
@@ -430,6 +516,47 @@ class AcquisitionService:
             )
         except Exception as exc:
             return AcquiredDocument(candidate=candidate, success=False, strategies_tried=tried, error=str(exc))
+
+    async def _jina_reader(
+        self, url: str, candidate: ConnectorCandidate, tried: list[str],
+    ) -> AcquiredDocument | None:
+        if not self.settings.enable_jina_reader_fallback:
+            return None
+        tried.append("jina_reader")
+        try:
+            # The target URL has already passed validate_public_url() in acquire(). Reader
+            # is a fixed intermediary: never forward target-site credentials or cookies.
+            endpoint = f"{self.settings.jina_reader_url.rstrip('/')}/{url}"
+            response = await self.client.get(
+                endpoint,
+                headers={
+                    "User-Agent": self.settings.user_agent,
+                    # Jina's default auto mode may choose its non-JS curl engine. This
+                    # fallback specifically exists for bot-protected and client-rendered
+                    # pages left empty by the preceding strategies.
+                    "X-Engine": "browser",
+                },
+                timeout=self.settings.jina_reader_timeout_s,
+            )
+            response.raise_for_status()
+            if len(response.content) > self.settings.max_download_bytes:
+                raise ValueError("Jina Reader response exceeds download limit")
+            markdown = response.text.strip()
+            if len(markdown) < 400:
+                return None
+            return self._document(
+                candidate,
+                markdown,
+                "jina_reader",
+                tried,
+                response.headers.get("content-type", "text/plain"),
+                document_type="text",
+                final_url=url,
+            )
+        except (httpx.HTTPError, ValueError) as exc:
+            return AcquiredDocument(
+                candidate=candidate, success=False, strategies_tried=tried, error=str(exc),
+            )
 
     async def _scrapling(
         self, url: str, candidate: ConnectorCandidate, tried: list[str],

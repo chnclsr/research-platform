@@ -12,9 +12,10 @@ Açık işler [OPEN_ITEMS.md](../OPEN_ITEMS.md), sürüm sürüm değişiklik ö
 
 - **Küçük değişiklikler** kökteki `DEVELOPMENTS_IMPLEMENTATION_REPORT.md`'ye **bölüm**
   olarak eklenir.
-- **Büyük değişiklikler** — şema göçü içeren veya birden çok servisi kapsayanlar — bu
-  klasörde **sürümlü kendi raporunu** alır ve aşağıdaki tabloya işlenir. Kökteki rapora
-  yalnız tek satırlık bir işaretçi konur.
+- **Büyük değişiklikler** — şema göçü içeren veya birden çok servisi kapsayanlar — depo
+  kökünde **sürümlü kendi raporunu** alır ve aşağıdaki tabloya işlenir. Kökteki aktif
+  geliştirme raporuna yalnız tek satırlık bir işaretçi konur. `previous_reports/` yalnız
+  v0.9.1 ve öncesinin tarihsel arşividir; buraya yeni rapor eklenmez.
 
 İlk örneği v0.10.0 kullanıcı kimliği çalışmasıdır.
 
@@ -73,6 +74,9 @@ Böylece okuyan yanılmaz, kayıt bozulmaz. Mevcut örnekler:
 | v0.9.0 | [FIGURE_INTELLIGENCE_V0.9.0_IMPLEMENTATION_REPORT](FIGURE_INTELLIGENCE_V0.9.0_IMPLEMENTATION_REPORT.md) | Kaynak figürü anlama |
 | v0.9.1 | [SOURCE_FIGURE_EMBEDDING_V0.9.1_IMPLEMENTATION_REPORT](SOURCE_FIGURE_EMBEDDING_V0.9.1_IMPLEMENTATION_REPORT.md) | Figürü Word raporuna yerleştirme |
 | v0.10.0 | [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT](../MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md) | Kullanıcı kimliği ve koşu sahipliği — **kökte**, arşivde değil |
+| v0.11.0 | [PRIORITY_QUEUE_V0.11.0_IMPLEMENTATION_REPORT](../PRIORITY_QUEUE_V0.11.0_IMPLEMENTATION_REPORT.md) | Öncelikli koşu kuyruğu — **kökte**, arşivde değil |
+| v0.12.0 | [PARALLEL_RUNS_V0.12.0_IMPLEMENTATION_REPORT](../PARALLEL_RUNS_V0.12.0_IMPLEMENTATION_REPORT.md) | Donanıma göre paralel koşular — **kökte**, arşivde değil |
+| v0.13.0 | [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT](../DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md) | Ağır PDF yolu ve GPU'lu Docling servisi — **kökte**, arşivde değil |
 | — | [AGENT_GATEWAY_ARCHITECTURE_REPORT](AGENT_GATEWAY_ARCHITECTURE_REPORT.md) | Agent gateway mimarisi |
 | — | [COVERAGE_RECOVERY_REDESIGN_REPORT](COVERAGE_RECOVERY_REDESIGN_REPORT.md) | Coverage recovery yeniden tasarımı |
 | — | [COVERAGE_RECOVERY_IMPLEMENTATION_REPORT](COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md) | Coverage recovery uygulaması |

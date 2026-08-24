@@ -99,7 +99,7 @@ def test_plan_carries_models_acquisition_order_and_rejection_feedback():
     plan = plan_for(protocol(), plan_feedback=["Add regulatory sources"])
     assert plan["models"]["llm"] == settings.llm_model
     assert plan["models"]["context_tokens"] == settings.llm_context_tokens
-    assert plan["acquisition"]["strategy_order"][0] == "direct"
+    assert plan["acquisition"]["strategy_order"][:2] == ["github_repository", "direct"]
     assert "html_structured" in plan["acquisition"]["parsers"]
     assert plan["feedback"] == ["Add regulatory sources"]
     assert plan["revision"] == 1

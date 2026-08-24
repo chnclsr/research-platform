@@ -75,10 +75,13 @@ and bibliographic similarity.
 
 Acquisition follows a legal and observable resolver chain:
 
-1. open API or directly downloadable content;
-2. AgentSearch reading;
-3. Crawl4AI for structural or dynamic pages;
-4. a controlled Scrapling fallback where configured.
+1. depth-one snapshots for GitHub repository URLs, rendered from tracked README,
+   manifest, and source files;
+2. open API or directly downloadable content;
+3. AgentSearch reading;
+4. Crawl4AI for structural or dynamic pages;
+5. Jina Reader's browser engine for pages still blocked or empty;
+6. a controlled Scrapling fallback where configured.
 
 Failed strategies and access restrictions are recorded. Restricted content triggers a search
 for lawful open-access alternatives; it does not trigger paywall circumvention.
