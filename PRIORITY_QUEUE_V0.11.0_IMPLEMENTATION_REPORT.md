@@ -22,7 +22,7 @@ yalnızca "hangisi önce geldi" olmasıydı.
 
 arq'ta bir `Worker` tam olarak bir `queue_name` tüketir. İki gerçek kuyruk iki worker
 süreci demektir; iki worker ise aynı GPU için yarışır ve bütün kurulumun üzerine kurulu
-olduğu tek-iş serileştirmesini bozar — CLAUDE.md'deki "ikinci bir worker aynı ARQ kuyruğu
+olduğu tek-iş serileştirmesini bozar — AGENTS.md'deki "ikinci bir worker aynı ARQ kuyruğu
 ile GPU için yarışır" uyarısı tam olarak bu.
 
 Bunun yerine tek kuyruğun **içinde iki bant** açıldı. Kullanıcı açısından davranış istenen

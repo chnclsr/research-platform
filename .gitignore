@@ -23,7 +23,9 @@ research/pdf-parser/results/c1_rc1/predictions.jsonl
 # Generated review interface: 3 MB of HTML plus ~34 MB of rendered page images,
 # all reproducible from the corpus by scripts/hata_arayuzu.py.
 research/pdf-parser/html/
-CLAUDE.md
+# Ajan yonergeleri: tek dosya, AGENTS.md. Makineye ozgu yollar ve bu kurulumun
+# tuzaklari icinde oldugu icin depoya girmiyor.
+AGENTS.md
 .claude/
 # Ekran görüntüleri ve tek seferlik sunum çıktıları. docs/diagrams/ depoda kalır --
 # README onlara bağlanıyor; buradakiler yalnız o günkü ekranı gösteriyor.

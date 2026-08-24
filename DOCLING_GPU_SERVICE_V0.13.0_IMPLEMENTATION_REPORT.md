@@ -72,7 +72,7 @@ Uygulama sonuçları:
 
 ## GPU'lu ve GPU'suz makine
 
-Profil (`--profile docling`) kullanılmadı: CLAUDE.md'de yazılı `telegram-bot` tuzağının
+Profil (`--profile docling`) kullanılmadı: AGENTS.md'de yazılı `telegram-bot` tuzağının
 aynısını üretirdi — düz `docker compose up -d --build` servise dokunmaz, servis eski
 imajla ayakta kalır ve hata vermediği için fark edilmez.
 
@@ -213,7 +213,7 @@ kasıtlı bir dağıtımdır, arıza değil.
 
 ## Bilinçli olarak değiştirilen eski kararlar
 
-CLAUDE.md gereği açıkça yazılıyor:
+AGENTS.md gereği açıkça yazılıyor:
 
 | Nerede | Eski karar | Yeni | Neden |
 |---|---|---|---|

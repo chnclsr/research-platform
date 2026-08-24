@@ -56,7 +56,7 @@ koşu bazında **elle** temizlik ekle. Otomatik retention en son ve varsayılan 
 karşı korur; **disk arızasına veya makine kaybına karşı korumaz.**
 
 **Yapılacak:** Asıl sunucuda farklı bir sürücüye veya ağ paylaşımına yönlendir. Mekanizma
-hazır, sadece hedef değişmeli. Güncelleme yolu `CLAUDE.md`'de yazılı (setup'ı yeniden
+hazır, sadece hedef değişmeli. Güncelleme yolu `AGENTS.md`'de yazılı (setup'ı yeniden
 çalıştırma — `-InitializeOnly` tuzağı).
 
 ## 4. Resume sonrası ham veri kaybı
@@ -171,7 +171,7 @@ eklendiğinde anlam kazanır; bugün tek parser varken aynı çıktıyı verir.
 **Durum:** `CONTROL_PANEL_DEPLOYMENT=docker` ile çözüldü, ancak ayar `native` bırakılırsa
 "Başlat" düğmesi port çakışmasına ve aynı ARQ kuyruğunda ikinci bir worker'a yol açıyor.
 
-**Durum: belgelendi**, kod değişikliği planlanmıyor. `CLAUDE.md`'de kritik tuzak olarak
+**Durum: belgelendi**, kod değişikliği planlanmıyor. `AGENTS.md`'de kritik tuzak olarak
 yazılı.
 
 ---
