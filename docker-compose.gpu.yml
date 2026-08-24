@@ -1,0 +1,48 @@
+# GPU overlay. Everything here is the difference between a machine with an NVIDIA card
+# and one without; the base file stays runnable on both.
+#
+# HOW TO TURN IT ON. Put these TWO lines in .env (which is per-machine and gitignored):
+#
+#   COMPOSE_PATH_SEPARATOR=:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+#
+# Both lines, not one. COMPOSE_FILE's separator defaults to the platform's -- ";" on
+# Windows, ":" elsewhere -- so a single line written with ":" fails on Windows with
+# "cannot find the file docker-compose.yml:docker-compose.gpu.yml" (verified
+# 2026-08-21). Naming the separator makes the same two lines work on both.
+#
+# Compose reads COMPOSE_FILE from the project .env, so every ordinary command --
+# `docker compose up -d --build`, `docker compose ps`, `docker compose logs` -- picks
+# the overlay up with no extra flags. That is the point: a `-f` you have to remember is
+# a `-f` you will forget, and the failure would be silent (the service would come back
+# up on CPU and quietly produce different text).
+#
+# WHY THE BUDGETS MOVE TOO. A GPU deployment is ~3x faster per page (measured, same
+# machine: 1622 -> 530 ms/page) and does not need the CPU slack. They are set on the
+# worker alone because it is the only service that runs acquisition; api, mcp-gateway
+# and telegram-bot never call the heavy engine.
+
+services:
+  docling:
+    build:
+      args:
+        # CUDA wheels for the card measured on this hardware: RTX 4060, driver 595.79,
+        # CUDA 13.2. torch's own index decides the build; PyPI's default would be CPU.
+        TORCH_VARIANT: cu132
+    environment:
+      # Asserted, not detected. The service exits if it cannot get a CUDA device --
+      # CPU output is not interchangeable with GPU output (261-page corpus: 7 pages
+      # differ, one loses a markdown table), and content_hash is the sha256 of it.
+      DOCLING_DEVICE: cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  worker:
+    environment:
+      SMART_ROUTER_QUEUE_WAIT_S: "300"
+      SMART_ROUTER_HEAVY_TIMEOUT_S: "900"

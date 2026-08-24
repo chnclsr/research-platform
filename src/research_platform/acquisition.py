@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import base64
 import hashlib
 import ipaddress
@@ -37,8 +36,6 @@ def _provenance_note(parsed: ParsedDocument) -> str:
     }
     return f" provenance={interesting}" if interesting else ""
 
-
-logger = logging.getLogger(__name__)
 
 PAYWALL_MARKERS = (
     "subscribe to continue", "subscription required", "become a subscriber",

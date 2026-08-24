@@ -782,3 +782,201 @@ def test_merge_reports_no_device_when_the_engine_did_not_name_one():
         requested={"docling": [1]},
     )
     assert merged.engine_devices == {}
+
+
+# --- The docling service (v0.13.0) -------------------------------------------
+# The heavy path moved from "import it here" to "call the service", so the tests
+# below stand where the old assumptions used to: which transport gets picked, and
+# what happens to a page when the transport fails. None of them need a GPU, a
+# service, or docling installed -- an engine that cannot run is exactly the case
+# that has to stay safe.
+
+
+def _servissiz(monkeypatch):
+    """Silence every source of a service URL, including a real .env file."""
+    from research_platform.parsers.smart_router import engines
+
+    monkeypatch.delenv(engines.URL_ENV, raising=False)
+    monkeypatch.setattr(engines, "_ayardan_url", lambda: "")
+
+
+def test_http_engine_stays_out_of_the_way_when_no_service_is_configured(monkeypatch):
+    """An unconfigured service must be a no-op, not a failed request per document."""
+    from research_platform.parsers.smart_router import engines
+
+    _servissiz(monkeypatch)
+    monkeypatch.setattr(
+        engines.HttpDoclingEngine, "_saglik",
+        lambda self: pytest.fail("unconfigured service was probed"),
+    )
+    ok, detail = engines.HttpDoclingEngine().available()
+    assert ok is False
+    assert engines.URL_ENV in detail
+
+
+def test_http_engine_reports_the_service_device_in_its_availability(monkeypatch):
+    """Health has to say WHICH device answered: cpu and gpu are different documents."""
+    from research_platform.parsers.smart_router import engines
+
+    monkeypatch.setenv(engines.URL_ENV, "http://docling:3941")
+    monkeypatch.setattr(
+        engines.HttpDoclingEngine, "_saglik",
+        lambda self: (True, "docling service (docling 2.121.0, torch 2.13.0+cu132)",
+                      "cuda", "docling 2.121.0, torch 2.13.0+cu132"),
+    )
+    ok, detail = engines.HttpDoclingEngine().available()
+    assert ok is True
+    assert "cu132" in detail
+
+
+def test_a_failed_service_call_keeps_the_page_instead_of_losing_it(monkeypatch):
+    """
+    The service is allowed to be down. The page is not allowed to disappear.
+
+    Acquisition drops any document under 400 characters, so a page that vanishes on
+    a transport error is a source that vanishes with it.
+    """
+    from research_platform.parsers.smart_router import engines
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    monkeypatch.setenv(engines.URL_ENV, "http://docling:3941")
+    monkeypatch.setattr(
+        engines.HttpDoclingEngine, "_saglik",
+        lambda self: (True, "docling service", "cuda", "build"),
+    )
+    monkeypatch.setattr(
+        engines.HttpDoclingEngine, "_istek",
+        lambda self, path, blocks: ({}, [], "ConnectError: connection refused", "", ""),
+    )
+
+    engine = engines.HttpDoclingEngine()
+    result = engine.extract("nonexistent.pdf", [1])
+    assert result.ok is False
+    assert result.degraded is True
+
+    merged = birlestir(
+        {1: "the fast path text"}, results=[result], requested={engine.name: [1]}
+    )
+    assert merged.pages[0].text == "the fast path text"
+    assert merged.pages[0].fell_back is True
+    assert merged.degraded is True
+    assert any("connection refused" in note for note in merged.notes)
+
+
+def test_the_in_process_path_is_off_unless_it_is_asked_for(monkeypatch):
+    """
+    In-process docling cannot be timed out, so it must not be reached by accident.
+
+    Reversed deliberately on 2026-08-21: this used to be the first choice. parse()
+    runs on a worker thread that acquisition cannot cancel, so an overrunning
+    conversion holds the only heavy slot until it finishes on its own -- and the
+    moment docling lands in the application image, that becomes reachable without
+    anyone choosing it.
+    """
+    from research_platform.parsers.smart_router import engines
+
+    monkeypatch.setattr(engines, "_docling_importable", lambda: True)
+    monkeypatch.delenv(engines.KOPRU_ENV, raising=False)
+
+    monkeypatch.delenv(engines.IC_SUREC_ENV, raising=False)
+    ok, detail = engines.DoclingEngine().available()
+    assert ok is False
+    assert engines.IC_SUREC_ENV in detail
+
+    monkeypatch.setenv(engines.IC_SUREC_ENV, "1")
+    ok, detail = engines.DoclingEngine().available()
+    assert ok is True
+    assert "in-process" in detail
+
+
+def test_bridged_wins_over_in_process_when_both_are_possible(monkeypatch, tmp_path):
+    """
+    Only the bridged path can be killed on a timeout, so it is preferred.
+
+    Before the modes were resolved in one place, available() said in-process while
+    extract() decided separately -- the two could name different modes for the same
+    call, and provenance recorded whichever one asked.
+    """
+    from research_platform.parsers.smart_router import engines
+
+    interpreter = tmp_path / "python.exe"
+    interpreter.write_text("", encoding="utf-8")
+    monkeypatch.setattr(engines, "_docling_importable", lambda: True)
+    monkeypatch.setenv(engines.IC_SUREC_ENV, "1")
+
+    engine = engines.DoclingEngine(python_path=str(interpreter))
+    assert engine._mode() == "bridged"
+    assert "bridged" in engine.available()[1]
+
+
+def test_the_service_is_tried_before_the_local_engines():
+    """
+    Order is a behaviour, not a detail: the service is the only mode that can hold a
+    GPU the worker container does not have, and the only one where the models stay
+    resident between documents.
+    """
+    from research_platform.parsers.smart_pdf import _heavy_engines
+
+    names = [type(engine).__name__ for engine in _heavy_engines()]
+    assert names == ["HttpDoclingEngine", "DoclingEngine", "MinerUEngine"]
+
+
+def test_health_reports_the_same_engine_the_run_would_use(monkeypatch):
+    """
+    A health line that disagrees with what parse() does is worse than none.
+
+    Both read _heavy_engines(); this pins that they keep doing so.
+    """
+    from research_platform.parsers import smart_pdf
+    from research_platform.parsers.smart_router.engines import MinerUEngine
+
+    class _Servis:
+        name = "docling-service"
+
+        def available(self):
+            return True, "docling service at http://docling:3941 (cuda)"
+
+    monkeypatch.setattr(smart_pdf, "_heavy_engines", lambda: [_Servis(), MinerUEngine()])
+    ok, detail = smart_pdf.SmartPdfParser().available()
+    assert ok is True
+    assert "heavy path via docling service" in detail
+
+
+def test_no_heavy_engine_names_every_reason_not_just_the_last(monkeypatch):
+    """An operator debugging a missing heavy path needs all the refusals, not one."""
+    from research_platform.parsers import smart_pdf
+
+    class _Yok:
+        def __init__(self, ad):
+            self.ad = ad
+
+        def available(self):
+            return False, f"{self.ad} is not configured"
+
+    monkeypatch.setattr(
+        smart_pdf, "_heavy_engines", lambda: [_Yok("service"), _Yok("bridge")]
+    )
+    _, detail = smart_pdf.SmartPdfParser().available()
+    assert "service is not configured" in detail
+    assert "bridge is not configured" in detail
+    assert "TEXT ONLY" in detail
+
+
+def test_the_engine_build_reaches_provenance():
+    """
+    The device alone does not pin the output: a docling upgrade moves the text on the
+    same card, and content_hash moves with it. Both have to be recorded.
+    """
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    merged = birlestir(
+        {1: "fast"},
+        results=[EngineResult(
+            engine="docling-service", pages={1: "heavy"}, device="cuda",
+            build="docling 2.121.0, torch 2.13.0+cu132, NVIDIA GeForce RTX 4060",
+        )],
+        requested={"docling-service": [1]},
+    )
+    assert merged.engine_devices == {"docling-service": "cuda"}
+    assert "2.121.0" in merged.engine_builds["docling-service"]

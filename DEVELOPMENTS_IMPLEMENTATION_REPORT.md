@@ -1,8 +1,8 @@
 # `developments` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.12.0`
+Platform sürümü: `v0.13.0`
 
-Belge sürümü: `12.11`
+Belge sürümü: `12.12`
 
 Son güncelleme: `2026-08-21`
 
@@ -39,9 +39,16 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 24 | Öncelikli koşu kuyruğu (kendi raporu var) | `9b1c887` |
 | 25 | Donanıma göre paralel koşular (kendi raporu var) | `9b1c887` |
 | 26 | Koşuyu izsiz silme: `research-admin purge-runs` | `9b1c887` |
+| 27 | Ağır PDF yolu: docling GPU servisi (kendi raporu var) | _commit bekliyor_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
+>
+> **Not:** 27. bölümün ayrıntıları
+> [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md](DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md)
+> dosyasındadır. O iş, `engines.py`'nin "Docling'e iki yol" kararını ve in-process
+> yolun birinci tercih olmasını bilinçli olarak değiştirir; gerekçe orada tablo
+> hâlindedir.
 >
 > **Not:** 13. bölüm, 11. bölümdeki izolasyon kararını bilinçli olarak gevşetir —
 > hangi yönüyle olduğu o bölümde tablo hâlinde yazılıdır.

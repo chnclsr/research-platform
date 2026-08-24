@@ -1,15 +1,41 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.12.0`
+Platform sürümü: `v0.13.0`
 
-Belge sürümü: `6.5`
+Belge sürümü: `6.6`
 
 Son güncelleme: `2026-08-21`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
 [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
+ve [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md](DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.13.0 — 2026-08-21
+
+- **PDF'lerin ağır ayrıştırma yolu artık gerçekten koşuyor.** Sayfa yönlendirme zaten
+  vardı ama gönderdiği sayfaları alacak bir motor hiçbir yerde çalışmıyordu: 12 gerçek
+  koşu PDF'i üzerinde ölçüldüğünde 372 sayfanın 138'i ağır motora yönlendiriliyor ve
+  **hiçbiri** işlenmiyordu. Docling artık kendi servisinde koşuyor; aynı 12 belgede 138
+  sayfanın 138'i işlendi, **120 tablo** yapısal olarak kurtarıldı (öncesi: 0) ve toplam
+  metin %12,8 arttı. Belgeler artık `degraded` işaretlenmiyor.
+- **NVIDIA kartı olan makinede GPU kullanılıyor.** `.env`'e iki satır eklemek yeterli;
+  komutlar değişmiyor. Kartı olmayan makinede aynı yığın CPU'da çalışır — daha yavaş,
+  ama eksiksiz.
+- **Hangi cihazın ürettiği artık kayıt altında.** Aynı PDF, aynı Docling sürümü, CPU ve
+  GPU'da farklı metin üretiyor. Bu yüzden cihaz tahmin edilmiyor: hangi cihazın
+  isteneceği açıkça yazılıyor, istenen cihaz bulunamazsa servis başlamıyor, ve her
+  belgenin kaydında hangi cihaz ve hangi sürümle ayrıştırıldığı duruyor.
+- **Ağır motor ulaşılamazsa hiçbir sayfa kaybolmuyor.** Servis kapalıysa ya da zaman
+  aşımına uğrarsa sayfa hızlı yol metnini koruyor, belge `degraded` işaretleniyor ve
+  gerekçe kaydına yazılıyor.
+- Sistem sağlığı ekranı artık ağır yolun durumunu ve hangi cihazda koştuğunu gösteriyor.
+- **Teslimat paketindeki üretilebilirlik manifestosu artık her kaynağın nasıl
+  ayrıştırıldığını da yazıyor.** Önceden yalnız "kullanıcı hangi parser'ı zorladı"
+  bilgisi vardı; şimdi hangi parser'ın seçildiği, hangi motorun kaç sayfayı ürettiği,
+  hangi cihazda ve hangi sürümle ürettiği kayıtta. Bir belgenin metnini yeniden
+  üretmek isteyen biri için gereken bilgi buydu.
 
 ## v0.12.0 — 2026-08-21
 

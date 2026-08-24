@@ -166,13 +166,25 @@ def _gpu_slots(measurement: Measurement, settings: Settings) -> int:
     with a margin, Ollama evicts and reloads on every switch between them -- and parallel
     runs alternate between the two far more often than one run does. That thrash is worth
     avoiding, so the answer there is a single run.
+
+    DOCLING IS A SECOND CONSUMER THIS FUNCTION CANNOT SEE. `resident_vram_gb` comes from
+    Ollama, and :func:`model_lease` serialises Ollama calls -- neither covers a GPU
+    docling service sitting on the same card. It does not queue behind the lease either:
+    parse() runs on a worker thread and the lease is an asyncio primitive, so making it
+    wait there would mean cross-loop signalling to buy mutual exclusion nobody asked for
+    (one run's acquisition and another's analysis overlapping is the point of parallel
+    runs). A flat reservation is the honest model instead: the service keeps its models
+    resident, so its VRAM is a constant, not a spike. Settings default it to 0.0 and it
+    is meant to be measured with nvidia-smi during a conversion, not guessed.
     """
     if measurement.resident_vram_gb is None:
         # The probe failed. Say nothing rather than something wrong: RAM and CPU still
         # bound the answer, and treating an unreachable Ollama as "no GPU pressure" would
         # be the one reading that cannot be justified.
         return ABSOLUTE_GUARD
-    headroom = settings.gpu_vram_total_gb - measurement.resident_vram_gb
+    headroom = (settings.gpu_vram_total_gb
+                - measurement.resident_vram_gb
+                - settings.docling_vram_reserve_gb)
     return ABSOLUTE_GUARD if headroom >= settings.gpu_vram_margin_gb else 1
 
 

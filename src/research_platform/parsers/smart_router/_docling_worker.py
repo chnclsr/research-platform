@@ -81,6 +81,25 @@ def cihaz() -> str:
         return f"bilinmiyor ({type(exc).__name__})"
 
 
+def yapi() -> str:
+    """Docling + torch + accelerator, as one string for provenance.
+
+    The device alone does not pin the output -- a docling upgrade changes the text on
+    the same card -- so `cihaz()`'s answer travels with the versions that produced it.
+    Read from installation metadata: docling exports no `__version__`.
+    """
+    import importlib.metadata as _metadata
+
+    parcalar = []
+    for paket in ("docling", "torch"):
+        try:
+            parcalar.append(f"{paket} {_metadata.version(paket)}")
+        except Exception:
+            parcalar.append(f"{paket} bilinmiyor")
+    parcalar.append(cihaz())
+    return ", ".join(parcalar)
+
+
 def run(pdf_path: str, blocks: list[list[int]]) -> dict:
     from docling.document_converter import DocumentConverter
 
@@ -106,7 +125,7 @@ def run(pdf_path: str, blocks: list[list[int]]) -> dict:
                 continue
             if flattened:
                 tables.append(flattened)
-    return {"pages": pages, "tables": tables, "device": cihaz()}
+    return {"pages": pages, "tables": tables, "device": cihaz(), "build": yapi()}
 
 
 def main(argv: list[str]) -> int:

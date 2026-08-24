@@ -55,6 +55,44 @@ def _is_reportable(claim: Any) -> bool:
     return claim.status in {"supported", "qualified"} and relevance >= 0.20 and supporting > 0
 
 
+def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
+    """How each source was ACTUALLY parsed, for the reproducibility manifest.
+
+    `protocol.parsers` already sits in the manifest, but it records the caller's
+    overrides -- a request, not an outcome. It said `{"overrides": {}}` for a run whose
+    PDF went through smart_pdf and had 15 of its 43 pages re-extracted by Docling on a
+    CUDA device, and nothing in the manifest said so.
+
+    That gap matters more than it looks. `content_hash` is the sha256 of the parsed
+    text, and the same PDF does not produce the same text on CPU and on CUDA -- measured
+    on a 261-page corpus, 7 pages differ and one loses a whole markdown table. A manifest
+    that names the protocol but not the engine and the accelerator cannot be used to
+    reproduce the run it describes.
+
+    Only the keys that decide the output are copied. The per-page breakdown stays in
+    `13_raw_sources.jsonl`: a manifest answers "what produced this", the raw dump carries
+    the audit trail. Keys a parser did not set are dropped rather than written as null,
+    so a single-extractor source stays a three-line record.
+    """
+    kept = (
+        "parser_profile", "engine_counts", "engine_devices", "engine_build",
+        "engine_version", "router_version", "esik_version", "degraded",
+    )
+    records: list[dict[str, Any]] = []
+    for source, version in versions:
+        provenance = version.provenance or {}
+        parse = provenance.get("parse_provenance") or {}
+        record: dict[str, Any] = {
+            "source_id": source.id,
+            "content_hash": version.content_hash,
+            "document_type": provenance.get("document_type"),
+            "parser_id": provenance.get("parser_id"),
+        }
+        record.update({key: parse[key] for key in kept if parse.get(key) is not None})
+        records.append(record)
+    return records
+
+
 async def build_exports(
     run_id: str,
     protocol: ResearchProtocol,
@@ -404,6 +442,7 @@ async def build_exports(
             sort_keys=False,
         ).encode("utf-8"),
     )
+    versions = await repo.list_source_versions(run_id)
     manifest = {
         "run_id": run_id,
         "protocol": protocol.model_dump(mode="json"),
@@ -412,6 +451,7 @@ async def build_exports(
         "reportable_claim_count": len(reportable),
         "excluded_claim_count": len(excluded),
         "source_ids": [s.id for s in sources],
+        "parsing": _parsing_manifest(versions),
         "coverage": coverage.model_dump(),
     }
     files["10_reproducibility_manifest.json"] = (
@@ -448,7 +488,6 @@ async def build_exports(
     )
     files["12_uncertainty_report.md"] = ("text/markdown", uncertainty_md.encode("utf-8"))
 
-    versions = await repo.list_source_versions(run_id)
     raw_source_lines = []
     for source, version in versions:
         raw_source_lines.append(

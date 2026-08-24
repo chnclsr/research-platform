@@ -68,6 +68,11 @@ class MergedDocument:
     #: sha256 of that text, so which device produced a page belongs with which
     #: engine produced it.
     engine_devices: Dict[str, str] = field(default_factory=dict)
+    #: Engine name -> the docling/torch/accelerator build it reported. The device on
+    #: its own does not pin the output: an engine upgrade changes the text on the same
+    #: card. Kept beside the device so an audit can explain a content_hash that moved
+    #: while the document did not.
+    engine_builds: Dict[str, str] = field(default_factory=dict)
     #: Pages the heavy path was supposed to handle but did not.
     fallback_pages: List[int] = field(default_factory=list)
     #: Tables the heavy engine recovered as a grid: {"page", "headers", "rows"}.
@@ -290,9 +295,12 @@ def birlestir(
     denenip_reddedilen: List[int] = []
     kararlar: Dict[int, _Karar] = {}
     devices: Dict[str, str] = {}
+    builds: Dict[str, str] = {}
     for result in results:
         if result.device:
             devices[result.engine] = result.device
+        if getattr(result, "build", ""):
+            builds[result.engine] = result.build
         table_candidates.extend((result.engine, table) for table in result.tables)
         if result.degraded or not result.ok:
             degraded = True
@@ -392,7 +400,7 @@ def birlestir(
             tables.append(table)
 
     return MergedDocument(
-        pages=merged, engine_counts=counts, engine_devices=devices,
+        pages=merged, engine_counts=counts, engine_devices=devices, engine_builds=builds,
         fallback_pages=fallbacks,
         tables=sorted(tables, key=lambda t: (t.get("page") or 0)),
         quarantined_pages=sorted(quarantined),

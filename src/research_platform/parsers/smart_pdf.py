@@ -28,7 +28,7 @@ try:
     from .smart_router import PDFCritic, PdfInspectorAdapter, ROUTER_VERSION, SmartRouterHatti
     from .smart_router.ayarlar import AYAR
     from .smart_router.engines import (
-        ENGINE_VERSION, DoclingEngine, EngineResult, MinerUEngine,
+        ENGINE_VERSION, DoclingEngine, EngineResult, HttpDoclingEngine, MinerUEngine,
     )
     from .smart_router.gate import ESIK_VERSION
     from .smart_router.merge import MergedDocument, birlestir, sayfa_basliklariyla
@@ -40,6 +40,21 @@ except Exception as exc:  # pragma: no cover - exercised only when deps are abse
     AYAR = None  # type: ignore[assignment]
     ROUTER_VERSION = ESIK_VERSION = ""
     _ROUTER_IMPORT_ERROR = f"{type(exc).__name__}: {exc}"
+
+
+def _heavy_engines() -> list:
+    """The heavy engines in the order they are tried, best transport first.
+
+    Service before local: it is the only mode that can hold a GPU the worker container
+    does not have, and the only one where the models stay resident between documents.
+    Local docling next, as the developer path and the fallback when the service is
+    down. MinerU last and still unexercised -- see its class docstring.
+
+    `available()` and `_run_heavy_pages` both read this, rather than each listing the
+    engines themselves; health that disagrees with what the run does is worse than no
+    health at all.
+    """
+    return [HttpDoclingEngine(), DoclingEngine(), MinerUEngine()]
 
 
 class SmartPdfParser(DocumentParser):
@@ -111,10 +126,17 @@ class SmartPdfParser(DocumentParser):
                 f"fast path DEGRADED to PyMuPDFFallback ({PdfInspectorAdapter.import_hatasi()}); "
                 "table/figure/OCR signals are the unmeasured heuristic, not pdf-inspector"
             )
-        engine_ready, engine_detail = DoclingEngine().available()
-        heavy_detail = (f"heavy path via {engine_detail}" if engine_ready
-                        else f"TEXT ONLY -- no heavy engine ({engine_detail}); "
-                             "scanned PDFs will not survive acquisition")
+        gerekceler = []
+        heavy_detail = ""
+        for engine in _heavy_engines():
+            engine_ready, engine_detail = engine.available()
+            if engine_ready:
+                heavy_detail = f"heavy path via {engine_detail}"
+                break
+            gerekceler.append(engine_detail)
+        if not heavy_detail:
+            heavy_detail = (f"TEXT ONLY -- no heavy engine ({'; '.join(gerekceler)}); "
+                            "scanned PDFs will not survive acquisition")
         return True, f"smart_router, {profil}, {fast_detail}, {heavy_detail}"
 
     def parse(self, content: bytes, *, url: str, content_type: str = "") -> ParsedDocument:
@@ -217,6 +239,10 @@ class SmartPdfParser(DocumentParser):
             # device is not interchangeable with the same document parsed on
             # another, and an operator has to be able to see which was used.
             "engine_devices": merged.engine_devices,
+            # And which build. The device says cuda; it does not say which docling and
+            # which torch produced the text on it, and an upgrade moves the text
+            # without moving the device.
+            "engine_build": merged.engine_builds,
             "degraded": merged.degraded,
             "notes": merged.notes,
             "engine_counts": merged.engine_counts,
@@ -253,10 +279,9 @@ class SmartPdfParser(DocumentParser):
         requested: dict[str, list[int]] = {}
         outstanding = list(heavy)
         # Ordered fallback rather than one hard-coded engine: if the first cannot
-        # run or misses pages, the next gets what is left. MinerU currently reports
-        # itself unavailable, so in practice this is Docling alone -- but the shape
-        # is here so wiring MinerU up is a change in one place, not a rewrite.
-        for engine in (DoclingEngine(), MinerUEngine()):
+        # run or misses pages, the next gets what is left. The order lives in
+        # _heavy_engines() so health() reports the same choice this loop makes.
+        for engine in _heavy_engines():
             if not outstanding:
                 break
             usable, _ = engine.available()

@@ -1,0 +1,59 @@
+# Docling service pins -- the packages that decide what text comes out of a PDF.
+#
+# WHY PINNED AT ALL. content_hash is the sha256 of the parsed text, and dedup,
+# snapshot keys and passage offsets all hang off it. Two builds of this image a
+# month apart must produce the same text for the same PDF, or the same document
+# arrives as a new SourceVersion for no reason anyone can see. The `>=2.120,<3`
+# range in pyproject.toml's `parsing` extra is fine for an optional dev install
+# and wrong for the image a deployment runs.
+#
+# WHY THIS SET AND NOT A FULL LOCK. These were resolved and verified on
+# 2026-08-21 against the corpus in research/pdf-parser (12 documents, 372 pages,
+# 138 routed pages, all produced). Every entry here is either Docling itself or
+# a library whose version changes model behaviour -- weights, tokenisation,
+# layout inference, image decoding. The remaining transitives are resolved at
+# build time; a full linux lock is produced from the built image (see the note
+# at the bottom) rather than guessed from a Windows resolve.
+#
+# torch and torchvision are NOT here: they come from the variant index in
+# Dockerfile.docling, because the CPU and CUDA builds are different wheels of
+# the same version and the index decides which.
+
+docling==2.121.0
+docling-core==2.92.0
+docling-ibm-models==3.14.0
+docling-parse==7.15.0
+doclang==0.7.3
+
+# Model runtime. transformers and tokenizers decide how the layout and OCR
+# models read; safetensors decides how the weights load.
+transformers==5.15.1
+tokenizers==0.22.2
+safetensors==0.8.0
+accelerate==1.14.0
+huggingface_hub==1.28.0
+
+# Image and geometry path. Docling rasterises pages through pypdfium2 and
+# pillow, and its layout post-processing goes through opencv/shapely/scipy --
+# a version bump in any of them moves box coordinates, which moves text order.
+pypdfium2==5.13.0
+pillow==12.3.0
+# docling bunu dogrudan bagimlilik olarak beyan ediyor; headless surumunu zorlamak
+# ise yaramiyor (ikisi de ayni cv2 ad alanini saglar ve non-headless kazanir).
+# Bedeli, Dockerfile.docling'deki X11 kutuphane katmani -- olculdu: headless pin'i
+# ile build `libxcb.so.1` eksikliginden dustu.
+opencv-python==5.0.0.93
+shapely==2.1.2
+scipy==1.18.0
+numpy==2.5.2
+rapidocr==3.9.2
+
+# The service itself.
+fastapi==0.141.1
+uvicorn==0.52.1
+python-multipart==0.0.32
+
+# PRODUCING A FULL LOCK. After a successful build:
+#   docker compose run --rm --no-deps --entrypoint pip docling freeze > docker/docling-lock-linux.txt
+# and pass it to pip with `-c` on the next build. Deferred rather than skipped;
+# tracked in OPEN_ITEMS.md.

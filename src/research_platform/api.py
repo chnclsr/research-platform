@@ -302,6 +302,21 @@ async def health(request: Request) -> dict:
         checks["crawl4ai"] = "ok" if response.is_success else "degraded"
     except Exception:
         checks["crawl4ai"] = "unavailable"
+    # The heavy half of PDF parsing. Carries the device in the value rather than just
+    # "ok": CPU and GPU do not produce the same text, so which one answered is the part
+    # worth seeing without a shell. "unconfigured" is a deliberate deployment, not a
+    # fault -- the router still routes, the pages it routes just keep their fast text.
+    if not settings.smart_router_docling_url:
+        checks["docling"] = "unconfigured"
+    else:
+        try:
+            response = await request.app.state.http.get(
+                f"{settings.smart_router_docling_url.rstrip('/')}/health", timeout=3
+            )
+            device = (response.json().get("device") or "?") if response.is_success else ""
+            checks["docling"] = f"ok ({device})" if response.is_success else "degraded"
+        except Exception:
+            checks["docling"] = "unavailable"
     try:
         scheme = "https" if settings.minio_secure else "http"
         response = await request.app.state.http.get(

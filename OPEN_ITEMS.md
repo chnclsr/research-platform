@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-19`
+Son güncelleme: `2026-08-24`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -15,7 +15,6 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 |---|---|---|---|
 | 1 | MinIO'da hiç temizlik yok — sınırsız disk büyümesi | Zamanla diski doldurur | **Yüksek** |
 | 2 | Yedekler kaynakla aynı diskte | Disk arızasında ikisi de gider | **Yüksek** |
-| 3 | PDF tabloları yapısal değil | Sayısal kanıt kaybı | Orta |
 | 4 | Resume sonrası ham veri kaybı | Kesilen koşuda figür analizi çalışmaz | Orta |
 | 5 | `raw_content` yedekliliği — geri yükleme yolu yok | Yedek var, kurtarma test edilmemiş | Düşük |
 | 6 | MinIO anahtar düzeni tutarsız | Temizlik yazmayı zorlaştırır | Düşük |
@@ -27,6 +26,9 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 12 | Panel `native` modda hâlâ zararlı | Yanlış modda çakışma | Belgelendi |
 | 13 | Tek bir belgenin kaydı tüm koşuyu düşürüyor | Toplanan her şey kaybolur | **Yüksek** |
 | 15 | Kanıt çıkarımında bütçe karakterle ölçülüyor | Latin dışı metinde 0 iddia | **Yüksek** |
+| 16 | CPU/GPU aynı PDF'ten farklı `content_hash` üretir | İki kurulumda iki sürüm | Düşük |
+| 17 | Docling imajı 11,9 GB, geçişli bağımlılıklar kilitsiz | Disk + build kayması | Orta |
+| 18 | Docling + Ollama kartı aynı anda paylaşınca ne olur, denenmedi | Olası VRAM thrash | Orta |
 
 ---
 
@@ -56,34 +58,6 @@ karşı korur; **disk arızasına veya makine kaybına karşı korumaz.**
 **Yapılacak:** Asıl sunucuda farklı bir sürücüye veya ağ paylaşımına yönlendir. Mekanizma
 hazır, sadece hedef değişmeli. Güncelleme yolu `CLAUDE.md`'de yazılı (setup'ı yeniden
 çalıştırma — `-InitializeOnly` tuzağı).
-
-## 3. PDF tabloları yapısal değil
-
-**Durum:** HTML tabloları markdown boru ayracıyla çıkıyor (birim testleriyle kanıtlı), ancak
-PDF tabloları hâlâ boşlukla hizalanmış metin. `fitz.get_text("text", sort=True)` mekânsal
-düzeni koruyor ama tabloyu yapıya çevirmiyor.
-
-**Ölçüm (PyMuPDF 1.28.2, `find_tables()` mevcut, 177 sayfalık INL raporu):**
-
-| Ölçüm | Değer |
-|---|---|
-| Ham tespit | 138 tablo |
-| Medyan boş hücre oranı | %55 — yarısından fazlası düzen ızgarası |
-| Boş ≤%30 ve ≥2×2 filtresiyle kalan | 37 |
-| Maliyet: yalnız metin | 2.62 sn |
-| Maliyet: + tablo tespiti | 17.54 sn (**6.7 kat**, sayfa başına ~99 ms) |
-
-Gerçek bir maliyet tablosunu doğru çıkardı: `Large Reactor / BOAK OCC ($/kWe) / 5,250 /
-5,750 / 7,750` (Advanced / Moderate / Conservative).
-
-**Zorluklar:** (a) aşırı tespit — yoğunluk filtresi şart; (b) **çifte sayım** —
-`get_text()` tablo metnini zaten içeriyor, markdown tabloyu da eklersek aynı rakam iki kez
-geçer ve iki ayrı "yerden" iddia çıkarılabilir; `table.bbox` ile o bölgeyi akıştan çıkarmak
-gerekiyor; (c) çok satırlı başlıklar ve birleşik hücrelerden gelen boş sütunlar.
-
-**Yapılacak:** `PDF_TABLE_EXTRACTION` ayarı (kapatılabilir), `PDF_TABLE_MAX_PAGES` sınırı,
-yoğunluk filtresi, bbox tabanlı değiştirme. `ParsedTable` ve `to_markdown()` hazır; asıl iş
-bbox değiştirme.
 
 ## 4. Resume sonrası ham veri kaybı
 
@@ -264,6 +238,85 @@ gerçek tokenizer yoksa Latin dışı karakter oranına göre düzeltilmiş bir 
 yeterli. `done_reason = "length"` da bir olay olarak yazılmalı — bugün sessiz.
 
 ---
+
+## 16. CPU'lu ve GPU'lu makine aynı PDF'ten farklı `content_hash` üretir
+
+**Durum:** `docling` servisi cihazı beyan edilen parametre olarak alıyor
+(`DOCLING_DEVICE`). Aynı belgeyi GPU'lu ve CPU'lu iki kurulum ayrıştırdığında metin birebir
+aynı olmuyor, dolayısıyla aynı kaynak iki kurulumda iki ayrı `SourceVersion` satırı
+oluyor.
+
+**Ölçüm:** Kendi korpusumuzda, aynı makinede tek değişken cihazken 261 sayfanın 7'si
+farklı; 6'sı kozmetik, 1'i gerçek kayıp (`gpt3` s.50'de bir markdown tablosu). Kaynak:
+`research/pdf-parser/results/gpu/README.md`. 2026-08-24'te 12 belgelik korpusta da
+görüldü: `ornek_4` CPU'da 10 tablo / 61.144 karakter, GPU'da 7 tablo / 62.313 karakter.
+Aynı cihazda tekrar **bayt bayt aynı** (3 koşu, tek `content_hash`) — sorun
+tekrarlanabilirlik değil, taşınabilirlik.
+
+**Neden ertelendi:** Kaçınılmaz; docling'in CPU ve CUDA çekirdekleri farklı sonuç veriyor.
+Gizlenmiyor: hangi cihaz ve hangi build ürettiyse `parse_provenance.engine_devices` ve
+`engine_build` içinde duruyor.
+
+**Yapılacak:** Tek makineli kurulumda etkisi yok. Birden çok worker'lı bir kuruluma
+geçilirse ya hepsi aynı cihaz olmalı, ya da tekilleştirme cihazı da hesaba katmalı.
+
+## 17. Docling imajı 11,9 GB ve geçişli bağımlılıkları kilitli değil
+
+**Durum:** İki ayrı sorun, aynı dosyada. Biri (mükerrer katman) 2026-08-24'te kapatıldı.
+
+**Ölçüm (cu132 yapısı):** `site-packages` 5,4 GB (`nvidia/` 2,6 · `torch/` 1,2 ·
+`triton/` 0,69), model ağırlıkları 1,4 GB. Docker Desktop'ın sanal diski bir kez
+büyüdükten sonra küçülmüyor.
+
+**Düzeltildi — mükerrer ağırlık katmanı (~1,4 GB).** `chown -R` ağırlıkların tam bir
+kopyasını yeni katmana yazıyordu: overlay2 kopyala-yaz ve alt katmandaki bir dosya için
+"yalnız izin değişti" diye bir kaydı yok, sahiplik değişikliği dosyanın tamamını yukarı
+kopyalatıyor. Kullanıcı artık indirmeden **önce** oluşturuluyor, indirme `USER docling`
+altında koşuyor ve `chown` yalnız iki boş dizine uygulanıyor. `useradd` katmanı
+**1,44 GB → 81,9 kB**, imaj **14,6 → 11,9 GB**. Çıktının değişmediği doğrulandı: aynı
+belgenin `content_hash`'i rebuild öncesi ve sonrası aynı (`709c8164…`).
+
+**Bilinçli olarak yapılmadı — `CodeFormulaV2` (611 MB).** `DocumentConverter()`
+varsayılanında formül/kod zenginleştirme kapalı olduğu için bugün kullanılmıyor, ama
+ileride açılma ihtimaline karşı imajda bırakıldı (kullanıcı kararı, 2026-08-24). Not:
+`HF_HUB_OFFLINE=1` yüzünden, imajda **olmayan** bir modeli gerektiren bir ayar açılırsa
+sonuç sessiz bir indirme değil sert bir hata olur — yani "ne indiriliyor" listesi
+davranışın parçası.
+
+**Kilit tarafı hâlâ açık:** Çıktıyı belirleyen paketler (docling ve alt paketleri,
+transformers, tokenizers, safetensors, pypdfium2, pillow, opencv, shapely, scipy, numpy,
+rapidocr) tam sabitli; kalan geçişli bağımlılıklar build anında çözülüyor, yani iki build
+arasında sürüm kayması mümkün. Windows'ta alınan bir `pip freeze` Linux'a taşınamıyor;
+doğru kilit kurulan imajın içinden üretilmeli:
+
+```
+docker compose run --rm --no-deps --entrypoint pip docling freeze > docker/docling-lock-linux.txt
+```
+
+ve sonraki build'lerde `-c` ile geçirilmeli.
+
+## 18. Docling ile Ollama'nın kartı aynı anda paylaşması denenmedi
+
+**Durum:** Rezervasyonun kendisi **ölçüldü ve kondu**. `capacity._gpu_slots()` artık
+`docling_vram_reserve_gb`'yi headroom'dan düşüyor; bu makinenin `.env`'inde `1.6`.
+Kodda varsayılan `0.0` kalıyor — başka bir kurulumda ölçülmeden bir sayı koymak,
+tahmin etmekle aynı şey.
+
+**Ölçüm (2026-08-24, RTX 4060 Laptop, 8188 MiB):**
+
+| Durum | Kartta kullanılan |
+|---|---|
+| Docling servisi kapalı | 46 MiB |
+| Servis ayakta, boşta (modeller yüklü) | 767 MiB |
+| 38 sayfalık dönüştürmenin tepesinde | 1673 MiB |
+
+Yani servisin payı boşta ~721 MiB, tepe ~1,6 GB. Rezervasyon tepe değere konuldu.
+
+**Kalan iş:** Ollama'nın modeli yerleşikken eşzamanlı bir dönüştürme denenmedi. 8 GB'lık
+kartta LLM + embedding + docling dar bir alan ve `model_lease()` docling'i kapsamıyor;
+thrash olup olmadığı ancak ikisi aynı anda çalışırken görülür. Ölçümdeki 46 MiB tabanı,
+Ollama'nın o an hiçbir modeli yerleşik tutmadığını da gösteriyor — yani bu ölçüm en iyi
+hâli, en kötü hâli değil.
 
 ## Kapsam dışı bırakılanlar
 

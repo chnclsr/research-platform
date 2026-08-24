@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # config file must not take PDF parsing down. Empty means the repository
     # default, config/smart_router.yaml.
     smart_router_config_path: str = ""
+    # Where the docling service lives, e.g. http://docling:3941. Empty means the heavy
+    # path falls back to a local interpreter (SMART_ROUTER_DOCLING_PYTHON) or, if that
+    # is unset too, to no heavy engine at all -- pages keep their fast-path text and the
+    # document is marked degraded rather than failing. Mirrored from the environment
+    # variable of the same name by parsers/smart_router/engines.py, so a `.env` entry
+    # works as well as a container environment.
+    smart_router_docling_url: str = ""
     passage_target_tokens: int = Field(700, ge=200, le=1800)
     passage_overlap_tokens: int = Field(100, ge=0, le=400)
     passages_per_question: int = Field(8, ge=1, le=30)
@@ -167,6 +174,13 @@ class Settings(BaseSettings):
     # models actually occupy is read live from Ollama.
     gpu_vram_total_gb: float = Field(8.0, gt=0, le=256)
     gpu_vram_margin_gb: float = Field(0.7, ge=0, le=16)
+    # VRAM the docling service holds while it is resident. Subtracted from the headroom
+    # the run planner works with, because docling is a GPU consumer the planner cannot
+    # see: capacity measures Ollama's resident VRAM, and model_lease() serialises Ollama
+    # calls -- neither knows about a second process on the same card. Left at 0.0 until
+    # measured on the deployment (nvidia-smi during a conversion); a guessed reservation
+    # would either waste the card or fail to protect it.
+    docling_vram_reserve_gb: float = Field(0.0, ge=0, le=64)
     capacity_poll_s: float = Field(15.0, ge=1.0, le=300.0)
     testing: bool = False
 

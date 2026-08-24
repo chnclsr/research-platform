@@ -12,6 +12,15 @@ x-app: &app
     AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
     CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
     OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    # The heavy half of PDF parsing. Empty disables it: the router still routes, the
+    # pages it routes keep their fast-path text and the document is marked degraded.
+    SMART_ROUTER_DOCLING_URL: ${SMART_ROUTER_DOCLING_URL:-http://docling:3941}
+    # CPU budgets. docker-compose.gpu.yml lowers both on the worker, because a GPU
+    # deployment is ~3x faster per page and does not need the slack. Measured
+    # 2026-08-21: 138 routed pages over 12 documents, 671 s bridged on CPU. At the old
+    # 300 s queue wait the tail of that queue never got a slot.
+    SMART_ROUTER_QUEUE_WAIT_S: ${SMART_ROUTER_QUEUE_WAIT_S:-900}
+    SMART_ROUTER_HEAVY_TIMEOUT_S: ${SMART_ROUTER_HEAVY_TIMEOUT_S:-1800}
     # Identity settings. SERVICE_TOKEN is what the panel and the bot present when they
     # act for a user; SESSION_SECRET keeps panel logins alive across a restart.
     SERVICE_TOKEN: ${SERVICE_TOKEN:-}
@@ -123,6 +132,44 @@ services:
     networks: [research]
     restart: unless-stopped
 
+  # The heavy half of smart_pdf: Docling, kept resident so the models are loaded once
+  # rather than per document (measured 2026-08-21: ~24 s of every document's cost).
+  #
+  # DEFAULTS TO CPU AND IS NOT BEHIND A PROFILE. A profile would repeat the
+  # telegram-bot trap -- a plain `docker compose up -d --build` would leave this
+  # service on an old image and say nothing. CPU works on every machine; a box with an
+  # NVIDIA card adds docker-compose.gpu.yml, which is what turns this into a CUDA
+  # build. Do not "fix" a CPU deployment by setting DOCLING_DEVICE=cuda here: the
+  # service refuses to start without a card on purpose, because CPU and GPU do not
+  # produce the same text and a silent fallback would rewrite content_hash.
+  docling:
+    build:
+      context: .
+      dockerfile: Dockerfile.docling
+      args:
+        TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
+    environment:
+      DOCLING_DEVICE: ${DOCLING_DEVICE:-cpu}
+      DOCLING_PORT: 3941
+      # One conversion at a time. On GPU this is what protects the VRAM the run
+      # planner has reserved for Ollama (see capacity._gpu_slots).
+      DOCLING_MAX_CONCURRENT: ${DOCLING_MAX_CONCURRENT:-1}
+      DOCLING_NUM_THREADS: ${DOCLING_NUM_THREADS:-4}
+    ports:
+      - "127.0.0.1:3941:3941"
+    healthcheck:
+      # No curl in python:3.12-slim, and adding it would be an apt layer for one probe.
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:3941/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      # Models load before the port opens, so the first probe must not be the one that
+      # declares the service dead.
+      start_period: 300s
+    networks: [research]
+    restart: unless-stopped
+
   migrate:
     <<: *app
     command: ["alembic", "upgrade", "head"]
@@ -138,6 +185,8 @@ services:
       AGENTSEARCH_URL: ${AGENTSEARCH_URL:-http://agentsearch-adapter:3940}
       CRAWL4AI_URL: ${CRAWL4AI_URL:-http://crawl4ai:11235}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      # /health reports the service and the device it answered on.
+      SMART_ROUTER_DOCLING_URL: ${SMART_ROUTER_DOCLING_URL:-http://docling:3941}
       SERVICE_TOKEN: ${SERVICE_TOKEN:-}
       SESSION_SECRET: ${SESSION_SECRET:-}
       CORPUS_SCOPE: ${CORPUS_SCOPE:-owner}

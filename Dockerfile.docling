@@ -1,0 +1,86 @@
+# The heavy half of smart_pdf, as its own image.
+#
+# Kept out of the application Dockerfile on purpose: api, worker, mcp-gateway and
+# telegram-bot all share that one image through the `*app` anchor in
+# docker-compose.yml, so putting torch there would make four services several
+# gigabytes each to buy something only the worker's PDF path uses.
+#
+# The device is a BUILD choice here and a RUNTIME assertion in the service. CPU and
+# CUDA do not produce the same text -- measured on a 261-page corpus, 7 pages differ
+# and one loses a markdown table (research/pdf-parser/results/gpu/README.md) -- and
+# content_hash is the sha256 of that text. So the wheel variant is named, never
+# inferred, and docling_service.py refuses to start if it cannot get the device it
+# was told to use.
+FROM python:3.12-slim
+
+# cpu (default, works everywhere) or a CUDA build such as cu132. Set by
+# docker-compose.gpu.yml on a machine that has the card.
+ARG TORCH_VARIANT=cpu
+ARG TORCH_VERSION=2.13.0
+ARG TORCHVISION_VERSION=0.28.0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    # torch.compile shells out to a C++ compiler that is not in this image, and its
+    # absence takes the whole conversion down. Same reason _docling_worker.py sets it.
+    TORCHDYNAMO_DISABLE=1 \
+    # Where the layout and table models live. Baked at build time (below) so a
+    # container start never depends on HuggingFace being reachable -- and, more to
+    # the point, so the same image tag always carries the same weights.
+    DOCLING_ARTIFACTS_PATH=/opt/docling-models \
+    HF_HOME=/opt/hf
+
+WORKDIR /app
+
+# libgomp1: torch's OpenMP runtime. The rest are what cv2 links against:
+# docling declares opencv-python (not -headless), so the X11 client libraries
+# have to be here even though nothing draws a window. Measured 2026-08-21:
+# without them `docling-tools models download` dies importing rapidocr with
+# ImportError: libxcb.so.1.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y libgomp1 libglib2.0-0 libgl1 libxcb1 libxext6 libsm6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# torch first and from the variant index. Installing docling first would drag in
+# whichever torch PyPI defaults to and quietly undo the choice above.
+RUN pip install --no-cache-dir \
+        --index-url "https://download.pytorch.org/whl/${TORCH_VARIANT}" \
+        "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}"
+
+COPY docker/docling-requirements.txt ./
+RUN pip install --no-cache-dir -r docling-requirements.txt
+
+# The user comes BEFORE the weights, and the download runs as that user.
+#
+# The obvious order -- download as root, then `chown -R` at the end -- costs a full
+# second copy of the weights. Measured 2026-08-24: the useradd layer was 1.44 GB,
+# exactly the size of the download layer above it. overlay2 is copy-on-write and has
+# no metadata-only delta for a file that lives in a lower layer: changing ownership
+# means copying the whole file up into the new layer. Both copies then ship forever,
+# because layers are immutable and deleting in a later one only adds a whiteout.
+#
+# So `chown` here is NOT recursive -- it touches two empty directories and costs
+# nothing. The weights are created with the right owner in the first place.
+RUN useradd --create-home --uid 10001 docling \
+    && mkdir -p "${DOCLING_ARTIFACTS_PATH}" "${HF_HOME}" \
+    && chown docling:docling "${DOCLING_ARTIFACTS_PATH}" "${HF_HOME}"
+USER docling
+
+# Weights into the image. Without this the first conversion downloads them into a
+# layer nothing persists, so every container recreate pays it again -- and whatever
+# HuggingFace serves that day is what the run gets.
+RUN docling-tools models download --output-dir "${DOCLING_ARTIFACTS_PATH}"
+
+# Fail loudly on a missing weight instead of silently fetching a different version.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+# The service and the one platform module it reuses. _docling_worker.py already
+# avoids importing the rest of the package (see the "invoked by file path, not -m"
+# note in engines.py), which is what makes it safe to lift into an image that has
+# no research_platform installed.
+COPY src/research_platform/parsers/smart_router/_docling_worker.py ./
+COPY scripts/docling_service.py ./
+
+EXPOSE 3941
+CMD ["python", "docling_service.py"]
