@@ -1,5 +1,143 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1600 840" width="1600" height="840" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="langgraph-state-machine-title langgraph-state-machine-desc">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ResearchPipeline · LangGraph state machine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Raleway:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens · Cezeri Robot skin ──────────────────────────────── */
+    :root {
+      --color-paper:       #f2f5f7;
+      --color-paper-2:     #e3eaee;
+      --color-ink:         #1b242c;
+      --color-muted:       #50697c;
+      --color-soft:        #8298a6;
+      --color-rule:        rgba(27,36,44,0.12);
+      --color-rule-solid:  #c3d0d8;
+      --color-accent:      #0090ba;
+      --color-accent-tint: rgba(0,144,186,0.10);
+      --color-link:        #04253c;
+      --font-sans:   'Raleway', system-ui, sans-serif;
+      --font-serif:  'Instrument Serif', 'Times New Roman', serif;
+      --font-mono:   'Geist Mono', ui-monospace, Menlo, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+      color: var(--color-ink);
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; }
+
+    .header { margin-bottom: 2.5rem; }
+
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 62ch;
+    }
+
+    .diagram-container {
+      background: transparent;
+      border: none;
+      padding: 0;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 1100px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 0.9fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 900px) { .cards { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #ffffff;
+      border-radius: 6px;
+      border: 1px solid var(--color-rule);
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid rgba(27,36,44,0.08);
+    }
+
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .card-dot.ink   { background: var(--color-ink); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.cyan  { background: var(--color-accent); }
+
+    .card h3 { font-size: 0.875rem; font-weight: 600; color: var(--color-ink); }
+
+    .card ul { list-style: none; color: var(--color-muted); font-size: 0.8125rem; line-height: 1.55; }
+    .card li { margin-bottom: 0.3rem; padding-left: 0.875rem; position: relative; }
+    .card li::before {
+      content: '—'; position: absolute; left: 0;
+      color: rgba(27,36,44,0.25); font-size: 0.75rem;
+    }
+    .card code { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-ink); }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(27,36,44,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <p class="header-eyebrow">ResearchPipeline · pipeline.py:_build_graph</p>
+      <h1>LangGraph state machine</h1>
+      <p class="subtitle">The 15-node graph the worker executes. The flow runs top to bottom; rows alternate direction, left-to-right then right-to-left. <code>CHECK_COVERAGE</code> is the only branch point and <code>PLAN_RECOVERY → SEARCH</code> the only loop.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1600 840" width="1600" height="840" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="langgraph-state-machine-title langgraph-state-machine-desc">
         <title id="langgraph-state-machine-title">ResearchPipeline LangGraph state machine</title>
         <desc id="langgraph-state-machine-desc">The research pipeline as a 15-state LangGraph graph: from protocol validation through search, fetching and parsing, then evidence extraction, auditing and a coverage check. If coverage falls short a recovery plan loops back to search; if it is sufficient the run goes on to counter-argument review and report synthesis; if the budget is exhausted it halts straight to the end.</desc>
         <defs>
@@ -16,63 +154,67 @@
 
         <rect width="100%" height="100%" fill="#f2f5f7"/>
 
+        <!-- =================================================================
+             TRANSITIONS — drawn first so boxes paint over them.
+             ================================================================= -->
 
-
-
+        <!-- START -> VALIDATE_PROTOCOL -->
         <line x1="200" y1="96" x2="200" y2="112" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-
+        <!-- Row 1, left to right -->
         <line x1="320" y1="152" x2="368" y2="152" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="616" y1="152" x2="664" y2="152" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="912" y1="152" x2="960" y2="152" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="1208" y1="152" x2="1256" y2="152" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-
+        <!-- Wrap: ACQUIRE -> NORMALIZE -->
         <line x1="1384" y1="184" x2="1384" y2="292" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-
+        <!-- Row 2, right to left -->
         <line x1="1264" y1="332" x2="1216" y2="332" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="968" y1="332" x2="920" y2="332" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="672" y1="332" x2="624" y2="332" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="376" y1="332" x2="328" y2="332" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-
+        <!-- Wrap: ANALYZE_CLAIMS -> AUDIT -->
         <line x1="200" y1="364" x2="200" y2="472" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-
+        <!-- Row 3, left to right -->
         <line x1="320" y1="512" x2="368" y2="512" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
-
+        <!-- finish -->
         <line x1="616" y1="512" x2="664" y2="512" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <rect x="620" y="488" width="40" height="16" rx="2" fill="#f2f5f7"/>
         <text x="640" y="500" fill="#50697c" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">finish</text>
 
         <line x1="912" y1="512" x2="960" y2="512" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
-
+        <!-- SYNTHESIZE_EXPORT -> END -->
         <line x1="1208" y1="512" x2="1368" y2="512" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
 
-
+        <!-- expand: CHECK_COVERAGE -> PLAN_RECOVERY -->
         <line x1="496" y1="544" x2="496" y2="632" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <rect x="452" y="576" width="36" height="16" rx="2" fill="#f2f5f7"/>
         <text x="484" y="588" fill="#50697c" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end" letter-spacing="0.06em">expand</text>
 
-
+        <!-- halt: CHECK_COVERAGE -> END (budget exhausted) -->
         <path d="M 560,544 V 592 Q 560,600 568,600 H 1376 Q 1384,600 1384,592 V 528"
               fill="none" stroke="#50697c" stroke-width="1.2" marker-end="url(#arrow)"/>
         <rect x="856" y="576" width="88" height="16" rx="2" fill="#f2f5f7"/>
         <text x="900" y="588" fill="#50697c" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">halt</text>
 
-
+        <!-- Recovery return: PLAN_RECOVERY -> SEARCH (dashed, loop-back) -->
         <path d="M 376,672 H 56 Q 48,672 48,664 V 56 Q 48,48 56,48 H 1080 Q 1088,48 1088,56 V 112"
               fill="none" stroke="#50697c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
         <rect x="140" y="24" width="132" height="16" rx="2" fill="#f2f5f7"/>
         <text x="204" y="36" fill="#50697c" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">add_edge -> SEARCH</text>
 
+        <!-- =================================================================
+             STATES
+             ================================================================= -->
 
-
-
+        <!-- START marker -->
         <circle cx="200" cy="88" r="6" fill="#1b242c"/>
 
-
+        <!-- ── Row 1 ──────────────────────────────────────────────────── -->
         <rect x="80" y="120" width="240" height="64" rx="8" fill="#ffffff" stroke="#1b242c" stroke-width="1"/>
         <text x="200" y="148" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">VALIDATE_PROTOCOL</text>
         <text x="200" y="168" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Protocol, budget and run label</text>
@@ -89,12 +231,12 @@
         <text x="1088" y="148" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">SEARCH</text>
         <text x="1088" y="168" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Run the search across connectors</text>
 
-
+        <!-- FOCAL 1 — ACQUIRE (heavy PDF path moved to the docling service) -->
         <rect x="1264" y="120" width="240" height="64" rx="8" fill="#ffffff" stroke="#1b242c" stroke-width="1"/>
         <text x="1384" y="148" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">ACQUIRE</text>
         <text x="1384" y="168" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Fetch and parse · smart_pdf</text>
 
-
+        <!-- ── Row 2 (right to left) ──────────────────────────────────── -->
         <rect x="1264" y="300" width="240" height="64" rx="8" fill="#ffffff" stroke="#1b242c" stroke-width="1"/>
         <text x="1384" y="328" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">NORMALIZE</text>
         <text x="1384" y="348" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Text cleanup · chunked checkpoint</text>
@@ -115,12 +257,12 @@
         <text x="200" y="328" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">ANALYZE_CLAIMS</text>
         <text x="200" y="348" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Verify claims, find contradictions</text>
 
-
+        <!-- ── Row 3 (left to right) ──────────────────────────────────── -->
         <rect x="80" y="480" width="240" height="64" rx="8" fill="#ffffff" stroke="#1b242c" stroke-width="1"/>
         <text x="200" y="508" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">AUDIT</text>
         <text x="200" y="528" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Quality and accuracy audit</text>
 
-
+        <!-- FOCAL 2 — CHECK_COVERAGE (the only branch point) -->
         <rect x="376" y="480" width="240" height="64" rx="8" fill="rgba(0,144,186,0.10)" stroke="#0090ba" stroke-width="1"/>
         <text x="496" y="508" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">CHECK_COVERAGE</text>
         <text x="496" y="528" fill="#0090ba" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Coverage sufficient? · 3 exits</text>
@@ -133,20 +275,20 @@
         <text x="1088" y="508" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">SYNTHESIZE_EXPORT</text>
         <text x="1088" y="528" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">Report synthesis and .docx</text>
 
-
+        <!-- END marker -->
         <circle cx="1384" cy="512" r="8" fill="none" stroke="#1b242c" stroke-width="1"/>
         <circle cx="1384" cy="512" r="5" fill="#1b242c"/>
 
-
+        <!-- ── Recovery state (conditional side path) ─────────────────── -->
         <rect x="376" y="640" width="240" height="64" rx="8" fill="#ffffff" stroke="#50697c" stroke-width="1"/>
         <text x="496" y="668" fill="#1b242c" font-size="10" font-weight="600" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.04em">PLAN_RECOVERY</text>
         <text x="496" y="688" fill="#50697c" font-size="10" font-family="'Raleway', system-ui, sans-serif" text-anchor="middle">New searches for the gaps</text>
 
-
+        <!-- ── Cross-cutting annotation ───────────────────────────────── -->
         <text x="80" y="752" fill="#50697c" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.18em">IN EVERY STATE</text>
         <text x="204" y="752" fill="#50697c" font-size="16" font-style="italic" font-family="'Instrument Serif', serif">_boundary() writes a checkpoint on entry to every node and stops the graph there if the run is PAUSED or CANCEL_REQUESTED — that exit exists from every state and is not drawn as its own edge.</text>
 
-
+        <!-- ── Legend ─────────────────────────────────────────────────── -->
         <line x1="80" y1="784" x2="1520" y2="784" stroke="rgba(27,36,44,0.12)" stroke-width="0.8"/>
         <text x="80" y="804" fill="#50697c" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
 
@@ -172,3 +314,53 @@
         <rect x="1112" y="796" width="36" height="10" rx="2" fill="#f2f5f7" stroke="rgba(27,36,44,0.12)" stroke-width="0.8"/>
         <text x="1156" y="804" fill="#50697c" font-size="9" font-family="'Raleway', system-ui, sans-serif">Labelled edge — add_conditional_edges routing key</text>
       </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot cyan"></span>
+          <h3>CHECK_COVERAGE — the only branch</h3>
+        </div>
+        <ul>
+          <li><code>_coverage_route</code> returns one of three keys: <code>expand</code>, <code>finish</code>, <code>halt</code></li>
+          <li><code>expand</code> → <code>PLAN_RECOVERY</code>, which returns to <code>SEARCH</code> and opens another round</li>
+          <li><code>finish</code> → <code>ADVERSARIAL_REVIEW</code> and synthesis</li>
+          <li><code>halt</code> → straight to <code>END</code>; when the budget runs out the run stops with the evidence it has</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>ACQUIRE and the parser</h3>
+        </div>
+        <ul>
+          <li>Five fetch strategies in order — <code>_direct</code>, scholarly metadata, agentsearch, crawl4ai, scrapling; first success wins</li>
+          <li>Anything under 400 characters is dropped, which is why a scanned PDF with no heavy engine disappears here</li>
+          <li><code>ParserRegistry.select()</code> picks <code>SmartPdfParser</code> (priority 20); the heavy re-extraction it calls out to runs in the <code>docling</code> service</li>
+          <li><code>content_hash</code> is the sha256 of the parsed text, so parsing has to be deterministic</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot muted"></span>
+          <h3>Corrected in this revision</h3>
+        </div>
+        <ul>
+          <li>The <code>halt → END</code> edge was missing; the graph has three branches and only two were drawn</li>
+          <li>The <code>_boundary()</code> pause/cancel exit was not shown at all</li>
+          <li>Accent now marks the branch point only — one focal element</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>research-platform · pipeline.py:_build_graph</span>
+      <span>docs/diagrams/langgraph-state-machine.svg</span>
+    </div>
+
+  </div>
+</body>
+</html>

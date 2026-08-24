@@ -103,7 +103,7 @@ object-storage, and model services remain private to the host.
 
 ## Research Lifecycle & Stage Flow
 
-![ResearchPipeline stage flow: collection round, coverage decision and recovery loop](docs/diagrams/pipeline-flow.svg)
+![ResearchPipeline LangGraph state machine: stage sequence, coverage decision and expand/finish recovery loop](docs/diagrams/langgraph-state-machine.svg)
 
 Collection does not stop merely because one plausible source was found. In
 `literature_scan` mode, accepted direct and contextual sources remain in the corpus and

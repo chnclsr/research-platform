@@ -1,5 +1,144 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 1760 1448" width="1760" height="1448" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="e2e-system-flow-title e2e-system-flow-desc">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Research Platform · end-to-end system flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Raleway:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Tokens · Cezeri Robot skin ──────────────────────────────── */
+    :root {
+      --color-paper:       #f2f5f7;
+      --color-paper-2:     #e3eaee;
+      --color-ink:         #1b242c;
+      --color-muted:       #50697c;
+      --color-soft:        #8298a6;
+      --color-rule:        rgba(27,36,44,0.12);
+      --color-rule-solid:  #c3d0d8;
+      --color-accent:      #0090ba;
+      --color-accent-tint: rgba(0,144,186,0.10);
+      --color-link:        #04253c;
+      --font-sans:   'Raleway', system-ui, sans-serif;
+      --font-serif:  'Instrument Serif', 'Times New Roman', serif;
+      --font-mono:   'Geist Mono', ui-monospace, Menlo, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+      color: var(--color-ink);
+    }
+
+    .container { max-width: 1560px; margin: 0 auto; }
+
+    .header { margin-bottom: 2.5rem; }
+
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--color-ink);
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 62ch;
+    }
+
+    .diagram-container {
+      background: transparent;
+      border: none;
+      padding: 0;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 1400px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1fr 0.95fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 1200px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #ffffff;
+      border-radius: 6px;
+      border: 1px solid var(--color-rule);
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid rgba(27,36,44,0.08);
+    }
+
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .card-dot.ink   { background: var(--color-ink); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.cyan  { background: var(--color-accent); }
+
+    .card h3 { font-size: 0.875rem; font-weight: 600; color: var(--color-ink); }
+
+    .card ul { list-style: none; color: var(--color-muted); font-size: 0.8125rem; line-height: 1.55; }
+    .card li { margin-bottom: 0.3rem; padding-left: 0.875rem; position: relative; }
+    .card li::before {
+      content: '—'; position: absolute; left: 0;
+      color: rgba(27,36,44,0.25); font-size: 0.75rem;
+    }
+    .card code { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-ink); }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(27,36,44,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <p class="header-eyebrow">docker compose · v0.13.0</p>
+      <h1>End-to-end system flow</h1>
+      <p class="subtitle">The pipeline's 15 nodes sit in a single <code>worker</code> box; the stage-by-stage flow is in the <a href="langgraph-state-machine.svg">state machine diagram</a>. The weight here is on what surrounds the worker: which surfaces come in from where, which gates a run passes before it gets a slot, what the worker calls out to, how the heavy PDF path works, and where the result is written and how it gets back.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1760 1448" width="1760" height="1448" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="e2e-system-flow-title e2e-system-flow-desc">
         <title id="e2e-system-flow-title">Research Platform end-to-end system flow</title>
         <desc id="e2e-system-flow-desc">End-to-end infrastructure view. Four client surfaces -- the control panel running natively on the host, telegram-bot, mcp-gateway and langflow -- reach the API, which puts the run on the arq queue; CapacityGate measures free VRAM and hands out a slot to the worker, and the scheduler can preempt a running job for an urgent one. The worker is drawn as one box and fans out to five things: 27 external connectors, crawl4ai, the in-process SmartPdfParser, the agentsearch adapter and Ollama on the host. PDFs go through a fast path, a heavy re-extraction of only the flagged pages, and a merge with quarantine checks, then land in postgres and minio and are delivered back to the surfaces as bundles. Three strips across the bottom summarise image topology, the single shared GPU, and the identity layer.</desc>
         <defs>
@@ -253,3 +392,67 @@
         <line x1="1032" y1="1404" x2="1052" y2="1404" stroke="#50697c" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
         <text x="1060" y="1408" fill="#50697c" font-size="9" font-family="'Raleway', system-ui, sans-serif">Control and return — preemption, SSE, delivery</text>
       </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot cyan"></span>
+          <h3>Admission before a run starts</h3>
+        </div>
+        <ul>
+          <li>One arq queue, three priority bands; the enqueue score <em>is</em> the queue position</li>
+          <li><code>CapacityGate</code> measures Ollama's resident VRAM and hands out run slots against what is actually free</li>
+          <li><code>scheduler.py</code> preempts: an urgent question pauses the running normal run and resumes it afterwards</li>
+          <li>Preemption acts across owners, so it takes a system principal — who gets paused is a scheduling decision, not something the requester is authorised to do</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>The heavy PDF path</h3>
+        </div>
+        <ul>
+          <li><code>pdf-inspector</code> extracts the <strong>whole</strong> document first; the gate and the critic both read that one pass</li>
+          <li><code>GirisKapisi</code> raises per-page flags (<code>has_table</code>, <code>needs_ocr</code>, <code>has_figure</code>); <code>PDFCritic</code> scores quality; the page selector decides what is worth re-extracting</li>
+          <li>Only the flagged pages are re-extracted. The tool for that is the <code>docling</code> service — a separate image because torch is several GB and five services share the app image</li>
+          <li>With the service off the run does not fail: fast-path text is kept and the document is marked <code>degraded</code></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>One card, two consumers</h3>
+        </div>
+        <ul>
+          <li>Ollama and docling share the same RTX 4060; <code>DOCLING_MAX_CONCURRENT=1</code> holds docling to one conversion at a time</li>
+          <li><code>CapacityGate</code> reserves headroom for docling but cannot see it — <code>resident_vram_gb</code> only reports Ollama</li>
+          <li><code>DOCLING_DEVICE=cuda</code> refuses to start without a card, deliberately: CPU and GPU do not produce the same text (7 of 261 pages differ, one loses a table) and <code>content_hash</code> is the sha256 of that text</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-dot muted"></span>
+          <h3>Scope and corrections</h3>
+        </div>
+        <ul>
+          <li>The 15 LangGraph nodes collapse to one <code>worker</code> box — the stage flow has its own diagram</li>
+          <li>Per-stage <code>Repository</code> writes and <code>_boundary()</code> checkpoints are not drawn; they exist on every node</li>
+          <li><code>migrate</code> is not drawn: it belongs to startup, not to the run flow</li>
+          <li>Corrected: the vector store is <strong>not Qdrant</strong> — embeddings live in the <code>passages.embedding</code> JSON column and similarity is computed in Python via <code>_cosine</code></li>
+          <li>Corrected: the run endpoint is <code>POST /v1/research-runs</code>; there is no <code>/api/v1/research/start</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>research-platform · docker-compose.yml + docker-compose.gpu.yml</span>
+      <span>docs/diagrams/e2e-system-flow.svg</span>
+    </div>
+
+  </div>
+</body>
+</html>
