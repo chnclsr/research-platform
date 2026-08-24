@@ -980,3 +980,38 @@ def test_the_engine_build_reaches_provenance():
     )
     assert merged.engine_devices == {"docling-service": "cuda"}
     assert "2.121.0" in merged.engine_builds["docling-service"]
+
+
+def test_merge_carries_the_engine_duration_into_provenance():
+    """
+    How long the heavy engine took is measured per result and was being dropped at the
+    merge, so nothing downstream could see it.
+
+    Reported, never consulted: a duration varies between runs on a loaded machine, and a
+    routing or merge decision that read one would make the extracted text depend on the
+    load. `content_hash` is the sha256 of that text.
+    """
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    merged = birlestir(
+        {1: "fast"},
+        results=[EngineResult(
+            engine="docling-service", pages={1: "heavy"}, duration_ms=6336.53,
+        )],
+        requested={"docling-service": [1]},
+    )
+    assert merged.engine_durations_ms == {"docling-service": 6336.5}
+
+
+def test_an_engine_that_reported_no_duration_is_not_recorded_as_zero():
+    """A missing measurement must read as missing, not as an instant conversion."""
+    from research_platform.parsers.smart_router.engines import EngineResult
+    from research_platform.parsers.smart_router.merge import birlestir
+
+    merged = birlestir(
+        {1: "fast"},
+        results=[EngineResult(engine="docling-service", pages={1: "heavy"})],
+        requested={"docling-service": [1]},
+    )
+    assert merged.engine_durations_ms == {}

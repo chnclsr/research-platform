@@ -73,6 +73,11 @@ class MergedDocument:
     #: card. Kept beside the device so an audit can explain a content_hash that moved
     #: while the document did not.
     engine_builds: Dict[str, str] = field(default_factory=dict)
+    #: Engine name -> wall milliseconds that engine spent on this document. Reported,
+    #: never consulted: a duration varies between runs on a loaded machine, and letting
+    #: one reach a routing or merge decision would make the output depend on the load.
+    #: It is here so an operator can see where a slow acquisition went.
+    engine_durations_ms: Dict[str, float] = field(default_factory=dict)
     #: Pages the heavy path was supposed to handle but did not.
     fallback_pages: List[int] = field(default_factory=list)
     #: Tables the heavy engine recovered as a grid: {"page", "headers", "rows"}.
@@ -296,7 +301,10 @@ def birlestir(
     kararlar: Dict[int, _Karar] = {}
     devices: Dict[str, str] = {}
     builds: Dict[str, str] = {}
+    durations: Dict[str, float] = {}
     for result in results:
+        if getattr(result, "duration_ms", 0.0):
+            durations[result.engine] = round(result.duration_ms, 1)
         if result.device:
             devices[result.engine] = result.device
         if getattr(result, "build", ""):
@@ -401,6 +409,7 @@ def birlestir(
 
     return MergedDocument(
         pages=merged, engine_counts=counts, engine_devices=devices, engine_builds=builds,
+        engine_durations_ms=durations,
         fallback_pages=fallbacks,
         tables=sorted(tables, key=lambda t: (t.get("page") or 0)),
         quarantined_pages=sorted(quarantined),

@@ -4,9 +4,9 @@
   <br>
 
   <p align="center">
-    <a href="https://github.com/chnclsr/research-platform"><img src="https://img.shields.io/badge/version-v0.12.0-3b82f6.svg?style=flat-square" alt="Version"></a>
+    <a href="https://github.com/chnclsr/research-platform"><img src="https://img.shields.io/badge/version-v0.13.0-3b82f6.svg?style=flat-square" alt="Version"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square" alt="Python"></a>
-    <a href="tests/"><img src="https://img.shields.io/badge/tests-412%20passed-10b981.svg?style=flat-square" alt="Tests"></a>
+    <a href="tests/"><img src="https://img.shields.io/badge/tests-429%20passed-10b981.svg?style=flat-square" alt="Tests"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-emerald.svg?style=flat-square" alt="License"></a>
     <a href="docs/ARCHITECTURE.md"><img src="https://img.shields.io/badge/hardware-RTX%204060%208GB%20%2B%20CPU-8b5cf6.svg?style=flat-square" alt="Hardware"></a>
     <a href="docs/ARCHITECTURE.md"><img src="https://img.shields.io/badge/connectors-27%20active-f59e0b.svg?style=flat-square" alt="Connectors"></a>
@@ -187,6 +187,42 @@ A complete run can produce:
 
 The exact artifact count varies when a run contains no usable figures or a particular
 optional output has no data.
+
+### Inspecting how a run parsed its PDFs
+
+PDFs do not go through one extractor. Each page is inspected first, and only the pages
+that need it -- a scanned page, a page holding a table, a page whose text fails a quality
+check -- are re-extracted by the heavy engine. Every one of those decisions is recorded,
+and one command turns the record into a readable report:
+
+```bash
+python scripts/inspect_bundle.py <run_id>                              # routing summary
+python scripts/inspect_bundle.py <run_id> --heavy                      # + each heavy page
+python scripts/inspect_bundle.py <run_id> --heavy --md outputs/reports # markdown per run
+python scripts/inspect_bundle.py <run_id> --pdf outputs/inputs         # the bytes sent
+```
+
+The run id is enough: the bundle is looked up in the report-sync folder and then in
+object storage, so a run that finished a minute ago can be inspected without waiting for
+the next sync. Pointing `--md` at a directory names the file after the run instead of
+overwriting the previous report.
+
+The report answers four questions per source:
+
+| Question | Answer in the report |
+|---|---|
+| which pages went to the heavy engine | with the reason -- `has_table_yuksek`, `low_quality`, `needs_ocr` |
+| what it produced | the page markdown, tables included |
+| where it ran | device and the docling/torch/GPU build that produced the text |
+| what it cost | parse time split into routing and heavy engine |
+
+Device and build are recorded because they change the output: the same PDF and the same
+Docling build do not produce identical text on CPU and CUDA (measured on a 261-page
+corpus, 7 pages differ and one loses a markdown table), and `content_hash` is the sha256
+of that text.
+
+The same fields are in `10_reproducibility_manifest.json` under `parsing`, for a
+consumer that wants them as data rather than as a report.
 
 ## Local model stack
 

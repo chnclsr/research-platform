@@ -77,6 +77,7 @@ def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
     kept = (
         "parser_profile", "engine_counts", "engine_devices", "engine_build",
         "engine_version", "router_version", "esik_version", "degraded",
+        "duration_ms", "gate_duration_ms", "engine_durations_ms",
     )
     records: list[dict[str, Any]] = []
     for source, version in versions:

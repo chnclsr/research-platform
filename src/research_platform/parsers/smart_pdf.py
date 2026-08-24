@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import time
 
 from .base import DocumentParser, ParsedDocument, ParsedTable
 
@@ -146,9 +147,12 @@ class SmartPdfParser(DocumentParser):
         path = self._spill_to_disk(content)
         if path is None:
             return self._empty("could not write the document to a temp file", "")
+        started = time.perf_counter()
         try:
             decision = SmartRouterHatti().calistir(path, metin_dahil=True)
+            gate_ms = (time.perf_counter() - started) * 1000
             merged = self._run_heavy_pages(path, decision)
+            toplam_ms = (time.perf_counter() - started) * 1000
         except Exception as exc:
             # A truncated or mislabelled download must not abort acquisition -- the
             # caller rejects the document on the resulting empty text instead. But
@@ -166,7 +170,7 @@ class SmartPdfParser(DocumentParser):
             parser_id=self.id,
             page_count=merged.page_count,
             tables=self._tables(merged),
-            parse_provenance=self._provenance(decision, merged),
+            parse_provenance=self._provenance(decision, merged, gate_ms, toplam_ms),
         )
 
     def _tables(self, merged: MergedDocument) -> list[ParsedTable]:
@@ -206,7 +210,8 @@ class SmartPdfParser(DocumentParser):
             },
         )
 
-    def _provenance(self, decision: dict, merged: MergedDocument) -> dict:
+    def _provenance(self, decision: dict, merged: MergedDocument,
+                    gate_ms: float, toplam_ms: float) -> dict:
         """
         Record how this document was parsed, page by page.
 
@@ -246,6 +251,14 @@ class SmartPdfParser(DocumentParser):
             "degraded": merged.degraded,
             "notes": merged.notes,
             "engine_counts": merged.engine_counts,
+            # Where the time went. REPORTED, NEVER CONSULTED: a duration varies between
+            # runs on a loaded machine, so letting one reach a routing or merge decision
+            # would make the extracted text depend on the load. It is here because
+            # acquisition's own `latency_seconds` covers fetch AND parse together, which
+            # cannot answer "was this document slow to download or slow to parse".
+            "duration_ms": round(toplam_ms, 1),
+            "gate_duration_ms": round(gate_ms, 1),
+            "engine_durations_ms": merged.engine_durations_ms,
             "fallback_pages": merged.fallback_pages,
             "quarantined_pages": merged.quarantined_pages,
             "pages": [

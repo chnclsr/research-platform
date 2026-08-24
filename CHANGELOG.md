@@ -31,6 +31,14 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   aşımına uğrarsa sayfa hızlı yol metnini koruyor, belge `degraded` işaretleniyor ve
   gerekçe kaydına yazılıyor.
 - Sistem sağlığı ekranı artık ağır yolun durumunu ve hangi cihazda koştuğunu gösteriyor.
+- **Ayrıştırmanın ne kadar sürdüğü kayıtta.** Toplam süre, sayfa yönlendirme kararının
+  süresi ve ağır motorun süresi ayrı ayrı yazılıyor. Acquisition'ın kendi ölçümü indirme
+  ile ayrıştırmayı birlikte sayıyordu; "bu belge indirilirken mi yoksa ayrıştırılırken mi
+  yavaştı" sorusunu cevaplayamıyordu.
+- **Bir koşunun PDF'lerini nasıl ayrıştırdığı tek komutla rapor edilebiliyor**
+  (`scripts/inspect_bundle.py <run_id> --heavy --md <dizin>`): hangi sayfa hangi
+  gerekçeyle ağır motora gitti, motor ne üretti, hangi cihazda ve ne kadar sürede.
+  Ayrıntılar README'de.
 - **Teslimat paketindeki üretilebilirlik manifestosu artık her kaynağın nasıl
   ayrıştırıldığını da yazıyor.** Önceden yalnız "kullanıcı hangi parser'ı zorladı"
   bilgisi vardı; şimdi hangi parser'ın seçildiği, hangi motorun kaç sayfayı ürettiği,

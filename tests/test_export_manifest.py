@@ -91,3 +91,40 @@ def test_a_version_with_no_provenance_at_all_does_not_raise():
 
     assert kayit["parser_id"] is None
     assert kayit["source_id"] == "src-old"
+
+
+def test_the_manifest_says_where_the_parse_time_went():
+    """
+    Acquisition already times each candidate, but that number is fetch AND parse
+    together -- it cannot answer "was this document slow to download or slow to parse".
+    The split is the useful part: measured on a real PDF, 7.3 s of parse was 0.4 s of
+    routing and 6.3 s of the heavy engine.
+    """
+    versions = [_cift("src-pdf", {
+        "document_type": "pdf",
+        "parser_id": "smart_pdf",
+        "parse_provenance": {
+            "engine_counts": {"docling-service": 6, "pdf-inspector": 4},
+            "duration_ms": 7270.4,
+            "gate_duration_ms": 355.2,
+            "engine_durations_ms": {"docling-service": 6336.5},
+        },
+    })]
+    (kayit,) = _parsing_manifest(versions)
+
+    assert kayit["duration_ms"] == 7270.4
+    assert kayit["gate_duration_ms"] == 355.2
+    assert kayit["engine_durations_ms"]["docling-service"] == 6336.5
+
+
+def test_a_record_from_before_timing_was_measured_still_exports():
+    """Runs that predate the duration fields must not grow null timing keys."""
+    versions = [_cift("src-pdf", {
+        "document_type": "pdf",
+        "parser_id": "smart_pdf",
+        "parse_provenance": {"engine_counts": {"pdf-inspector": 4}},
+    })]
+    (kayit,) = _parsing_manifest(versions)
+
+    assert "duration_ms" not in kayit
+    assert "engine_durations_ms" not in kayit
