@@ -29,7 +29,16 @@ def _rows(path: str) -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def _table_grid_function():
+def _uretim_worker():
+    """Uretimdeki _docling_worker modulunu yukler.
+
+    Ayni modulden hem `_table_grid` hem `cihaz()` aliniyor; ikinci bir yol
+    acmak ikisinin farkli surumlerden gelmesine izin verirdi.
+
+    `cihaz()` payload'a yaziliyor cunku cache dosyalari yalniz `pdf_sha256` ile
+    adlandiriliyor -- cihaz adi anahtarda YOK. Payload'da da durmazsa bir cache
+    dosyasina bakip CPU'da mi GPU'da mi uretildigini soylemek imkansiz olur.
+    """
     path = os.path.join(
         URETIM_SRC, "research_platform", "parsers", "smart_router", "_docling_worker.py"
     )
@@ -38,7 +47,7 @@ def _table_grid_function():
         raise RuntimeError("Production Docling worker yuklenemedi: %s" % path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module._table_grid
+    return module
 
 
 def _atomic_json(path: str, payload: dict) -> None:
@@ -91,8 +100,10 @@ def main() -> int:
     print("Docling modeli yukleniyor; belge=%d" % len(pending), flush=True)
     from docling.document_converter import DocumentConverter
     converter = DocumentConverter()
-    table_grid = _table_grid_function()
-    print("Model hazir.", flush=True)
+    worker = _uretim_worker()
+    table_grid = worker._table_grid
+    device = worker.cihaz()
+    print("Model hazir; cihaz=%s" % device, flush=True)
 
     errors = 0
     for index, (record, cache_path) in enumerate(pending, start=1):
@@ -115,6 +126,8 @@ def main() -> int:
             "id": record["kimlik"], "pdf_sha256": record["pdf_sha256"],
             "pages": pages, "tables": tables, "ok": error is None,
             "degraded": error is not None, "error": error, "mode": "persistent-cache",
+            # Cihaz anahtarda yok; provenance yalniz burada duruyor.
+            "device": device,
             "duration_ms": round((time.perf_counter() - started) * 1000, 1),
         }
         _atomic_json(cache_path, payload)
