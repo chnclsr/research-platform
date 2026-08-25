@@ -281,7 +281,7 @@
 
     <div class="nav-tabs">
       <button class="nav-tab active" onclick="switchTab('e2e')">1. Uçtan Uca Kullanıcı &amp; DB Akışı (Dev Şema)</button>
-      <button class="nav-tab" onclick="switchTab('langgraph')">2. LangGraph Durum Makinesi (14 Düğüm)</button>
+      <button class="nav-tab" onclick="switchTab('langgraph')">2. LangGraph Durum Makinesi (15 Düğüm)</button>
       <button class="nav-tab" onclick="switchTab('router')">3. Smart Router Derin Ayrıştırma</button>
       <button class="nav-tab" onclick="switchTab('matrix')">4. Karantina ve Karar Matrisi</button>
     </div>
@@ -490,13 +490,13 @@
           <text x="16" y="78" class="label-code" font-size="10" fill="var(--link)">• Nihai Word (.docx) rapor dosyaları</text>
         </g>
 
-        <!-- 4.4 passages + Qdrant -->
+        <!-- 4.4 passages + gomulu vektor indeksi -->
         <g transform="translate(1040, 425)">
           <rect width="540" height="95" rx="12" fill="var(--paper-2)" stroke="var(--success)" stroke-width="1.5" />
-          <text x="16" y="26" class="label-title" font-size="14" fill="var(--success)">PostgreSQL: passages + Vektör DB (Qdrant)</text>
+          <text x="16" y="26" class="label-title" font-size="14" fill="var(--success)">PostgreSQL: passages + gömülü vektör indeksi</text>
           <text x="16" y="44" class="label-sub" font-size="12" fill="var(--muted)">Alıntılanabilir Metin Pasajları &amp; Vektörler</text>
           <text x="16" y="62" class="label-code" font-size="10" fill="var(--ink)">• passage_id, source_id, text, token_count</text>
-          <text x="16" y="78" class="label-code" font-size="10" fill="var(--success)">• section_path="3 Yöntem &gt; Page 5" | dense_vector [1536f]</text>
+          <text x="16" y="78" class="label-code" font-size="10" fill="var(--success)">• section_path="3 Yöntem &gt; Page 5" | embedding (JSON kolonu)</text>
         </g>
 
         <!-- 4.5 evidences & reports -->
@@ -556,7 +556,7 @@
         <!-- Gate & Critic / Fast Path -> MinIO BLOB Store -->
         <path d="M 960,342 H 1040" fill="none" stroke="var(--link)" stroke-width="2" marker-end="url(#m-blue)" />
 
-        <!-- Docling Engine -> passages & Qdrant -->
+        <!-- Docling Engine -> passages & gomulu vektor indeksi -->
         <path d="M 960,472 H 1040" fill="none" stroke="var(--success)" stroke-width="2" marker-end="url(#m-green)" />
 
         <!-- merge.py -> evidences & reports -->
@@ -577,7 +577,7 @@
 
 
     <!-- ========================================================================= -->
-    <!-- TAB 2: LANGGRAPH DURUM MAKİNESİ (14 DÜĞÜM DETAYI - DIŞ KORİDOR LOOP)      -->
+    <!-- TAB 2: LANGGRAPH DURUM MAKİNESİ (15 DÜĞÜM DETAYI - DIŞ KORİDOR LOOP)      -->
     <!-- ========================================================================= -->
     <div id="view-langgraph" class="diagram-view">
       <svg viewBox="0 0 1660 720" width="1660" height="720">
@@ -1075,7 +1075,7 @@
       <h3><span class="pill pill-purple">Veritabanı</span> PostgreSQL &amp; MinIO Kalıcı Depolama</h3>
       <p>İndirilen tüm ham içerikler MinIO S3 deposunda BLOB olarak saklanır. Ayrıştırılan belgeler <code>sources</code> tablosuna (provenance ile) ve parçalanan pasajlar <code>passages</code> tablosuna yazılır.</p>
       <ul>
-        <li><code>Qdrant</code> vektör veri tabanında pasaj embedding'leri aranır.</li>
+        <li>Pasaj embedding'leri <code>passages.embedding</code> JSON kolonunda tutulur; ayrı bir vektör veri tabanı yoktur. Benzerlik <code>passages._cosine</code> ile süreç içinde hesaplanıp BM25 skorlarıyla harmanlanır.</li>
         <li><code>evidences</code> ve <code>reports</code> ile alıntılar ACID güvencesinde tutulur.</li>
       </ul>
     </div>

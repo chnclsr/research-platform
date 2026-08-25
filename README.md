@@ -32,7 +32,7 @@
           Contradiction &amp; Direction Maps
         </td>
         <td>
-          <b>LangGraph 14-Node Engine</b><br>
+          <b>LangGraph 15-Node Engine</b><br>
           HITL Gate &amp; Recovery Loops<br><br>
           <b>Smart PDF Layout Router</b><br>
           Fast Path (2.6ms) + Docling Gating<br><br>
@@ -44,8 +44,8 @@
           Deterministic State Checkpoints<br><br>
           <b>MinIO S3 Snapshot Store</b><br>
           Immutable BLOB &amp; Figure Vault<br><br>
-          <b>Qdrant Vector Engine</b><br>
-          Dense Hybrid Passage Retrieval
+          <b>In-Database Vector Index</b><br>
+          BM25 + Cosine Hybrid Retrieval
         </td>
       </tr>
     </tbody>
@@ -55,7 +55,7 @@
 ---
 
 > **Ingest global academic literature, patents, regulatory filings, and web intelligence across 27 connectors.**  
-> Research Platform turns a single office workstation into an auditable, high-throughput evidence service. Codex, Claude, Telegram users, and operations consoles submit complex research inquiries to a deterministic 14-node LangGraph pipeline, executing structure-aware parsing, passage-level quote audits, and cross-source synthesis with zero hallucinations.
+> Research Platform turns a single office workstation into an auditable, high-throughput evidence service. Codex, Claude, Telegram users, and operations consoles submit complex research inquiries to a deterministic 15-node LangGraph pipeline, executing structure-aware parsing, passage-level quote audits, and cross-source synthesis with zero hallucinations.
 
 The local deployment hosts its language, embedding, and figure-understanding models on a single **NVIDIA RTX 4060 (8 GB VRAM)** with CPU capacity auto-scaling. It does not replace general-purpose reasoning agents; it equips them with a durable research back end: broad multi-source discovery, provenance validation, verifiable citations, coverage diagnostics, and publication-ready deliverables.
 
@@ -82,13 +82,13 @@ The local deployment hosts its language, embedding, and figure-understanding mod
 ![Research Platform End-to-End System Architecture & Database Lifecycle](docs/diagrams/e2e-system-flow.svg)
 
 > **Architectural Specifications & Interactive Explorers:**
-> - Complete subsystem breakdowns, 14-node LangGraph state machine, Smart Router pipeline, and database dictionaries: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+> - Complete subsystem breakdowns, 15-node LangGraph state machine, Smart Router pipeline, and database dictionaries: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 > - Standalone browser-based interactive diagram with real-time light/dark theme toggles: **[system_architecture_diagram.html](./system_architecture_diagram.html)**
 
 | View | Focus & Coverage | Architectural Subsystems |
 |---|---|---|
-| **1. End-to-End User & DB Lifecycle** | Complete system data flow from entrypoint to persistent storage | Telegram / Operations UI -> LangGraph Engine -> Parser Registry (`SmartPdfParser` p=20) -> PostgreSQL (`runs`, `sources`, `passages`, `evidences`) + MinIO S3 Snapshot + Qdrant Vector DB |
-| **2. LangGraph 14-Node State Machine** | Formal state machine transitions and recovery loops | `VALIDATE_PROTOCOL` (HITL) -> `DECOMPOSE` -> `BUILD_QUERY_BRANCHES` -> `SEARCH` -> `ACQUIRE` -> `NORMALIZE` -> `CHUNK_INDEX` -> `RETRIEVE_PASSAGES` -> `EXTRACT_EVIDENCE` -> `ANALYZE_CLAIMS` -> `AUDIT` -> `CHECK_COVERAGE` (`expand` recovery loop / `finish`) -> `SYNTHESIZE_EXPORT` |
+| **1. End-to-End User & DB Lifecycle** | Complete system data flow from entrypoint to persistent storage | Telegram / Operations UI -> LangGraph Engine -> Parser Registry (`SmartPdfParser` p=20) -> PostgreSQL (`runs`, `sources`, `passages`, `evidences`) + MinIO S3 Snapshot + in-database passage embeddings (`passages.embedding`) |
+| **2. LangGraph 15-Node State Machine** | Formal state machine transitions and recovery loops | `VALIDATE_PROTOCOL` (HITL) -> `DECOMPOSE` -> `BUILD_QUERY_BRANCHES` -> `SEARCH` -> `ACQUIRE` -> `NORMALIZE` -> `CHUNK_INDEX` -> `RETRIEVE_PASSAGES` -> `EXTRACT_EVIDENCE` -> `ANALYZE_CLAIMS` -> `AUDIT` -> `CHECK_COVERAGE` (`expand` -> `PLAN_RECOVERY` -> `SEARCH` / `finish` / `halt`) -> `ADVERSARIAL_REVIEW` -> `SYNTHESIZE_EXPORT` |
 | **3. Smart Router Deep-Dive** | Page-routed hybrid PDF parsing pipeline | Fast path (`pdf-inspector` 2.6 ms/page) -> Gate & Critic (`critic_ceza_dokumu`, non-drawing quality veto) -> `_AGIR_KAPI` Semaphore -> Docling Engine (1.55s/page) -> Quarantine Gate & `# Page N` heading hierarchy |
 | **4. Quarantine & Decision Matrix** | Safety verification and fallback routing | Page triage flowchart, 5.0 dead band degradation tolerance, >50% text loss threshold, heavy acceptance vs fast fallback |
 

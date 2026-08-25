@@ -112,7 +112,7 @@
 
       <!-- Badge 2 -->
       <rect x="142" y="0" width="156" height="28" rx="14" fill="rgba(168, 85, 247, 0.15)" stroke="#a855f7" stroke-width="1.2" />
-      <text x="220" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#d8b4fe" text-anchor="middle">LANGGRAPH 14-NODE</text>
+      <text x="220" y="18" font-family="-apple-system, sans-serif" font-weight="700" font-size="11.5" fill="#d8b4fe" text-anchor="middle">LANGGRAPH 15-NODE</text>
 
       <!-- Badge 3 -->
       <rect x="308" y="0" width="160" height="28" rx="14" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" stroke-width="1.2" />

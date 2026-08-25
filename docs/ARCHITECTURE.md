@@ -43,7 +43,7 @@ Workloads flow from user interfaces through the LangGraph runtime, engage the Sm
 4. **Persistence & Vector Storage Tier:**
    - **PostgreSQL (`research_runs`, `sources`, `passages`, `evidences`, `reports`):** Enforces relational integrity and auditability.
    - **MinIO S3 Snapshot Store:** Persists immutable raw document bytes, extracted figures, and binary report artifacts.
-   - **Qdrant Vector Database:** Indexes passage embeddings (`dense_vector [1536f]`) with structured metadata filters (`source_id`, `section_path`).
+   - **In-Database Vector Index (`passages.embedding`):** Dense passage embeddings are stored as a JSON column on the `passages` table; there is no external vector database. Similarity is computed in-process (`passages._cosine`) and fused with BM25 lexical scores plus `section_path` overlap.
 
 ---
 
@@ -59,7 +59,7 @@ Collection does not stop merely because an initial source was discovered. The pl
 
 ---
 
-## 4. LangGraph 14-Node State Machine
+## 4. LangGraph 15-Node State Machine
 
 The research execution graph is implemented with LangGraph `StateGraph`, maintaining deterministic state transitions, human checkpointing, and conditional recovery loops.
 
@@ -75,12 +75,12 @@ The research execution graph is implemented with LangGraph `StateGraph`, maintai
 | 04 | `SEARCH` | Executes parallel connector scans across academic databases (PubMed, arXiv, Semantic Scholar, Crossref, etc.). |
 | 05 | `ACQUIRE` | Downloads candidate source artifacts and invokes `ParserRegistry.select("pdf")` for structured extraction. |
 | 06 | `NORMALIZE` | Cleans raw text, strips invalid Unicode / NUL characters, and standardizes document structure. |
-| 07 | `CHUNK_INDEX` | Segments parsed text into retrievable passages (`passages.py`), preserving `# Page N` and heading hierarchy, then indexes dense vectors in Qdrant. |
+| 07 | `CHUNK_INDEX` | Segments parsed text into retrievable passages (`passages.py`), preserving `# Page N` and heading hierarchy, then stores dense embeddings in the `passages.embedding` column. |
 | 08 | `RETRIEVE_PASSAGES` | Performs hybrid (dense embedding + BM25 lexical) passage retrieval against sub-hypothesis targets. |
 | 09 | `EXTRACT_EVIDENCE` | Extracts atomic claim-to-passage links with verbatim quotations, direction (supporting/conflicting), and confidence scores. |
 | 10 | `ANALYZE_CLAIMS` | Reconciles claims across sources, builds the contradiction map, and aggregates empirical evidence. |
 | 11 | `AUDIT` | Verifies source coverage, validates quote precision, and computes citation completeness. |
-| 12 | `CHECK_COVERAGE` | **Decision Gate:** Evaluates whether evidence coverage satisfies protocol requirements. Routes to `expand` (triggering `PLAN_RECOVERY`) or `finish` (proceeding to synthesis). |
+| 12 | `CHECK_COVERAGE` | **Decision Gate:** Evaluates whether evidence coverage satisfies protocol requirements. Routes to `expand` (triggering `PLAN_RECOVERY`), `finish` (proceeding to `ADVERSARIAL_REVIEW`), or `halt` (terminating the graph). |
 | 13 | `PLAN_RECOVERY` | If coverage is incomplete, formulates gap-targeted search queries and loops back to `SEARCH`. |
 | 14 | `ADVERSARIAL_REVIEW` | Subject syntheses to counter-argument verification and stress-testing. |
 | 15 | `SYNTHESIZE_EXPORT` | Generates the comprehensive research dossier, executive summaries, Markdown reports, and formatted Word (`.docx`) deliverables. |
