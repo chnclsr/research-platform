@@ -1,0 +1,51 @@
+{
+ "aciklama": "201 belgelik karsilastirmada heavy utility farki cikan 5 belge, bu makinede CPU ve CUDA ile yeniden uretildi",
+ "belgeler": [
+  {
+   "id": "data_135",
+   "sayfa_farkli": false,
+   "tablo_farkli": false,
+   "cpu_device": "cpu",
+   "cuda_device": "cuda:0",
+   "cpu_karakter": 9082,
+   "cuda_karakter": 9082
+  },
+  {
+   "id": "data_52",
+   "sayfa_farkli": false,
+   "tablo_farkli": false,
+   "cpu_device": "cpu",
+   "cuda_device": "cuda:0",
+   "cpu_karakter": 620,
+   "cuda_karakter": 620
+  },
+  {
+   "id": "data_175",
+   "sayfa_farkli": false,
+   "tablo_farkli": false,
+   "cpu_device": "cpu",
+   "cuda_device": "cuda:0",
+   "cpu_karakter": 1968,
+   "cuda_karakter": 1968
+  },
+  {
+   "id": "data_59",
+   "sayfa_farkli": false,
+   "tablo_farkli": false,
+   "cpu_device": "cpu",
+   "cuda_device": "cuda:0",
+   "cpu_karakter": 8262,
+   "cuda_karakter": 8262
+  },
+  {
+   "id": "data_53",
+   "sayfa_farkli": false,
+   "tablo_farkli": false,
+   "cpu_device": "cpu",
+   "cuda_device": "cuda:0",
+   "cpu_karakter": 14,
+   "cuda_karakter": 14
+  }
+ ],
+ "cihazdan_kaynakli_fark": false
+}

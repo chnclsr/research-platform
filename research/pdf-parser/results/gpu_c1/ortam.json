@@ -1,0 +1,38 @@
+{
+ "olcum_tarihi": "2026-08-24T15:03:30+03:00",
+ "depo_commit": "485a4b567275afee1095ffdaf9fc7355cdd1312a",
+ "depo_yolu": "/home/cezeri/Desktop/projeler/research-platform",
+ "makine": {
+  "ad": "server-cezeri",
+  "islemci": "Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz",
+  "cekirdek": 16,
+  "ram_gb": 125.5,
+  "os": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "kernel": "6.8.0-138-generic"
+ },
+ "gpu": {
+  "nvidia_smi_ozet": "Quadro RTX 4000, 595.84, 8192 MiB, 7.5",
+  "nvidia_smi_tam": "Mon Aug 24 15:03:28 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 595.84                 Driver Version: 595.84         CUDA Version: 13.2     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  Quadro RTX 4000                Off |   00000000:65:00.0 Off |                  N/A |\n| 30%   46C    P8             20W /  125W |     480MiB /   8192MiB |      0%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|    0   N/A  N/A            1802      G   /usr/lib/xorg/Xorg                      110MiB |\n|    0   N/A  N/A            1959      G   /usr/bin/gnome-shell                    132MiB |\n|    0   N/A  N/A            3481      G   .../4848/usr/lib/firefox/firefox        217MiB |\n+-----------------------------------------------------------------------------------------+"
+ },
+ "venv311": {
+  "python": "3.11.16",
+  "yorumlayici": "/home/cezeri/Desktop/projeler/research-platform/.venv311/bin/python",
+  "torch": "yok (ModuleNotFoundError)",
+  "docling": "yok (ModuleNotFoundError)"
+ },
+ "venv_docling": {
+  "python": "3.10.12",
+  "yorumlayici": "/home/cezeri/Desktop/projeler/research-platform/.venv-docling/bin/python",
+  "torch": "2.6.0+cu124",
+  "torch_cuda": "12.4",
+  "cuda_var": true,
+  "gpu_adi": "Quadro RTX 4000",
+  "gpu_bellek_gb": 7.6,
+  "gpu_yetenek": "7.5",
+  "docling": "2.120.1"
+ },
+ "beklenen_docling": "2.120.1",
+ "docling_surum_uyari": null,
+ "metric_version": "c1_metrics_v1_2026-08-18",
+ "metric_fingerprint": "c1_metrics_v1_2026-08-18+rapidfuzz"
+}

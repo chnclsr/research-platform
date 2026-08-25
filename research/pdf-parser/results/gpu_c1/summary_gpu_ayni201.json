@@ -1,0 +1,19 @@
+{
+  "metric_version": "c1_metrics_v1_2026-08-18",
+  "metric_fingerprint": "c1_metrics_v1_2026-08-18+rapidfuzz",
+  "documents": 201,
+  "ok": 201,
+  "errors": 0,
+  "routed_heavy": 87,
+  "heavy_gain_ge_0_02": 63,
+  "route_precision_at_0_02": 0.4713,
+  "route_recall_at_0_02": 0.6508,
+  "mean_utility": {
+    "fast": 0.835381,
+    "heavy": 0.849089,
+    "routed": 0.852504
+  },
+  "run_id": "gpu_ayni201",
+  "engine": "docling persistent cache (/home/cezeri/Desktop/projeler/research-platform/research/pdf-parser/out/c1_docling_cache_cuda)",
+  "manifest": "/home/cezeri/Desktop/projeler/research-platform/research/pdf-parser/out/korpus_envanteri.jsonl"
+}

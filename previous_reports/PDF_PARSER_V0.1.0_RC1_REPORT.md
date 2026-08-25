@@ -553,6 +553,56 @@ Bu bloklar `CODEX-2026-08-18` yorumuyla işaretlidir.
 3. Production Docling köprüsüyle bir text-layer ve bir taranmış PDF smoke testi geçti.
 4. Bilinen sınırlamalar bu raporda açıklandı.
 
+### Açık ve HENÜZ DOĞRULANMAMIŞ: Docling ilk sayfada bir tam satır düşürüyor (2026-08-25)
+
+Kullanıcı, denenen makalenin (IEEE Access SLR, 43 sayfa) **1. sayfasında Docling
+çıktısının bir tam satırı kaçırdığını** bildirdi. Bu bulgu bugüne kadar hiçbir
+yere yazılmamıştı — bilerek ertelenmedi, kayda geçmedi.
+
+Bugün ölçülebilenler:
+
+- Sayfa 1 **ağır yola gidiyor** (`karar_kaynagi = ['has_table_dusuk']`), yani o
+  sayfanın metni Docling'den geliyor. Kayıp gözlemi bu yüzden tutarlı.
+- Sayfa 1 hızlı metni: **4444 karakter, 9 dolu satır** (ortalama 494 karakter —
+  satırlar sütun birleşmesiyle uzun).
+- Merge'in içerik kaybı koruması `icerik_kaybi_esik = 0.20`. Tek bir satırın
+  kaybı bu sayfada **%3–11** aralığında kalır → **koruma yapısal olarak tek
+  satırlık kaybı yakalayamaz**, sayfa sessizce kabul edilir. Karantina da
+  skorlara baktığı için bunu görmez.
+
+**DOĞRULANDI — ve üst/alt bilgi değil, GÖVDE (2026-08-25):** kullanıcı kaybolan
+satırı verdi. Sayfa 1 **abstract'ının** içinden:
+
+> `have a strong potential to extract useful information from unstructured
+> documents automatically. However,`
+
+Ölçüldü: bu cümle **hem** hızlı yol (pdf-inspector) metninde **hem** kaynak
+PyMuPDF metninde var; yalnız Docling çıktısında yok. Yani ilk "üst/alt bilgi
+furniture olarak atılıyor" hipotezi **yanlıştı** — bu bir tercih değil, gerçek
+içerik kaybı. Kaybolan parça sayfanın yaklaşık **%6'sı**; `icerik_kaybi_esik`
+%20 olduğu için merge sayfayı sorgusuz kabul ediyor.
+
+Bunun iki ayrı sonucu var:
+
+1. **Ağır yol, hızlı yolun taşıdığı gövde cümlesini düşürebiliyor** ve mevcut
+   korumaların hiçbiri (oransal içerik kaybı, karantina skoru, formül işareti)
+   bunu görmüyor. Kayıp abstract'ta olduğu için etkisi büyük: o cümle passage'a,
+   embedding'e ve aramaya hiç girmiyor.
+2. **Ölçüm boşluğu koruma boşluğundan daha ciddi.** Bu kayıp aylardır çıktıdaydı
+   ve hiçbir metrik onu göstermedi; gözle fark edildi.
+
+Kapatmak için:
+
+1. Docling kurulu bir makinede aynı PDF'in sayfa 1 çıktısı — kaybın Docling
+   sürümüne mi, düzen modeline mi (tam genişlikli abstract + iki sütunlu gövde
+   karışık düzen) bağlı olduğunu ayırt etmek için. GPU'lu makinedeki koşu bunu
+   ligatür onarımının ağır yol doğrulamasıyla aynı anda kapatabilir.
+2. Merge'e **satır kapsama** kontrolü: hızlı metindeki bir cümle ağır metinde
+   hiç yoksa, oran eşiğinden bağımsız olarak işaretle. Oransal eşik tek satırlık
+   kaybı yapısal olarak göremiyor; bu ayrı bir sinyal gerektiriyor.
+3. Bu kontrol bir ölçüm olarak da koşulmalı: 9 belgelik çekirdek korpusta ağır
+   yolun düşürdüğü cümle sayısı bugüne kadar hiç sayılmadı.
+
 ### Kalite için P0/P1
 
 1. Ağır çıktının büyük içerik kaybını corruption skorundan bağımsız yakalayan
@@ -2296,6 +2346,386 @@ Karantina karnesi yeni tabanda: 87 ağır sayfa, 1 red (o da yanlış), NET
 yanlış kabuldü. Korelasyon (−0,0637) ve sessizlik oranı (%79) değişmedi —
 karantina sinyalinin kendi sorunu duruyor, veto onu çözmedi, yalnız üzerine
 düştüğü küme küçüldü.
+
+## P. Üçüncü Makinede Tam GPU Koşusu — Mimari Uçtan Uca GPU'da Ölçüldü (2026-08-24)
+
+<!-- CLAUDE-2026-08-24: Quadro RTX 4000'li Linux makinede Adim 0-10; E/F/G'nin
+     devami degil, kapsam olarak ustu: yalniz Docling degil butun hat. -->
+
+E ve G bölümleri GPU'da **yalnız Docling motorunu** ölçmüştü. Bu koşu bütün
+hattı ölçtü: kapı, critic, merge, C1 doğrulaması ve arayüz üretimi dahil. Koşu
+GPU'lu makinede `Adım 0–10` sırasıyla yapıldı; **Adım 6 hariç hepsi tamamlandı**.
+
+**Ortam:** Quadro RTX 4000 8 GB (sürücü 595.84, nvidia-smi'nin bildirdiği CUDA
+13.2, sm_75/Turing) · Intel Xeon W-2145 (8c/16t), 125 GB RAM · Ubuntu 22.04.5 ·
+ağır motor venv Python 3.10.12 + **torch 2.6.0+cu124** (torch'un derlendiği CUDA
+12.4 — sürücününkiyle karıştırılmasın) + **docling 2.120.1** · metrik venv Python
+3.11.16 + rapidfuzz 3.14.5 · depo `485a4b5` ·
+`metric_fingerprint = c1_metrics_v1_2026-08-18+rapidfuzz`.
+
+**Değişen kod: iki dosya.** `c1_docling_cache.py` payload'una `"device"` alanı
+eklendi (cache dosyaları yalnız `pdf_sha256` ile adlandırılıyor, cihaz anahtarda
+yok — provenance başka yerde duramıyordu) ve yeni `gpu_panosu.py` yazıldı.
+`config/smart_router.yaml` **ellenmedi**, `esik_version` değişmedi.
+
+Kanıt: `research/pdf-parser/results/gpu_c1/` · rapor `RAPOR_GPU.md` · devir notu
+`DEVIR.md` · arayüz `html/gpu_panosu.html`.
+
+### P.1 Kabul kontrolleri
+
+| kontrol | sonuç | kaynak |
+|---|---|---|
+| Envanter — 380 PDF'in sha256'sı | **GEÇTİ**, 380/380 eşleşti | `envanter_karsilastirma.json` |
+| `metric_fingerprint` üç koşuda + CPU tabanında eşit | **GEÇTİ** | `*/summary.json` |
+| `mean_utility.fast` (GPU kullanmayan yol) belge belge | **GEÇTİ**, 201'de 0 fark | `predictions.jsonl` |
+| Determinizm — 6 ve 75 sayfalık belge, 3'er koşu | **GEÇTİ**, bayt bayt aynı | `*_determinizm_*.json` |
+| Cihaz eşdeğerliği — 261 sayfa + 65 belge | **GEÇTİ**, 0 fark | `cache_esdegerlik.json` |
+| Donanım kısılması | **GEÇMEDİ** — 16/153 örnekte, 91 °C, SM 2100→1005 MHz | `telemetri.jsonl` |
+
+Son satır sonucu geçersiz kılmaz ama yönünü belirler: **ölçülen GPU hızlanması
+bir alt sınırdır.**
+
+### P.2 Hız — "~300×" varsayımı düştü, karar ayakta kaldı
+
+Aynı ölçüm iki kez koşuldu ve **tekrarlanmadı**:
+
+| | 1. ölçüm | 2. ölçüm | koşular arası oran |
+|---|---:|---:|---:|
+| CPU | 1.757,0 ms/sayfa | 2.464,0 ms/sayfa | 1,40× |
+| GPU | 516,4 ms/sayfa | 887,4 ms/sayfa | 1,72× |
+| **hızlanma** | **3,40×** | **2,78×** | — |
+
+Bu yüzden hızlanma tek sayı değil **2,78×–3,40× aralığı** olarak yazıldı.
+Fark 9 belgenin hepsinde aynı yönde (belge bazında CPU oranı 1,20–1,49). PROCHOT
+sayacı 0, rakip süreç yok (>%92 boşta), governor ve EPP değişmedi; **sebep
+doğrulanmadı**. Hipotez (kanıt değil): 2. ölçüm ~45 dakikalık sürekli GPU
+yükünden sonra koştu.
+
+C1 korpusunda (380 tek sayfalık belge) cache üretimi: **CUDA 987,5 ms/belge**
+(medyan 830,5), **CPU 4.005,0 ms/belge** (medyan 2.814,0). Cihaz varsayılmadı,
+payload'daki `device` alanından okundu: 380/380 `cuda:0`, 60/60 `cpu`.
+
+**Maliyet oranı:**
+
+| hat | ms/sayfa | oran = ağır / kapı |
+|---|---:|---:|
+| kapı (inspector 2,14 + gate 5,75 + critic 0,69) | 8,65 | 1× |
+| Docling CPU (bu makine) | 1.757 – 2.464 | **203× – 285×** |
+| Docling CUDA (bu makine) | 516 – 887 | **60× – 103×** |
+
+E bölümünün dayandığı **~300× artık geçerli değil**; GPU'da oran 60–103×.
+Ama "her sayfayı ağıra yolla" senaryosu hesaplandı: bugün 261 sayfanın 115'i
+(%44,1) ağır hatta gidiyor; %100'e çıkarmak toplam süreyi **CPU'da 2,26×, GPU'da
+2,22×** artırırdı. **Sayfa seçmek GPU'da da haklı — ama gerekçe artık "300 kat
+pahalı" değil, "60–103 kat pahalı, toplamda 2,2 kat".**
+
+### P.3 Determinizm — bozulmuyor
+
+`turkce_makale` (6 sayfa) ve `gpt3_uzun_75sayfa` (75 sayfa), GPU'da 3'er koşu,
+**bayt bayt aynı**. Uzun belge kasten seçildi: 75 sayfada kayan nokta toplama
+sırası çok daha fazla yer bulur.
+
+`registry.py`'nin "aynı baytlar her koşuda aynı çıktıyı vermeli" sözleşmesi ve
+`content_hash = sha256(metin)` bu yığında (docling 2.120.1 + torch 2.6.0+cu124 +
+Turing) **GPU'da tutuyor**. Bu bir genel garanti değil, bu yığın için ölçülmüş
+bir sonuçtur.
+
+**Çapraz makine gözlemi:** `turkce_makale`'nin markdown sha256'sı
+(`0f51d4ac…c3c0d66d`, 55.746 karakter) bu makinede ve önceki RTX 4060'lı
+makinede — **farklı GPU, farklı torch, farklı docling sürümü (2.120.1 vs
+2.120.3), farklı işletim sistemi** — birebir aynı çıktı.
+
+### P.4 Cihaz eşdeğerliği — E/G'nin bulgusu tekrarlanmadı, ve atıf değişti
+
+Üç bağımsız test, hepsi **aynı makinede** CPU ve CUDA:
+
+| test | kapsam | karşılaştırılan | fark |
+|---|---|---|---:|
+| Adım 3 | 9 belge / 261 sayfa | sayfa markdown'ı | **0** |
+| C1 cache | 60 belge | sayfa metni **+ tablo yapıları** | **0 / 0** |
+| Atıf | 5 belge | sayfa metni + tablo yapıları | **0 / 0** |
+
+İkinci test kasten farklı bir şey sorar: markdown'ın aynı çıkması `_table_grid`
+çıktısının da aynı olduğunu kanıtlamaz.
+
+**Asıl bulgu — fark cihazdan değil makineden geliyor.** Gönderilen CPU tabanı
+(PC_7820) ile bu makinenin GPU koşusu arasında, aynı 201 belgede **5 belgede**
+heavy utility farkı çıktı (hepsi `ocrturk`): `data_53` −0,1435 · `data_135`
++0,0265 · `data_52` +0,0154 · `data_175` −0,0049 · `data_59` +0,0005. Bu beş
+belge **bu makinede** hem CPU hem CUDA ile yeniden üretildi: beşinde de sayfa
+metni ve tablo yapısı **birebir aynı**.
+
+Yani: ağır motorun metni **makineden makineye** değişiyor, **aynı makinede
+cihazdan cihaza değişmiyor.**
+
+> **`engines.py` içindeki `EngineResult.device` yorumu bu ölçümle çelişiyor.**
+> Orada "aynı PDF ve aynı Docling derlemesi CPU ve CUDA'da FARKLI metin veriyor —
+> 9 belgenin 4'ü, biri bütün bir markdown tablosunu kaybediyor … iki worker farklı
+> hızlandırıcıda birbirinin yerine geçmez" yazıyor. Bu, RTX 4060 + docling 2.120.3
+> üzerinde ölçülmüş doğru bir gözlemdi; **bu makinede (Quadro RTX 4000 + docling
+> 2.120.1) tekrarlanmadı.** İki değişken birden farklı olduğu için (GPU mimarisi
+> **ve** docling sürümü) hangisinin sorumlu olduğu ayrılamaz. Yorum **silinmemeli**
+> — cihazı provenance'a yazma kararı hâlâ doğru; ama "cihaz farkı kesin" ifadesi
+> "bir makinede gözlendi, ikincisinde gözlenmedi, atıf çözülmedi" olarak
+> düzeltilmelidir. Ayırmak için **aynı makinede docling 2.120.3** koşulmalıdır.
+
+### P.5 C1 — yönlendirmenin faydası GPU'da
+
+**P.5.1 Elmayla elma (aynı 201 belge).** Değişen hiçbir karar yok:
+
+| metrik | CPU tabanı | GPU aynı 201 | fark |
+|---|---:|---:|---:|
+| routed_heavy | 87 | 87 | 0 |
+| heavy_gain ≥ 0,02 | 63 | 63 | 0 |
+| route_precision@0,02 | 0,4713 | 0,4713 | 0 |
+| route_recall@0,02 | 0,6508 | 0,6508 | 0 |
+| mean_utility.fast | 0,835381 | 0,835381 | 0 |
+| mean_utility.heavy | 0,849617 | 0,849089 | −0,000528 |
+| mean_utility.routed | 0,852394 | 0,852504 | +0,000110 |
+| NET | 3,4198 | 3,4419 | +0,0221 |
+| karantina red | 1 | 1 | 0 |
+
+**Route kararı değişen belge 0, fast utility farklı belge 0** — beklendiği gibi:
+kapı sinyalleri pdf-inspector ve PyMuPDF'ten geliyor, ikisi de GPU kullanmıyor.
+Heavy'deki küçük fark P.4'teki 5 belgeden (makine farkı), cihazdan değil.
+
+**Kontrol sütunu:** aynı makinede CPU cache'iyle koşulan 60 belge, GPU'nun aynı
+60 belgesiyle **fast/heavy/routed/route kararı — dördünde de 0 fark**. Cihaz
+dışında her şey sabitken hiçbir metrik değişmiyor. **Soru 4'ün cevabı: C1 fayda
+ölçümü GPU'da ayakta kalıyor.**
+
+**P.5.2 Kapanan kanıt boşluğu — 380'in tamamı.** CPU'da 380 belgenin 201'i
+işlenebilmişti (179 "Docling cache yok" hatası, belgeler sağlamdı, CPU
+yetişmemişti). GPU'da **380/380, 0 hata**:
+
+| metrik | ocrturk (180) | opendataloader_bench (200) | **birleşik (380)** |
+|---|---:|---:|---:|
+| routed_heavy | 85 | 75 | 160 |
+| heavy_gain ≥ 0,02 | 71 | 27 | 98 |
+| route_precision@0,02 | 0,5529 | **0,2267** | **0,4000** |
+| route_recall@0,02 | 0,6620 | 0,6296 | 0,6531 |
+| mean_utility.fast | 0,802770 | 0,887721 | 0,847481 |
+| mean_utility.heavy | 0,832977 | 0,867520 | 0,851158 |
+| mean_utility.routed | 0,834039 | 0,879854 | 0,858152 |
+| **NET** | **+5,6284** | **−1,5734** | +4,0550 |
+| karantina red | 3 | 0 | 3 |
+
+(Bu tablo `predictions.jsonl`'dan bağımsız olarak yeniden hesaplandı; birleşik
+satır `summary.json` ile birebir uyuştu.)
+
+**İki sonuç:**
+
+1. **Birleşik precision 0,4713 → 0,4000'e düştü.** 201 belgelik örneklem
+   yönlendirmenin isabetini olduğundan **iyi** gösteriyormuş.
+2. **`opendataloader_bench`'te zarar iki katına çıktı.** 72 belgede NET −0,6835
+   idi; 200 belgenin tamamında **−1,5734**. Ağır çağrıların **%77,3'ü boşa**
+   (precision 0,2267) ve `mean_utility.routed` (0,8799) `mean_utility.fast`'in
+   (0,8877) **altında** — o ailede yönlendirme çıktıyı kötüleştiriyor.
+
+Bu, O.13'ün "born-digital İngilizce'de en iyi politika heavy'yi hiç çağırmamak"
+bulgusunun **daha büyük örneklemde ve daha güçlü biçimde** tekrarıdır. Bölüm 5'in
+"İngilizcede mevcut route kararı zarar veriyor" hükmü artık 72 değil **200
+belgeye** dayanıyor.
+
+> "Yakalanan fayda oranı" (`max(delta,0)`) burada kasten kullanılmadı: asimetrik,
+> yalnız kazancı sayar, gereksiz ağır çağrının zararını saymaz — `opendataloader`
+> rejiminde baskın olan tam da o zarar.
+
+### P.6 Adım 6 ölçülemedi — ve neden 0 yazılmadı
+
+Kendi 9 belgelik korpusun tablo/şekil hükümleri GPU metniyle **üretilemedi**.
+`hata_arayuzu.py` iki girdi istiyor ve ikisini üreten betik depoda yok:
+`out/docling_annot/<belge>.json` ve `out/mineru/<belge>/auto/*_middle.json`.
+
+İkincisi **sessiz bozulma** üretirdi: kod `if os.path.exists` ile korunuyor, dosya
+yoksa MinerU tarafı boş kümeye düşüyor ve `mineru & docling_tablo` **her zaman
+boş** çıkıyor — tablo hükümleri hata vermeden anlamsız olurdu. Bu, projenin daha
+önce yaşadığı "hiç var olmayan sayı" hatasının aynısı; o yüzden koşulmadı.
+
+Ayrıca `hata_arayuzu.py` içinde `OUT` **sabit yazılı** (`BASE/out`),
+`PDF_PARSER_OUT` dinlenmiyor — ayrı bir çıktı köküne yazma tarifi bu sürümle
+çalışmıyor.
+
+**Yerine ölçülen:** cihaz eşdeğerliği (65 belge, tablo yapıları dahil, 0 fark).
+Ağır motorun metni ve tablo yapıları cihazla değişmediği için tablo/şekil
+hükümlerinin de değişmeyeceği **çıkarılabilir** — ama bu bir çıkarımdır, ölçüm
+değildir ve öyle kaydedildi.
+
+### P.7 Arayüz
+
+Adım 9'un istediği tek sayfalık basılabilir pano yazıldı:
+`scripts/gpu_panosu.py` → `html/gpu_panosu.html`. Tek dosya, gömülü CSS/JS, dış
+bağımlılık yok, `@media print` ile A4'e basılıyor. **Hiçbir sayı betiğin içine
+gömülü değil** — hepsi koşuların JSON'larından okunuyor ve her sayının altında
+`kaynak: <dosya> → <alan>` satırı duruyor. Eksik dosya "ölçülmedi" kartı üretiyor,
+0 yazmıyor.
+
+Entegrasyonda üç şey eklendi/düzeltildi (2026-08-24):
+
+* Pano çıktısı `REPO_ROOT/html`'e yazıyordu — depo kökünde `html/` yok. Diğer
+  arayüzlerle aynı yere (`research/pdf-parser/html/`) alındı.
+* `html/index.html` yazıldı: bütün arayüzleri, hangi soruyu cevapladıklarını ve
+  künyelerini listeleyen giriş sayfası. Panoya arayüzler arası gezinme şeridi
+  eklendi.
+* **`c1_arayuz_gpu.html` 380'in yalnız 201'ini gösteriyor** — `--kiyas` verilince
+  `c1_arayuz.py` iki koşunun kesişimini alıyor, yani P.5.2'nin asıl bulgusunu
+  üreten 179 belge arayüzde görünmüyordu. `--kiyas`sız ikinci bir arayüz üretildi:
+  `html/c1_arayuz_gpu380.html` (380 belge, precision 0,4000 / recall 0,6531 /
+  karantina 3 — koşunun sayılarıyla birebir).
+
+### P.8 Bu koşudan çıkan açık maddeler
+
+1. **Atıf çözülmedi:** önceki makinenin 7 sayfalık cihaz farkı GPU mimarisinden
+   mi docling 2.120.3'ten mi geliyor? Ayırmak için aynı makinede 2.120.3
+   koşulmalı. `engines.py` yorumu o zamana kadar "atıf açık" olarak düzeltilmeli.
+2. **Hız ölçümü tekrarlanabilir değil** (CPU 1,40×, GPU 1,72× koşular arası).
+   Soğuk makinede, GPU yükü olmadan, 3+ tekrarla ölçülmeli.
+3. **Adım 6 hâlâ açık:** `docling_annot/` ve `mineru/` üreten betikler yok;
+   `hata_arayuzu.py:55`'teki sabit `OUT` da düzeltilmeli.
+4. **`opendataloader_bench` NET −1,5734** — 200 belgenin tamamında doğrulandı.
+   Bu koşunun kapsamı dışıydı (`smart_router.yaml` kasten ellenmedi) ama artık
+   kalibrasyonun en güçlü gerekçesi bu sayı.
+5. **Birleşik metrikler 201 örneklemde iyimserdi** (precision 0,4713 → 0,4000).
+   Bundan sonraki bütün C1 sayıları **380 belgelik taban** üzerinden verilmeli;
+   201'lik koşular yalnız geçmişle kıyas için.
+
+
+## Q. Ligatür Kaybı — Kaynakla Doğrulanan Sözcük Onarımı (2026-08-25) — commit `3dc273b`
+
+<!-- CLAUDE-2026-08-25: extraction katmani duzeltmesi; yonlendirme/esik degismedi,
+     esik_version ellenmedi. Sozluk/LLM YOK, yalniz kaynak PDF dogrulamasi. -->
+
+### Q.1 Sorun
+
+Aynı PDF'in hem hızlı yol (`pdf-inspector`) hem ağır yol (Docling) çıktısında
+bazı `fi`/`fl` karakterleri kayboluyordu: `predefined → predened`,
+`significantly → signicantly`, `Artificial → Arti cial`,
+`classification → classifica- tion`.
+
+Hata **HTML görüntülemede değil**: ham Inspector ve Docling markdown'ında zaten
+mevcut. Kaynak PDF'in PyMuPDF metin katmanında aynı konumlarda Unicode `ﬁ`/`ﬂ`
+ligatürleri duruyor; kayıp, ligatürün genişletilmesi sırasında oluşuyor.
+
+### Q.2 Çözüm — onarım yalnız kaynakla doğrulanabiliyorsa
+
+Sözlük, LLM veya yazım tahmini **kullanılmadı**. Bir kelime ancak şu koşulların
+hepsi sağlanırsa düzeltiliyor:
+
+1. Kaynak PDF sayfasında fiziksel olarak Unicode `ﬁ`/`ﬂ` ligatürü var,
+2. ligatür genişletildiğinde doğru kelime **aynı sayfada** oluşuyor,
+3. parser çıktısı bu kelimenin `fi/fl` kısmı düşmüş biçimiyle eşleşiyor,
+4. aynı sayfada tek bir aday var (birden fazlaysa dokunulmuyor),
+5. token, kaynağın yalnızca **satır sonu bölünmesi** olarak tanıdığı bir parça
+   değil (`termi- nal` olduğu gibi bırakılır),
+6. parser çıktısı zaten doğruysa hiçbir değişiklik yapılmıyor.
+
+**Maliyet:** ikinci bir PyMuPDF geçişi eklenmedi. Kapı zaten her sayfada
+`page.get_text()` çağırıyor; o sonuç sayfa bazında taşınıyor. Gate'in çağrı
+testi üçüncü bir extraction çağrısı oluşmadığını kilitliyor.
+
+**Akıştaki yeri:** merge'den **sonra**, `# Page N` başlıkları eklenmeden
+**önce**. Böylece kazanan sayfa hangi motordan gelirse gelsin aynı kuraldan
+geçiyor ve page locator sözleşmesi bozulmuyor.
+
+### Q.3 Ölçümler
+
+Gerçek makale (IEEE Access SLR, 43 sayfa; 28 sayfa hızlı, 15 sayfa ağır yola
+bayraklı):
+
+| ölçüm | değer |
+|---|---|
+| toplam onarım (43 sayfanın hızlı metni) | **344** |
+| hızlı yolda kalan 28 sayfadaki onarım | **278** |
+| belirsiz aday | **0** |
+| değişen sayfa | 39 / 43 |
+| passage: eksik / geçersiz sayfa no, offset uyuşmazlığı | 0 / 0 / 0 |
+| provenance'a kaynak metin sızması | yok |
+
+Regresyon — **hiçbir gereksiz onarım yok**:
+
+| korpus | sayfa | onarım | belirsiz |
+|---|---|---|---|
+| çekirdek parser corpusu (9 belge) | 261 | 0 | 0 |
+| rastgele benchmark örnekleri | 300 | 2 (ikisi de doğru yönde) | 0 |
+
+### Q.4 Yanlış onarım riski — ölçülen ve kapatılan
+
+İlk sürümde tek-token aşaması *"parser çıktısındaki bir kelime kaynak sayfada
+yoksa bu bir ligatür kaybıdır"* varsayıyordu. Bu varsayım fazla geniş:
+261 sayfada parser çıktısında olup kaynakta olmayan **2041 token** var ve
+çoğu tire-satır-sonu parçası (`ing`, `tion`, `guage`, `architec`).
+
+Yeniden üretilebilir bozulma:
+
+```
+kaynak : "the ﬁnal termi-
+nal"
+parser : "the final termi- nal"     ← zaten doğru
+öncesi : "the final termi- final"   ← BOZULDU
+sonrası: "the final termi- nal"     ← düzeltildi
+```
+
+Kapatma: bir token, komşusuyla birleştiğinde kaynakta gerçek bir kelime
+oluşturuyorsa onarım adayı sayılmıyor (split aşamasının zaten uyguladığı
+kuralın ters yönden okunuşu). Etkisi ölçüldü:
+
+| ölçüm | değer |
+|---|---|
+| korumanın kapattığı riskli token (261 sayfa) | 1031 / 2041 |
+| korumanın kapattığı riskli token (300 sayfa) | 1012 / 2639 |
+| korumanın elediği **doğru** onarım | **0** |
+| makalede korumalı/korumasız çıktı farkı | **byte düzeyinde 0** |
+
+### Q.5 Açık kalanlar
+
+1. **Kısa iskelet tabanı (min 3 harf).** `ﬁle → le`, `ﬁnd → nd`, `ﬁne → ne`
+   gibi kayıplar onarılmıyor; makalede **23 adet** böyle tek-adaylı kayıp
+   ölçüldü (`le→file` 7, `nd→find` 5, `ne→fine` 4, `ve→five` 2, `t→fit` 2,
+   `aw→flaw`, `ow→flow`, `ku→kufi`). Taban 2'ye indirilirse `ow`, `aw`, `ne`,
+   `ve` gibi gerçek kelimelerin üzerine yazma riski doğuyor — bilinçli
+   precision/recall tercihi. Bu belgede kapsama ≈ 344/367 = **%94**.
+2. **Tire-satır-sonu birleştirme yapılmıyor.** Makalede onarımdan sonra hâlâ
+   806 parça token var (`docu`+`ments`, `infor`+`mation`, `extrac`+`tion`).
+   Bu bir ligatür sorunu değil, ayrı bir de-hyphenation işi — normalizer
+   bunlara kasten dokunmuyor, yeni koruma da onları yanlış onarımdan koruyor.
+3. **Kalan yanlış-onarım sınıfı.** Parser, kaynak sayfada hiç bulunmayan bir
+   kelime üretir ve o kelime aynı sayfadaki bir ligatür iskeletiyle birebir
+   çakışırsa yanlış onarım hâlâ mümkün (`ﬂown` varken `own`, `ﬁner` varken
+   `NER`). Ölçülen 561 sayfa + makalede **0 kez** gerçekleşti — bu bir garanti
+   değil, ölçülmüş bir üst sınırdır.
+4. **`ff`/`ffi`/`ffl` kayıpları kapsam dışı.** Bu makalede o ligatürlerden
+   **0 tane** var, dolayısıyla burada etkisi yok; başka belgelerde olabilir.
+5. **Ağır yol split onarımları yerelde doğrulanamadı.** Bu makinede Docling
+   kurulu olmadığı için 43 sayfa da hızlı yolda kaldı; ağır yol sayfalarındaki
+   65 split onarımı yalnız önceki cache'li koşumdan biliniyor.
+
+6. **Kaynağın kendisi bozuksa onarım yapılmıyor — ve bu bütün sayfayı
+   etkiliyor.** Makalenin 41. sayfasında (kaynakça) PDF'in kendi metin
+   katmanında hem `Artiﬁcial` (ligatürlü, 3 kez) hem `Articial` (zaten
+   bozuk, 1 kez) bulunuyor. `articial` kaynakta gerçek bir kelime olarak
+   göründüğü için 5. kural devreye giriyor ve o sayfadaki **3 `Articial`
+   onarılmadan kalıyor**. Yani tek bir bozuk geçiş, o sayfada o iskeleti
+   tümüyle dokunulmaz yapıyor. Bu, "kanıt yoksa tahmin yürütme" kuralının
+   bilinçli bedeli; sayım tabanlı bir gevşetme (3 ligatürlü geçiş > 1 bozuk
+   geçiş) mümkün ama tahmine kapı açar, ölçülmeden yapılmamalı.
+
+   Üretim çıktısında kelime sınırıyla sayılan **tek kalan bozuk biçim budur**:
+   `classication`, `specic`, `signicantly`, `workow`, `nancial`, `identied`,
+   `coefcient`, `scientic`, `classier`, `dened`, `rst`, `elds` → hepsi **0**.
+
+### Q.6 Etki ve sürüm
+
+- `esik_version`, `config/smart_router.yaml` ve yönlendirme kararları
+  **değişmedi**; bu bir extraction katmanı düzeltmesi.
+- Onarılan belgelerin `content_hash` değeri değişir → eski belgeler yeniden
+  ayrıştırılırsa **yeniden embedding** gerekir.
+- Ek maliyet ölçülen ~1,65 ms/sayfa CPU; ek PyMuPDF geçişi yok.
+- Normalizer hata verirse parse düşürülmez: sayfalar ancak tamamı hatasız
+  onarıldıktan sonra yazılır, aksi hâlde seçilmiş metin olduğu gibi kalır ve
+  hata provenance'a geçer.
+- `origin/developments-supplementer` üzerinde tek commit `3dc273b`; beş dosya,
+  `smart_pdf.py` tarafı saf ekleme. Geri alma: `git revert 3dc273b`.
+- Tam test paketi yeni taban üstünde **464 passed** (17'si bu değişikliğin).
 
 ## 12. Son Cümle
 

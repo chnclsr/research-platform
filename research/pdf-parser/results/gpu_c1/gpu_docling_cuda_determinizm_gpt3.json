@@ -1,0 +1,44 @@
+{
+ "ortam": {
+  "makine": "server-cezeri",
+  "islemci": "x86_64",
+  "python": "3.10.12",
+  "os": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "torch": "2.6.0+cu124",
+  "cuda_var": true,
+  "gpu": "Quadro RTX 4000",
+  "gpu_bellek_gb": 7.6,
+  "cuda_surum": "12.4",
+  "docling": "2.120.1"
+ },
+ "device": "cuda",
+ "threads": 16,
+ "runs": 1,
+ "isinma_sn": 135.48,
+ "belgeler": [
+  {
+   "belge": "gpt3_uzun_75sayfa",
+   "sayfa": 75,
+   "sure_sn": 106.937,
+   "ms_sayfa": 1425.8,
+   "tum_kosular_sn": [
+    106.937
+   ],
+   "karakter": 335919,
+   "markdown_sha256": "53d45db19a56c7ffee1864a210b121748a2709ec2915b75447bc8046ba26461b"
+  }
+ ],
+ "toplam_sn": 106.9,
+ "toplam_sayfa": 75,
+ "ortalama_ms_sayfa": 1425.8,
+ "determinizm": {
+  "belge": "gpt3_uzun_75sayfa",
+  "kosu": 3,
+  "hepsi_ayni": true,
+  "ozetler": [
+   "53d45db19a56c7ffee1864a210b121748a2709ec2915b75447bc8046ba26461b",
+   "53d45db19a56c7ffee1864a210b121748a2709ec2915b75447bc8046ba26461b",
+   "53d45db19a56c7ffee1864a210b121748a2709ec2915b75447bc8046ba26461b"
+  ]
+ }
+}

@@ -1,0 +1,103 @@
+{
+ "olcumler": {
+  "cpu_1": {
+   "ortalama_ms_sayfa": 1757.0,
+   "toplam_sn": 458.6,
+   "toplam_sayfa": 261,
+   "belge": {
+    "turkce_makale": 3397.1,
+    "resnet_2sutun_gorsel": 1502.0,
+    "vgg_tablo_agirlikli": 2830.7,
+    "attention_tablo": 1274.0,
+    "bert_2sutun_dipnot": 1338.5,
+    "sybil_tip_2sutun": 2045.8,
+    "gpt3_uzun_75sayfa": 2465.2,
+    "gpt4_uzun_gorsel": 727.9,
+    "taranmis_bert_2sutun_dipnot": 7926.7
+   }
+  },
+  "cpu_2": {
+   "ortalama_ms_sayfa": 2464.0,
+   "toplam_sn": 643.1,
+   "toplam_sayfa": 261,
+   "belge": {
+    "turkce_makale": 4877.9,
+    "resnet_2sutun_gorsel": 2108.6,
+    "vgg_tablo_agirlikli": 3912.6,
+    "attention_tablo": 1867.1,
+    "bert_2sutun_dipnot": 1876.2,
+    "sybil_tip_2sutun": 2907.8,
+    "gpt3_uzun_75sayfa": 3669.6,
+    "gpt4_uzun_gorsel": 876.3,
+    "taranmis_bert_2sutun_dipnot": 10572.9
+   }
+  },
+  "cuda_1": {
+   "ortalama_ms_sayfa": 516.4,
+   "toplam_sn": 134.8,
+   "toplam_sayfa": 261,
+   "belge": {
+    "turkce_makale": 955.5,
+    "resnet_2sutun_gorsel": 531.1,
+    "vgg_tablo_agirlikli": 615.8,
+    "attention_tablo": 420.7,
+    "bert_2sutun_dipnot": 384.7,
+    "sybil_tip_2sutun": 555.5,
+    "gpt3_uzun_75sayfa": 826.9,
+    "gpt4_uzun_gorsel": 194.2,
+    "taranmis_bert_2sutun_dipnot": 1785.8
+   }
+  },
+  "cuda_2": {
+   "ortalama_ms_sayfa": 887.4,
+   "toplam_sn": 231.6,
+   "toplam_sayfa": 261,
+   "belge": {
+    "turkce_makale": 1641.7,
+    "resnet_2sutun_gorsel": 965.2,
+    "vgg_tablo_agirlikli": 974.3,
+    "attention_tablo": 841.0,
+    "bert_2sutun_dipnot": 674.8,
+    "sybil_tip_2sutun": 935.1,
+    "gpt3_uzun_75sayfa": 1428.5,
+    "gpt4_uzun_gorsel": 353.8,
+    "taranmis_bert_2sutun_dipnot": 2452.4
+   }
+  }
+ },
+ "cpu_kosular_arasi_oran": 1.402,
+ "gpu_kosular_arasi_oran": 1.718,
+ "eslesmis_ciftler": [
+  {
+   "cift": "1. olcum",
+   "cpu_ms_sayfa": 1757.0,
+   "gpu_ms_sayfa": 516.4,
+   "hizlanma": 3.4
+  },
+  {
+   "cift": "2. olcum",
+   "cpu_ms_sayfa": 2464.0,
+   "gpu_ms_sayfa": 887.4,
+   "hizlanma": 2.78
+  }
+ ],
+ "hizlanma_araligi": {
+  "en_dusuk": 2.78,
+  "en_yuksek": 3.4
+ },
+ "belge_bazinda_cpu_orani": {
+  "turkce_makale": 1.436,
+  "resnet_2sutun_gorsel": 1.404,
+  "vgg_tablo_agirlikli": 1.382,
+  "attention_tablo": 1.466,
+  "bert_2sutun_dipnot": 1.402,
+  "sybil_tip_2sutun": 1.421,
+  "gpt3_uzun_75sayfa": 1.489,
+  "gpt4_uzun_gorsel": 1.204,
+  "taranmis_bert_2sutun_dipnot": 1.334
+ },
+ "cpu_termal_kisilma_sayaci": "0",
+ "cpu_governor": "powersave",
+ "cpu_epp": "balance_performance",
+ "not": "Iki CPU olcumu arasindaki fark 9 belgenin hepsinde ayni yonde ve benzer buyuklukte. PROCHOT sayaci 0, rakip surec yok (>%90 bosta), governor ve EPP degismedi. HIPOTEZ (kanit degil): 1. olcum ~45 dakikalik surekli GPU yukunden ONCE, 2. olcum SONRA kosuldu; sicak kasada turbo binleri PROCHOT bayragi kaldirmadan duser. Dogrulanmadi. Sonuc: hizlanma katsayisi tek sayi degil ARALIK olarak raporlanir."
+}

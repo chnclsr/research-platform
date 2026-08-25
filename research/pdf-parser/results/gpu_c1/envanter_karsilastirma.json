@@ -1,0 +1,28 @@
+{
+ "gonderilen_kayit": 380,
+ "yerel_kayit": 380,
+ "ortak": 380,
+ "yalniz_gonderilende": [],
+ "yalniz_yerelde": [],
+ "farkli_sha256": [],
+ "farkli_sayfa_sayisi": [],
+ "farkli_referans_karakter": [],
+ "veri_seti_sayimi": {
+  "ocrturk": 180,
+  "opendataloader_bench": 200
+ },
+ "pdf_parse_yetenekli": 380,
+ "kendi_korpus_pdf": 9,
+ "kendi_korpus_dosyalar": [
+  "attention_tablo.pdf",
+  "bert_2sutun_dipnot.pdf",
+  "gpt3_uzun_75sayfa.pdf",
+  "gpt4_uzun_gorsel.pdf",
+  "resnet_2sutun_gorsel.pdf",
+  "sybil_tip_2sutun.pdf",
+  "taranmis_bert_2sutun_dipnot.pdf",
+  "turkce_makale.pdf",
+  "vgg_tablo_agirlikli.pdf"
+ ],
+ "gecti": true
+}

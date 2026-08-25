@@ -1,0 +1,16 @@
+{
+ "aciklama": "C1 cache'inde ayni PDF'in CPU ve CUDA ciktilari",
+ "cpu_belge": 60,
+ "cuda_belge": 380,
+ "karsilastirilan": 60,
+ "cpu_device": [
+  "cpu"
+ ],
+ "cuda_device": [
+  "cuda:0"
+ ],
+ "sayfa_metni_farkli": [],
+ "tablo_yapisi_farkli": [],
+ "ayrinti": [],
+ "gecti": true
+}

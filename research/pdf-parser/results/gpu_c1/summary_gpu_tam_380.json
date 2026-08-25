@@ -1,0 +1,19 @@
+{
+  "metric_version": "c1_metrics_v1_2026-08-18",
+  "metric_fingerprint": "c1_metrics_v1_2026-08-18+rapidfuzz",
+  "documents": 380,
+  "ok": 380,
+  "errors": 0,
+  "routed_heavy": 160,
+  "heavy_gain_ge_0_02": 98,
+  "route_precision_at_0_02": 0.4,
+  "route_recall_at_0_02": 0.6531,
+  "mean_utility": {
+    "fast": 0.847481,
+    "heavy": 0.851158,
+    "routed": 0.858152
+  },
+  "run_id": "gpu_tam_380",
+  "engine": "docling persistent cache (/home/cezeri/Desktop/projeler/research-platform/research/pdf-parser/out/c1_docling_cache_cuda)",
+  "manifest": "/home/cezeri/Desktop/projeler/research-platform/research/pdf-parser/out/korpus_envanteri.jsonl"
+}
