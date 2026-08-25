@@ -1,19 +1,63 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.13.0`
+Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.11`
+Belge sürümü: `6.16`
 
-Son güncelleme: `2026-08-24`
+Son güncelleme: `2026-08-25`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
 [MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md](MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md)
 ve [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md](DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md)
+ve [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md)
+ve [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
 
-## v0.13.0 — 2026-08-24
+## v0.15.0 — 2026-08-25
 
+- Güvenlik, kapasite, worker, veritabanı, kuyruk, telemetri, API/istemci ve pipeline
+  davranışını belirleyen uygulama sabitleri `.env` üzerinden yönetilebilir hâle geldi;
+  mevcut kurulumun değerleri değiştirilmeden `.env` ve `.env.example` içine yazıldı.
+- `ACQUISITION_CONCURRENCY=4` artık yeni koşuların edinim paralelliğinin gerçek varsayılanı,
+  `FRONTIER_MAX_DEPTH=2` ise citation frontier derinliğinin gerçek varsayılanıdır. İstemci
+  protokolde açık değer gönderirse koşu-bazlı tercih üstün gelmeye devam eder.
+- Redis bağlantısının başlangıç, olağan işlem ve sağlık sorgusu deneme sayıları ayrı
+  değişkenlerdir; önceki `30 / 3 / 1` davranışı korunur. Gecikme de `.env` ile ayarlanır.
+- Connector'a özgü yapılandırmalar, Telegram davranışı ve Docker/Compose değerleri bu
+  sürümün kapsamına alınmadı.
+
+## v0.14.0 — 2026-08-25
+
+- Araştırmalar kapasite kuyruğundan çıktıkları anda ortak Docker/WSL CPU-RAM ve toplam GPU
+  yükünü kaydediyor; kuyrukta geçen süre ölçüme katılmıyor.
+- Paralel koşular donanımı ayrı ayrı sorgulamıyor. Tek örnek her etkin koşunun kendi stage
+  etiketi ve kimlik açıklamayan paralel-koşu sayısıyla kaydediliyor; grafik örtüşen süreyi
+  gölgeliyor ve tüketimi tek bir koşuya atfetmiyor.
+- Başarılı, eksik, başarısız ve iptal edilmiş admitted koşular CSV, özet JSON, SVG grafik
+  ve bağımsız donanım ZIP paketi üretiyor. Tamamlanan koşuların ana teslimat paketleri de
+  telemetri dosyalarını içeriyor.
+- GPU veya NVML bulunmayan kurulumlarda CPU/RAM grafiği devam ediyor. Telemetri arızası
+  araştırma durumunu değiştirmiyor, özgün pipeline hatasını maskelemiyor ve kapasite
+  slotunun bırakılmasını engellemiyor.
+- Kontrol paneli donanım SVG'sini sahiplik korumalı artifact yolu üzerinden önizliyor;
+  ham örnek event'leri uzun koşuların panel zaman çizelgesi kotasını tüketmiyor.
+- Paket, API, MCP gateway ve panel artık sürümü kurulu dağıtım metadata'sındaki tek
+  değerden okuyor; health yanıtları, OpenAPI metadata'sı, `__version__` ve panel footer'ı
+  aynı etiketi gösteriyor.
+- Donanım SVG'sinde panel başlığı, legend ve üst eksen etiketleri için ayrılan alanlar
+  ayrıştırıldı; küçük ve büyük önizlemelerdeki metin iç içe geçmeleri giderildi.
+
+## v0.13.0 — 2026-08-25
+
+- **Connector operasyon ekranındaki sahte “disabled” durumu giderildi.** Panel connector
+  sağlığını eski `API_TOKEN` yerine kurulumun `SERVICE_TOKEN` değeriyle sorguluyor;
+  çalışan connector'lar yeniden doğru etkin/sağlıklı durumlarıyla görünüyor. Değişiklik
+  araştırma worker'larını veya devam eden koşuları yeniden başlatmıyor.
+- **Commit ve push artık tam test kapısına bağlı.** Son kod değişikliğinden sonra bütün
+  pytest paketi geçmeden yayın yapılmıyor; test ortamı çalışmıyorsa önceki bir koşunun
+  sonucu yeterli sayılmıyor. Codex sandbox'ının sağlam `.venv` için üretebildiği yanıltıcı
+  erişim hatasının teşhisi de geliştirici notlarına eklendi.
 - **Sistem mimarisi diyagramı güncel çalışma biçimini gösteriyor.** Langflow ve panel
   girişleri, sahiplik korumalı API, acil/normal Redis öncelikleri, kapasite kapılı paralel
   koşular, Git/Jina dahil edinim kümesi ve ayrı Docling GPU servisi eklendi. Diyagram

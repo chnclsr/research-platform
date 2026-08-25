@@ -217,7 +217,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 "model": self.settings.llm_model, "temperature": 0,
                 "response_format": {"type": "json_object"},
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            }, timeout=180,
+            }, timeout=self.settings.llm_timeout_s,
         )
         response.raise_for_status()
         payload = response.json()

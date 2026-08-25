@@ -399,9 +399,11 @@ def _markdown_report(record: dict, args: argparse.Namespace) -> list[str]:
     by_number = {page["page"]: page for page in pages}
     lines += [
         f"- pages: {len(pages)} · routed heavy: {len(routed)}",
-        f"- retained fast: {len(retained_fast)} · "
-        f"untouched: {fast_states['untouched']} · fallback: {fast_states['fallback']} · "
-        f"quarantined: {fast_states['quarantined']}",
+        (
+            f"- retained fast: {len(retained_fast)} · "
+            f"untouched: {fast_states['untouched']} · fallback: {fast_states['fallback']} · "
+            f"quarantined: {fast_states['quarantined']}"
+        ),
         f"- engines: `{parse.get('engine_counts')}`",
         f"- device: `{parse.get('engine_devices')}` · degraded: `{parse.get('degraded')}`",
     ]
@@ -435,8 +437,12 @@ def _markdown_report(record: dict, args: argparse.Namespace) -> list[str]:
         reasons = ", ".join(page.get("decision") or []) or "fast path"
         details = [_fast_state(page), reasons, page.get("karar_gerekcesi")]
         detail = " · ".join(str(item) for item in details if item)
-        lines += ["", f"## Page {number} — {page.get('engine') or FAST_ENGINE} "
-                      f"({detail})", "", markdown[number]]
+        lines += [
+            "",
+            f"## Page {number} — {page.get('engine') or FAST_ENGINE} ({detail})",
+            "",
+            markdown[number],
+        ]
     lines.append("")
     return lines
 

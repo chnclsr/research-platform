@@ -8,6 +8,7 @@ from typing import Any, Literal
 import ulid
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
+from .config import get_settings
 from .temporal import infer_relative_date_range
 
 
@@ -84,7 +85,11 @@ class ResearchBudget(BaseModel):
     # and a silent 45 minutes was a decision nobody saw being made.
     max_wall_minutes: int = Field(ge=1, le=1440)
     results_per_connector: int = Field(20, ge=1, le=100)
-    acquisition_concurrency: int = Field(4, ge=1, le=16)
+    acquisition_concurrency: int = Field(
+        default_factory=lambda: get_settings().acquisition_concurrency,
+        ge=1,
+        le=16,
+    )
     exhaustive_until_budget: bool = True
 
 
@@ -125,7 +130,11 @@ class ConnectorSelection(BaseModel):
     trusted_domains: list[str] = Field(default_factory=list)
     zotero_collections: list[str] = Field(default_factory=list)
     zotero_tags: list[str] = Field(default_factory=list)
-    citation_depth: int = Field(1, ge=0, le=2)
+    citation_depth: int = Field(
+        default_factory=lambda: get_settings().frontier_max_depth,
+        ge=0,
+        le=5,
+    )
 
     @model_validator(mode="after")
     def apply_profile(self) -> "ConnectorSelection":

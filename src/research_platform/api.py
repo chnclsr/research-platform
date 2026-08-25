@@ -22,12 +22,12 @@ from .connectors import build_registry
 from .db import SessionLocal, create_schema, get_session
 from .embeddings import EmbeddingClient
 from .identity import principal_from_api_key, principal_from_user_id
+from .paperqa_adapter import paperqa2_health
 from .parsers import build_parser_registry
 from .passages import retrieve_passages
 from .queueing import discard_run_jobs, enqueue_run, normalize_priority, rescore_run
 from .repository import ActorRequired, Repository, RunAccessDenied
 from .scheduler import preempt_for
-from .paperqa_adapter import paperqa2_health
 from .schemas import (
     ArtifactView,
     CorpusSearchRequest,
@@ -42,6 +42,7 @@ from .schemas import (
     ZoteroSyncResult,
 )
 from .storage import ObjectStore
+from .version import VERSION
 from .zotero_sync import ZoteroSyncService
 
 logger = logging.getLogger(__name__)
@@ -112,7 +113,7 @@ def _validate_hitl_response(interaction_type: str, response: dict) -> dict:
     raise HTTPException(status_code=400, detail="Unknown interaction type")
 
 
-async def _connect_redis(app: FastAPI, *, attempts: int = 1, delay_s: float = 1.0):
+async def _connect_redis(app: FastAPI, *, attempts: int):
     if app.state.redis is not None:
         try:
             await app.state.redis.ping()
@@ -141,7 +142,7 @@ async def _connect_redis(app: FastAPI, *, attempts: int = 1, delay_s: float = 1.
                     exc,
                 )
                 if attempt < attempts:
-                    await asyncio.sleep(delay_s)
+                    await asyncio.sleep(settings.redis_connect_delay_s)
     return None
 
 
@@ -186,14 +187,14 @@ async def lifespan(app: FastAPI):
     await create_schema()
     settings = get_settings()
     app.state.http = httpx.AsyncClient(
-        transport=httpx.AsyncHTTPTransport(retries=3),
+        transport=httpx.AsyncHTTPTransport(retries=settings.http_transport_retries),
         timeout=settings.request_timeout_s,
         headers={"User-Agent": settings.user_agent},
     )
     app.state.redis = None
     app.state.redis_lock = asyncio.Lock()
     if not settings.testing:
-        await _connect_redis(app, attempts=30)
+        await _connect_redis(app, attempts=settings.redis_startup_connect_attempts)
         await _reconcile_interrupted_runs(app)
     yield
     await app.state.http.aclose()
@@ -203,7 +204,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Research Platform API",
-    version="0.10.0",
+    version=VERSION,
     description="Local-first, multi-source evidence research platform",
     lifespan=lifespan,
 )
@@ -285,20 +286,26 @@ async def _handle_actor_required(_: Request, exc: ActorRequired) -> JSONResponse
 @app.get("/health")
 async def health(request: Request) -> dict:
     settings = get_settings()
-    await _connect_redis(request.app, attempts=1)
+    await _connect_redis(request.app, attempts=settings.redis_probe_connect_attempts)
     checks = {"database": "ok", "redis": "ok" if request.app.state.redis else "unavailable"}
     try:
-        response = await request.app.state.http.get(f"{settings.ollama_url}/api/version", timeout=3)
+        response = await request.app.state.http.get(
+            f"{settings.ollama_url}/api/version", timeout=settings.service_health_timeout_s
+        )
         checks["ollama"] = "ok" if response.is_success else "degraded"
     except Exception:
         checks["ollama"] = "unavailable"
     try:
-        response = await request.app.state.http.get(f"{settings.agentsearch_url}/health", timeout=3)
+        response = await request.app.state.http.get(
+            f"{settings.agentsearch_url}/health", timeout=settings.service_health_timeout_s
+        )
         checks["agentsearch"] = "ok" if response.is_success else "degraded"
     except Exception:
         checks["agentsearch"] = "unavailable"
     try:
-        response = await request.app.state.http.get(f"{settings.crawl4ai_url}/health", timeout=3)
+        response = await request.app.state.http.get(
+            f"{settings.crawl4ai_url}/health", timeout=settings.service_health_timeout_s
+        )
         checks["crawl4ai"] = "ok" if response.is_success else "degraded"
     except Exception:
         checks["crawl4ai"] = "unavailable"
@@ -311,7 +318,8 @@ async def health(request: Request) -> dict:
     else:
         try:
             response = await request.app.state.http.get(
-                f"{settings.smart_router_docling_url.rstrip('/')}/health", timeout=3
+                f"{settings.smart_router_docling_url.rstrip('/')}/health",
+                timeout=settings.service_health_timeout_s,
             )
             device = (response.json().get("device") or "?") if response.is_success else ""
             checks["docling"] = f"ok ({device})" if response.is_success else "degraded"
@@ -320,7 +328,8 @@ async def health(request: Request) -> dict:
     try:
         scheme = "https" if settings.minio_secure else "http"
         response = await request.app.state.http.get(
-            f"{scheme}://{settings.minio_endpoint}/minio/health/live", timeout=3
+            f"{scheme}://{settings.minio_endpoint}/minio/health/live",
+            timeout=settings.service_health_timeout_s,
         )
         checks["minio"] = "ok" if response.is_success else "degraded"
     except Exception:
@@ -342,7 +351,7 @@ async def create_research_run(
     body: ResearchRunCreate, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
     settings = get_settings()
-    redis = await _connect_redis(request.app, attempts=3)
+    redis = await _connect_redis(request.app, attempts=settings.redis_operation_connect_attempts)
     if redis is None and not settings.testing:
         raise HTTPException(status_code=503, detail="Redis queue unavailable; run was not created")
     try:
@@ -420,6 +429,7 @@ async def pause_research_run(run_id: str, repo: Repository = Depends(repository)
 async def resume_research_run(
     run_id: str, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
+    settings = get_settings()
     row = await _required_run(run_id, repo)
     resumable_statuses = {RunStatus.PAUSED.value, RunStatus.FAILED.value}
     if row.status not in resumable_statuses:
@@ -431,7 +441,7 @@ async def resume_research_run(
         )
     if row.interaction:
         raise HTTPException(status_code=409, detail="Respond to the pending HITL interaction first")
-    redis = await _connect_redis(request.app, attempts=3)
+    redis = await _connect_redis(request.app, attempts=settings.redis_operation_connect_attempts)
     if redis is None:
         raise HTTPException(status_code=503, detail="Redis queue unavailable")
     previous_status = row.status
@@ -478,6 +488,7 @@ async def respond_to_hitl(
     request: Request,
     repo: Repository = Depends(repository),
 ) -> RunView:
+    settings = get_settings()
     row = await _required_run(run_id, repo)
     if row.status not in {RunStatus.AWAITING_INPUT.value, RunStatus.PAUSED.value}:
         raise HTTPException(status_code=409, detail=f"Run is not awaiting input: {row.status}")
@@ -508,7 +519,7 @@ async def respond_to_hitl(
             "response": response,
         },
     ]
-    redis = await _connect_redis(request.app, attempts=3)
+    redis = await _connect_redis(request.app, attempts=settings.redis_operation_connect_attempts)
     if redis is None:
         raise HTTPException(status_code=503, detail="Redis queue unavailable")
     row = await repo.update_run(
@@ -581,6 +592,7 @@ async def set_research_run_priority(
     nothing about when it runs, and demoting one would be a confusing way to ask for a
     pause -- that is what the pause endpoint is for.
     """
+    settings = get_settings()
     row = await _required_run(run_id, repo)
     if row.status not in {RunStatus.QUEUED.value, RunStatus.PAUSED.value}:
         raise HTTPException(
@@ -589,7 +601,7 @@ async def set_research_run_priority(
     priority = normalize_priority(body.priority)
     row = await repo.update_run(run_id, priority=priority)
     await repo.event(run_id, "priority_changed", {"priority": priority})
-    redis = await _connect_redis(request.app, attempts=1)
+    redis = await _connect_redis(request.app, attempts=settings.redis_probe_connect_attempts)
     if redis is not None:
         # A paused run has no queued job to move; it enters its new band when it resumes.
         await rescore_run(redis, run_id, priority)

@@ -108,6 +108,8 @@ class Settings(BaseSettings):
     # deployment, so a real value belongs in the environment file there.
     session_secret: str | None = None
     session_max_age_seconds: int = Field(12 * 3600, ge=300)
+    login_max_attempts: int = Field(8, ge=1, le=100)
+    login_lockout_seconds: int = Field(300, ge=1, le=86400)
     # Presented by trusted intermediaries (the panel, the Telegram bot) that
     # authenticate their own users and then declare who they act for via X-Actor-User.
     service_token: str | None = None
@@ -129,6 +131,8 @@ class Settings(BaseSettings):
     control_panel_https: bool = False
     research_api_url: str = "http://localhost:8000"
     gateway_download_dir: str = "./data/deliveries"
+    gateway_client_timeout_s: float = Field(60.0, gt=0, le=3600.0)
+    gateway_artifact_max_chars: int = Field(100_000, ge=1, le=10_000_000)
     mcp_transport: str = "stdio"
     mcp_host: str = "127.0.0.1"
     mcp_port: int = Field(8010, ge=1, le=65535)
@@ -162,12 +166,46 @@ class Settings(BaseSettings):
 
     max_download_bytes: int = 25 * 1024 * 1024
     request_timeout_s: float = 25.0
+    http_transport_retries: int = Field(3, ge=0, le=20)
+    service_health_timeout_s: float = Field(3.0, gt=0, le=120.0)
+    redis_startup_connect_attempts: int = Field(30, ge=1, le=300)
+    redis_operation_connect_attempts: int = Field(3, ge=1, le=100)
+    redis_probe_connect_attempts: int = Field(1, ge=1, le=20)
+    redis_connect_delay_s: float = Field(1.0, ge=0, le=60.0)
     pipeline_control_poll_s: float = Field(1.0, ge=0.1, le=10.0)
     search_stage_timeout_s: float = Field(600.0, ge=10.0, le=3600.0)
     acquisition_stage_timeout_s: float = Field(900.0, ge=10.0, le=3600.0)
     acquisition_concurrency: int = Field(4, ge=1, le=16)
+    acquisition_max_redirects: int = Field(5, ge=0, le=50)
+    agentsearch_read_max_chars: int = Field(100_000, ge=1, le=10_000_000)
+    crawl4ai_timeout_s: float = Field(90.0, gt=0, le=3600.0)
     domain_delay_s: float = Field(0.5, ge=0)
     allow_private_networks: bool = False
+
+    embedding_batch_size: int = Field(32, ge=1, le=1024)
+    embedding_timeout_s: float = Field(180.0, gt=0, le=3600.0)
+
+    search_concurrency: int = Field(8, ge=1, le=128)
+    citation_seed_min: int = Field(4, ge=0, le=1000)
+    citation_seed_max: int = Field(12, ge=0, le=1000)
+    evidence_extraction_concurrency: int = Field(2, ge=1, le=128)
+    relevance_retry_attempts: int = Field(2, ge=1, le=20)
+    graph_recursion_min: int = Field(80, ge=1, le=100_000)
+    graph_recursion_max: int = Field(5000, ge=1, le=100_000)
+    graph_recursion_per_wall_minute: int = Field(20, ge=0, le=1000)
+    first_round_source_fraction: float = Field(0.40, gt=0, le=1)
+    later_round_source_fraction: float = Field(0.30, gt=0, le=1)
+
+    checkpoint_max_bytes: int = Field(200 * 1024 * 1024, ge=1024 * 1024)
+    db_pool_min_size: int = Field(10, ge=1, le=1000)
+    db_pool_per_run: int = Field(5, ge=1, le=100)
+    db_overflow_min_size: int = Field(10, ge=0, le=1000)
+    db_overflow_per_run: int = Field(3, ge=0, le=100)
+    queue_priority_shift_days: int = Field(3650, ge=1, le=36500)
+    queue_job_expiry_s: int = Field(86400, ge=1, le=2_592_000)
+    worker_job_timeout_s: int = Field(86400, ge=1, le=2_592_000)
+    worker_keep_result_s: int = Field(60, ge=0, le=86400)
+    worker_health_check_interval_s: int = Field(30, ge=1, le=3600)
 
     # How many runs may execute at once is measured, not configured -- see capacity.py.
     # What is configured here is the *budget* each run is assumed to need and the headroom
@@ -191,6 +229,15 @@ class Settings(BaseSettings):
     # would either waste the card or fail to protect it.
     docling_vram_reserve_gb: float = Field(0.0, ge=0, le=64)
     capacity_poll_s: float = Field(15.0, ge=1.0, le=300.0)
+    capacity_absolute_guard: int = Field(8, ge=1, le=128)
+    capacity_probe_timeout_s: float = Field(5.0, gt=0, le=120.0)
+    model_max_concurrent_calls: int = Field(1, ge=1, le=32)
+    # Shared run-window telemetry. It describes the Docker/WSL environment and total
+    # visible GPU load, not one coroutine's share of those resources.
+    hardware_telemetry_enabled: bool = True
+    hardware_telemetry_interval_s: float = Field(5.0, ge=1.0, le=60.0)
+    hardware_telemetry_flush_s: float = Field(60.0, ge=1.0, le=3600.0)
+    hardware_telemetry_max_buffered_samples: int = Field(720, ge=1, le=100_000)
     testing: bool = False
 
 

@@ -19,8 +19,9 @@ class EmbeddingClient:
         if not texts or self.settings.testing:
             return [[] for _ in texts]
         output: list[list[float]] = []
-        for start in range(0, len(texts), 32):
-            batch = texts[start:start + 32]
+        batch_size = self.settings.embedding_batch_size
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start:start + batch_size]
             started = time.perf_counter()
             # The same single file the LLM calls queue in: embedding and completion share
             # one GPU, so they have to share one lease or parallel runs would put both on
@@ -29,7 +30,7 @@ class EmbeddingClient:
                 response = await self.client.post(
                     f"{self.settings.ollama_url}/api/embed",
                     json={"model": self.settings.embedding_model, "input": batch, "truncate": True},
-                    timeout=180,
+                    timeout=self.settings.embedding_timeout_s,
                 )
             response.raise_for_status()
             payload = response.json()

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "research-platform"
-version = "0.12.0"
+version = "0.15.0"
 description = "Local-first, multi-source evidence research platform"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,6 +17,7 @@ dependencies = [
   "langgraph>=1.0,<2",
   "mcp>=1.27,<2",
   "minio>=7.2,<8",
+  "nvidia-ml-py>=13.610,<14",
   # Exact pin, not a range: this is the smart_router fast path AND the source
   # of every gate.py signal (table/figure/OCR detection). It was never a
   # declared dependency before 2026-08-20 -- installed ad hoc in dev venvs

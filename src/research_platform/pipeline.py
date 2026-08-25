@@ -16,14 +16,16 @@ from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .acquisition import AcquisitionService
+from .auth import Principal
 from .config import Settings
 from .connectors import build_registry
 from .coverage import calculate_coverage
 from .db import SessionLocal
 from .discovery_quality import estimated_completeness, relation_to_candidate, sentinel_recall
-from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .embeddings import EmbeddingClient
+from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .exporter import build_exports
+from .hardware_telemetry import TelemetryHub
 from .llm import (
     LLMProvider,
     build_llm,
@@ -35,6 +37,8 @@ from .llm import (
     translate_for_display,
     translate_research_request,
 )
+from .normalization import canonicalize_url, detect_language
+from .paperqa_adapter import PaperQA2EvidenceEngine
 from .passages import (
     chunk_document,
     merge_passage_claims,
@@ -43,38 +47,27 @@ from .passages import (
     relevant_sentence_claims,
     retrieve_passages,
 )
-from .paperqa_adapter import PaperQA2EvidenceEngine
-from .normalization import canonicalize_url, detect_language
+from .query_compiler import compile_provider_query
+from .recovery import (
+    diagnose_gaps,
+    initial_missions,
+    literature_scan_probe_missions,
+    matches_target_entities,
+    mission_signature,
+    recovery_missions,
+    resolve_official_entities,
+    select_mission_balanced_candidates,
+)
 from .relevance import (
-    classify_candidate_admission,
     claim_relevance,
+    classify_candidate_admission,
     document_relevance,
     domain_matches,
     filter_and_rank_candidates,
     temporal_relevance,
 )
-from .query_compiler import compile_provider_query
-from .research_plan import build_research_plan, plan_strategy
-from .recovery import (
-    diagnose_gaps,
-    initial_missions,
-    literature_scan_probe_missions,
-    mission_signature,
-    matches_target_entities,
-    recovery_missions,
-    resolve_official_entities,
-    select_mission_balanced_candidates,
-)
-from .auth import Principal
 from .repository import Repository
-from .scholarly import candidate_dedupe_key
-from .scoping import (
-    LABEL_MAX_LENGTH,
-    apply_planning_answers,
-    date_suffix,
-    fixed_questions,
-    slugify,
-)
+from .research_plan import build_research_plan, plan_strategy
 from .schemas import (
     AcquiredDocument,
     AuthorityLevel,
@@ -88,6 +81,14 @@ from .schemas import (
     SearchMission,
     SourceFamily,
     new_id,
+)
+from .scholarly import candidate_dedupe_key
+from .scoping import (
+    LABEL_MAX_LENGTH,
+    apply_planning_answers,
+    date_suffix,
+    fixed_questions,
+    slugify,
 )
 from .storage import ObjectStore
 from .temporal import constrain_text_to_scope, enrich_publication_date
@@ -152,7 +153,13 @@ class PipelineStageTimeout(RuntimeError):
 
 
 class ResearchPipeline:
-    def __init__(self, settings: Settings, session: AsyncSession, client: httpx.AsyncClient):
+    def __init__(
+        self,
+        settings: Settings,
+        session: AsyncSession,
+        client: httpx.AsyncClient,
+        telemetry: TelemetryHub | None = None,
+    ):
         self.settings = settings
         self.session = session
         # The pipeline executes runs on behalf of whoever owns them, so it needs
@@ -165,6 +172,7 @@ class ResearchPipeline:
         self.llm: LLMProvider = build_llm(settings, client)
         self.embeddings = EmbeddingClient(settings, client)
         self.store = ObjectStore(settings)
+        self.telemetry = telemetry
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -207,6 +215,10 @@ class ResearchPipeline:
         return graph.compile()
 
     async def _boundary(self, state: PipelineState, stage: str) -> None:
+        if self.telemetry is not None:
+            # Mark the work that is about to begin, including checkpoint serialization.
+            # The hardware sample is shared, but this stage label belongs only to this run.
+            self.telemetry.set_stage(state["run_id"], stage)
         run = await self.repo.get_run(state["run_id"])
         if run is None:
             raise KeyError(state["run_id"])
@@ -519,8 +531,13 @@ class ResearchPipeline:
             # default previously killed such runs after roughly six rounds,
             # long before the user-selected duration elapsed.
             recursion_limit = max(
-                80,
-                min(5000, 80 + protocol.budget.max_wall_minutes * 20),
+                self.settings.graph_recursion_min,
+                min(
+                    self.settings.graph_recursion_max,
+                    self.settings.graph_recursion_min
+                    + protocol.budget.max_wall_minutes
+                    * self.settings.graph_recursion_per_wall_minute,
+                ),
             )
             result = await self.graph.ainvoke(
                 state,
@@ -918,9 +935,12 @@ class ResearchPipeline:
         missions = [SearchMission.model_validate(item) for item in state.get("missions", [])]
         if not missions:
             missions = initial_missions(protocol, state.get("queries", []))
-        semaphore = asyncio.Semaphore(8)
+        semaphore = asyncio.Semaphore(self.settings.search_concurrency)
         citation_budget_lock = asyncio.Lock()
-        citation_seed_budget = min(12, max(4, protocol.budget.results_per_connector))
+        citation_seed_budget = min(
+            self.settings.citation_seed_max,
+            max(self.settings.citation_seed_min, protocol.budget.results_per_connector),
+        )
         citation_seeds_used = 0
         connector_errors: list[dict[str, str]] = []
         connector_metrics: list[dict[str, Any]] = []
@@ -1300,7 +1320,11 @@ class ResearchPipeline:
             round_cap = max(1, len(novel))
         else:
             remaining = max(0, protocol.budget.max_sources - len(existing))
-            fraction = 0.40 if state.get("round_number", 1) == 1 else 0.30
+            fraction = (
+                self.settings.first_round_source_fraction
+                if state.get("round_number", 1) == 1
+                else self.settings.later_round_source_fraction
+            )
             round_cap = min(
                 remaining,
                 max(1, math.ceil(protocol.budget.max_sources * fraction)),
@@ -1552,7 +1576,7 @@ class ResearchPipeline:
             f"DOCUMENT_EXCERPT: {document.content[:6000]}"
         )
         last_error = "invalid_response"
-        for _attempt in range(2):
+        for _attempt in range(self.settings.relevance_retry_attempts):
             try:
                 result = await self.llm.complete_json(system_prompt, user_prompt)
                 if not isinstance(result, dict) or not isinstance(
@@ -2029,7 +2053,7 @@ class ResearchPipeline:
             )
         )
         documents_by_version = {payload["source_version_id"]: payload for payload in documents}
-        semaphore = asyncio.Semaphore(2)
+        semaphore = asyncio.Semaphore(self.settings.evidence_extraction_concurrency)
         extraction_errors: list[dict[str, str]] = []
 
         async def one(passage: Passage):

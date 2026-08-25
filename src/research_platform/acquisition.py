@@ -356,7 +356,7 @@ class AcquisitionService:
             await self.limiter.wait(url)
             current = url
             redirects: list[str] = []
-            for _ in range(5):
+            for _ in range(self.settings.acquisition_max_redirects):
                 response = await self.client.get(
                     current, follow_redirects=False, headers={"User-Agent": self.settings.user_agent},
                     timeout=self.settings.request_timeout_s,
@@ -443,7 +443,8 @@ class AcquisitionService:
         try:
             response = await self.client.get(
                 f"{self.settings.agentsearch_url}/read",
-                params={"url": url, "max_chars": 100000}, timeout=self.settings.request_timeout_s,
+                params={"url": url, "max_chars": self.settings.agentsearch_read_max_chars},
+                timeout=self.settings.request_timeout_s,
             )
             response.raise_for_status()
             data = response.json()
@@ -465,7 +466,9 @@ class AcquisitionService:
                 headers["Authorization"] = f"Bearer {self.settings.crawl4ai_api_token}"
             response = await self.client.post(
                 f"{self.settings.crawl4ai_url}/crawl",
-                headers=headers, json={"urls": [url], "browser_config": {"headless": True}}, timeout=90,
+                headers=headers,
+                json={"urls": [url], "browser_config": {"headless": True}},
+                timeout=self.settings.crawl4ai_timeout_s,
             )
             response.raise_for_status()
             data = response.json()

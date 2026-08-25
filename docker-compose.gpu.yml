@@ -46,3 +46,13 @@ services:
     environment:
       SMART_ROUTER_QUEUE_WAIT_S: "300"
       SMART_ROUTER_HEAVY_TIMEOUT_S: "900"
+      # The worker does not run CUDA workloads. Utility-only driver access lets pynvml
+      # observe the card shared by host Ollama and the docling container.
+      NVIDIA_DRIVER_CAPABILITIES: utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

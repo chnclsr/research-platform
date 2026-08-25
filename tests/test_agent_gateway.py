@@ -6,11 +6,12 @@ from types import SimpleNamespace
 import httpx
 import pytest
 import respx
-from starlette.responses import JSONResponse
 from starlette.applications import Starlette
+from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
+import research_platform.mcp_server as mcp_module
 from research_platform.db import SessionLocal, create_schema
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.identity import (
@@ -25,9 +26,12 @@ from research_platform.identity import (
 )
 from research_platform.mcp_server import BearerProtectedMCP
 from research_platform.telegram_bot import (
-    TelegramResearchBot, duration_keyboard, has_explicit_duration, parse_research_request,
+    TelegramResearchBot,
+    duration_keyboard,
+    has_explicit_duration,
+    parse_research_request,
 )
-import research_platform.mcp_server as mcp_module
+from research_platform.version import VERSION
 
 
 async def _linked_telegram_user(telegram_user_id: int) -> str:
@@ -152,6 +156,7 @@ async def test_health_needs_no_credential_but_still_respects_the_network_perimet
         response = client.get("/health")
         assert response.status_code == 200
         assert response.json()["service"] == "research-platform-mcp"
+        assert response.json()["version"] == VERSION
         # The tool surface behind it is still closed.
         assert client.get("/mcp").status_code == 401
 

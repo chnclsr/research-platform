@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import Principal
 from .config import get_settings
-
 from .db import (
     ArtifactRow,
     CheckpointRow,
@@ -34,6 +33,7 @@ from .db import (
 )
 from .normalization import canonicalize_url
 from .queueing import NORMAL, URGENT, normalize_priority
+from .relevance import evidence_entailment
 from .schemas import (
     AcquiredDocument,
     ConnectorCandidate,
@@ -46,14 +46,12 @@ from .schemas import (
     SourceFamily,
     new_id,
 )
-from .relevance import evidence_entailment
 from .scholarly import candidate_dedupe_key, scholarly_identity, title_fingerprint
-
 
 # PostgreSQL refuses a jsonb value once its elements exceed 256 MiB. Stop below that so
 # the run fails with an actionable error instead of an opaque driver exception that also
 # poisons the session.
-CHECKPOINT_MAX_BYTES = 200 * 1024 * 1024
+CHECKPOINT_MAX_BYTES = get_settings().checkpoint_max_bytes
 
 
 class ActorRequired(RuntimeError):
@@ -548,6 +546,17 @@ class Repository(metaclass=_OwnershipEnforced):
             .where(EventRow.run_id == run_id, EventRow.id > after_id)
             .order_by(EventRow.id)
             .limit(200)
+        )
+        return list(rows)
+
+    async def events_by_types(self, run_id: str, event_types: set[str]) -> list[EventRow]:
+        """Read a run's complete audit subset without the streaming endpoint's page cap."""
+        if not event_types:
+            return []
+        rows = await self.session.scalars(
+            select(EventRow)
+            .where(EventRow.run_id == run_id, EventRow.event_type.in_(event_types))
+            .order_by(EventRow.id)
         )
         return list(rows)
 

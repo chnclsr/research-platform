@@ -323,8 +323,11 @@ settings = get_settings()
 # short-lived control and checkpoint sessions beside it, so the default 5+10 pool is the
 # next thing to run out once more than one run executes at a time.
 _POOL_KWARGS: dict = {} if settings.database_url.startswith("sqlite") else {
-    "pool_size": max(10, startup_ceiling(settings) * 5),
-    "max_overflow": max(10, startup_ceiling(settings) * 3),
+    "pool_size": max(settings.db_pool_min_size, startup_ceiling(settings) * settings.db_pool_per_run),
+    "max_overflow": max(
+        settings.db_overflow_min_size,
+        startup_ceiling(settings) * settings.db_overflow_per_run,
+    ),
 }
 engine = create_async_engine(settings.database_url, pool_pre_ping=True, **_POOL_KWARGS)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)

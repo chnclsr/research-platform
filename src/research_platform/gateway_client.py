@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from .config import get_settings
 from .schemas import DeliveryMode, ResearchProtocol
 
 
@@ -22,14 +23,21 @@ class ResearchGatewayClient:
         base_url: str,
         api_token: str,
         *,
-        timeout_s: float = 60.0,
+        timeout_s: float | None = None,
+        artifact_max_chars: int | None = None,
         actor_user_id: str | None = None,
     ) -> None:
+        settings = get_settings()
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {api_token}"}
         if actor_user_id:
             self.headers["X-Actor-User"] = actor_user_id
-        self.timeout_s = timeout_s
+        self.timeout_s = timeout_s if timeout_s is not None else settings.gateway_client_timeout_s
+        self.artifact_max_chars = (
+            artifact_max_chars
+            if artifact_max_chars is not None
+            else settings.gateway_artifact_max_chars
+        )
 
     def for_actor(self, actor_user_id: str) -> "ResearchGatewayClient":
         """A copy of this client bound to one user, leaving the original untouched."""
@@ -37,6 +45,7 @@ class ResearchGatewayClient:
             self.base_url,
             "",
             timeout_s=self.timeout_s,
+            artifact_max_chars=self.artifact_max_chars,
         )
         clone.headers = {**self.headers, "X-Actor-User": actor_user_id}
         return clone
@@ -118,17 +127,18 @@ class ResearchGatewayClient:
         name: str,
         *,
         offset: int = 0,
-        max_chars: int = 100_000,
+        max_chars: int | None = None,
     ) -> str:
+        limit = max_chars if max_chars is not None else self.artifact_max_chars
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
             response = await client.get(
                 f"{self.base_url}/v1/research-runs/{run_id}/artifacts/{name}"
             )
             response.raise_for_status()
             text = response.content.decode("utf-8", errors="replace")
-            selected = text[offset : offset + max_chars]
-            if offset + max_chars < len(text):
-                selected += f"\n\n[TRUNCATED next_offset={offset + max_chars}]"
+            selected = text[offset : offset + limit]
+            if offset + limit < len(text):
+                selected += f"\n\n[TRUNCATED next_offset={offset + limit}]"
             return selected
 
     async def download(

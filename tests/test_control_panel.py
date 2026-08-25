@@ -2,17 +2,18 @@ import asyncio
 import json
 import re
 
+import pytest
+from conftest import acting_principal
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-import pytest
 
-from conftest import acting_principal
 from research_platform import control_panel
 from research_platform.auth import Principal
 from research_platform.db import SessionLocal, create_schema
 from research_platform.identity import create_user, get_user_by_email
 from research_platform.repository import Repository
 from research_platform.schemas import ResearchProtocol
+from research_platform.version import VERSION
 
 PANEL_PASSWORD = "panel-test-password"
 
@@ -77,6 +78,7 @@ def test_panel_requires_a_session_and_serves_the_login_form():
     with TestClient(control_panel.app) as client:
         health = client.get("/health")
         assert health.status_code == 200
+        assert health.json()["version"] == VERSION
 
         # The dashboard is no longer reachable without signing in.
         redirected = client.get("/", follow_redirects=False)
@@ -100,6 +102,7 @@ async def test_signed_in_user_sees_the_dashboard():
         assert "Sentinel recall" in page.text
         assert "Connector operasyon görünümü" in page.text
         assert "flow-nodes" in page.text
+        assert f"· v{VERSION}" in page.text
 
 
 @pytest.mark.asyncio
@@ -297,6 +300,58 @@ def test_queue_listing_hides_run_identifiers_from_non_admins():
 
     for_admin = control_panel._publishable_queue(queue, Principal.user("01ADM".ljust(26, "0"), "admin"))
     assert for_admin["jobs"][0]["run_id"] == "abc"
+
+
+@pytest.mark.asyncio
+async def test_connector_snapshot_prefers_the_service_token(monkeypatch):
+    """Connector health uses the same trusted-intermediary credential as panel proxies."""
+    request_headers: dict[str, str] = {}
+
+    class Settings:
+        research_api_url = "http://research-api.example.test"
+        service_token = "service-token"
+        api_token = "legacy-api-token"
+
+    class Response:
+        is_success = True
+
+        @staticmethod
+        def json():
+            return [
+                {
+                    "id": "snapshot_test",
+                    "family": "academic",
+                    "enabled": True,
+                    "healthy": True,
+                    "detail": "configured",
+                    "capabilities": ["search"],
+                }
+            ]
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            pass
+
+        async def get(self, url: str, *, headers: dict[str, str]):
+            assert url == "http://research-api.example.test/v1/connectors"
+            request_headers.update(headers)
+            return Response()
+
+    monkeypatch.setattr(control_panel, "get_settings", Settings)
+    monkeypatch.setattr(control_panel.httpx, "AsyncClient", Client)
+
+    snapshot = await control_panel._connector_snapshot()
+
+    assert request_headers == {"Authorization": "Bearer service-token"}
+    connector = next(item for item in snapshot if item["id"] == "snapshot_test")
+    assert connector["enabled"] is True
+    assert connector["healthy"] is True
 
 
 @pytest.mark.asyncio

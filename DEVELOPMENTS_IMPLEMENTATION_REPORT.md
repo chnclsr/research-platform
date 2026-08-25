@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.13.0`
+Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.17`
+Belge sürümü: `12.22`
 
-Son güncelleme: `2026-08-24`
+Son güncelleme: `2026-08-25`
 
 ## Kapsam
 
@@ -43,10 +43,15 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 28 | Akış diyagramlarının güncel mimariye uyarlanması | `f330659` |
 | 29 | PDF ayrıştırma teşhis raporu ve süre kaydı | `dbb7e43` |
 | 30 | Ajan yönergelerinin `AGENTS.md` altında tekleştirilmesi | `dc9b544` |
-| 31 | PDF raporunda sayfa seçimleri ve çakışmayan mod adları | _çalışma ağacı_ |
-| 32 | Jina Reader browser fallback'i | _çalışma ağacı_ |
-| 33 | GitHub URL akıllı repository işleyicisi | _çalışma ağacı_ |
-| 34 | Sistem mimarisi diyagramının güncel mimari ve Cezeri derisiyle yenilenmesi | _çalışma ağacı_ |
+| 31 | PDF raporunda sayfa seçimleri ve çakışmayan mod adları | `aa62f49` |
+| 32 | Jina Reader browser fallback'i | `aa62f49` |
+| 33 | GitHub URL akıllı repository işleyicisi | `aa62f49` |
+| 34 | Sistem mimarisi diyagramının güncel mimari ve Cezeri derisiyle yenilenmesi | `aa62f49` |
+| 35 | Commit/push öncesi zorunlu tam-test kapısı | _çalışma ağacı_ |
+| 36 | Connector görünümünde SERVICE_TOKEN kimlik doğrulaması | _çalışma ağacı_ |
+| 37 | Koşu donanım telemetrisi (kendi raporu var) | _çalışma ağacı_ |
+| 38 | Tek çalışma zamanı sürümü ve telemetri SVG yerleşimi | _çalışma ağacı_ |
+| 39 | Uygulama sabitlerinin `.env` yönetimine alınması (kendi raporu var) | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -59,6 +64,14 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 >
 > **Not:** 13. bölüm, 11. bölümdeki izolasyon kararını bilinçli olarak gevşetir —
 > hangi yönüyle olduğu o bölümde tablo hâlinde yazılıdır.
+>
+> **Not:** 37. bölümün ayrıntıları
+> [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md)
+> dosyasındadır.
+>
+> **Not:** 39. bölümün ayrıntıları
+> [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md)
+> dosyasındadır.
 
 ---
 
@@ -2431,6 +2444,86 @@ geometri denetimi sıfır kırpılmış etiket bildiriyor. SVG sıkı XML olarak
 ilk çocuklarının `title`/`desc` olduğu ve Türkçe kaynakla dışa aktarılan İngilizce sürümün
 geometrisinin eş olduğu doğrulandı. Son görünüm 1280×720 başsız Chrome render'ında elle
 incelendi.
+
+---
+
+## 35. Commit/push öncesi zorunlu tam-test kapısı
+
+`AGENTS.md` commit kuralı, son kod değişikliğinden sonra tam pytest paketi sıfır çıkışla
+bitmeden commit veya push'ı yasaklayacak biçimde kesinleştirildi. Test ortamı erişim veya
+yorumlayıcı hatasıyla başlatılamıyorsa önceki rapor sonucu kullanılamıyor; ortam çözülene
+kadar yayın duruyor. Yalnız testten sonra gelen belge değişikliği kodu değiştirmediğinde
+paketin yeniden koşması gerekmiyor.
+
+Bu oturumda `.venv` başlatıcısının verdiği hata gerçek ortam bozulması değildi: Codex
+sandbox'ı, `pyvenv.cfg` içindeki `%LOCALAPPDATA%` Python 3.12 tabanını çalıştırmayı
+engelliyordu. Yetkili yürütmede aynı ortam Python 3.12.7, pytest 8.4.2 ve Ruff 0.16.2 ile
+sağlıklı açıldı. Yanlışlıkla yeniden kurulum yapılmaması için teşhis yolu kalıcı notlara
+eklendi. Bu makineye özgü `AGENTS.md` bilinçli olarak gitignore'da tutulduğu için kapı bu
+kurulumda doğrudan etkindir; paylaşılan tarihsel kayıt bu bölüm ve CHANGELOG'dur.
+
+Tam paket son kod değişikliğinden sonra `447 passed, 2 warnings` sonucuyla 62,42 saniyede
+geçti. Tam-depo Ruff'ın 1.053 tarihsel ihlal taşıdığı ayrıca görünür kılındı; committe
+eklenen Inspector satırlarındaki iki yeni `ISC004` ihlali düzeltildi. Yeni/değişen kod
+için hedefli Ruff kapısı korunurken tarihsel borç temizmiş gibi raporlanmıyor.
+
+---
+
+## 36. Connector görünümünde SERVICE_TOKEN kimlik doğrulaması
+
+Çok kullanıcılı kimlik geçişinde API'nin güvenilir aracılar için kabul ettiği kimlik
+bilgisi `SERVICE_TOKEN + X-Actor-User` olarak değiştirilmişti. Panelin genel API proxy
+yolu bu seçimi `service_token or api_token` ile uygularken connector sağlık snapshot'ı
+eski `API_TOKEN` değerini göndermeye devam ediyordu. İki değer farklı olduğunda API
+`/v1/connectors` isteğini 401 ile reddediyor; panel boş sağlık cevabını geçmiş operasyon
+kayıtlarıyla birleştirirken connector'ları varsayılan olarak `enabled=false` gösteriyordu.
+Canlı API'de 28 connector'ın 24'ü çalışır durumdayken paneldeki toplu “disabled” görünümü
+bu nedenle oluştu.
+
+Snapshot isteği artık diğer panel API çağrılarıyla aynı seçim kuralını kullanıyor:
+`SERVICE_TOKEN` tanımlıysa onu, geriye dönük kurulumlarda yoksa `API_TOKEN` değerini
+gönderiyor. Değerler hiçbir yanıta veya loga yazılmıyor. Bu değişiklik
+`MULTI_USER_AUTH_V0.10.0_IMPLEMENTATION_REPORT.md` içindeki servis-token kararını
+değiştirmiyor; gözden kaçmış tek çağrı yolunu o kararla yeniden uyumlu hâle getiriyor.
+
+Regresyon testi iki token farklıyken connector snapshot isteğinin yalnız
+`SERVICE_TOKEN` taşıdığını ve dönen sağlıklı connector'ın etkin kaldığını doğruluyor.
+Hedefli Ruff, dosyalardaki önceden var olan ve `OPEN_ITEMS.md` 21. maddede izlenen kural
+borcu hariç temiz; kontrol paneli paketi `21 passed, 1 warning` sonucuyla geçti. Dağıtım
+yalnız host üzerindeki kontrol paneli sürecinin yeniden başlatılmasını gerektirir; Docker
+API ve worker servisleri ile çalışan araştırmalar yeniden başlatılmaz.
+
+Son kod değişikliği üzerinde zorunlu tam paket de `448 passed, 2 warnings` sonucuyla
+76,12 saniyede tamamlandı.
+
+Canlı dağıtımda yalnız host paneli yeniden başlatıldı (PID `19184` → `26204`) ve sağlık
+ucu `healthy` döndü. Panelin kullandığı `SERVICE_TOKEN` ile `/v1/connectors` 28 kayıt
+döndürdü: 24'ü etkin ve sağlıklı, üçü gerçek yapılandırma/opsiyonel bağımlılık nedeniyle
+disabled, biri etkin fakat yerel Zotero bağlantısı olmadığı için unhealthy. Yeniden
+başlatma sonrasında iki aktif araştırma `running` ve hatasız kalmaya devam etti; daha önce
+ACQUIRE güvenlik timeout'uyla düşmüş üçüncü koşunun durumu bu değişiklikle ilişkili değil.
+
+---
+
+## 38. Tek çalışma zamanı sürümü ve telemetri SVG yerleşimi
+
+Paket metadata'sı, API, panel health/status, MCP health ve footer daha önce birbirinden
+bağımsız sabit sürüm metinleri taşıyordu. `pyproject.toml` beyanı kurulu dağıtım metadata'sına
+dönüşüyor; `research_platform.version.VERSION` bütün çalışma zamanı yüzeylerinin tek okuma
+noktasıdır. Panel HTML'i sunulurken aynı değer footer yer tutucusuna yazılır. Sürüm eşitliği
+ile health ve footer çıktıları regresyon testleriyle korunur; OPEN_ITEMS 22. madde
+kapatılmıştır.
+
+Donanım SVG'sinde her metrik paneli için başlık bandı ile veri alanı ayrıldı. Legend'ler
+başlığın sağına, eksen ve grid çizgileri başlık bandının altına taşındı. Koordinat testi
+başlık/legend yatay mesafesini ve üst eksen etiketinin dikey mesafesini doğruluyor. Terminal
+smoke koşusunun artifact'leri idempotent finalizer ile yenilendi; Chrome'da doğal 1200×930
+boyut, panel `v0.14.0` footer'ı ve çakışmasız görünüm doğrulandı.
+
+Değişen Python dosyalarında hedefli Ruff temizdir. Son hedefli test paketi `55 passed`, son kod
+değişikliğinden sonraki zorunlu tam kapı `461 passed, 2 warnings` sonucuyla tamamlandı.
+Canlı iki araştırma boyunca worker ve API yeniden oluşturulmadı; yalnız host paneli
+yenilendi ve koşular `running` kalmaya devam etti.
 
 ---
 

@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Not a policy number: a runaway brake. If the measurements ever go wrong -- a container
 # limit disappears, psutil reports nonsense -- the answer must still be finite.
-ABSOLUTE_GUARD = 8
+ABSOLUTE_GUARD = get_settings().capacity_absolute_guard
 
 
 @dataclass(frozen=True)
@@ -91,9 +91,9 @@ async def resident_vram_gb(settings: Settings, client: httpx.AsyncClient | None 
     url = f"{settings.ollama_url.rstrip('/')}/api/ps"
     try:
         if client is not None:
-            response = await client.get(url, timeout=5)
+            response = await client.get(url, timeout=settings.capacity_probe_timeout_s)
         else:
-            async with httpx.AsyncClient(timeout=5) as owned:
+            async with httpx.AsyncClient(timeout=settings.capacity_probe_timeout_s) as owned:
                 response = await owned.get(url)
         response.raise_for_status()
         models = response.json().get("models") or []
@@ -140,12 +140,13 @@ def plan_capacity(measurement: Measurement, settings: Settings | None = None) ->
 
     slots_gpu = _gpu_slots(measurement, settings)
 
-    allowed = min(slots_ram, slots_cpu, slots_gpu, ABSOLUTE_GUARD)
+    guard = settings.capacity_absolute_guard
+    allowed = min(slots_ram, slots_cpu, slots_gpu, guard)
     # One run always runs. A machine too loaded for even a single run would otherwise
     # stop the platform entirely, and refusing every run is worse than running one.
     allowed = max(1, allowed)
 
-    named = {"ram": slots_ram, "cpu": slots_cpu, "gpu": slots_gpu, "guard": ABSOLUTE_GUARD}
+    named = {"ram": slots_ram, "cpu": slots_cpu, "gpu": slots_gpu, "guard": guard}
     limited_by = min(named, key=lambda key: named[key])
     return Capacity(
         allowed=allowed,
@@ -181,11 +182,11 @@ def _gpu_slots(measurement: Measurement, settings: Settings) -> int:
         # The probe failed. Say nothing rather than something wrong: RAM and CPU still
         # bound the answer, and treating an unreachable Ollama as "no GPU pressure" would
         # be the one reading that cannot be justified.
-        return ABSOLUTE_GUARD
+        return settings.capacity_absolute_guard
     headroom = (settings.gpu_vram_total_gb
                 - measurement.resident_vram_gb
                 - settings.docling_vram_reserve_gb)
-    return ABSOLUTE_GUARD if headroom >= settings.gpu_vram_margin_gb else 1
+    return settings.capacity_absolute_guard if headroom >= settings.gpu_vram_margin_gb else 1
 
 
 def startup_ceiling(settings: Settings | None = None) -> int:
@@ -205,7 +206,7 @@ def startup_ceiling(settings: Settings | None = None) -> int:
     by_cpu = int(math.floor(
         cpu_count * (1.0 - settings.cpu_headroom) / settings.run_cpu_budget
     ))
-    return max(1, min(by_ram, by_cpu, ABSOLUTE_GUARD))
+    return max(1, min(by_ram, by_cpu, settings.capacity_absolute_guard))
 
 
 class CapacityGate:
@@ -286,7 +287,7 @@ class CapacityGate:
 # describe this machine, and a per-pipeline copy would police nothing.
 GATE = CapacityGate()
 
-_MODEL_LEASE = asyncio.Semaphore(1)
+_MODEL_LEASE = asyncio.Semaphore(get_settings().model_max_concurrent_calls)
 
 
 def model_lease() -> asyncio.Semaphore:

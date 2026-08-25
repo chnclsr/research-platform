@@ -32,6 +32,8 @@ from arq.constants import (
     retry_key_prefix,
 )
 
+from .config import get_settings
+
 Priority = Literal["normal", "urgent"]
 
 PRIORITIES: tuple[str, ...] = ("normal", "urgent")
@@ -41,12 +43,12 @@ NORMAL: str = "normal"
 # How far below the normal band the urgent band sits. Any value larger than the longest
 # a normal job could plausibly wait works; ten years is unambiguous and still leaves the
 # score far inside the float range Redis uses.
-PRIORITY_SHIFT = timedelta(days=10 * 365)
+PRIORITY_SHIFT = timedelta(days=get_settings().queue_priority_shift_days)
 
 # arq derives the job key's TTL from the score when none is given, which goes negative for
 # a back-dated score and makes Redis reject the PSETEX. Passing it explicitly keeps the
 # job alive for the same day arq would have chosen.
-JOB_EXPIRY = timedelta(days=1)
+JOB_EXPIRY = timedelta(seconds=get_settings().queue_job_expiry_s)
 
 
 def normalize_priority(value: Any) -> str:

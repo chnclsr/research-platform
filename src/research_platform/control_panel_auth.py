@@ -32,11 +32,9 @@ CSRF_HEADER = "X-Control-Token"
 # belongs to no run.
 audit = logging.getLogger("research_platform.audit")
 
-# Login throttling. Deliberately in-process and per-address: the panel is a single
+# Login throttling is deliberately in-process and per-address: the panel is a single
 # uvicorn worker, and a shared store would be infrastructure this deployment does not
 # otherwise need. It slows credential stuffing; it is not a defence against a botnet.
-_MAX_ATTEMPTS = 8
-_LOCKOUT_SECONDS = 300
 
 
 @dataclass
@@ -164,24 +162,26 @@ def client_key(request: Request) -> str:
 
 def throttled(key: str) -> int:
     """Seconds the caller must wait, or 0 when they may try again now."""
+    settings = get_settings()
     record = _login_attempts.get(key)
-    if record is None or record.failures < _MAX_ATTEMPTS:
+    if record is None or record.failures < settings.login_max_attempts:
         return 0
     elapsed = time.time() - record.first_failure
-    if elapsed >= _LOCKOUT_SECONDS:
+    if elapsed >= settings.login_lockout_seconds:
         _login_attempts.pop(key, None)
         return 0
-    return int(_LOCKOUT_SECONDS - elapsed)
+    return int(settings.login_lockout_seconds - elapsed)
 
 
 def record_failure(key: str, email: str = "") -> None:
+    settings = get_settings()
     audit.warning("login failed from=%s email=%s", key, email[:120])
     record = _login_attempts.get(key)
-    if record is None or time.time() - record.first_failure >= _LOCKOUT_SECONDS:
+    if record is None or time.time() - record.first_failure >= settings.login_lockout_seconds:
         _login_attempts[key] = _AttemptRecord(failures=1)
         return
     record.failures += 1
-    if record.failures >= _MAX_ATTEMPTS:
+    if record.failures >= settings.login_max_attempts:
         audit.warning("login lockout from=%s after %s failures", key, record.failures)
 
 

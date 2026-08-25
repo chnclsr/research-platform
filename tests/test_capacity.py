@@ -92,6 +92,15 @@ def test_the_guard_holds_when_the_measurements_go_wrong():
     assert capacity.allowed == ABSOLUTE_GUARD
 
 
+def test_the_guard_is_loaded_from_settings():
+    capacity = plan_capacity(
+        machine(ram=4096.0, cpus=512, vram=0.0),
+        settings(capacity_absolute_guard=3),
+    )
+    assert capacity.allowed == 3
+    assert capacity.slots_gpu == 3
+
+
 def test_startup_ceiling_is_a_real_number_for_this_machine():
     ceiling = startup_ceiling(settings())
     assert 1 <= ceiling <= ABSOLUTE_GUARD

@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-24`
+Son güncelleme: `2026-08-25`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -32,6 +32,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 18 | Docling + Ollama kartı aynı anda paylaşınca ne olur, denenmedi | Olası VRAM thrash | Orta |
 | 19 | Anonim Jina Reader dış servis sınırı | 429 riski + hedef URL üçüncü tarafa gider | Düşük |
 | 20 | Metadata'sız GitHub adayında boyut sınırı klon sonrası | Büyük repo geçici ağ/disk tüketebilir | Düşük |
+| 21 | Tam-depo Ruff tabanı 1.053 ihlal taşıyor | Yeni lint hataları tarihsel gürültüde saklanabilir | Orta |
 
 ---
 
@@ -353,6 +354,22 @@ ama tek çağrı sırasında ağ ve geçici disk tüketimi yaratabilir.
 GitHub repository metadata'sı sorgulanacak; kimliksiz API kotasını tüketmemek için şu an
 her GitHub URL'sine ek bir istek konmadı. Gerekirse object filtering/partial clone ayrıca
 ölçülecek.
+
+## 21. Tam-depo Ruff tabanı temiz değil
+
+**Durum:** `ruff check .` 2026-08-24 ölçümünde 1.053 ihlal bildiriyor; 533'ü güvenli
+`--fix` adayı. Borç çoğunlukla tarihsel `research/pdf-parser` betikleri, migrations,
+Langflow bileşenleri ve eski testlerde. Bu iş kapsamında değişen üretim ve test kodunun
+hedefli Ruff kapıları temiz, `acquisition.py` ile `inspect_bundle.py` içindeki önceden
+belgelenmiş dar istisnalar açıkça hariç tutuluyor.
+
+**Etki:** Tam-depo Ruff bugün commit kapısı yapılamıyor; doğrudan kullanılırsa her değişiklik
+1.000'den fazla alakasız hata içinde başarısız oluyor ve yeni ihlaller gözden kaçabiliyor.
+
+**Yapılacak:** Önce Ruff kapsamını aktif ürün kodu ile tarihsel/deneysel araçlar arasında
+`pyproject.toml` üzerinden açıkça ayır; aktif kapsam için sıfır taban oluştur. Kalan borcu
+dizin bazında ayrı PR'larla azalt, otomatik düzeltmeleri davranış testleriyle birlikte
+uygula. Tam taban sıfıra inene kadar değişen Python dosyalarında hedefli Ruff zorunlu.
 
 ## Kapsam dışı bırakılanlar
 

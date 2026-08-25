@@ -60,6 +60,17 @@ from .control_panel_metrics import (
     stage_timeline,
 )
 from .control_panel_ui import CONTROL_PANEL_HTML, LOGIN_HTML
+from .db import (
+    ArtifactRow,
+    CheckpointRow,
+    ClaimRow,
+    EventRow,
+    EvidenceRow,
+    ResearchRunRow,
+    SessionLocal,
+    SourceRow,
+)
+from .hardware_telemetry import SAMPLE_EVENT
 from .identity import (
     authenticate,
     format_link_code,
@@ -72,19 +83,9 @@ from .identity import (
     telegram_ids_for,
     unlink_telegram,
 )
-from .db import (
-    ArtifactRow,
-    CheckpointRow,
-    ClaimRow,
-    EventRow,
-    EvidenceRow,
-    ResearchRunRow,
-    SessionLocal,
-    SourceRow,
-)
 from .repository import ACTIVE_RUN_STATUSES, Repository
 from .schemas import RunStatus
-
+from .version import VERSION
 
 ROOT = Path(__file__).resolve().parents[2]
 LOG_DIR = ROOT / "logs"
@@ -498,7 +499,7 @@ async def build_status(principal: Principal) -> dict[str, Any]:
     any_running = any(item["running"] for item in processes.values())
     overall = "running" if core_running else "degraded" if any_running else "stopped"
     return {
-        "version": "0.7.0",
+        "version": VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "overall": overall,
         "processes": processes,
@@ -520,7 +521,10 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="Araştırma bulunamadı")
         events = list(
             await session.scalars(
-                select(EventRow).where(EventRow.run_id == run_id).order_by(EventRow.id).limit(5000)
+                select(EventRow)
+                .where(EventRow.run_id == run_id, EventRow.event_type != SAMPLE_EVENT)
+                .order_by(EventRow.id)
+                .limit(5000)
             )
         )
         sources = list(
@@ -645,7 +649,11 @@ async def _connector_snapshot() -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(
                 f"{settings.research_api_url.rstrip('/')}/v1/connectors",
-                headers={"Authorization": f"Bearer {settings.api_token}"},
+                headers={
+                    "Authorization": (
+                        f"Bearer {settings.service_token or settings.api_token}"
+                    )
+                },
             )
             if response.is_success:
                 health_rows = response.json()
@@ -825,7 +833,7 @@ async def _run_powershell(script: str) -> tuple[int, str]:
 
 app = FastAPI(
     title="Research Platform Control Panel",
-    version="0.7.0",
+    version=VERSION,
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -887,7 +895,9 @@ async def index(principal: Principal | None = Depends(optional_principal)):
         return login_redirect()
     # The CSRF token is derived from the session, so the page a user is served can only
     # drive actions as that user.
-    page = CONTROL_PANEL_HTML.replace("__CONTROL_TOKEN__", csrf_token(principal))
+    page = CONTROL_PANEL_HTML.replace("__CONTROL_TOKEN__", csrf_token(principal)).replace(
+        "__PLATFORM_VERSION__", VERSION
+    )
     return _secure_headers(HTMLResponse(page))
 
 
@@ -946,7 +956,7 @@ async def logout() -> RedirectResponse:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "research-control-panel", "version": "0.12.0"}
+    return {"status": "healthy", "service": "research-control-panel", "version": VERSION}
 
 
 @app.get("/api/session")

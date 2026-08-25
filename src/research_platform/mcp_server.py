@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import ipaddress
-import json
 import base64
 import hashlib
+import ipaddress
+import json
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import parse_qs
 
 import httpx
-from mcp.server.fastmcp import FastMCP
 import uvicorn
+from mcp.server.fastmcp import FastMCP
 
 from .auth import AuthError
 from .config import get_settings
@@ -19,7 +19,7 @@ from .db import SessionLocal
 from .gateway_client import ResearchGatewayClient
 from .identity import principal_from_api_key
 from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
-
+from .version import VERSION
 
 settings = get_settings()
 mcp = FastMCP(
@@ -148,7 +148,7 @@ async def read_research_report(
     report: Literal[
         "executive_summary", "full_report", "coverage", "audit", "uncertainty"
     ] = "full_report",
-    max_chars: int = 100_000,
+    max_chars: int | None = None,
 ) -> str:
     """Read a textual result artifact directly into the calling Codex or Claude context."""
     names = {
@@ -166,7 +166,7 @@ async def read_research_raw_data(
     run_id: str,
     dataset: Literal["sources", "passages"] = "passages",
     offset: int = 0,
-    max_chars: int = 100_000,
+    max_chars: int | None = None,
 ) -> str:
     """Read collected source versions or normalized passages in repeatable chunks."""
     names = {
@@ -305,7 +305,7 @@ class BearerProtectedMCP:
                     {
                         "status": "healthy",
                         "service": "research-platform-mcp",
-                        "version": "0.10.1",
+                        "version": VERSION,
                     },
                 )
                 return

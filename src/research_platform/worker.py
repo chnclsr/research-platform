@@ -1,22 +1,23 @@
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
+
 import httpx
 from arq import run_worker
-from arq.cron import cron
 from arq.connections import RedisSettings
+from arq.cron import cron
 
-import logging
-
+from .auth import Principal
 from .capacity import GATE, startup_ceiling
 from .config import get_settings
 from .db import SessionLocal, create_schema
+from .hardware_telemetry import HUB, finalize_hardware_telemetry
 from .pipeline import ResearchPipeline
-from .auth import Principal
 from .queueing import NORMAL, discard_run_jobs, enqueue_run
 from .repository import Repository
 from .scheduler import resume_preempted
 from .schemas import RunStatus
-from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +61,23 @@ async def _recover_interrupted_jobs(ctx: dict) -> None:
 async def startup(ctx: dict) -> None:
     settings = get_settings()
     ctx["http"] = httpx.AsyncClient(
-        transport=httpx.AsyncHTTPTransport(retries=3),
+        transport=httpx.AsyncHTTPTransport(retries=settings.http_transport_retries),
         timeout=settings.request_timeout_s,
         headers={"User-Agent": settings.user_agent},
     )
     await create_schema()
     await _recover_interrupted_jobs(ctx)
+    try:
+        await HUB.start()
+    except Exception:
+        logger.exception("hardware telemetry startup failed; research execution continues")
 
 
 async def shutdown(ctx: dict) -> None:
+    try:
+        await HUB.stop()
+    except Exception:
+        logger.exception("hardware telemetry shutdown failed")
     client = ctx.get("http")
     if client is not None:
         await client.aclose()
@@ -101,12 +110,28 @@ async def execute_research_run(ctx: dict, run_id: str) -> None:
         capacity.allowed,
         capacity.limited_by,
     )
+    telemetry_started = False
     try:
+        try:
+            telemetry_started = await HUB.begin(run_id) is not None
+        except Exception:
+            logger.exception("hardware telemetry could not start for run %s", run_id)
         async with SessionLocal() as session:
-            pipeline = ResearchPipeline(settings, session, ctx["http"])
+            pipeline = ResearchPipeline(settings, session, ctx["http"], telemetry=HUB)
             await pipeline.run(run_id)
     finally:
-        GATE.release(run_id)
+        try:
+            if telemetry_started:
+                try:
+                    await HUB.end(run_id)
+                except Exception:
+                    logger.exception("hardware telemetry could not stop for run %s", run_id)
+                try:
+                    await finalize_hardware_telemetry(run_id, settings)
+                except Exception:
+                    logger.exception("hardware telemetry finalization failed for run %s", run_id)
+        finally:
+            GATE.release(run_id)
 
 
 async def expire_hitl_interactions(ctx: dict) -> None:
@@ -163,9 +188,9 @@ class WorkerSettings:
     max_jobs = startup_ceiling()
     # Collection has its own budget. Post-processing and final synthesis are
     # allowed to finish after that cutoff instead of being killed mid-report.
-    job_timeout = 24 * 60 * 60
-    keep_result = 60
-    health_check_interval = 30
+    job_timeout = get_settings().worker_job_timeout_s
+    keep_result = get_settings().worker_keep_result_s
+    health_check_interval = get_settings().worker_health_check_interval_s
 
 
 def run() -> None:
