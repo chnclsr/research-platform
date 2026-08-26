@@ -14,8 +14,11 @@ from research_platform.config import Settings, get_settings
 from research_platform.control_panel_ui import CONTROL_PANEL_HTML
 from research_platform.db import SessionLocal, create_schema
 from research_platform.hardware_telemetry import (
+    CSV_FILE,
     SAMPLE_EVENT,
     SEGMENT_EVENT,
+    SUMMARY_FILE,
+    SVG_FILE,
     HardwareSampler,
     TelemetryHub,
     build_telemetry_files,
@@ -309,7 +312,9 @@ def test_merge_zip_replaces_members_without_duplicates():
 @pytest.mark.asyncio
 async def test_terminal_finalizer_saves_artifacts_and_enriches_existing_bundles():
     await create_schema()
-    settings = get_settings()
+    # Settings read the deployment's own .env, so the output type is pinned here instead of
+    # letting the machine that runs the suite decide which artifacts this test expects.
+    settings = get_settings().model_copy(update={"hardware_telemetry_output_type": "all"})
     store = ObjectStore(settings)
     protocol = ResearchProtocol(
         title="Telemetry finalizer",
@@ -415,9 +420,91 @@ async def test_failed_and_cancelled_runs_get_a_standalone_bundle(status: RunStat
     assert "hardware_utilization_bundle.zip" in names
 
 
+def test_csv_output_type_builds_the_data_files_without_rendering_a_chart():
+    samples = [sample("2026-08-25T10:00:00+00:00")]
+    events = [
+        {"action": "start", "segment_id": "segment-1", "timestamp": samples[0]["timestamp"]},
+    ]
+    def build(output_type: str):
+        return build_telemetry_files(
+            samples,
+            events,
+            status=RunStatus.COMPLETED.value,
+            interval_seconds=60,
+            output_type=output_type,
+        )
+
+    assert set(build("csv")) == {CSV_FILE, SUMMARY_FILE}
+    assert set(build("all")) == {CSV_FILE, SUMMARY_FILE, SVG_FILE}
+    # The data files must stay byte-identical: "csv" drops the chart, it does not degrade
+    # the measurements or the summary behind it.
+    assert build("csv")[CSV_FILE] == build("all")[CSV_FILE]
+    assert build("csv")[SUMMARY_FILE] == build("all")[SUMMARY_FILE]
+
+
+@pytest.mark.asyncio
+async def test_csv_output_type_keeps_the_svg_out_of_artifacts_and_bundles():
+    await create_schema()
+    settings = get_settings().model_copy(update={"hardware_telemetry_output_type": "csv"})
+    store = ObjectStore(settings)
+    protocol = ResearchProtocol(
+        title="Telemetry csv output",
+        primary_question="Does the output type gate the chart?",
+        budget={"max_wall_minutes": 5},
+    )
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run = await repo.create_run(protocol)
+        await repo.event(
+            run.id,
+            SEGMENT_EVENT,
+            {"action": "start", "segment_id": "segment-1",
+             "timestamp": "2026-08-25T10:00:00+00:00"},
+        )
+        await repo.event(
+            run.id,
+            SAMPLE_EVENT,
+            {"samples": [sample("2026-08-25T10:00:00+00:00")], "schema_version": 1},
+        )
+        await repo.update_run(run.id, status=RunStatus.COMPLETED.value)
+        for bundle_name in ("raw_bundle.zip", "result_bundle.zip", "research_bundle.zip"):
+            key = f"runs/{run.id}/{bundle_name}"
+            data = zip_bytes({"existing.txt": b"kept"})
+            await store.put(key, data, "application/zip")
+            await repo.save_artifact(run.id, bundle_name, "application/zip", key, len(data))
+
+    saved = await finalize_hardware_telemetry(run.id, settings, store=store)
+
+    assert set(saved) == {CSV_FILE, SUMMARY_FILE, "hardware_utilization_bundle.zip"}
+    assert SVG_FILE not in saved
+    async with SessionLocal() as session:
+        artifacts = {
+            artifact.name: artifact
+            for artifact in await Repository(
+                session, actor=acting_principal()
+            ).list_artifacts(run.id)
+        }
+    assert SVG_FILE not in artifacts
+    for bundle_name, expected in {
+        "hardware_utilization_bundle.zip": {CSV_FILE, SUMMARY_FILE},
+        "raw_bundle.zip": {CSV_FILE},
+        "result_bundle.zip": {SUMMARY_FILE},
+        "research_bundle.zip": {CSV_FILE, SUMMARY_FILE},
+    }.items():
+        bundle = await store.get(artifacts[bundle_name].object_key)
+        with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+            names = set(archive.namelist())
+        assert expected <= names
+        assert SVG_FILE not in names
+
+
 def test_settings_validate_the_sampling_interval_and_panel_has_preview_support():
     with pytest.raises(ValidationError):
         Settings(hardware_telemetry_interval_s=0.5)
+    with pytest.raises(ValidationError):
+        Settings(hardware_telemetry_output_type="svg")
+    # _env_file=None reads the code default rather than whatever this deployment's .env says.
+    assert Settings(_env_file=None).hardware_telemetry_output_type == "all"
     assert "20_hardware_utilization.svg" in CONTROL_PANEL_HTML
     assert "Donanım kullanımı" in CONTROL_PANEL_HTML
     assert "URL.createObjectURL(blob),img=document.createElement('img')" not in CONTROL_PANEL_HTML

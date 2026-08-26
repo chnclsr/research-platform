@@ -54,11 +54,10 @@ TERMINAL_STATUSES = {
     RunStatus.FAILED.value,
     RunStatus.CANCELLED.value,
 }
-TELEMETRY_FILES = {
-    "18_hardware_utilization.csv",
-    "19_hardware_utilization_summary.json",
-    "20_hardware_utilization.svg",
-}
+CSV_FILE = "18_hardware_utilization.csv"
+SUMMARY_FILE = "19_hardware_utilization_summary.json"
+SVG_FILE = "20_hardware_utilization.svg"
+TELEMETRY_FILES = {CSV_FILE, SUMMARY_FILE, SVG_FILE}
 
 EventWriter = Callable[[str, str, dict[str, Any]], Awaitable[None]]
 
@@ -694,19 +693,29 @@ def build_telemetry_files(
     *,
     status: str,
     interval_seconds: float,
+    output_type: str = "all",
 ) -> dict[str, tuple[str, bytes]]:
     samples = sorted(samples, key=lambda item: str(item.get("timestamp") or ""))
     summary = telemetry_summary(
         samples, segment_events, status=status, interval_seconds=interval_seconds
     )
-    return {
-        "18_hardware_utilization.csv": ("text/csv; charset=utf-8", telemetry_csv(samples)),
-        "19_hardware_utilization_summary.json": (
+    files = {
+        CSV_FILE: ("text/csv; charset=utf-8", telemetry_csv(samples)),
+        SUMMARY_FILE: (
             "application/json",
             json.dumps(summary, ensure_ascii=False, indent=2).encode("utf-8"),
         ),
-        "20_hardware_utilization.svg": ("image/svg+xml", telemetry_svg(samples, summary)),
     }
+    # Plotting walks every sample to place coordinates, so "csv" skips the call outright
+    # rather than rendering a chart it would discard.
+    if output_type == "all":
+        files[SVG_FILE] = ("image/svg+xml", telemetry_svg(samples, summary))
+    return files
+
+
+def _select(files: dict[str, bytes], names: Iterable[str]) -> dict[str, bytes]:
+    """Keep the requested members that this output type actually produced."""
+    return {name: files[name] for name in names if name in files}
 
 
 def _zip_bytes(files: dict[str, bytes]) -> bytes:
@@ -764,6 +773,7 @@ async def finalize_hardware_telemetry(
             segment_events,
             status=run.status,
             interval_seconds=settings.hardware_telemetry_interval_s,
+            output_type=settings.hardware_telemetry_output_type,
         )
         raw_bytes = {name: data for name, (_, data) in files.items()}
         saved = []
@@ -787,22 +797,16 @@ async def finalize_hardware_telemetry(
         saved.append(telemetry_bundle_name)
 
         artifacts = {artifact.name: artifact for artifact in await repo.list_artifacts(run_id)}
+        # The output type decides which names exist, so every bundle selects from what was
+        # actually built instead of indexing a file it assumes is there.
         bundle_additions = {
-            "raw_bundle.zip": {"18_hardware_utilization.csv": raw_bytes[
-                "18_hardware_utilization.csv"
-            ]},
-            "result_bundle.zip": {
-                name: raw_bytes[name]
-                for name in (
-                    "19_hardware_utilization_summary.json",
-                    "20_hardware_utilization.svg",
-                )
-            },
-            "research_bundle.zip": raw_bytes,
+            "raw_bundle.zip": _select(raw_bytes, (CSV_FILE,)),
+            "result_bundle.zip": _select(raw_bytes, (SUMMARY_FILE, SVG_FILE)),
+            "research_bundle.zip": dict(raw_bytes),
         }
         for bundle_name, additions in bundle_additions.items():
             artifact = artifacts.get(bundle_name)
-            if artifact is None:
+            if artifact is None or not additions:
                 continue
             patched = merge_zip(await store.get(artifact.object_key), additions)
             await store.put(artifact.object_key, patched, "application/zip")

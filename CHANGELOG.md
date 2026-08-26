@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.16`
+Belge sürümü: `6.17`
 
-Son güncelleme: `2026-08-25`
+Son güncelleme: `2026-08-26`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -26,6 +26,11 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   değişkenlerdir; önceki `30 / 3 / 1` davranışı korunur. Gecikme de `.env` ile ayarlanır.
 - Connector'a özgü yapılandırmalar, Telegram davranışı ve Docker/Compose değerleri bu
   sürümün kapsamına alınmadı.
+- `HARDWARE_TELEMETRY_OUTPUT_TYPE` telemetri çıktı setini seçiyor: `csv` ham ölçüm CSV'si
+  ile özet JSON'ı üretip çizilmiş SVG grafiğini atlıyor, `all` üçünü de üretiyor.
+  Varsayılan `all` olduğu için anahtarı tanımlamayan kurulum aynı dosyaları almaya devam
+  ediyor. `csv` modunda grafik üretilip atılmıyor, hiç çizilmiyor; koşunun teslimat
+  paketleri de yalnız üretilmiş dosyaları alıyor.
 
 ## v0.14.0 — 2026-08-25
 

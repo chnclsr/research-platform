@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.22`
+Belge sürümü: `12.23`
 
-Son güncelleme: `2026-08-25`
+Son güncelleme: `2026-08-26`
 
 ## Kapsam
 
@@ -47,11 +47,12 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 32 | Jina Reader browser fallback'i | `aa62f49` |
 | 33 | GitHub URL akıllı repository işleyicisi | `aa62f49` |
 | 34 | Sistem mimarisi diyagramının güncel mimari ve Cezeri derisiyle yenilenmesi | `aa62f49` |
-| 35 | Commit/push öncesi zorunlu tam-test kapısı | _çalışma ağacı_ |
-| 36 | Connector görünümünde SERVICE_TOKEN kimlik doğrulaması | _çalışma ağacı_ |
-| 37 | Koşu donanım telemetrisi (kendi raporu var) | _çalışma ağacı_ |
-| 38 | Tek çalışma zamanı sürümü ve telemetri SVG yerleşimi | _çalışma ağacı_ |
-| 39 | Uygulama sabitlerinin `.env` yönetimine alınması (kendi raporu var) | _çalışma ağacı_ |
+| 35 | Commit/push öncesi zorunlu tam-test kapısı | `22b75c1` |
+| 36 | Connector görünümünde SERVICE_TOKEN kimlik doğrulaması | `22b75c1` |
+| 37 | Koşu donanım telemetrisi (kendi raporu var) | `22b75c1` |
+| 38 | Tek çalışma zamanı sürümü ve telemetri SVG yerleşimi | `22b75c1` |
+| 39 | Uygulama sabitlerinin `.env` yönetimine alınması (kendi raporu var) | `22b75c1` |
+| 40 | Telemetri çıktı seçimi: `HARDWARE_TELEMETRY_OUTPUT_TYPE` | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2524,6 +2525,61 @@ Değişen Python dosyalarında hedefli Ruff temizdir. Son hedefli test paketi `5
 değişikliğinden sonraki zorunlu tam kapı `461 passed, 2 warnings` sonucuyla tamamlandı.
 Canlı iki araştırma boyunca worker ve API yeniden oluşturulmadı; yalnız host paneli
 yenilendi ve koşular `running` kalmaya devam etti.
+
+---
+
+## 40. Telemetri çıktı seçimi: `HARDWARE_TELEMETRY_OUTPUT_TYPE`
+
+Koşu terminal duruma geldiğinde donanım telemetrisi üç artifact üretiyordu ve üçü de
+koşulsuzdu: ham ölçümlerin `18_hardware_utilization.csv` dosyası, `mean`/`p95`/`max` ile
+aktif süre ve eksik ölçüm tahminini taşıyan `19_hardware_utilization_summary.json`, ve
+çizilmiş `20_hardware_utilization.svg` grafiği. Grafiği istemeyen bir kurulumun kapatma
+yolu yoktu; `telemetry_svg` her ölçüm için koordinat ürettiğinden bu yalnız depolama değil
+hesap maliyetiydi.
+
+`HARDWARE_TELEMETRY_OUTPUT_TYPE` bu seçimi `.env`'e taşıyor. `csv` veri dosyalarını üretip
+grafiği atlıyor, `all` üçünü de üretiyor. Varsayılan `all` olduğu için anahtarı
+tanımlamayan kurulum bugünkü davranışını aynen sürdürüyor. Bu, 39. bölümdeki "dağıtıma
+bağlı davranış `.env`'den yönetilir" kararının devamıdır; v0.15.0 raporunun anahtar
+tablosuna dokunulmadı, o tablo v0.15.0'ın tarihsel kaydıdır.
+
+JSON özeti bilinçli olarak `csv` modunda da üretiliyor. Bir görselleştirme değil veridir:
+`p95` ve tepe değerleri yalnız orada bulunuyor, CSV'de yok. Atılsaydı 8 GB VRAM'li kartta
+asıl kritik olan tepe bilgisi geri döndürülemez biçimde kaybolurdu. Testte iki modun CSV ve
+JSON çıktılarının bayt bayt aynı olduğu doğrulanıyor — `csv` grafiği düşürüyor, ölçümü
+veya özeti bozmuyor.
+
+`csv` modunda `telemetry_svg()` hiç çağrılmıyor; üretilip atılmıyor. Bundle birleştirme de
+üretilen ada göre seçim yapıyor: eski kod `raw_bytes["20_hardware_utilization.svg"]` diye
+doğrudan indekslediği için `csv` modunda `KeyError` verirdi. Artık `_select` yardımcısı
+yalnız gerçekten üretilmiş üyeleri alıyor ve additions'ı boş kalan bundle yeniden
+zip'lenmeden atlanıyor. Bugüne kadar hiçbir yerde kullanılmayan `TELEMETRY_FILES` sabiti de
+dosya adlarının tek kaynağı hâline getirildi.
+
+Testte ortaya çıkan asıl kırılganlık şuydu: `Settings`, `env_file=".env"` ile
+yapılandırılmış ve finalizer testi `get_settings()` çağırıyordu — yani test paketi koştuğu
+makinenin gerçek `.env`'ini okuyordu. Doğrulandı: test ortamında `interval_s` `60.0`
+dönüyor, bu değer ne kod varsayılanında (`5.0`) ne `.env.example`'da (`5`) var. `.env`'e
+`OUTPUT_TYPE=csv` yazılır yazılmaz o test kırılacaktı. Testler artık beklediği modu açıkça
+sabitliyor (`model_copy`), varsayılan doğrulaması ise deponun mevcut
+`Settings(_env_file=None, ...)` kalıbını kullanıyor.
+
+Panelde değişiklik gerekmedi: SVG önizlemesi `data.artifacts.find(...)` sonucunu
+`if(telemetryGraphic)` ile koruyor, dosya yoksa bölüm sessizce render edilmiyor.
+
+**Bilinçli sınır.** `all` ile finalize edilmiş bir koşu sonradan `csv` ile yeniden finalize
+edilirse, `merge_zip` additions'ta olmayan üyeleri koruduğu için bundle'lardaki eski SVG
+yerinde kalır ve standalone SVG artifact satırı silinmez. Finalizer koşu başına bir kez
+çalıştığından bu yalnız retry yolunda görülür; geçmiş artifact'i silmemek daha güvenli
+olduğu için davranış korundu.
+
+Değişen Python dosyalarında hedefli Ruff temizdir. Hedefli telemetri paketi `11 passed`
+yerine `13 passed`, son kod değişikliğinden sonraki zorunlu tam kapı `483 passed,
+2 warnings` sonucuyla tamamlandı. Kapının ilk koşusunda `test_academic_connectors.py`
+içindeki tamamen mock'lu bir edinim testi bir kez düştü; izole koşuda, modülün beş ardışık
+koşusunda ve sonraki tam koşularda tekrarlamadı. O test `Settings(_env_file=None)`
+kullandığı için bu bölümün `.env` değişikliğini görmüyor — ilgisiz, aralıklı bir kırılganlık
+olarak not edildi.
 
 ---
 

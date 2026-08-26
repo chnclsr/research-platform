@@ -238,6 +238,8 @@ class Settings(BaseSettings):
     hardware_telemetry_interval_s: float = Field(5.0, ge=1.0, le=60.0)
     hardware_telemetry_flush_s: float = Field(60.0, ge=1.0, le=3600.0)
     hardware_telemetry_max_buffered_samples: int = Field(720, ge=1, le=100_000)
+    # "csv" keeps the data artifacts and skips the rendered chart; "all" adds the SVG.
+    hardware_telemetry_output_type: Literal["csv", "all"] = "all"
     testing: bool = False
 
 
