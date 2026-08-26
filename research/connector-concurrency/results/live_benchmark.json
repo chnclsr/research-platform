@@ -1,0 +1,2415 @@
+{
+  "benchmark_version": "connector_io_live_v1",
+  "generated_at": "2026-08-26T14:18:37.606226+00:00",
+  "environment": {
+    "python": "3.11.15",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "gpu_required": false,
+    "network_required": true
+  },
+  "methodology": {
+    "repeats": 5,
+    "timeout_s": 45,
+    "query": "retrieval augmented generation evaluation",
+    "result_limit": 3,
+    "order_alternated": true,
+    "search_connectors": [
+      "openalex",
+      "crossref",
+      "arxiv",
+      "europe_pmc"
+    ],
+    "acquisition_targets": [
+      "https://www.rfc-editor.org/rfc/rfc9110.html",
+      "https://www.iana.org/help/example-domains",
+      "https://www.python.org/about/",
+      "https://www.w3.org/TR/WCAG22/"
+    ]
+  },
+  "stages": [
+    {
+      "stage": "search",
+      "configurations": [
+        {
+          "mode": "serial",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 1972.674,
+          "wall_ms_min": 1610.523,
+          "wall_ms_max": 2811.64,
+          "wall_ms_mad": 106.572,
+          "throughput_per_second_median": 2.028,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 1,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 1.0,
+          "paired_speedup_min": 1.0,
+          "paired_speedup_max": 1.0,
+          "operation_latency_ms": {
+            "arxiv": {
+              "median": 137.08,
+              "min": 128.173,
+              "max": 633.916,
+              "successes": 5,
+              "errors": 0
+            },
+            "crossref": {
+              "median": 645.775,
+              "min": 510.342,
+              "max": 715.664,
+              "successes": 5,
+              "errors": 0
+            },
+            "europe_pmc": {
+              "median": 367.792,
+              "min": 279.402,
+              "max": 595.139,
+              "successes": 5,
+              "errors": 0
+            },
+            "openalex": {
+              "median": 818.432,
+              "min": 552.435,
+              "max": 1022.439,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 2811.64,
+              "throughput_per_second": 1.423,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 1022.439,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 715.664,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 633.916,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 439.5,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 2059.411,
+              "throughput_per_second": 1.942,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 816.742,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 510.342,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 137.08,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 595.139,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1972.674,
+              "throughput_per_second": 2.028,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 818.432,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 658.178,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 128.173,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 367.792,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1610.523,
+              "throughput_per_second": 2.484,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 552.435,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 645.775,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 132.814,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 279.402,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1866.102,
+              "throughput_per_second": 2.144,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 857.98,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 570.364,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 141.516,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 296.159,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 1.0,
+          "speedup_vs_asyncio_c1": 0.97
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 1912.63,
+          "wall_ms_min": 1538.871,
+          "wall_ms_max": 2201.628,
+          "wall_ms_mad": 261.619,
+          "throughput_per_second_median": 2.091,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 1,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 1.031,
+          "paired_speedup_min": 0.935,
+          "paired_speedup_max": 1.293,
+          "operation_latency_ms": {
+            "arxiv": {
+              "median": 138.179,
+              "min": 129.79,
+              "max": 143.05,
+              "successes": 5,
+              "errors": 0
+            },
+            "crossref": {
+              "median": 665.922,
+              "min": 515.692,
+              "max": 890.378,
+              "successes": 5,
+              "errors": 0
+            },
+            "europe_pmc": {
+              "median": 333.512,
+              "min": 267.4,
+              "max": 599.633,
+              "successes": 5,
+              "errors": 0
+            },
+            "openalex": {
+              "median": 593.608,
+              "min": 546.375,
+              "max": 938.902,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 2174.249,
+              "throughput_per_second": 1.84,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 938.902,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 598.967,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 135.091,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 500.969,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 2201.628,
+              "throughput_per_second": 1.817,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 573.144,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 890.378,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 138.179,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 599.633,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1912.63,
+              "throughput_per_second": 2.091,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 840.911,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 665.922,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 129.79,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 275.534,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1713.743,
+              "throughput_per_second": 2.334,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 593.608,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 711.022,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 141.517,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 267.4,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1538.871,
+              "throughput_per_second": 2.599,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 546.375,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 515.692,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 143.05,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 333.512,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 1.031,
+          "speedup_vs_asyncio_c1": 1.0,
+          "marginal_reduction_vs_previous_asyncio_percent": null
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 2,
+          "repeats": 5,
+          "wall_ms_median": 1219.158,
+          "wall_ms_min": 863.69,
+          "wall_ms_max": 2847.65,
+          "wall_ms_mad": 298.054,
+          "throughput_per_second_median": 3.281,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 2,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 1.688,
+          "paired_speedup_min": 0.723,
+          "paired_speedup_max": 2.306,
+          "operation_latency_ms": {
+            "arxiv": {
+              "median": 137.034,
+              "min": 134.042,
+              "max": 166.246,
+              "successes": 5,
+              "errors": 0
+            },
+            "crossref": {
+              "median": 574.25,
+              "min": 547.182,
+              "max": 2847.253,
+              "successes": 5,
+              "errors": 0
+            },
+            "europe_pmc": {
+              "median": 445.434,
+              "min": 289.027,
+              "max": 835.228,
+              "successes": 5,
+              "errors": 0
+            },
+            "openalex": {
+              "median": 807.883,
+              "min": 523.099,
+              "max": 838.203,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 1219.158,
+              "throughput_per_second": 3.281,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 838.203,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 638.961,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 134.042,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 445.434,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 2847.65,
+              "throughput_per_second": 1.405,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 523.099,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 2847.253,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 166.246,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 321.698,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 1168.409,
+              "throughput_per_second": 3.423,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 810.137,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 563.39,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 140.331,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 464.069,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 863.69,
+              "throughput_per_second": 4.631,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 557.863,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 574.25,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 137.034,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 289.027,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 1517.212,
+              "throughput_per_second": 2.636,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 807.883,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 547.182,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 134.218,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 835.228,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 1.618,
+          "speedup_vs_asyncio_c1": 1.569,
+          "marginal_reduction_vs_previous_asyncio_percent": 36.26
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 4,
+          "repeats": 5,
+          "wall_ms_median": 881.003,
+          "wall_ms_min": 813.081,
+          "wall_ms_max": 1029.097,
+          "wall_ms_mad": 61.928,
+          "throughput_per_second_median": 4.54,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 4,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 2.295,
+          "paired_speedup_min": 1.828,
+          "paired_speedup_max": 2.732,
+          "operation_latency_ms": {
+            "arxiv": {
+              "median": 144.882,
+              "min": 128.737,
+              "max": 162.289,
+              "successes": 5,
+              "errors": 0
+            },
+            "crossref": {
+              "median": 584.27,
+              "min": 526.502,
+              "max": 1028.483,
+              "successes": 5,
+              "errors": 0
+            },
+            "europe_pmc": {
+              "median": 312.88,
+              "min": 281.201,
+              "max": 742.33,
+              "successes": 5,
+              "errors": 0
+            },
+            "openalex": {
+              "median": 880.903,
+              "min": 812.921,
+              "max": 925.823,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 1029.097,
+              "throughput_per_second": 3.887,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 925.823,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 1028.483,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 153.186,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 742.33,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 901.934,
+              "throughput_per_second": 4.435,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 901.825,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 584.27,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 144.882,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 390.582,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 819.075,
+              "throughput_per_second": 4.884,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 818.934,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 621.228,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 162.289,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 312.88,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 881.003,
+              "throughput_per_second": 4.54,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 880.903,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 526.502,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 128.737,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 281.201,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 813.081,
+              "throughput_per_second": 4.92,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "030962440c0c9ff8dac035951f0f5900819def8aa45fac2703672a8bbd5c5427",
+              "results": [
+                {
+                  "operation_id": "openalex",
+                  "success": true,
+                  "latency_ms": 812.921,
+                  "result_count": 3,
+                  "payload_fingerprint": "c5944c955bf548498c70a71a2a150b1eeedecfb7943f0b096d2e4376b6e0a627",
+                  "method": "openalex",
+                  "error": ""
+                },
+                {
+                  "operation_id": "crossref",
+                  "success": true,
+                  "latency_ms": 568.961,
+                  "result_count": 3,
+                  "payload_fingerprint": "b48e1cbfa7190505d58cec09aa027c407caeb1564c2b3f77c583d28d084c8290",
+                  "method": "crossref",
+                  "error": ""
+                },
+                {
+                  "operation_id": "arxiv",
+                  "success": true,
+                  "latency_ms": 135.463,
+                  "result_count": 3,
+                  "payload_fingerprint": "1b9425cd6ca2087e0cd754a8264138a4002f7395db79d3bbbbd5ed0f35f0ccff",
+                  "method": "arxiv",
+                  "error": ""
+                },
+                {
+                  "operation_id": "europe_pmc",
+                  "success": true,
+                  "latency_ms": 305.985,
+                  "result_count": 3,
+                  "payload_fingerprint": "865d8cc67af448f55d7ecdc61a7621a067834551198f6ad65b418373a100101d",
+                  "method": "europe_pmc",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 2.239,
+          "speedup_vs_asyncio_c1": 2.171,
+          "marginal_reduction_vs_previous_asyncio_percent": 27.74
+        }
+      ]
+    },
+    {
+      "stage": "acquisition",
+      "configurations": [
+        {
+          "mode": "serial",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 1152.719,
+          "wall_ms_min": 1105.143,
+          "wall_ms_max": 2094.566,
+          "wall_ms_mad": 47.48,
+          "throughput_per_second_median": 3.47,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 1,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 1.0,
+          "paired_speedup_min": 1.0,
+          "paired_speedup_max": 1.0,
+          "operation_latency_ms": {
+            "iana-reserved": {
+              "median": 96.008,
+              "min": 81.635,
+              "max": 204.198,
+              "successes": 5,
+              "errors": 0
+            },
+            "python-about": {
+              "median": 176.92,
+              "min": 148.685,
+              "max": 392.127,
+              "successes": 5,
+              "errors": 0
+            },
+            "rfc9110": {
+              "median": 618.215,
+              "min": 585.531,
+              "max": 945.635,
+              "successes": 5,
+              "errors": 0
+            },
+            "wcag22": {
+              "median": 240.98,
+              "min": 228.497,
+              "max": 552.525,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 2094.566,
+              "throughput_per_second": 1.91,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 945.635,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 204.198,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 392.127,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 552.525,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1105.239,
+              "throughput_per_second": 3.619,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 618.215,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 96.008,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 149.981,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 240.98,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1152.719,
+              "throughput_per_second": 3.47,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 585.531,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 102.298,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 148.685,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 316.148,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1192.965,
+              "throughput_per_second": 3.353,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 696.641,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 89.671,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 176.92,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 229.673,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1105.143,
+              "throughput_per_second": 3.619,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 609.978,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 81.635,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 184.951,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 228.497,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 1.0,
+          "speedup_vs_asyncio_c1": 1.013
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 1167.736,
+          "wall_ms_min": 1158.077,
+          "wall_ms_max": 1691.436,
+          "wall_ms_mad": 9.659,
+          "throughput_per_second_median": 3.425,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 1,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 0.987,
+          "paired_speedup_min": 0.903,
+          "paired_speedup_max": 1.238,
+          "operation_latency_ms": {
+            "iana-reserved": {
+              "median": 88.939,
+              "min": 76.46,
+              "max": 268.161,
+              "successes": 5,
+              "errors": 0
+            },
+            "python-about": {
+              "median": 149.6,
+              "min": 127.749,
+              "max": 212.6,
+              "successes": 5,
+              "errors": 0
+            },
+            "rfc9110": {
+              "median": 683.848,
+              "min": 608.879,
+              "max": 872.768,
+              "successes": 5,
+              "errors": 0
+            },
+            "wcag22": {
+              "median": 244.055,
+              "min": 217.452,
+              "max": 337.525,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1691.436,
+              "throughput_per_second": 2.365,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 872.768,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 268.161,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 212.6,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 337.525,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1160.685,
+              "throughput_per_second": 3.446,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 715.065,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 76.46,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 127.749,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 241.002,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1167.736,
+              "throughput_per_second": 3.425,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 608.879,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 88.939,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 147.685,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 321.755,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1158.077,
+              "throughput_per_second": 3.454,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 675.661,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 88.463,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 149.6,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 244.055,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1223.187,
+              "throughput_per_second": 3.27,
+              "max_in_flight": 1,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 683.848,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 151.371,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 169.852,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 217.452,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 0.987,
+          "speedup_vs_asyncio_c1": 1.0,
+          "marginal_reduction_vs_previous_asyncio_percent": null
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 2,
+          "repeats": 5,
+          "wall_ms_median": 776.371,
+          "wall_ms_min": 713.246,
+          "wall_ms_max": 1024.245,
+          "wall_ms_mad": 34.851,
+          "throughput_per_second_median": 5.152,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 2,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 1.485,
+          "paired_speedup_min": 1.362,
+          "paired_speedup_max": 2.045,
+          "operation_latency_ms": {
+            "iana-reserved": {
+              "median": 159.13,
+              "min": 67.267,
+              "max": 312.817,
+              "successes": 5,
+              "errors": 0
+            },
+            "python-about": {
+              "median": 182.968,
+              "min": 135.501,
+              "max": 237.114,
+              "successes": 5,
+              "errors": 0
+            },
+            "rfc9110": {
+              "median": 670.273,
+              "min": 610.524,
+              "max": 917.172,
+              "successes": 5,
+              "errors": 0
+            },
+            "wcag22": {
+              "median": 473.997,
+              "min": 431.75,
+              "max": 515.075,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 1024.245,
+              "throughput_per_second": 3.905,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 917.172,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 312.817,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 237.114,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 473.997,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 765.545,
+              "throughput_per_second": 5.225,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 659.345,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 67.267,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 182.968,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 515.075,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 776.371,
+              "throughput_per_second": 5.152,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 670.273,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 159.13,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 147.562,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 468.901,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 713.246,
+              "throughput_per_second": 5.608,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 708.714,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 76.874,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 135.501,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 500.382,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 811.222,
+              "throughput_per_second": 4.931,
+              "max_in_flight": 2,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 610.524,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 180.421,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 198.795,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 431.75,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 1.485,
+          "speedup_vs_asyncio_c1": 1.504,
+          "marginal_reduction_vs_previous_asyncio_percent": 33.51
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 4,
+          "repeats": 5,
+          "wall_ms_median": 687.163,
+          "wall_ms_min": 588.339,
+          "wall_ms_max": 887.67,
+          "wall_ms_mad": 54.285,
+          "throughput_per_second_median": 5.821,
+          "successes_min": 4,
+          "errors_total": 0,
+          "max_in_flight": 4,
+          "paired_equivalence_rate": 1.0,
+          "paired_speedup_median": 1.885,
+          "paired_speedup_min": 1.608,
+          "paired_speedup_max": 2.36,
+          "operation_latency_ms": {
+            "iana-reserved": {
+              "median": 96.064,
+              "min": 73.963,
+              "max": 361.82,
+              "successes": 5,
+              "errors": 0
+            },
+            "python-about": {
+              "median": 254.026,
+              "min": 147.142,
+              "max": 362.026,
+              "successes": 5,
+              "errors": 0
+            },
+            "rfc9110": {
+              "median": 686.9,
+              "min": 588.063,
+              "max": 887.471,
+              "successes": 5,
+              "errors": 0
+            },
+            "wcag22": {
+              "median": 258.631,
+              "min": 222.138,
+              "max": 572.05,
+              "successes": 5,
+              "errors": 0
+            }
+          },
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 887.67,
+              "throughput_per_second": 4.506,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 887.471,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 361.82,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 362.026,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 572.05,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 1
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 687.163,
+              "throughput_per_second": 5.821,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 686.9,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 73.963,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 263.074,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 222.138,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 2
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 588.339,
+              "throughput_per_second": 6.799,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 588.063,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 96.064,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 254.026,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 258.631,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 3
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 632.878,
+              "throughput_per_second": 6.32,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 632.672,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 151.328,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 147.142,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 335.963,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 4
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 687.171,
+              "throughput_per_second": 5.821,
+              "max_in_flight": 4,
+              "successes": 4,
+              "errors": 0,
+              "result_fingerprint": "01ed5d67fea7bafd742f9afe5957fbbb3f3dd595703289782387ee562ff39069",
+              "results": [
+                {
+                  "operation_id": "rfc9110",
+                  "success": true,
+                  "latency_ms": 686.979,
+                  "result_count": 1,
+                  "payload_fingerprint": "3572b004da244f4e203eff1ea7eb7c6c8d1127ed5c86ae8795118cfcb2d5d48f",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "iana-reserved",
+                  "success": true,
+                  "latency_ms": 86.674,
+                  "result_count": 1,
+                  "payload_fingerprint": "cf9a94a78d1984c5a7ea3ea8dfbd2a9c93b23d252286d47b5e2cb0d9ae0c64c1",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "python-about",
+                  "success": true,
+                  "latency_ms": 229.752,
+                  "result_count": 1,
+                  "payload_fingerprint": "dcba615a99abf32ab6eae2c7a4b0f4b63dec5ecd56d092657f39dcfac319eeea",
+                  "method": "direct",
+                  "error": ""
+                },
+                {
+                  "operation_id": "wcag22",
+                  "success": true,
+                  "latency_ms": 242.908,
+                  "result_count": 1,
+                  "payload_fingerprint": "1d7d8910a022a683dc7135d35c199146abd2cd55e3f0dcb8665463be1d1e7769",
+                  "method": "direct",
+                  "error": ""
+                }
+              ],
+              "repeat": 5
+            }
+          ],
+          "speedup_vs_serial": 1.678,
+          "speedup_vs_asyncio_c1": 1.699,
+          "marginal_reduction_vs_previous_asyncio_percent": 11.49
+        }
+      ]
+    }
+  ]
+}

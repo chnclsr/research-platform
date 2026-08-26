@@ -1,0 +1,781 @@
+{
+  "benchmark_version": "pipeline_connector_io_v1",
+  "generated_at": "2026-08-26T14:16:04.416584+00:00",
+  "environment": {
+    "python": "3.11.15",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "gpu_required": false,
+    "network_required": false
+  },
+  "methodology": {
+    "repeats": 5,
+    "warmups": 1,
+    "concurrencies": [
+      1,
+      2,
+      4
+    ],
+    "operations_per_stage": 8,
+    "controlled_delays_ms": [
+      60,
+      80,
+      100,
+      120,
+      70,
+      90,
+      110,
+      130
+    ],
+    "pipeline_methods": [
+      "_search_node",
+      "_acquire_node"
+    ],
+    "threadpool_scope": "blocking synchronous I/O reference only"
+  },
+  "stages": [
+    {
+      "stage": "pipeline_search",
+      "configurations": [
+        {
+          "stage": "pipeline_search",
+          "mode": "asyncio_pipeline",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 815.251,
+          "wall_ms_min": 797.393,
+          "wall_ms_max": 817.63,
+          "wall_ms_mad": 1.902,
+          "throughput_per_second_median": 9.813,
+          "max_in_flight": 1,
+          "result_count": 8,
+          "result_fingerprints": [
+            "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 797.393,
+              "throughput_per_second": 10.033,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 817.63,
+              "throughput_per_second": 9.784,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 815.251,
+              "throughput_per_second": 9.813,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 817.153,
+              "throughput_per_second": 9.79,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 814.18,
+              "throughput_per_second": 9.826,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            }
+          ],
+          "speedup_vs_c1": 1.0,
+          "equivalent_to_c1": true
+        },
+        {
+          "stage": "pipeline_search",
+          "mode": "asyncio_pipeline",
+          "concurrency": 2,
+          "repeats": 5,
+          "wall_ms_median": 460.364,
+          "wall_ms_min": 443.38,
+          "wall_ms_max": 473.72,
+          "wall_ms_mad": 11.553,
+          "throughput_per_second_median": 17.378,
+          "max_in_flight": 2,
+          "result_count": 8,
+          "result_fingerprints": [
+            "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 467.945,
+              "throughput_per_second": 17.096,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 448.811,
+              "throughput_per_second": 17.825,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 473.72,
+              "throughput_per_second": 16.888,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 460.364,
+              "throughput_per_second": 17.378,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 443.38,
+              "throughput_per_second": 18.043,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            }
+          ],
+          "speedup_vs_c1": 1.771,
+          "equivalent_to_c1": true
+        },
+        {
+          "stage": "pipeline_search",
+          "mode": "asyncio_pipeline",
+          "concurrency": 4,
+          "repeats": 5,
+          "wall_ms_median": 264.723,
+          "wall_ms_min": 237.895,
+          "wall_ms_max": 277.527,
+          "wall_ms_mad": 12.804,
+          "throughput_per_second_median": 30.22,
+          "max_in_flight": 4,
+          "result_count": 8,
+          "result_fingerprints": [
+            "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 277.527,
+              "throughput_per_second": 28.826,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 242.825,
+              "throughput_per_second": 32.945,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 264.723,
+              "throughput_per_second": 30.22,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 266.385,
+              "throughput_per_second": 30.032,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            },
+            {
+              "stage": "pipeline_search",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 237.895,
+              "throughput_per_second": 33.628,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "42dfcbe63a7cef181eb03c397fae6bbea6819e7d9ad8a3c994ee523c1e827d83",
+              "event_count": 1
+            }
+          ],
+          "speedup_vs_c1": 3.08,
+          "equivalent_to_c1": true
+        }
+      ]
+    },
+    {
+      "stage": "pipeline_acquisition",
+      "configurations": [
+        {
+          "stage": "pipeline_acquisition",
+          "mode": "asyncio_pipeline",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 817.923,
+          "wall_ms_min": 795.611,
+          "wall_ms_max": 830.179,
+          "wall_ms_mad": 11.941,
+          "throughput_per_second_median": 9.781,
+          "max_in_flight": 1,
+          "result_count": 8,
+          "result_fingerprints": [
+            "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 830.179,
+              "throughput_per_second": 9.636,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 805.982,
+              "throughput_per_second": 9.926,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 795.611,
+              "throughput_per_second": 10.055,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 817.923,
+              "throughput_per_second": 9.781,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 1,
+              "operation_count": 8,
+              "wall_ms": 820.603,
+              "throughput_per_second": 9.749,
+              "max_in_flight": 1,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            }
+          ],
+          "speedup_vs_c1": 1.0,
+          "equivalent_to_c1": true
+        },
+        {
+          "stage": "pipeline_acquisition",
+          "mode": "asyncio_pipeline",
+          "concurrency": 2,
+          "repeats": 5,
+          "wall_ms_median": 456.592,
+          "wall_ms_min": 386.147,
+          "wall_ms_max": 467.988,
+          "wall_ms_mad": 8.634,
+          "throughput_per_second_median": 17.521,
+          "max_in_flight": 2,
+          "result_count": 8,
+          "result_fingerprints": [
+            "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 456.592,
+              "throughput_per_second": 17.521,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 386.147,
+              "throughput_per_second": 20.718,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 447.958,
+              "throughput_per_second": 17.859,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 465.037,
+              "throughput_per_second": 17.203,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 2,
+              "operation_count": 8,
+              "wall_ms": 467.988,
+              "throughput_per_second": 17.094,
+              "max_in_flight": 2,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            }
+          ],
+          "speedup_vs_c1": 1.791,
+          "equivalent_to_c1": true
+        },
+        {
+          "stage": "pipeline_acquisition",
+          "mode": "asyncio_pipeline",
+          "concurrency": 4,
+          "repeats": 5,
+          "wall_ms_median": 264.831,
+          "wall_ms_min": 234.567,
+          "wall_ms_max": 281.954,
+          "wall_ms_mad": 17.123,
+          "throughput_per_second_median": 30.208,
+          "max_in_flight": 4,
+          "result_count": 8,
+          "result_fingerprints": [
+            "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 281.954,
+              "throughput_per_second": 28.373,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 234.567,
+              "throughput_per_second": 34.105,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 264.831,
+              "throughput_per_second": 30.208,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 265.074,
+              "throughput_per_second": 30.18,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            },
+            {
+              "stage": "pipeline_acquisition",
+              "mode": "asyncio_pipeline",
+              "concurrency": 4,
+              "operation_count": 8,
+              "wall_ms": 236.022,
+              "throughput_per_second": 33.895,
+              "max_in_flight": 4,
+              "result_count": 8,
+              "result_fingerprint": "2e4ff438cddf2de958c60aee52fd99d520f337392fa9310b8690d0cf930517a9",
+              "event_count": 9,
+              "update_count": 8
+            }
+          ],
+          "speedup_vs_c1": 3.088,
+          "equivalent_to_c1": true
+        }
+      ]
+    }
+  ],
+  "threadpool_reference": {
+    "applicability": "Reference for blocking synchronous I/O; production connectors are async and are not executed inside ThreadPoolExecutor.",
+    "configurations": [
+      {
+        "stage": "blocking_io_reference",
+        "mode": "blocking_serial",
+        "concurrency": 1,
+        "repeats": 5,
+        "wall_ms_median": 763.524,
+        "wall_ms_min": 762.469,
+        "wall_ms_max": 763.789,
+        "wall_ms_mad": 0.265,
+        "throughput_per_second_median": 10.478,
+        "max_in_flight": 1,
+        "result_count": 8,
+        "result_fingerprints": [
+          "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+        ],
+        "deterministic_results": true,
+        "runs": [
+          {
+            "stage": "blocking_io_reference",
+            "mode": "blocking_serial",
+            "concurrency": 1,
+            "operation_count": 8,
+            "wall_ms": 762.469,
+            "throughput_per_second": 10.492,
+            "max_in_flight": 1,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "blocking_serial",
+            "concurrency": 1,
+            "operation_count": 8,
+            "wall_ms": 763.789,
+            "throughput_per_second": 10.474,
+            "max_in_flight": 1,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "blocking_serial",
+            "concurrency": 1,
+            "operation_count": 8,
+            "wall_ms": 763.524,
+            "throughput_per_second": 10.478,
+            "max_in_flight": 1,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "blocking_serial",
+            "concurrency": 1,
+            "operation_count": 8,
+            "wall_ms": 763.707,
+            "throughput_per_second": 10.475,
+            "max_in_flight": 1,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "blocking_serial",
+            "concurrency": 1,
+            "operation_count": 8,
+            "wall_ms": 763.181,
+            "throughput_per_second": 10.482,
+            "max_in_flight": 1,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          }
+        ],
+        "speedup_vs_serial": 1.0,
+        "equivalent_to_serial": true
+      },
+      {
+        "stage": "blocking_io_reference",
+        "mode": "threadpool",
+        "concurrency": 2,
+        "repeats": 5,
+        "wall_ms_median": 423.374,
+        "wall_ms_min": 422.527,
+        "wall_ms_max": 423.78,
+        "wall_ms_mad": 0.366,
+        "throughput_per_second_median": 18.896,
+        "max_in_flight": 2,
+        "result_count": 8,
+        "result_fingerprints": [
+          "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+        ],
+        "deterministic_results": true,
+        "runs": [
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 2,
+            "operation_count": 8,
+            "wall_ms": 423.008,
+            "throughput_per_second": 18.912,
+            "max_in_flight": 2,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 2,
+            "operation_count": 8,
+            "wall_ms": 423.393,
+            "throughput_per_second": 18.895,
+            "max_in_flight": 2,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 2,
+            "operation_count": 8,
+            "wall_ms": 423.78,
+            "throughput_per_second": 18.878,
+            "max_in_flight": 2,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 2,
+            "operation_count": 8,
+            "wall_ms": 422.527,
+            "throughput_per_second": 18.934,
+            "max_in_flight": 2,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 2,
+            "operation_count": 8,
+            "wall_ms": 423.374,
+            "throughput_per_second": 18.896,
+            "max_in_flight": 2,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          }
+        ],
+        "speedup_vs_serial": 1.803,
+        "equivalent_to_serial": true
+      },
+      {
+        "stage": "blocking_io_reference",
+        "mode": "threadpool",
+        "concurrency": 4,
+        "repeats": 5,
+        "wall_ms_median": 253.028,
+        "wall_ms_min": 252.151,
+        "wall_ms_max": 253.713,
+        "wall_ms_mad": 0.165,
+        "throughput_per_second_median": 31.617,
+        "max_in_flight": 4,
+        "result_count": 8,
+        "result_fingerprints": [
+          "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+        ],
+        "deterministic_results": true,
+        "runs": [
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 4,
+            "operation_count": 8,
+            "wall_ms": 253.713,
+            "throughput_per_second": 31.532,
+            "max_in_flight": 4,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 4,
+            "operation_count": 8,
+            "wall_ms": 253.028,
+            "throughput_per_second": 31.617,
+            "max_in_flight": 4,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 4,
+            "operation_count": 8,
+            "wall_ms": 252.863,
+            "throughput_per_second": 31.638,
+            "max_in_flight": 4,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 4,
+            "operation_count": 8,
+            "wall_ms": 252.151,
+            "throughput_per_second": 31.727,
+            "max_in_flight": 4,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          },
+          {
+            "stage": "blocking_io_reference",
+            "mode": "threadpool",
+            "concurrency": 4,
+            "operation_count": 8,
+            "wall_ms": 253.104,
+            "throughput_per_second": 31.608,
+            "max_in_flight": 4,
+            "result_count": 8,
+            "result_fingerprint": "053f5f3b57383137f27bafe6aa2fd3080667d8fcc724ec223162d00acb73d318"
+          }
+        ],
+        "speedup_vs_serial": 3.018,
+        "equivalent_to_serial": true
+      }
+    ]
+  }
+}

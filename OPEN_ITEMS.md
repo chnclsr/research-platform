@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-25`
+Son güncelleme: `2026-08-26`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -33,6 +33,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 19 | Anonim Jina Reader dış servis sınırı | 429 riski + hedef URL üçüncü tarafa gider | Düşük |
 | 20 | Metadata'sız GitHub adayında boyut sınırı klon sonrası | Büyük repo geçici ağ/disk tüketebilir | Düşük |
 | 21 | Tam-depo Ruff tabanı 1.053 ihlal taşıyor | Yeni lint hataları tarihsel gürültüde saklanabilir | Orta |
+| 22 | `_acquire_node` beklenmeyen istisnayı izole etmiyor | Tek bağlayıcı hatası ACQUIRE adımını düşürebilir | Orta |
 
 ---
 
@@ -370,6 +371,31 @@ belgelenmiş dar istisnalar açıkça hariç tutuluyor.
 `pyproject.toml` üzerinden açıkça ayır; aktif kapsam için sıfır taban oluştur. Kalan borcu
 dizin bazında ayrı PR'larla azalt, otomatik düzeltmeleri davranış testleriyle birlikte
 uygula. Tam taban sıfıra inene kadar değişen Python dosyalarında hedefli Ruff zorunlu.
+
+## 22. `_acquire_node` beklenmeyen istisnayı izole etmiyor
+
+**Durum:** `pipeline.py` içindeki iki eşzamanlı adım bu konuda simetrik değil.
+`_search_node`'un görev gövdesi `except Exception` ile sarılı: bir bağlayıcı patlarsa hata
+`connector_errors` listesine yazılıyor, görev boş liste döndürüyor ve diğer bağlayıcılar
+etkilenmiyor. `_acquire_node`'un görev gövdesinde (`one()`) böyle bir koruma yok;
+`AcquisitionService.acquire()` beklenmeyen bir istisna atarsa istisna `as_completed`
+döngüsündeki `await task` üzerinden düğümün dışına çıkıyor ve `finally` bloğu kalan
+görevleri iptal ediyor.
+
+**Neden bugün görünmüyor:** Servis normal başarısızlıkları istisna olarak değil,
+`AcquiredDocument(success=False)` olarak döndürüyor. Yani bu, bilinen bir hata yolu değil,
+kapatılmamış bir dayanıklılık boşluğu. Ölçüm sırasında da tetiklenmedi.
+
+**Nereden çıktı:** Konnektör I/O eşzamanlılık deneyi
+(`research/connector-concurrency/REPORT.md`, "Eleştirel hazır olma değerlendirmesi"). Deney
+kontrollü hata ve timeout'ların *benchmark* görevlerini birbirinden izole ettiğini doğruladı;
+üretimdeki `_acquire_node` görev gövdesi için aynı kanıt yok.
+
+**Yapılacak:** `one()` gövdesini `_search_node`'daki desenle aynı biçimde sarmak, yani
+beklenmeyen istisnayı `AcquiredDocument(success=False)` benzeri bir kayda çevirip metriklere
+yazmak. Değişiklikle birlikte, `acquire()` istisna attığında diğer indirmelerin tamamlandığını
+gösteren bir test eklenmeli. Bu deneyin kapsamı ölçümdü, davranış değişikliği değildi;
+bu yüzden burada açık bırakıldı.
 
 ## Kapsam dışı bırakılanlar
 

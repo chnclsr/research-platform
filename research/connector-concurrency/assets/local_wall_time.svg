@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="461" viewBox="0 0 1000 461" role="img" aria-labelledby="title desc">
+  <title id="title">Kontrollü yerel deney medyan duvar süreleri</title>
+  <desc id="desc">Sekiz işlem için arama ve indirme medyan sürelerinin concurrency seviyelerine göre karşılaştırması. Düşük süre daha iyidir.</desc>
+  <rect width="1000" height="461" fill="#ffffff"/>
+  <text x="40" y="42" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#172033">Kontrollü yerel deney: medyan duvar süresi</text>
+  <text x="40" y="68" font-family="Arial, sans-serif" font-size="14" fill="#556070">8 işlem, 5 tekrar · düşük değer daha iyi</text>
+  <rect x="860" y="35" width="16" height="16" rx="3" fill="#f97316"/>
+  <text x="884" y="48" font-family="Arial, sans-serif" font-size="14" fill="#172033">İndirme</text>
+  <rect x="780" y="35" width="16" height="16" rx="3" fill="#2563eb"/>
+  <text x="804" y="48" font-family="Arial, sans-serif" font-size="14" fill="#172033">Arama</text>
+  <g stroke="#d7dde7" stroke-width="1">
+    <line x1="170.0" y1="90" x2="170.0" y2="406"/>
+    <line x1="298.3" y1="90" x2="298.3" y2="406"/>
+    <line x1="426.7" y1="90" x2="426.7" y2="406"/>
+    <line x1="555.0" y1="90" x2="555.0" y2="406"/>
+    <line x1="683.3" y1="90" x2="683.3" y2="406"/>
+    <line x1="811.7" y1="90" x2="811.7" y2="406"/>
+    <line x1="940.0" y1="90" x2="940.0" y2="406"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="12" fill="#667085" text-anchor="middle">
+    <text x="170.0" y="429">0 ms</text>
+    <text x="298.3" y="429">250</text>
+    <text x="426.7" y="429">500</text>
+    <text x="555.0" y="429">750</text>
+    <text x="683.3" y="429">1000</text>
+    <text x="811.7" y="429">1250</text>
+    <text x="940.0" y="429">1500</text>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="15" fill="#172033" text-anchor="end">
+    <text x="150" y="125.0">Sıralı</text>
+    <text x="150" y="189.0">asyncio c=1</text>
+    <text x="150" y="253.0">asyncio c=2</text>
+    <text x="150" y="317.0">asyncio c=4</text>
+    <text x="150" y="381.0">asyncio c=8</text>
+  </g>
+  <g fill="#2563eb">
+    <rect x="170" y="100" width="481.6" height="20" rx="4"/>
+    <rect x="170" y="164" width="481.4" height="20" rx="4"/>
+    <rect x="170" y="228" width="273.3" height="20" rx="4"/>
+    <rect x="170" y="292" width="159.4" height="20" rx="4"/>
+    <rect x="170" y="356" width="80.5" height="20" rx="4"/>
+  </g>
+  <g fill="#f97316">
+    <rect x="170" y="120" width="646.5" height="20" rx="4"/>
+    <rect x="170" y="184" width="649.8" height="20" rx="4"/>
+    <rect x="170" y="248" width="367.4" height="20" rx="4"/>
+    <rect x="170" y="312" width="213.3" height="20" rx="4"/>
+    <rect x="170" y="376" width="116.2" height="20" rx="4"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#172033">
+    <text x="659.6" y="115">938 ms</text>
+    <text x="659.4" y="179">938 ms</text>
+    <text x="451.3" y="243">532 ms</text>
+    <text x="337.4" y="307">311 ms</text>
+    <text x="258.5" y="371">157 ms</text>
+    <text x="824.5" y="135">1259 ms</text>
+    <text x="827.8" y="199">1266 ms</text>
+    <text x="545.4" y="263">716 ms</text>
+    <text x="391.3" y="327">416 ms</text>
+    <text x="294.2" y="391">226 ms</text>
+  </g>
+</svg>

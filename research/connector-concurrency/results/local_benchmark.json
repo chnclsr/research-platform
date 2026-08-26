@@ -1,0 +1,4159 @@
+{
+  "benchmark_version": "connector_io_local_v1",
+  "generated_at": "2026-08-26T14:17:36.881239+00:00",
+  "environment": {
+    "python": "3.11.15",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "gpu_required": false,
+    "network_required": false
+  },
+  "methodology": {
+    "repeats": 5,
+    "warmups": 1,
+    "concurrencies": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "delay_scale": 1.0,
+    "strategies": [
+      "serial",
+      "asyncio.gather + Semaphore"
+    ]
+  },
+  "stages": [
+    {
+      "stage": "search",
+      "operation_count": 8,
+      "total_simulated_delay_ms": 900.0,
+      "configurations": [
+        {
+          "mode": "serial",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 938.213,
+          "wall_ms_min": 932.438,
+          "wall_ms_max": 965.247,
+          "wall_ms_mad": 5.775,
+          "throughput_per_second_median": 8.527,
+          "latency_p50_ms_median": 109.092,
+          "latency_p95_ms_median": 171.423,
+          "max_in_flight": 1,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 965.247,
+              "throughput_per_second": 8.288,
+              "latency_p50_ms": 116.802,
+              "latency_p95_ms": 166.833,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 65.738,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 100.449,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 122.082,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 160.237,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 81.69,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 116.802,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 150.312,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 166.833,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 937.217,
+              "throughput_per_second": 8.536,
+              "latency_p50_ms": 108.239,
+              "latency_p95_ms": 173.959,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.541,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.481,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.648,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 155.978,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 78.572,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.239,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.984,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 173.959,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 948.453,
+              "throughput_per_second": 8.435,
+              "latency_p50_ms": 109.092,
+              "latency_p95_ms": 171.423,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 76.313,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.768,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 123.037,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 154.641,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 78.49,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 109.092,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 140.263,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 171.423,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 932.438,
+              "throughput_per_second": 8.58,
+              "latency_p50_ms": 109.671,
+              "latency_p95_ms": 171.375,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.645,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.196,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 123.066,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 155.86,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 77.648,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 109.671,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 138.894,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 171.375,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 938.213,
+              "throughput_per_second": 8.527,
+              "latency_p50_ms": 107.575,
+              "latency_p95_ms": 172.393,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.305,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 94.541,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.621,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 156.916,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 77.823,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 107.575,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 140.669,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 172.393,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 1.0,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 1.0
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 937.869,
+          "wall_ms_min": 933.268,
+          "wall_ms_max": 947.413,
+          "wall_ms_mad": 4.047,
+          "throughput_per_second_median": 8.53,
+          "latency_p50_ms_median": 109.725,
+          "latency_p95_ms_median": 171.615,
+          "max_in_flight": 1,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 947.413,
+              "throughput_per_second": 8.444,
+              "latency_p50_ms": 108.071,
+              "latency_p95_ms": 171.615,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 75.803,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.643,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 123.728,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 156.033,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 77.195,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.071,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.571,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 171.615,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 941.1,
+              "throughput_per_second": 8.501,
+              "latency_p50_ms": 109.754,
+              "latency_p95_ms": 174.415,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.011,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.349,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 128.426,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 155.68,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 76.033,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 109.754,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.929,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 174.415,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 933.268,
+              "throughput_per_second": 8.572,
+              "latency_p50_ms": 109.469,
+              "latency_p95_ms": 171.647,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.648,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.472,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 122.758,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 154.031,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 77.784,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 109.469,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 140.235,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 171.647,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 937.869,
+              "throughput_per_second": 8.53,
+              "latency_p50_ms": 110.165,
+              "latency_p95_ms": 171.096,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 60.907,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 94.165,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.911,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 154.473,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 79.066,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 110.165,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 141.576,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 171.096,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 933.822,
+              "throughput_per_second": 8.567,
+              "latency_p50_ms": 109.725,
+              "latency_p95_ms": 167.673,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.462,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 91.283,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.99,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 154.569,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 78.21,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 109.725,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 144.283,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 167.673,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 1.0,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 1.0,
+          "marginal_reduction_vs_previous_asyncio_percent": null
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 2,
+          "repeats": 5,
+          "wall_ms_median": 532.349,
+          "wall_ms_min": 512.069,
+          "wall_ms_max": 567.772,
+          "wall_ms_mad": 13.136,
+          "throughput_per_second_median": 15.028,
+          "latency_p50_ms_median": 110.36,
+          "latency_p95_ms_median": 170.849,
+          "max_in_flight": 2,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 545.485,
+              "throughput_per_second": 14.666,
+              "latency_p50_ms": 116.541,
+              "latency_p95_ms": 168.646,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.653,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 92.836,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 130.415,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 166.415,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 66.521,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 116.541,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 116.63,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 168.646,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 529.227,
+              "throughput_per_second": 15.116,
+              "latency_p50_ms": 105.227,
+              "latency_p95_ms": 165.231,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 66.436,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 97.267,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 130.436,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 165.231,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 65.929,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 105.227,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 146.336,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 160.659,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 567.772,
+              "throughput_per_second": 14.09,
+              "latency_p50_ms": 116.859,
+              "latency_p95_ms": 182.492,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 68.719,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 102.987,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 132.219,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 164.41,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 66.501,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 116.859,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 150.366,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 182.492,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 512.069,
+              "throughput_per_second": 15.623,
+              "latency_p50_ms": 108.415,
+              "latency_p95_ms": 172.947,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 74.858,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 74.869,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 123.222,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 154.998,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 78.67,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.415,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.264,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 172.947,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 532.349,
+              "throughput_per_second": 15.028,
+              "latency_p50_ms": 110.36,
+              "latency_p95_ms": 170.849,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.891,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.804,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 125.813,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 156.15,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 62.351,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 110.36,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 141.285,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 170.849,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 1.762,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 1.762,
+          "marginal_reduction_vs_previous_asyncio_percent": 43.24
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 4,
+          "repeats": 5,
+          "wall_ms_median": 310.505,
+          "wall_ms_min": 294.766,
+          "wall_ms_max": 324.531,
+          "wall_ms_mad": 13.929,
+          "throughput_per_second_median": 25.764,
+          "latency_p50_ms_median": 108.618,
+          "latency_p95_ms_median": 170.679,
+          "max_in_flight": 4,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 324.531,
+              "throughput_per_second": 24.651,
+              "latency_p50_ms": 108.618,
+              "latency_p95_ms": 170.99,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 75.11,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 75.219,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 121.829,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 152.655,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 77.624,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.618,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.755,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 170.99,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 324.309,
+              "throughput_per_second": 24.668,
+              "latency_p50_ms": 108.725,
+              "latency_p95_ms": 169.993,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 75.496,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 75.627,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 122.085,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 153.685,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 78.215,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.725,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 140.572,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 169.993,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 310.505,
+              "throughput_per_second": 25.764,
+              "latency_p50_ms": 108.899,
+              "latency_p95_ms": 170.679,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.914,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 108.654,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 139.772,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 170.679,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 77.771,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.899,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.337,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 170.144,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 294.766,
+              "throughput_per_second": 27.14,
+              "latency_p50_ms": 108.523,
+              "latency_p95_ms": 170.25,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.886,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.004,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 123.88,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 154.583,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 62.06,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 108.523,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.605,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 170.25,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 296.576,
+              "throughput_per_second": 26.975,
+              "latency_p50_ms": 107.513,
+              "latency_p95_ms": 171.419,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.917,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.637,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.632,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 155.883,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 61.722,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 107.513,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.187,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 171.419,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 3.022,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 3.02,
+          "marginal_reduction_vs_previous_asyncio_percent": 41.67
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 8,
+          "repeats": 5,
+          "wall_ms_median": 156.804,
+          "wall_ms_min": 155.631,
+          "wall_ms_max": 171.198,
+          "wall_ms_mad": 0.894,
+          "throughput_per_second_median": 51.019,
+          "latency_p50_ms_median": 93.843,
+          "latency_p95_ms_median": 156.377,
+          "max_in_flight": 8,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 156.804,
+              "throughput_per_second": 51.019,
+              "latency_p50_ms": 92.935,
+              "latency_p95_ms": 156.377,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.088,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 92.935,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.687,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 156.327,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 62.078,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 92.927,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 124.669,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 156.377,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 155.91,
+              "throughput_per_second": 51.312,
+              "latency_p50_ms": 93.095,
+              "latency_p95_ms": 155.435,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 61.717,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.022,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 123.79,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 155.435,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 61.704,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 93.095,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 123.848,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 155.417,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 157.187,
+              "throughput_per_second": 50.895,
+              "latency_p50_ms": 94.136,
+              "latency_p95_ms": 156.899,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.465,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 94.062,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 125.4,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 156.815,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 62.533,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 94.136,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 125.452,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 156.899,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 155.631,
+              "throughput_per_second": 51.404,
+              "latency_p50_ms": 93.843,
+              "latency_p95_ms": 155.196,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 62.095,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 93.794,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 124.503,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 155.196,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 62.097,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 93.843,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 124.482,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 155.194,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 171.198,
+              "throughput_per_second": 46.73,
+              "latency_p50_ms": 107.538,
+              "latency_p95_ms": 170.787,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "10a626b71b4766ec959143e057dd2a50806e644d976ba510bc46b34eae16c023",
+              "results": [
+                {
+                  "operation_id": "search-01",
+                  "status": "success",
+                  "latency_ms": 76.029,
+                  "payload_fingerprint": "33aaac839dfd41463e31aee94e302087fe0cde11c9eaf166b07ef14fd0645e4f",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-02",
+                  "status": "success",
+                  "latency_ms": 76.204,
+                  "payload_fingerprint": "c3bff75f593aa3a558e0c0b82d9911c57f051f22f885165c1616d3099c4da103",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-03",
+                  "status": "success",
+                  "latency_ms": 107.745,
+                  "payload_fingerprint": "0316fd7ca639467fc14e85d256ea87664b0073025bdbf3575e1598100ce49be1",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-04",
+                  "status": "success",
+                  "latency_ms": 139.267,
+                  "payload_fingerprint": "12751de8f90aef553de6cfd5a562bf7e352e9ce259d97dce92ac3904453f94b6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-05",
+                  "status": "success",
+                  "latency_ms": 76.089,
+                  "payload_fingerprint": "f580dd904cc39ae0f32d9859185b1db21069b60738ee12ea6136d1d75bc12db7",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-06",
+                  "status": "success",
+                  "latency_ms": 107.538,
+                  "payload_fingerprint": "4089e3bd2de13fee4222d092e2b9d3ced359f6c7119dfd17be4bf8f7dfe9925e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-07",
+                  "status": "success",
+                  "latency_ms": 139.092,
+                  "payload_fingerprint": "6ee0f896eb200d41324447a4f8d0559b2439da3b066f76bd1f244b9f06c9d06e",
+                  "error": ""
+                },
+                {
+                  "operation_id": "search-08",
+                  "status": "success",
+                  "latency_ms": 170.787,
+                  "payload_fingerprint": "8013e257789683fb3c27063f66500c4b859e62b71518c8034ac500c4b8c712d5",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 5.983,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 5.981,
+          "marginal_reduction_vs_previous_asyncio_percent": 49.5
+        }
+      ]
+    },
+    {
+      "stage": "acquisition",
+      "operation_count": 8,
+      "total_simulated_delay_ms": 1200.0,
+      "configurations": [
+        {
+          "mode": "serial",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 1259.421,
+          "wall_ms_min": 1247.647,
+          "wall_ms_max": 1273.287,
+          "wall_ms_mad": 11.774,
+          "throughput_per_second_median": 6.352,
+          "latency_p50_ms_median": 146.509,
+          "latency_p95_ms_median": 232.999,
+          "max_in_flight": 1,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1273.287,
+              "throughput_per_second": 6.283,
+              "latency_p50_ms": 155.808,
+              "latency_p95_ms": 232.1,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 91.946,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 123.316,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 171.236,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 202.642,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 109.013,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 155.808,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 186.402,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.1,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1272.395,
+              "throughput_per_second": 6.287,
+              "latency_p50_ms": 141.619,
+              "latency_p95_ms": 233.488,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 93.736,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 124.742,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 173.613,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 202.741,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 112.176,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 141.619,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 189.546,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 233.488,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1259.421,
+              "throughput_per_second": 6.352,
+              "latency_p50_ms": 146.509,
+              "latency_p95_ms": 232.999,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 93.928,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 123.019,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 173.142,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 204.891,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 101.706,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 146.509,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 182.564,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.999,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1252.855,
+              "throughput_per_second": 6.385,
+              "latency_p50_ms": 150.478,
+              "latency_p95_ms": 220.164,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 84.694,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 138.775,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 161.057,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 200.486,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 113.981,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 150.478,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 182.52,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 220.164,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "serial",
+              "concurrency": 1,
+              "wall_ms": 1247.647,
+              "throughput_per_second": 6.412,
+              "latency_p50_ms": 141.477,
+              "latency_p95_ms": 236.438,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.162,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 131.819,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 166.177,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 201.242,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 100.573,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 141.477,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 188.126,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 236.438,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 1.0,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 1.005
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 1,
+          "repeats": 5,
+          "wall_ms_median": 1265.836,
+          "wall_ms_min": 1233.806,
+          "wall_ms_max": 1268.002,
+          "wall_ms_mad": 1.614,
+          "throughput_per_second_median": 6.32,
+          "latency_p50_ms_median": 150.013,
+          "latency_p95_ms_median": 233.826,
+          "max_in_flight": 1,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1267.45,
+              "throughput_per_second": 6.312,
+              "latency_p50_ms": 153.967,
+              "latency_p95_ms": 233.834,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.773,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 133.953,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 165.612,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 202.781,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 101.502,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 153.967,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 193.307,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 233.834,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1264.89,
+              "throughput_per_second": 6.325,
+              "latency_p50_ms": 148.915,
+              "latency_p95_ms": 232.655,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.544,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 131.549,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 167.107,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 202.878,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 113.593,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 148.915,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 183.395,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.655,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1233.806,
+              "throughput_per_second": 6.484,
+              "latency_p50_ms": 146.622,
+              "latency_p95_ms": 233.826,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.52,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 120.695,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 162.358,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 201.238,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 101.143,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 146.622,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 183.17,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 233.826,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1265.836,
+              "throughput_per_second": 6.32,
+              "latency_p50_ms": 150.891,
+              "latency_p95_ms": 232.862,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 82.133,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 133.084,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 166.789,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 200.586,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 116.138,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 150.891,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 181.974,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.862,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 1,
+              "wall_ms": 1268.002,
+              "throughput_per_second": 6.309,
+              "latency_p50_ms": 150.013,
+              "latency_p95_ms": 234.846,
+              "max_in_flight": 1,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 84.06,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 132.385,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 168.148,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 200.807,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 113.36,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 150.013,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 183.21,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 234.846,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 0.995,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 1.0,
+          "marginal_reduction_vs_previous_asyncio_percent": null
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 2,
+          "repeats": 5,
+          "wall_ms_median": 715.737,
+          "wall_ms_min": 684.163,
+          "wall_ms_max": 729.214,
+          "wall_ms_mad": 13.477,
+          "throughput_per_second_median": 11.177,
+          "latency_p50_ms_median": 148.483,
+          "latency_p95_ms_median": 232.719,
+          "max_in_flight": 2,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 720.275,
+              "throughput_per_second": 11.107,
+              "latency_p50_ms": 149.034,
+              "latency_p95_ms": 237.442,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.012,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 133.145,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 166.969,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 200.037,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 104.468,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 149.034,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 179.233,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 237.442,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 729.214,
+              "throughput_per_second": 10.971,
+              "latency_p50_ms": 148.483,
+              "latency_p95_ms": 248.421,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.12,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 130.523,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 163.396,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 201.153,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 116.219,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 148.483,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 176.13,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 248.421,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 684.163,
+              "throughput_per_second": 11.693,
+              "latency_p50_ms": 149.212,
+              "latency_p95_ms": 217.181,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.704,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 119.088,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 166.117,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 197.942,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 114.798,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 149.212,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 188.822,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 217.181,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 699.43,
+              "throughput_per_second": 11.438,
+              "latency_p50_ms": 143.197,
+              "latency_p95_ms": 232.719,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.844,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 115.319,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 178.888,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 207.532,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 107.722,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 143.197,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 196.034,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.719,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 2,
+              "wall_ms": 715.737,
+              "throughput_per_second": 11.177,
+              "latency_p50_ms": 148.293,
+              "latency_p95_ms": 232.68,
+              "max_in_flight": 2,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.077,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 133.074,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 149.136,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 200.969,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 101.359,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 148.293,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 181.561,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.68,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 1.76,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 1.769,
+          "marginal_reduction_vs_previous_asyncio_percent": 43.46
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 4,
+          "repeats": 5,
+          "wall_ms_median": 415.539,
+          "wall_ms_min": 398.649,
+          "wall_ms_max": 417.245,
+          "wall_ms_mad": 1.706,
+          "throughput_per_second_median": 19.252,
+          "latency_p50_ms_median": 149.875,
+          "latency_p95_ms_median": 216.937,
+          "max_in_flight": 4,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 398.649,
+              "throughput_per_second": 20.068,
+              "latency_p50_ms": 133.524,
+              "latency_p95_ms": 216.937,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.073,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 131.782,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 181.226,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 215.865,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 100.201,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 133.524,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 183.516,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 216.937,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 417.245,
+              "throughput_per_second": 19.173,
+              "latency_p50_ms": 149.962,
+              "latency_p95_ms": 216.985,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 82.47,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 116.09,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 165.868,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 199.678,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 117.068,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 149.962,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 199.952,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 216.985,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 415.539,
+              "throughput_per_second": 19.252,
+              "latency_p50_ms": 135.106,
+              "latency_p95_ms": 232.519,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 82.083,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 131.558,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 182.2,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 182.567,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 100.271,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 135.106,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 199.15,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 232.519,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 398.808,
+              "throughput_per_second": 20.06,
+              "latency_p50_ms": 150.161,
+              "latency_p95_ms": 215.32,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 82.058,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 131.039,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 182.426,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 215.055,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 100.44,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 150.161,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 183.141,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 215.32,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 4,
+              "wall_ms": 416.221,
+              "throughput_per_second": 19.221,
+              "latency_p50_ms": 149.875,
+              "latency_p95_ms": 215.634,
+              "max_in_flight": 4,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 84.938,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 116.892,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 168.54,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 199.966,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 114.754,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 149.875,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 198.002,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 215.634,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 3.031,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 3.046,
+          "marginal_reduction_vs_previous_asyncio_percent": 41.94
+        },
+        {
+          "mode": "asyncio",
+          "concurrency": 8,
+          "repeats": 5,
+          "wall_ms_median": 226.405,
+          "wall_ms_min": 215.616,
+          "wall_ms_max": 248.566,
+          "wall_ms_mad": 10.789,
+          "throughput_per_second_median": 35.335,
+          "latency_p50_ms_median": 147.84,
+          "latency_p95_ms_median": 226.209,
+          "max_in_flight": 8,
+          "counts": {
+            "success": 8,
+            "error": 0,
+            "timeout": 0
+          },
+          "result_fingerprints": [
+            "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2"
+          ],
+          "deterministic_results": true,
+          "runs": [
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 215.616,
+              "throughput_per_second": 37.103,
+              "latency_p50_ms": 147.84,
+              "latency_p95_ms": 215.296,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.482,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 116.047,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 181.162,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 215.112,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 115.694,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 147.84,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 181.237,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 215.296,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 248.566,
+              "throughput_per_second": 32.185,
+              "latency_p50_ms": 149.981,
+              "latency_p95_ms": 248.031,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.912,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 115.163,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 182.446,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 215.756,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 114.996,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 149.981,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 182.48,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 248.031,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 239.931,
+              "throughput_per_second": 33.343,
+              "latency_p50_ms": 150.1,
+              "latency_p95_ms": 239.565,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 83.553,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 116.49,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 183.129,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 216.586,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 116.352,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 150.1,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 183.209,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 239.565,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 226.405,
+              "throughput_per_second": 35.335,
+              "latency_p50_ms": 128.773,
+              "latency_p95_ms": 226.209,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 93.21,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 128.715,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 176.572,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 208.755,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 93.603,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 128.773,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 176.61,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 226.209,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            },
+            {
+              "mode": "asyncio",
+              "concurrency": 8,
+              "wall_ms": 217.033,
+              "throughput_per_second": 36.861,
+              "latency_p50_ms": 116.916,
+              "latency_p95_ms": 216.795,
+              "max_in_flight": 8,
+              "counts": {
+                "success": 8,
+                "error": 0,
+                "timeout": 0
+              },
+              "result_fingerprint": "11ace5835277128624d294cbc79b05dbdfe677172f572b465b71048fa9e774b2",
+              "results": [
+                {
+                  "operation_id": "acquisition-01",
+                  "status": "success",
+                  "latency_ms": 81.906,
+                  "payload_fingerprint": "f44245c9e60c7facced5e91aeb2b6a921a22a9e660a2d1e2efc47d69a9806b09",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-02",
+                  "status": "success",
+                  "latency_ms": 116.574,
+                  "payload_fingerprint": "3526a65f28611f81cf2f4fd16cd4a4d008ab11b5c96ff1dff19b78ee867817e6",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-03",
+                  "status": "success",
+                  "latency_ms": 166.202,
+                  "payload_fingerprint": "0c5a06b097b4f59e213306c0b41a8cb750375a7a50286e5778d286d8d49fa6bf",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-04",
+                  "status": "success",
+                  "latency_ms": 199.82,
+                  "payload_fingerprint": "b66e571cf367a07037cc34bd98b0cb1c6198d95a42844b7608b9b51c1eeecc19",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-05",
+                  "status": "success",
+                  "latency_ms": 81.934,
+                  "payload_fingerprint": "2da576a4ebc05fb883bab88d0901438f71949c9fd224135a2f3225c0aec34568",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-06",
+                  "status": "success",
+                  "latency_ms": 116.916,
+                  "payload_fingerprint": "ed98e63f5b1b0c314d7f88d31ffba978212888979e430d6d7169d941a3bcb4e4",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-07",
+                  "status": "success",
+                  "latency_ms": 166.426,
+                  "payload_fingerprint": "7e618c624bd66aa96d77d65032e7f7bc9dc55f74ca3a28d9db29d065cf27da81",
+                  "error": ""
+                },
+                {
+                  "operation_id": "acquisition-08",
+                  "status": "success",
+                  "latency_ms": 216.795,
+                  "payload_fingerprint": "287b1b0e131099b464c056aad3aae00c3ffd58776686ff5e28a3a8f75feca22d",
+                  "error": ""
+                }
+              ]
+            }
+          ],
+          "speedup_vs_serial": 5.563,
+          "equivalent_to_serial": true,
+          "speedup_vs_asyncio_c1": 5.591,
+          "marginal_reduction_vs_previous_asyncio_percent": 45.52
+        }
+      ]
+    }
+  ],
+  "fault_checks": [
+    {
+      "stage": "search",
+      "serial": {
+        "mode": "serial",
+        "concurrency": 1,
+        "wall_ms": 532.269,
+        "throughput_per_second": 7.515,
+        "latency_p50_ms": 80.895,
+        "latency_p95_ms": 301.806,
+        "max_in_flight": 1,
+        "counts": {
+          "success": 2,
+          "error": 1,
+          "timeout": 1
+        },
+        "result_fingerprint": "58984df0e85fb1f5a0dfc2c2b4a04bae2cd057e7a553d34598ad5ba8423761e0",
+        "results": [
+          {
+            "operation_id": "search-ok-1",
+            "status": "success",
+            "latency_ms": 66.011,
+            "payload_fingerprint": "2bfc57e116e17ade9f934688de181fbc8c083dcd8f4d33c65e4bc599edd56cbb",
+            "error": ""
+          },
+          {
+            "operation_id": "search-error",
+            "status": "error",
+            "latency_ms": 83.212,
+            "payload_fingerprint": "",
+            "error": "RuntimeError: controlled failure: search-error"
+          },
+          {
+            "operation_id": "search-timeout",
+            "status": "timeout",
+            "latency_ms": 301.806,
+            "payload_fingerprint": "",
+            "error": "operation timeout"
+          },
+          {
+            "operation_id": "search-ok-2",
+            "status": "success",
+            "latency_ms": 80.895,
+            "payload_fingerprint": "9c416577e96520ba28bde48dc84ccef9f522948985ea27f4c4eebed6ec68c997",
+            "error": ""
+          }
+        ]
+      },
+      "asyncio": {
+        "mode": "asyncio",
+        "concurrency": 8,
+        "wall_ms": 303.512,
+        "throughput_per_second": 13.179,
+        "latency_p50_ms": 50.955,
+        "latency_p95_ms": 303.251,
+        "max_in_flight": 4,
+        "counts": {
+          "success": 2,
+          "error": 1,
+          "timeout": 1
+        },
+        "result_fingerprint": "58984df0e85fb1f5a0dfc2c2b4a04bae2cd057e7a553d34598ad5ba8423761e0",
+        "results": [
+          {
+            "operation_id": "search-ok-1",
+            "status": "success",
+            "latency_ms": 50.869,
+            "payload_fingerprint": "2bfc57e116e17ade9f934688de181fbc8c083dcd8f4d33c65e4bc599edd56cbb",
+            "error": ""
+          },
+          {
+            "operation_id": "search-error",
+            "status": "error",
+            "latency_ms": 50.955,
+            "payload_fingerprint": "",
+            "error": "RuntimeError: controlled failure: search-error"
+          },
+          {
+            "operation_id": "search-timeout",
+            "status": "timeout",
+            "latency_ms": 303.251,
+            "payload_fingerprint": "",
+            "error": "operation timeout"
+          },
+          {
+            "operation_id": "search-ok-2",
+            "status": "success",
+            "latency_ms": 82.34,
+            "payload_fingerprint": "9c416577e96520ba28bde48dc84ccef9f522948985ea27f4c4eebed6ec68c997",
+            "error": ""
+          }
+        ]
+      },
+      "equivalent_results": true
+    },
+    {
+      "stage": "acquisition",
+      "serial": {
+        "mode": "serial",
+        "concurrency": 1,
+        "wall_ms": 529.413,
+        "throughput_per_second": 7.556,
+        "latency_p50_ms": 81.972,
+        "latency_p95_ms": 301.782,
+        "max_in_flight": 1,
+        "counts": {
+          "success": 2,
+          "error": 1,
+          "timeout": 1
+        },
+        "result_fingerprint": "f97bc61dc9125d5bb93183deec855ff926143ed373f024b4e88a7fe7876b4089",
+        "results": [
+          {
+            "operation_id": "acquisition-ok-1",
+            "status": "success",
+            "latency_ms": 63.328,
+            "payload_fingerprint": "e539f866b78b96011bc2f05b5ef7b696739faad76742f52f18ed7088dec00abd",
+            "error": ""
+          },
+          {
+            "operation_id": "acquisition-error",
+            "status": "error",
+            "latency_ms": 81.972,
+            "payload_fingerprint": "",
+            "error": "RuntimeError: controlled failure: acquisition-error"
+          },
+          {
+            "operation_id": "acquisition-timeout",
+            "status": "timeout",
+            "latency_ms": 301.782,
+            "payload_fingerprint": "",
+            "error": "operation timeout"
+          },
+          {
+            "operation_id": "acquisition-ok-2",
+            "status": "success",
+            "latency_ms": 82.096,
+            "payload_fingerprint": "efb0425c2e7d5c75e42c5f9727bd0eca725aee5a221f8e02a63ea0489c7cb7d9",
+            "error": ""
+          }
+        ]
+      },
+      "asyncio": {
+        "mode": "asyncio",
+        "concurrency": 8,
+        "wall_ms": 316.089,
+        "throughput_per_second": 12.655,
+        "latency_p50_ms": 64.194,
+        "latency_p95_ms": 315.665,
+        "max_in_flight": 4,
+        "counts": {
+          "success": 2,
+          "error": 1,
+          "timeout": 1
+        },
+        "result_fingerprint": "f97bc61dc9125d5bb93183deec855ff926143ed373f024b4e88a7fe7876b4089",
+        "results": [
+          {
+            "operation_id": "acquisition-ok-1",
+            "status": "success",
+            "latency_ms": 64.194,
+            "payload_fingerprint": "e539f866b78b96011bc2f05b5ef7b696739faad76742f52f18ed7088dec00abd",
+            "error": ""
+          },
+          {
+            "operation_id": "acquisition-error",
+            "status": "error",
+            "latency_ms": 64.163,
+            "payload_fingerprint": "",
+            "error": "RuntimeError: controlled failure: acquisition-error"
+          },
+          {
+            "operation_id": "acquisition-timeout",
+            "status": "timeout",
+            "latency_ms": 315.665,
+            "payload_fingerprint": "",
+            "error": "operation timeout"
+          },
+          {
+            "operation_id": "acquisition-ok-2",
+            "status": "success",
+            "latency_ms": 100.219,
+            "payload_fingerprint": "efb0425c2e7d5c75e42c5f9727bd0eca725aee5a221f8e02a63ea0489c7cb7d9",
+            "error": ""
+          }
+        ]
+      },
+      "equivalent_results": true
+    }
+  ]
+}
