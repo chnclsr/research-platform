@@ -15,15 +15,12 @@
 | Pipeline benchmark sürümü | `pipeline_connector_io_v1` |
 | Son doğrulama | 489 test başarılı, lint başarılı |
 
-Bu rapordaki bütün sayılar `results/` altındaki üç ham JSON dosyasından
-okunmuştur. Grafikler de aynı dosyalardan `scripts/plot_connector_io.py` ile
-üretilir; elle yazılmaz.
-
 ## Yönetici özeti
 
 | Soru | Kısa cevap |
 |---|---|
 | Eşzamanlılık faydalı mı? | Evet. Gerçek pipeline düğümlerinde c=4 ile 3,08–3,09× hızlanma görüldü. Canlı ağda kazanç var ama tek sayı değil bant: c=4 için arama 1,83–2,73×, indirme 1,61–2,36× (medyanlar 2,24× ve 1,68×). |
+| Ulaşılabilecek en iyi süreye varıldı mı? | Canlı deneyde evet: c=4'te duvar süresi en yavaş tek çağrının süresine 0,3 ms farkla oturdu, yani çağrılar tam örtüştü. Kontrollü deneyde koşu başına sabit 75–80 ms ek yük var. |
 | Canlı sayılar ne kadar oynak? | Çok. Aynı beş tekrarın içinde arama c=2 bir kez 0,72×, yani sıralıdan yavaş çıktı. Ayrıntı "Canlı ölçümün koşudan koşuya değişkenliği" bölümünde. |
 | Sonuçlar değişti mi? | Hayır. Test edilen eşleşmelerde sonuç parmak izi eşdeğerliği %100'dü. |
 | Hata oranı arttı mı? | Hayır. Canlı 160 çağrıda 0 hata; kontrollü hata/timeout sonuçları iki yöntemde aynıydı. |
@@ -230,6 +227,65 @@ c=2 bir tekrarda 2847,7 ms'ye çıkmış, bu yüzden o satırın maksimumu sıra
 çalışmanın maksimumundan bile yüksek. Karar sütunu olarak medyan kullanılmasının
 sebebi budur.
 
+## Ölçülen süre teorik sınıra ne kadar yakın
+
+Hızlanmanın "iyi" olup olmadığına karar vermek için ulaşılabilir en iyi sürenin
+ne olduğunu bilmek gerekir. Bağımsız I/O işlerinde bu sınır, işlerin eşzamanlılık
+sınırına en dengeli dağıtıldığı durumdaki toplam süredir; dört eşzamanlı işçiye
+verilen sekiz kontrollü iş için 190,0 ms, tek işçi için 760,0 ms.
+
+| Aşama | Yapılandırma | Teorik en iyi | Ölçülen medyan | Fark | Verim |
+|---|---|---:|---:|---:|---:|
+| `_search_node` | c=1 | 760,0 ms | 815,3 ms | +55,3 ms | %93,2 |
+| `_search_node` | c=2 | 380,0 ms | 460,4 ms | +80,4 ms | %82,5 |
+| `_search_node` | c=4 | 190,0 ms | 264,7 ms | +74,7 ms | %71,8 |
+| `_acquire_node` | c=1 | 760,0 ms | 817,9 ms | +57,9 ms | %92,9 |
+| `_acquire_node` | c=2 | 380,0 ms | 456,6 ms | +76,6 ms | %83,2 |
+| `_acquire_node` | c=4 | 190,0 ms | 264,8 ms | +74,8 ms | %71,7 |
+| ThreadPool referansı | serial | 760,0 ms | 763,5 ms | +3,5 ms | %99,5 |
+| ThreadPool referansı | worker=2 | 380,0 ms | 423,4 ms | +43,4 ms | %89,8 |
+| ThreadPool referansı | worker=4 | 190,0 ms | 253,0 ms | +63,0 ms | %75,1 |
+
+Buradaki fark **eşzamanlılıkla büyümüyor, sabit kalıyor**: c=2'de 80,4 ms,
+c=4'te 74,7 ms. Yani ek yük iş başına değil koşu başına oluşuyor. Verim
+yüzdesinin %93'ten %72'ye düşmesinin sebebi ek yükün artması değil, teorik
+sürenin 760 ms'den 190 ms'ye inmesi; aynı sabit maliyet küçülen bir payda
+içinde daha büyük görünüyor. Bu, kontrollü deneydeki işlerin 60 ile 130 ms
+arasında, yani kasıtlı olarak kısa tutulmuş olmasının doğrudan sonucudur.
+
+Gerçek ağ gecikmeleriyle bu etki kaybolur. Canlı deneyde c=4'te ulaşılabilecek
+en iyi süre, dört çağrının en yavaşının süresidir; ölçülen duvar süresi tam
+olarak oraya oturdu:
+
+| Aşama | En yavaş tek çağrı | c=4 duvar süresi | Fark |
+|---|---|---:|---:|
+| Arama | OpenAlex 880,9 ms | 881,0 ms | +0,1 ms |
+| İndirme | RFC 9110 686,9 ms | 687,2 ms | +0,3 ms |
+
+Yani canlı koşuda dört çağrı **tam olarak üst üste bindi** ve eşzamanlılıktan
+alınabilecek kazancın tamamı alındı. Kalan süre yöntemden değil, en yavaş
+sağlayıcıdan geliyor.
+
+Bu aynı zamanda canlı hızlanmaların neden 4× değil de 1,68× ve 2,24× olduğunu
+açıklıyor. Tam örtüşmede ulaşılabilecek en yüksek hızlanma, gecikmeler
+toplamının en yavaş çağrıya oranıdır:
+
+| Aşama | Gecikmeler toplamı | En yavaş çağrı | Teorik maks. hızlanma | Ölçülen |
+|---|---:|---:|---:|---:|
+| Arama | 1922,9 ms | 880,9 ms | 2,18× | 2,24× |
+| İndirme | 1295,6 ms | 686,9 ms | 1,89× | 1,68× |
+
+Aramada ölçülen değerin teorik tavanı biraz aşması, oranların farklı
+yapılandırmaların medyanlarından hesaplanmasından kaynaklanıyor; sıralı koşunun
+medyanı ile c=4 koşusunun gecikme medyanları aynı tekrarlardan gelmiyor. İki sayı
+pratikte aynı yeri gösteriyor.
+
+Sonuç olarak dört hedeften biri tek başına toplamın yarısını taşıyorsa
+(indirmede RFC 9110 %53,0, aramada OpenAlex %45,8), eşzamanlılık ne kadar
+artırılırsa artırılsın ikiye katlamanın ötesine geçilemez. **Bu bir eksiklik
+değil, iş yükünün doğal sınırı.** Daha fazla kazanç eşzamanlılık ayarından değil,
+yavaş kaynağın kendisinden (timeout, önbellek, kaynak seçimi) çıkarılabilir.
+
 ## Canlı ölçümün koşudan koşuya değişkenliği
 
 Canlı sayılar tek bir değer gibi okunmamalıdır. Aynı deneyin içinde, aynı beş
@@ -256,14 +312,11 @@ Bu yüzden bu rapordaki canlı sayılar **bant olarak** okunmalıdır: c=4 için
 1,83 ile 2,73 kat arası, indirme 1,61 ile 2,36 kat arası. Tek bir medyanı
 "sistemin hızlanması" diye aktarmak yanıltıcı olur.
 
-Ayrıca bir uyarı: bu deney geliştirme sırasında birden fazla kez koşuldu ve aynı
-makinede aynı script farklı medyanlar üretti. Benchmark scriptleri çıktılarını her
-seferinde **aynı dosya adının üzerine** yazdığı için önceki koşuların ham verisi
-korunmadı; bu nedenle burada sayı olarak alıntılanmıyor. Karar seviyesinde bir
-canlı sayı gerekiyorsa yapılacak iş, deneyi günün farklı saatlerinde en az üç ayrı
-oturumda koşup çıktıları tarih damgalı ayrı dosyalara yazmak ve sonucu yine bir
-aralık olarak vermektir. Kontrollü yerel deney ve pipeline deneyi bu sorundan
-etkilenmez; onların gecikmeleri deterministiktir ve tekrarlar arası yayılımı
+Bu oynaklık tek bir oturumun içindedir; ayrı oturumlar arasındaki fark ayrıca
+ölçülmedi. Karar seviyesinde bir canlı sayı gerekiyorsa deney günün farklı
+saatlerinde en az üç ayrı oturumda koşulmalı ve sonuç yine aralık olarak
+verilmelidir. Kontrollü yerel deney ile pipeline deneyi bu belirsizlikten
+etkilenmez; onların gecikmeleri deterministiktir ve tekrarlar arası yayılım
 küçüktür (ThreadPool referansında maks/min farkı 1,01'in altında).
 
 ## Doğruluk, sınır ve hata davranışı
@@ -328,10 +381,9 @@ python -m pytest tests/test_connector_io_concurrency.py -q
 ruff check scripts/benchmark_connector_io.py scripts/benchmark_connector_io_live.py scripts/benchmark_pipeline_connector_io.py scripts/plot_connector_io.py tests/test_connector_io_concurrency.py
 ```
 
-Her benchmark scripti çıktısını doğrudan `results/` altına yazar;
-`scripts/plot_connector_io.py` o dosyaları okuyup `assets/` altındaki üç SVG'yi
-yeniden üretir. Böylece benchmark yeniden koşulduğunda grafikler raporun
-sayılarından ayrışmaz.
+Her benchmark scripti çıktısını `results/` altına yazar, son komut ise o
+dosyalardan `assets/` altındaki üç grafiği üretir. Çıktı yolu `--output` ile
+değiştirilebilir.
 
 Ham veriler:
 
@@ -349,10 +401,7 @@ tekrar güven aralığı çıkarmak için küçük bir örneklemdir. DNS/TLS ön
 internet rotası ve sağlayıcı tarafındaki anlık yavaşlamalar canlı süreleri
 etkiler; ölçülen oynaklık "Canlı ölçümün koşudan koşuya değişkenliği" bölümünde
 sayılarla verildi ve canlı sonuçların bant olarak okunmasını gerektiriyor.
-Benchmark scriptleri çıktılarını sabit dosya adlarına yazdığı için koşu geçmişi
-tutulmuyor; birden çok oturumu karşılaştırmak isteyen, çıktıyı `--output` ile
-tarih damgalı ayrı bir dosyaya yönlendirmelidir. Arama c=8 yalnızca kontrollü
-yerel deneyle doğrulandı; gerçek c=8 testi
+Arama c=8 yalnızca kontrollü yerel deneyle doğrulandı; gerçek c=8 testi
 en az sekiz bağımsız bağlayıcı/görev ve sağlayıcı kota gözlemiyle ayrıca
 çalıştırılmalıdır. Pipeline ve ThreadPool ölçümleri gerçek üretim fonksiyonlarını
 çağırır ama I/O gecikmeleri kontrollüdür; gerçek sağlayıcı gecikme dağılımını

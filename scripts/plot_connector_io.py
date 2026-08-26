@@ -19,13 +19,24 @@ RESULTS = Path("research/connector-concurrency/results")
 ASSETS = Path("research/connector-concurrency/assets")
 
 WIDTH = 1000
-LEFT = 170
-RIGHT = 940
-TOP = 100
+MARGIN = 40
 BAR_H = 20
-GROUP_GAP = 24
+BAR_PITCH = 24
+GROUP_GAP = 22
 
 SERIES_COLORS = ("#2563eb", "#f97316", "#0f9d58")
+
+CATEGORY_FONT = 15
+VALUE_FONT = 12
+
+
+def _text_width(text: str, size: int, *, bold: bool = False) -> float:
+    """Arial'de yaklaşık metin genişliği.
+
+    Tam ölçüm için font metriği gerekir; burada amaç yerleşimin çakışmaması, o
+    yüzden karakter başına ortalama genişlikle üstten tahmin yeterli.
+    """
+    return len(text) * size * (0.60 if bold else 0.56)
 
 
 @dataclass(frozen=True)
@@ -62,17 +73,29 @@ def render_chart(
 ) -> str:
     rows = len(categories)
     bars = len(series)
-    group_h = bars * BAR_H + GROUP_GAP
-    plot_h = rows * group_h
-    axis_y = TOP + plot_h - GROUP_GAP + 20
-    height = axis_y + (70 if footnote else 45)
-
     values = [v for s in series for v in s.values if v is not None]
     top_value, ticks = _nice_ticks(max(values))
-    span = RIGHT - LEFT
+
+    # Sol kenar en uzun satır etiketine, sağ kenar en uzun değer etiketine göre
+    # belirlenir; sabit kenarlar uzun etiketlerde taşmaya yol açıyordu.
+    left = MARGIN + max(_text_width(c, CATEGORY_FONT) for c in categories) + 20
+    widest_value = max(_text_width(f"{v:.0f} ms", VALUE_FONT, bold=True) for v in values)
+    right = WIDTH - MARGIN - widest_value - 8
+
+    # Gösterge kendi satırında durur; başlığın yanına konunca uzun başlıkla
+    # çakışıyordu.
+    legend_y = 92
+    top = legend_y + 38
+
+    group_h = bars * BAR_PITCH + GROUP_GAP
+    bars_h = (bars - 1) * BAR_PITCH + BAR_H
+    axis_y = top + rows * group_h - GROUP_GAP + 20
+    height = axis_y + (70 if footnote else 45)
+
+    span = right - left
 
     def x_of(value: float) -> float:
-        return LEFT + span * (value / top_value)
+        return left + span * (value / top_value)
 
     out: list[str] = []
     out.append(
@@ -91,22 +114,23 @@ def render_chart(
         f'fill="#556070">{_esc(subtitle)}</text>'
     )
 
-    # Gösterge sağdan sola yerleşir ki uzun etiketler başlığa girmesin.
-    legend_x = WIDTH - 60
-    for s in reversed(series):
-        text_w = 8 * len(s.label)
-        legend_x -= text_w + 24
-        out.append(f'  <rect x="{legend_x}" y="35" width="16" height="16" rx="3" fill="{s.color}"/>')
+    legend_x = float(MARGIN)
+    for s in series:
         out.append(
-            f'  <text x="{legend_x + 24}" y="48" font-family="Arial, sans-serif" '
-            f'font-size="14" fill="#172033">{_esc(s.label)}</text>'
+            f'  <rect x="{round(legend_x, 1)}" y="{legend_y}" width="16" height="16" '
+            f'rx="3" fill="{s.color}"/>'
         )
-        legend_x -= 16
+        out.append(
+            f'  <text x="{round(legend_x + 24, 1)}" y="{legend_y + 13}" '
+            f'font-family="Arial, sans-serif" font-size="14" fill="#172033">'
+            f"{_esc(s.label)}</text>"
+        )
+        legend_x += 24 + _text_width(s.label, 14) + 28
 
     out.append('  <g stroke="#d7dde7" stroke-width="1">')
     for tick in ticks:
         x = round(x_of(tick), 1)
-        out.append(f'    <line x1="{x}" y1="{TOP - 10}" x2="{x}" y2="{axis_y - 10}"/>')
+        out.append(f'    <line x1="{x}" y1="{top - 10}" x2="{x}" y2="{axis_y - 10}"/>')
     out.append("  </g>")
 
     out.append(
@@ -118,11 +142,14 @@ def render_chart(
     out.append("  </g>")
 
     out.append(
-        '  <g font-family="Arial, sans-serif" font-size="15" fill="#172033" text-anchor="end">'
+        f'  <g font-family="Arial, sans-serif" font-size="{CATEGORY_FONT}" fill="#172033" '
+        f'text-anchor="end">'
     )
     for row, category in enumerate(categories):
-        centre = TOP + row * group_h + (bars * BAR_H) / 2 + 5
-        out.append(f'    <text x="150" y="{round(centre, 1)}">{_esc(category)}</text>')
+        centre = top + row * group_h + bars_h / 2 + 5
+        out.append(
+            f'    <text x="{round(left - 20, 1)}" y="{round(centre, 1)}">{_esc(category)}</text>'
+        )
     out.append("  </g>")
 
     labels: list[str] = []
@@ -131,16 +158,20 @@ def render_chart(
         for row, value in enumerate(s.values):
             if value is None:
                 continue
-            y = TOP + row * group_h + series_index * BAR_H
-            width = max(round(x_of(value) - LEFT, 1), 1.0)
-            out.append(f'    <rect x="{LEFT}" y="{y}" width="{width}" height="{BAR_H}" rx="4"/>')
+            y = top + row * group_h + series_index * BAR_PITCH
+            width = max(round(x_of(value) - left, 1), 1.0)
+            out.append(
+                f'    <rect x="{round(left, 1)}" y="{y}" width="{width}" '
+                f'height="{BAR_H}" rx="4"/>'
+            )
             labels.append(
-                f'    <text x="{round(LEFT + width + 8, 1)}" y="{y + 15}">{value:.0f} ms</text>'
+                f'    <text x="{round(left + width + 8, 1)}" y="{y + 15}">{value:.0f} ms</text>'
             )
         out.append("  </g>")
 
     out.append(
-        '  <g font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#172033">'
+        f'  <g font-family="Arial, sans-serif" font-size="{VALUE_FONT}" font-weight="700" '
+        f'fill="#172033">'
     )
     out.extend(labels)
     out.append("  </g>")
