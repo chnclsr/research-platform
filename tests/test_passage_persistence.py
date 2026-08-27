@@ -114,10 +114,7 @@ async def test_resaving_the_same_chunk_updates_in_place_instead_of_duplicating()
     assert rows[0].text == "Revised passage text."
     assert rows[0].embedding == [0.9, 0.8, 0.7]
     assert rows[0].section_path == "Document/Results"
-    assert (
-        rows[0].content_hash
-        == hashlib.sha256(b"Revised passage text.").hexdigest()
-    )
+    assert rows[0].content_hash == hashlib.sha256(b"Revised passage text.").hexdigest()
 
 
 @pytest.mark.anyio

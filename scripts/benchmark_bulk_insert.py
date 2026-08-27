@@ -302,12 +302,25 @@ def passage_upsert() -> Any:
     )
 
 
+def candidate_passage_rows(passages: list[Passage]) -> list[dict[str, Any]]:
+    """Mirror the proposed duplicate handling and lock order without changing production."""
+    by_chunk: dict[tuple[str, int], dict[str, Any]] = {}
+    for passage in passages:
+        key = (passage.source_version_id, passage.chunk_index)
+        values = passage_row_values(passage)
+        if key in by_chunk:
+            values["id"] = by_chunk[key]["id"]
+        by_chunk[key] = values
+    return [by_chunk[key] for key in sorted(by_chunk)]
+
+
 async def core_upsert_batched(ctx: StrategyContext) -> StrategyResult:
     """The candidate production path: idempotent upsert in bounded batches."""
+    rows = candidate_passage_rows(ctx.passages)
     upsert = passage_upsert()
     async with ctx.session_factory() as session:
-        for start in range(0, len(ctx.rows), ctx.upsert_batch):
-            await session.execute(upsert, ctx.rows[start : start + ctx.upsert_batch])
+        for start in range(0, len(rows), ctx.upsert_batch):
+            await session.execute(upsert, rows[start : start + ctx.upsert_batch])
         await session.commit()
     return StrategyResult(commits=1)
 

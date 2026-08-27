@@ -5,65 +5,65 @@
 <line x1="105" y1="475.00" x2="1145" y2="475.00" stroke="#d7dde8" stroke-width="1"/>
 <text x="95" y="479.00" text-anchor="end" class="axis">0.0</text>
 <line x1="105" y1="395.00" x2="1145" y2="395.00" stroke="#d7dde8" stroke-width="1"/>
-<text x="95" y="399.00" text-anchor="end" class="axis">5,107.2</text>
+<text x="95" y="399.00" text-anchor="end" class="axis">4,968.7</text>
 <line x1="105" y1="315.00" x2="1145" y2="315.00" stroke="#d7dde8" stroke-width="1"/>
-<text x="95" y="319.00" text-anchor="end" class="axis">10,214.4</text>
+<text x="95" y="319.00" text-anchor="end" class="axis">9,937.3</text>
 <line x1="105" y1="235.00" x2="1145" y2="235.00" stroke="#d7dde8" stroke-width="1"/>
-<text x="95" y="239.00" text-anchor="end" class="axis">15,321.5</text>
+<text x="95" y="239.00" text-anchor="end" class="axis">14,906.0</text>
 <line x1="105" y1="155.00" x2="1145" y2="155.00" stroke="#d7dde8" stroke-width="1"/>
-<text x="95" y="159.00" text-anchor="end" class="axis">20,428.7</text>
+<text x="95" y="159.00" text-anchor="end" class="axis">19,874.7</text>
 <line x1="105" y1="75.00" x2="1145" y2="75.00" stroke="#d7dde8" stroke-width="1"/>
-<text x="95" y="79.00" text-anchor="end" class="axis">25,535.9</text>
-<rect x="143.13" y="471.03" width="30.80" height="3.97" fill="#2563eb" rx="2"/>
-<text x="158.53" y="466.03" text-anchor="middle" class="value">253.5</text>
-<rect x="176.93" y="473.24" width="30.80" height="1.76" fill="#059669" rx="2"/>
-<text x="192.33" y="468.24" text-anchor="middle" class="value">112.3</text>
-<rect x="210.73" y="473.21" width="30.80" height="1.79" fill="#7c3aed" rx="2"/>
-<text x="226.13" y="468.21" text-anchor="middle" class="value">114.3</text>
-<rect x="244.53" y="473.24" width="30.80" height="1.76" fill="#ea580c" rx="2"/>
-<text x="259.93" y="468.24" text-anchor="middle" class="value">112.2</text>
-<rect x="278.33" y="473.33" width="30.80" height="1.67" fill="#0891b2" rx="2"/>
-<text x="293.73" y="468.33" text-anchor="middle" class="value">106.9</text>
-<rect x="312.13" y="473.43" width="30.80" height="1.57" fill="#65a30d" rx="2"/>
-<text x="327.53" y="468.43" text-anchor="middle" class="value">100.0</text>
-<rect x="345.93" y="467.31" width="30.80" height="7.69" fill="#dc2626" rx="2"/>
-<text x="361.33" y="462.31" text-anchor="middle" class="value">491.2</text>
-<rect x="379.73" y="473.71" width="30.80" height="1.29" fill="#db2777" rx="2"/>
-<text x="395.13" y="468.71" text-anchor="middle" class="value">82.5</text>
+<text x="95" y="79.00" text-anchor="end" class="axis">24,843.3</text>
+<rect x="143.13" y="471.27" width="30.80" height="3.73" fill="#2563eb" rx="2"/>
+<text x="158.53" y="466.27" text-anchor="middle" class="value">231.6</text>
+<rect x="176.93" y="473.20" width="30.80" height="1.80" fill="#059669" rx="2"/>
+<text x="192.33" y="468.20" text-anchor="middle" class="value">111.6</text>
+<rect x="210.73" y="473.08" width="30.80" height="1.92" fill="#7c3aed" rx="2"/>
+<text x="226.13" y="468.08" text-anchor="middle" class="value">119.1</text>
+<rect x="244.53" y="473.20" width="30.80" height="1.80" fill="#ea580c" rx="2"/>
+<text x="259.93" y="468.20" text-anchor="middle" class="value">111.8</text>
+<rect x="278.33" y="473.20" width="30.80" height="1.80" fill="#0891b2" rx="2"/>
+<text x="293.73" y="468.20" text-anchor="middle" class="value">111.6</text>
+<rect x="312.13" y="473.30" width="30.80" height="1.70" fill="#65a30d" rx="2"/>
+<text x="327.53" y="468.30" text-anchor="middle" class="value">105.3</text>
+<rect x="345.93" y="467.11" width="30.80" height="7.89" fill="#dc2626" rx="2"/>
+<text x="361.33" y="462.11" text-anchor="middle" class="value">489.8</text>
+<rect x="379.73" y="473.64" width="30.80" height="1.36" fill="#db2777" rx="2"/>
+<text x="395.13" y="468.64" text-anchor="middle" class="value">84.7</text>
 <text x="278.33" y="503" text-anchor="middle" class="axis">100 kayıt</text>
-<rect x="489.80" y="437.71" width="30.80" height="37.29" fill="#2563eb" rx="2"/>
-<text x="505.20" y="432.71" text-anchor="middle" class="value">2,380.7</text>
-<rect x="523.60" y="461.43" width="30.80" height="13.57" fill="#059669" rx="2"/>
-<text x="539.00" y="456.43" text-anchor="middle" class="value">866.6</text>
-<rect x="557.40" y="461.43" width="30.80" height="13.57" fill="#7c3aed" rx="2"/>
-<text x="572.80" y="456.43" text-anchor="middle" class="value">866.1</text>
-<rect x="591.20" y="462.89" width="30.80" height="12.11" fill="#ea580c" rx="2"/>
-<text x="606.60" y="457.89" text-anchor="middle" class="value">772.9</text>
-<rect x="625.00" y="462.59" width="30.80" height="12.41" fill="#0891b2" rx="2"/>
-<text x="640.40" y="457.59" text-anchor="middle" class="value">792.2</text>
-<rect x="658.80" y="463.19" width="30.80" height="11.81" fill="#65a30d" rx="2"/>
-<text x="674.20" y="458.19" text-anchor="middle" class="value">754.2</text>
-<rect x="692.60" y="424.32" width="30.80" height="50.68" fill="#dc2626" rx="2"/>
-<text x="708.00" y="419.32" text-anchor="middle" class="value">3,235.4</text>
-<rect x="726.40" y="465.79" width="30.80" height="9.21" fill="#db2777" rx="2"/>
-<text x="741.80" y="460.79" text-anchor="middle" class="value">588.2</text>
+<rect x="489.80" y="441.49" width="30.80" height="33.51" fill="#2563eb" rx="2"/>
+<text x="505.20" y="436.49" text-anchor="middle" class="value">2,081.1</text>
+<rect x="523.60" y="461.28" width="30.80" height="13.72" fill="#059669" rx="2"/>
+<text x="539.00" y="456.28" text-anchor="middle" class="value">852.4</text>
+<rect x="557.40" y="461.23" width="30.80" height="13.77" fill="#7c3aed" rx="2"/>
+<text x="572.80" y="456.23" text-anchor="middle" class="value">855.0</text>
+<rect x="591.20" y="462.39" width="30.80" height="12.61" fill="#ea580c" rx="2"/>
+<text x="606.60" y="457.39" text-anchor="middle" class="value">783.1</text>
+<rect x="625.00" y="462.28" width="30.80" height="12.72" fill="#0891b2" rx="2"/>
+<text x="640.40" y="457.28" text-anchor="middle" class="value">790.1</text>
+<rect x="658.80" y="462.93" width="30.80" height="12.07" fill="#65a30d" rx="2"/>
+<text x="674.20" y="457.93" text-anchor="middle" class="value">749.9</text>
+<rect x="692.60" y="405.10" width="30.80" height="69.90" fill="#dc2626" rx="2"/>
+<text x="708.00" y="400.10" text-anchor="middle" class="value">4,341.2</text>
+<rect x="726.40" y="465.69" width="30.80" height="9.31" fill="#db2777" rx="2"/>
+<text x="741.80" y="460.69" text-anchor="middle" class="value">578.5</text>
 <text x="625.00" y="503" text-anchor="middle" class="axis">1,000 kayıt</text>
-<rect x="836.47" y="303.90" width="30.80" height="171.10" fill="#2563eb" rx="2"/>
-<text x="851.87" y="298.90" text-anchor="middle" class="value">10,923.0</text>
-<rect x="870.27" y="407.16" width="30.80" height="67.84" fill="#059669" rx="2"/>
-<text x="885.67" y="402.16" text-anchor="middle" class="value">4,330.9</text>
-<rect x="904.07" y="407.57" width="30.80" height="67.43" fill="#7c3aed" rx="2"/>
-<text x="919.47" y="402.57" text-anchor="middle" class="value">4,304.7</text>
-<rect x="937.87" y="415.86" width="30.80" height="59.14" fill="#ea580c" rx="2"/>
-<text x="953.27" y="410.86" text-anchor="middle" class="value">3,775.7</text>
-<rect x="971.67" y="413.34" width="30.80" height="61.66" fill="#0891b2" rx="2"/>
-<text x="987.07" y="408.34" text-anchor="middle" class="value">3,936.5</text>
-<rect x="1005.47" y="419.12" width="30.80" height="55.88" fill="#65a30d" rx="2"/>
-<text x="1020.87" y="414.12" text-anchor="middle" class="value">3,567.3</text>
+<rect x="836.47" y="297.55" width="30.80" height="177.45" fill="#2563eb" rx="2"/>
+<text x="851.87" y="292.55" text-anchor="middle" class="value">11,020.9</text>
+<rect x="870.27" y="405.40" width="30.80" height="69.60" fill="#059669" rx="2"/>
+<text x="885.67" y="400.40" text-anchor="middle" class="value">4,322.8</text>
+<rect x="904.07" y="405.46" width="30.80" height="69.54" fill="#7c3aed" rx="2"/>
+<text x="919.47" y="400.46" text-anchor="middle" class="value">4,319.2</text>
+<rect x="937.87" y="414.37" width="30.80" height="60.63" fill="#ea580c" rx="2"/>
+<text x="953.27" y="409.37" text-anchor="middle" class="value">3,765.7</text>
+<rect x="971.67" y="411.60" width="30.80" height="63.40" fill="#0891b2" rx="2"/>
+<text x="987.07" y="406.60" text-anchor="middle" class="value">3,937.4</text>
+<rect x="1005.47" y="417.73" width="30.80" height="57.27" fill="#65a30d" rx="2"/>
+<text x="1020.87" y="412.73" text-anchor="middle" class="value">3,556.8</text>
 <rect x="1039.27" y="117.86" width="30.80" height="357.14" fill="#dc2626" rx="2"/>
-<text x="1054.67" y="112.86" text-anchor="middle" class="value">22,799.9</text>
-<rect x="1073.07" y="431.10" width="30.80" height="43.90" fill="#db2777" rx="2"/>
-<text x="1088.47" y="426.10" text-anchor="middle" class="value">2,802.7</text>
+<text x="1054.67" y="112.86" text-anchor="middle" class="value">22,181.5</text>
+<rect x="1073.07" y="429.75" width="30.80" height="45.25" fill="#db2777" rx="2"/>
+<text x="1088.47" y="424.75" text-anchor="middle" class="value">2,810.4</text>
 <text x="971.67" y="503" text-anchor="middle" class="axis">5,000 kayıt</text>
 <text transform="translate(24 275.0) rotate(-90)" text-anchor="middle" class="axis">Milisaniye</text>
 <rect x="105.00" y="528" width="13" height="13" fill="#2563eb" rx="2"/>

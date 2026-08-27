@@ -1,0 +1,1370 @@
+{
+  "benchmark_version": "postgres_partial_conflict_v1",
+  "generated_at": "2026-08-27T12:37:16.944915+00:00",
+  "methodology": {
+    "sizes": [
+      100,
+      1000,
+      5000
+    ],
+    "repeats": 10,
+    "warmups": 1,
+    "embedding_dimensions": 768,
+    "text_chars": 512,
+    "upsert_batch": 1000,
+    "conflict_ratio": 0.5,
+    "strategy_order": "alternating pair order"
+  },
+  "datasets": [
+    {
+      "row_count": 100,
+      "preseeded_rows": 50,
+      "new_rows": 50,
+      "strategies": {
+        "bulk_upsert": {
+          "wall_ms_median": 111.721,
+          "wall_ms_mean": 106.619,
+          "wall_ms_min": 79.5,
+          "wall_ms_max": 122.195,
+          "wall_ms_stdev": 17.14,
+          "sql_statement_count_median": 1.0,
+          "all_valid": true,
+          "runs": [
+            {
+              "repeat": 1,
+              "wall_ms": 121.172,
+              "rows_per_second": 825.272,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 2,
+              "wall_ms": 95.469,
+              "rows_per_second": 1047.456,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 3,
+              "wall_ms": 104.669,
+              "rows_per_second": 955.393,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 4,
+              "wall_ms": 79.5,
+              "rows_per_second": 1257.859,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 5,
+              "wall_ms": 79.635,
+              "rows_per_second": 1255.737,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 6,
+              "wall_ms": 122.195,
+              "rows_per_second": 818.361,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 7,
+              "wall_ms": 121.146,
+              "rows_per_second": 825.452,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 8,
+              "wall_ms": 102.196,
+              "rows_per_second": 978.511,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 9,
+              "wall_ms": 121.437,
+              "rows_per_second": 823.472,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 10,
+              "wall_ms": 118.774,
+              "rows_per_second": 841.937,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            }
+          ],
+          "speedup_vs_legacy": 2.053
+        },
+        "legacy_repository": {
+          "wall_ms_median": 229.381,
+          "wall_ms_mean": 322.889,
+          "wall_ms_min": 190.886,
+          "wall_ms_max": 581.564,
+          "wall_ms_stdev": 172.42,
+          "sql_statement_count_median": 200.0,
+          "all_valid": true,
+          "runs": [
+            {
+              "repeat": 1,
+              "wall_ms": 555.039,
+              "rows_per_second": 180.167,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 2,
+              "wall_ms": 229.292,
+              "rows_per_second": 436.125,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 3,
+              "wall_ms": 190.886,
+              "rows_per_second": 523.872,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 4,
+              "wall_ms": 192.443,
+              "rows_per_second": 519.635,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 5,
+              "wall_ms": 220.093,
+              "rows_per_second": 454.354,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 6,
+              "wall_ms": 231.015,
+              "rows_per_second": 432.873,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 7,
+              "wall_ms": 229.47,
+              "rows_per_second": 435.786,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 8,
+              "wall_ms": 220.575,
+              "rows_per_second": 453.36,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 9,
+              "wall_ms": 578.518,
+              "rows_per_second": 172.855,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 10,
+              "wall_ms": 581.564,
+              "rows_per_second": 171.95,
+              "sql_statement_count": 200,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 50,
+              "end_row_count": 100,
+              "validation": {
+                "row_count": 100,
+                "embedding_dimension_matches": 100,
+                "distinct_content_hashes": 100,
+                "distinct_ids": 100,
+                "distinct_chunk_indexes": 100,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "row_count": 1000,
+      "preseeded_rows": 500,
+      "new_rows": 500,
+      "strategies": {
+        "bulk_upsert": {
+          "wall_ms_median": 808.906,
+          "wall_ms_mean": 802.037,
+          "wall_ms_min": 770.265,
+          "wall_ms_max": 841.866,
+          "wall_ms_stdev": 21.932,
+          "sql_statement_count_median": 1.0,
+          "all_valid": true,
+          "runs": [
+            {
+              "repeat": 1,
+              "wall_ms": 773.634,
+              "rows_per_second": 1292.6,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 2,
+              "wall_ms": 809.417,
+              "rows_per_second": 1235.456,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 3,
+              "wall_ms": 805.328,
+              "rows_per_second": 1241.729,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 4,
+              "wall_ms": 808.394,
+              "rows_per_second": 1237.021,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 5,
+              "wall_ms": 811.359,
+              "rows_per_second": 1232.5,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 6,
+              "wall_ms": 770.265,
+              "rows_per_second": 1298.255,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 7,
+              "wall_ms": 778.117,
+              "rows_per_second": 1285.155,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 8,
+              "wall_ms": 841.866,
+              "rows_per_second": 1187.837,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 9,
+              "wall_ms": 811.83,
+              "rows_per_second": 1231.786,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 10,
+              "wall_ms": 810.16,
+              "rows_per_second": 1234.324,
+              "sql_statement_count": 1,
+              "executemany_call_count": 1,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            }
+          ],
+          "speedup_vs_legacy": 6.106
+        },
+        "legacy_repository": {
+          "wall_ms_median": 4939.51,
+          "wall_ms_mean": 4855.47,
+          "wall_ms_min": 3377.113,
+          "wall_ms_max": 6462.937,
+          "wall_ms_stdev": 1091.707,
+          "sql_statement_count_median": 2000.0,
+          "all_valid": true,
+          "runs": [
+            {
+              "repeat": 1,
+              "wall_ms": 6462.937,
+              "rows_per_second": 154.728,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 2,
+              "wall_ms": 5937.244,
+              "rows_per_second": 168.428,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 3,
+              "wall_ms": 5271.868,
+              "rows_per_second": 189.686,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 4,
+              "wall_ms": 3692.532,
+              "rows_per_second": 270.817,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 5,
+              "wall_ms": 3475.33,
+              "rows_per_second": 287.742,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 6,
+              "wall_ms": 4552.842,
+              "rows_per_second": 219.643,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 7,
+              "wall_ms": 5841.008,
+              "rows_per_second": 171.203,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 8,
+              "wall_ms": 5336.672,
+              "rows_per_second": 187.383,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 9,
+              "wall_ms": 4607.152,
+              "rows_per_second": 217.054,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 10,
+              "wall_ms": 3377.113,
+              "rows_per_second": 296.111,
+              "sql_statement_count": 2000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 500,
+              "end_row_count": 1000,
+              "validation": {
+                "row_count": 1000,
+                "embedding_dimension_matches": 1000,
+                "distinct_content_hashes": 1000,
+                "distinct_ids": 1000,
+                "distinct_chunk_indexes": 1000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "row_count": 5000,
+      "preseeded_rows": 2500,
+      "new_rows": 2500,
+      "strategies": {
+        "bulk_upsert": {
+          "wall_ms_median": 4042.18,
+          "wall_ms_mean": 4096.958,
+          "wall_ms_min": 4026.349,
+          "wall_ms_max": 4253.584,
+          "wall_ms_stdev": 95.752,
+          "sql_statement_count_median": 5.0,
+          "all_valid": true,
+          "runs": [
+            {
+              "repeat": 1,
+              "wall_ms": 4045.515,
+              "rows_per_second": 1235.936,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 2,
+              "wall_ms": 4236.263,
+              "rows_per_second": 1180.286,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 3,
+              "wall_ms": 4026.349,
+              "rows_per_second": 1241.82,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 4,
+              "wall_ms": 4040.574,
+              "rows_per_second": 1237.448,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 5,
+              "wall_ms": 4034.752,
+              "rows_per_second": 1239.233,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 6,
+              "wall_ms": 4033.475,
+              "rows_per_second": 1239.626,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 7,
+              "wall_ms": 4214.709,
+              "rows_per_second": 1186.322,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 8,
+              "wall_ms": 4042.653,
+              "rows_per_second": 1236.812,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 9,
+              "wall_ms": 4041.707,
+              "rows_per_second": 1237.101,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 10,
+              "wall_ms": 4253.584,
+              "rows_per_second": 1175.479,
+              "sql_statement_count": 5,
+              "executemany_call_count": 5,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            }
+          ],
+          "speedup_vs_legacy": 5.136
+        },
+        "legacy_repository": {
+          "wall_ms_median": 20760.83,
+          "wall_ms_mean": 20523.604,
+          "wall_ms_min": 12297.634,
+          "wall_ms_max": 29563.1,
+          "wall_ms_stdev": 5424.89,
+          "sql_statement_count_median": 10000.0,
+          "all_valid": true,
+          "runs": [
+            {
+              "repeat": 1,
+              "wall_ms": 22088.081,
+              "rows_per_second": 226.366,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 2,
+              "wall_ms": 27896.657,
+              "rows_per_second": 179.233,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 3,
+              "wall_ms": 17502.048,
+              "rows_per_second": 285.681,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 4,
+              "wall_ms": 14083.658,
+              "rows_per_second": 355.021,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 5,
+              "wall_ms": 29563.1,
+              "rows_per_second": 169.13,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 6,
+              "wall_ms": 18417.73,
+              "rows_per_second": 271.478,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 7,
+              "wall_ms": 19831.926,
+              "rows_per_second": 252.119,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 8,
+              "wall_ms": 21865.476,
+              "rows_per_second": 228.671,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 9,
+              "wall_ms": 21689.734,
+              "rows_per_second": 230.524,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            },
+            {
+              "repeat": 10,
+              "wall_ms": 12297.634,
+              "rows_per_second": 406.582,
+              "sql_statement_count": 10000,
+              "executemany_call_count": 0,
+              "commit_count": 1,
+              "start_row_count": 2500,
+              "end_row_count": 5000,
+              "validation": {
+                "row_count": 5000,
+                "embedding_dimension_matches": 5000,
+                "distinct_content_hashes": 5000,
+                "distinct_ids": 5000,
+                "distinct_chunk_indexes": 5000,
+                "null_embeddings": 0,
+                "stale_seed_rows": 0,
+                "valid": true
+              },
+              "success": true
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

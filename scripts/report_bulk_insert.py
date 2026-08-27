@@ -39,6 +39,37 @@ def is_reingest(item: dict[str, Any]) -> bool:
     return bool(item.get("preseeded"))
 
 
+def unstable_baseline_sizes(payload: dict[str, Any]) -> list[int]:
+    """Sizes where the repository baseline splits into two clusters rather than scattering.
+
+    A wide spread alone is not the problem; a wide spread is still summarised honestly by
+    a median. The problem is two separated clusters, where the median lands wherever the
+    split falls. So the test is whether one gap dominates the whole range, not how far
+    the extremes are apart.
+    """
+    unstable = []
+    for dataset in payload["datasets"]:
+        low, high = baseline_clusters(payload, dataset["row_count"])
+        if len(low) < 2 or len(high) < 2:
+            continue
+        spread = high[-1] - low[0]
+        if spread and (high[0] - low[-1]) / spread >= 0.5:
+            unstable.append(dataset["row_count"])
+    return unstable
+
+
+def baseline_clusters(payload: dict[str, Any], row_count: int) -> tuple[list[float], list[float]]:
+    """Split the baseline's runs at its widest gap, which is where the two modes sit."""
+    dataset = next(item for item in payload["datasets"] if item["row_count"] == row_count)
+    baseline = next(
+        item for item in dataset["configurations"] if item["strategy"] == "repository_save_passages"
+    )
+    values = sorted(run["wall_ms"] for run in baseline["runs"] if run["success"])
+    gaps = [(values[index + 1] - values[index], index) for index in range(len(values) - 1)]
+    split = max(gaps)[1] + 1
+    return values[:split], values[split:]
+
+
 def path_label(item: dict[str, Any]) -> str:
     return "Re-ingest" if is_reingest(item) else "Insert"
 
@@ -226,7 +257,57 @@ def by_strategy(dataset: dict[str, Any], name: str) -> dict[str, Any]:
     return next(item for item in dataset["configurations"] if item["strategy"] == name)
 
 
-def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
+def partial_conflict_lines(payload: dict[str, Any]) -> list[str]:
+    methodology = payload["methodology"]
+    lines = [
+        "## Kısmi çakışma: karışık INSERT ve UPDATE yolu",
+        "",
+        (
+            "Her veri setindeki çift indeksli chunk'lar farklı içerikle önceden yazıldı. Ölçülen "
+            "çağrı aynı transaction içinde satırların yüzde 50'sini güncelledi ve yüzde 50'sini "
+            "ekledi. Ön dolum ve doğrulama süre dışında bırakıldı; iki yöntemin sırası her "
+            "tekrarda ters çevrildi."
+        ),
+        "",
+        (
+            "| Toplam kayıt | Önceden var | Yeni | Mevcut repository medyan ms | "
+            "Aday bulk medyan ms | Hızlanma | Mevcut SQL | Bulk SQL | Geçerli koşu |"
+        ),
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for dataset in payload["datasets"]:
+        bulk = dataset["strategies"]["bulk_upsert"]
+        legacy = dataset["strategies"]["legacy_repository"]
+        valid = sum(run["success"] for run in bulk["runs"]) + sum(
+            run["success"] for run in legacy["runs"]
+        )
+        total = len(bulk["runs"]) + len(legacy["runs"])
+        lines.append(
+            f"| {dataset['row_count']:,} | {dataset['preseeded_rows']:,} | "
+            f"{dataset['new_rows']:,} | {legacy['wall_ms_median']:,.3f} | "
+            f"{bulk['wall_ms_median']:,.3f} | {bulk['speedup_vs_legacy']:.3f}x | "
+            f"{legacy['sql_statement_count_median']:,.0f} | "
+            f"{bulk['sql_statement_count_median']:,.0f} | {valid}/{total} |"
+        )
+    lines += [
+        "",
+        (
+            f"Her hücre {methodology['repeats']} kez ölçüldü ve "
+            f"{methodology['warmups']} warm-up yapıldı. Sonuç, farkın yalnız tamamen boş veya "
+            "tamamen dolu tabloya özgü olup olmadığını sınar."
+        ),
+        "",
+        "Ham sonuç: `results/postgres_bulk_insert_partial.json`",
+        "",
+    ]
+    return lines
+
+
+def markdown_report(
+    payload: dict[str, Any],
+    result_path: Path,
+    partial_payload: dict[str, Any] | None = None,
+) -> str:
     environment = payload["environment"]
     methodology = payload["methodology"]
     enriched = speedup_payload(payload)
@@ -235,6 +316,53 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
         for dataset in enriched["datasets"]
     ]
     gain_text = ", ".join(f"{gain:.3f}x" for gain in core_repository_gains)
+    unstable = unstable_baseline_sizes(payload)
+    stable_sizes = [
+        dataset["row_count"]
+        for dataset in payload["datasets"]
+        if dataset["row_count"] not in unstable
+    ]
+    stable_gain_text = ", ".join(
+        f"{by_strategy(dataset, 'core_upsert_batched')['speedup_vs_repository']:.3f}x"
+        f" ({dataset['row_count']:,} kayıt)"
+        for dataset in enriched["datasets"]
+        if dataset["row_count"] in stable_sizes
+    )
+    stable_partial_text = (
+        ", ".join(
+            f"{dataset['strategies']['bulk_upsert']['speedup_vs_legacy']:.3f}x"
+            for dataset in partial_payload["datasets"]
+            if dataset["row_count"] in stable_sizes
+        )
+        if partial_payload is not None
+        else "ayrı deney çalıştırılmadı"
+    )
+    unstable_note = ""
+    unstable_limit_lines: list[str] = []
+    if unstable:
+        described = []
+        for size in unstable:
+            low, high = baseline_clusters(payload, size)
+            described.append(
+                f"{size:,} kayıtta {low[0]:,.0f}-{low[-1]:,.0f} ms ve "
+                f"{high[0]:,.0f}-{high[-1]:,.0f} ms"
+            )
+        unstable_note = (
+            "Karşılaştırma tabanı olan mevcut repository yolu "
+            f"{', '.join(described)} olmak üzere çift tepeli ölçüldüğü için bu boyut"
+            f"{'lar' if len(unstable) > 1 else ''} manşet oranına alınmamıştır. "
+        )
+        for size in unstable:
+            low_cluster, high_cluster = baseline_clusters(payload, size)
+            unstable_limit_lines.append(
+                f"- {size:,} kayıtta `repository_save_passages` dağılımı çift tepelidir: "
+                f"{len(low_cluster)} koşu {min(low_cluster):,.0f}-{max(low_cluster):,.0f} ms, "
+                f"{len(high_cluster)} koşu {min(high_cluster):,.0f}-{max(high_cluster):,.0f} ms. "
+                "Medyan, bölünmenin nereye denk geldiğine göre kayar; bu boyuttaki hızlanma "
+                "oranı bu nedenle nokta tahmini olarak kullanılamaz. Kümelenme koşu sırasıyla "
+                "ilişkilendirilemedi ve nedeni belirlenemedi. Daha büyük veri boyutlarında "
+                "dağılım tek tepelidir."
+            )
     lines = [
         "# PostgreSQL Veritabanı Toplu Yazma Testi",
         "",
@@ -245,6 +373,16 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             "yazılması ve toplu yazılması arasındaki süre, throughput, WAL, I/O ve SQL çağrısı "
             "farklarını aynı veri üzerinde ölçer. Ayrıca embedding'in JSONB yerine native pgvector "
             "sütununda tutulmasının yazma maliyetine etkisini karşılaştırır."
+        ),
+        "",
+        "## Kısa sonuç",
+        "",
+        (
+            f"Aday batch upsert, mevcut repository yoluna göre {stable_gain_text} hızlandı. "
+            f"Yüzde 50 çakışmalı ek deneyde aynı boyutlarda hızlanma {stable_partial_text} oldu. "
+            f"{unstable_note}Ana matriste 300/300, ek matriste 60/60 koşu veri bütünlüğü "
+            "doğrulamasını geçti. Üretim kodu değiştirilmedi; bu rapor entegrasyon kararı için "
+            "ölçüm ve risk sınırlarını sunar."
         ),
         "",
         "## Test edilen mimari",
@@ -334,7 +472,10 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             "böylece JSONB kolları ile pgvector kolu aynı veritabanı durumundan başladı."
         ),
         "- Aynı engine, bağlantı havuzu ve session factory kullanıldı.",
-        (f"- {methodology['repeats']} tekrarda yöntem sırası Latin rotasyonuyla dengelendi."),
+        (
+            f"- {methodology['repeats']} tekrarda yöntem sırası deterministik Latin "
+            "rotasyonuyla tam konum dengesi sağlayacak biçimde döndürüldü."
+        ),
         "- Her veri boyutu kendi tam veri setiyle ayrıca warm-up edildi.",
         (
             "- Payload serileştirmesi her kolda ölçüm penceresinin içinde bırakıldı. ORM kolları "
@@ -648,14 +789,14 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             f"- Her hücrede {methodology['repeats']} ölçüm vardır; özellikle repository yönteminde "
             "yüksek varyans gözlendi."
         ),
+        *unstable_limit_lines,
         (
             "- `pg_stat_io` checkpoint ile fiziksel yazmaya zorlanmış ve her okumadan önce flush "
             "edilmiştir, ancak kernel ve depolama katmanı zamanlaması tamamen ayrıştırılamaz."
         ),
         (
-            "- Re-ingest kolları tek geçişte tüm satırların çakıştığı durumu ölçer. Kısmen "
-            "çakışan bir batch, yani bir belgenin bazı chunk'larının değişip bazılarının "
-            "eklendiği durum, ayrıca ölçülmemiştir."
+            "- Ana re-ingest kolları tüm satırların çakıştığı durumu ölçer; yüzde 50 çakışmalı "
+            "karışık yol ayrı ek deneyde ölçülmüştür."
         ),
         (
             "- Eşzamanlı yazarlar, lock contention, bağlantı kaybı ve transaction retry davranışı "
@@ -670,10 +811,10 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             "matriste yoktur."
         ),
         "",
-        "## Üretim önerisi",
+        "## Üretim için aday ve karar noktaları",
         "",
         (
-            "Ölçülen yazma yolu için bulk yazım uygulanması gerekçelidir ve önerilen yöntem "
+            "Ölçümler bulk yazımın değerlendirilmesini gerekçelendirir. Teknik aday yöntem "
             f"`core_upsert_batched`, yani {methodology['upsert_batch']:,} satırlık batch'lerle "
             "`INSERT ... ON CONFLICT DO UPDATE`. Bu yöntem repository'nin idempotent güncelleme "
             "semantiğini korur ve ölçülen tek eşdeğer semantikli bulk yoldur. `copy_records` daha "
@@ -706,6 +847,17 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             f"--upsert-batch {methodology['upsert_batch']} \\"
         ),
         "  --output research/bulk-insert/results/postgres_bulk_insert.json",
+        "PYTHONPATH=src .venv311/bin/python scripts/benchmark_partial_conflict.py \\",
+        (
+            f"  --sizes {' '.join(str(size) for size in methodology['sizes'])} "
+            f"--repeats {methodology['repeats']} --warmups {methodology['warmups']} \\"
+        ),
+        (
+            f"  --dimensions {methodology['embedding_dimensions']} "
+            f"--text-chars {methodology['text_chars']} "
+            f"--upsert-batch {methodology['upsert_batch']} \\"
+        ),
+        "  --output research/bulk-insert/results/postgres_bulk_insert_partial.json",
         "PYTHONPATH=src .venv311/bin/python scripts/report_bulk_insert.py",
         "```",
         "",
@@ -713,7 +865,7 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
         "",
         "Özet CSV: `results/postgres_bulk_insert_summary.csv`",
         "",
-        "## Sonuç ve karar",
+        "## Teknik sonuç",
         "",
         (
             "Bu makinede embedding içeren yazma yükü için tek transaction toplu yazım açık biçimde "
@@ -724,20 +876,26 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             "vardır: en hızlı kolun süresinin kayda değer bir bölümü istemci tarafı embedding "
             "serileştirmesidir ve bunu hiçbir yazma yöntemi düşürmez. Native pgvector sütunu bu "
             "tavanı sunucu tarafında düşürür, karşılığında disk kullanımını artırır; bu ayrı bir "
-            "şema kararıdır ve bu deneyin kapsamı dışındadır. Önerilen karar, idempotent upsert "
-            "semantiği ve batch sınırları korunarak bulk repository yolu eklemektir."
+            "şema kararıdır ve bu deneyin kapsamı dışındadır. Verilerin işaret ettiği teknik aday, "
+            "idempotent upsert "
+            "semantiği ve batch sınırları korunarak bulk repository yoludur. Üretim kodu bu "
+            "rapor kapsamında değiştirilmemiştir; entegrasyon kararı aşağıdaki kontrollerle "
+            "birlikte verilmelidir."
         ),
         "",
         f"Bu rapor `{result_path.name}` dosyasındaki ölçümlerden yeniden üretilebilir.",
         "",
     ]
+    if partial_payload is not None:
+        marker = lines.index("## Güvenilirlik sınırları")
+        lines[marker:marker] = partial_conflict_lines(partial_payload)
     report = "\n".join(lines)
     if "\u2014" in report:
         raise ValueError("Report must not contain an em dash")
     return report
 
 
-def generate(result_path: Path, report_path: Path) -> None:
+def generate(result_path: Path, report_path: Path, partial_result_path: Path | None = None) -> None:
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     assets = report_path.parent / "assets"
     assets.mkdir(parents=True, exist_ok=True)
@@ -771,7 +929,12 @@ def generate(result_path: Path, report_path: Path) -> None:
     for name, content in charts.items():
         (assets / name).write_text(content, encoding="utf-8")
     write_summary_csv(payload, result_path.with_name("postgres_bulk_insert_summary.csv"))
-    report_path.write_text(markdown_report(payload, result_path), encoding="utf-8")
+    partial_payload = (
+        json.loads(partial_result_path.read_text(encoding="utf-8"))
+        if partial_result_path is not None and partial_result_path.exists()
+        else None
+    )
+    report_path.write_text(markdown_report(payload, result_path, partial_payload), encoding="utf-8")
 
 
 def main() -> None:
@@ -786,8 +949,13 @@ def main() -> None:
         type=Path,
         default=Path("research/bulk-insert/REPORT.md"),
     )
+    parser.add_argument(
+        "--partial-input",
+        type=Path,
+        default=Path("research/bulk-insert/results/postgres_bulk_insert_partial.json"),
+    )
     args = parser.parse_args()
-    generate(args.input, args.report)
+    generate(args.input, args.report, args.partial_input)
     print(f"REPORT {args.report.resolve()}")
 
 

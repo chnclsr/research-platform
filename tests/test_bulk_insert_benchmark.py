@@ -11,6 +11,7 @@ from scripts.benchmark_bulk_insert import (
     UPDATABLE_COLUMNS,
     aggregate_runs,
     build_passages,
+    candidate_passage_rows,
     client_serialization_ms,
     copy_record,
     passage_row_values,
@@ -21,7 +22,13 @@ from scripts.benchmark_bulk_insert import (
     vector_literal,
     vector_parameters,
 )
-from scripts.report_bulk_insert import grouped_bar_svg, speedup_payload
+from scripts.benchmark_partial_conflict import mixed_seed_rows
+from scripts.report_bulk_insert import (
+    baseline_clusters,
+    grouped_bar_svg,
+    speedup_payload,
+    unstable_baseline_sizes,
+)
 
 
 def test_bulk_benchmark_data_matches_passage_row_schema() -> None:
@@ -238,3 +245,58 @@ def test_bulk_benchmark_reingest_arms_are_preseeded() -> None:
     # Each re-ingest arm must pair with an insert arm running the same code.
     for name in preseeded:
         assert name.removesuffix("_reingest") in {spec.name for spec in STRATEGIES}
+
+
+def test_partial_conflict_seed_is_exactly_half_and_preserves_identity() -> None:
+    rows = [passage_row_values(passage) for passage in build_passages(10, 4, 64)]
+
+    seeded = mixed_seed_rows(rows)
+
+    assert len(seeded) == 5
+    assert [row["chunk_index"] for row in seeded] == [0, 2, 4, 6, 8]
+    assert all(row["text"].startswith("seed ") for row in seeded)
+
+
+def test_candidate_collapses_duplicate_chunks_with_first_id_and_last_content() -> None:
+    passages = build_passages(2, 4, 64)
+    passages[1].source_version_id = passages[0].source_version_id
+    passages[1].chunk_index = passages[0].chunk_index
+
+    rows = candidate_passage_rows(passages)
+
+    assert len(rows) == 1
+    assert rows[0]["id"] == passages[0].id
+    assert rows[0]["text"] == passages[1].text
+
+
+def _baseline_payload(row_count: int, wall_values: list[float]) -> dict[str, object]:
+    return {
+        "datasets": [
+            {
+                "row_count": row_count,
+                "configurations": [
+                    {
+                        "strategy": "repository_save_passages",
+                        "runs": [{"wall_ms": value, "success": True} for value in wall_values],
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def test_report_flags_a_baseline_that_splits_into_two_clusters() -> None:
+    """The 100-row repository baseline really did land in two groups, not one spread."""
+    payload = _baseline_payload(100, [168, 169, 179, 434, 488, 492, 497, 504, 511, 518])
+
+    assert unstable_baseline_sizes(payload) == [100]
+    low, high = baseline_clusters(payload, 100)
+    assert low == [168, 169, 179]
+    assert len(high) == 7
+
+
+def test_report_does_not_flag_a_baseline_that_is_merely_noisy() -> None:
+    """A wide but single-peaked spread is still summarised honestly by its median."""
+    payload = _baseline_payload(1000, [1794, 2797, 3778, 4118, 4258, 4424, 4860, 5133, 5188, 5331])
+
+    assert unstable_baseline_sizes(payload) == []
