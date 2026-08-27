@@ -325,6 +325,28 @@ class Repository(metaclass=_OwnershipEnforced):
         )
         return list(rows)
 
+    async def list_failed_runs_since(self, cutoff: datetime) -> list[ResearchRunRow]:
+        """Runs that failed recently, for the notice the bot sends their owners.
+
+        Bounded on purpose: `list_runs_by_statuses` would return every run that ever failed,
+        and the notifier walks this list on each poll cycle. The cutoff is also what keeps
+        the feature from replaying old failures the first time it runs.
+
+        Carries the same admin guard as `list_runs_by_statuses` -- system paths only.
+        """
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        rows = await self.session.scalars(
+            select(ResearchRunRow)
+            .where(
+                ResearchRunRow.status == RunStatus.FAILED.value,
+                ResearchRunRow.updated_at >= cutoff,
+            )
+            .order_by(ResearchRunRow.updated_at)
+        )
+        return list(rows)
+
     async def running_normal_run(self) -> ResearchRunRow | None:
         """The normal-priority run currently holding the worker, if there is one.
 

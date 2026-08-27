@@ -8,22 +8,28 @@ import secrets
 import shlex
 import time
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
 
+from .auth import Principal
 from .config import get_settings
 from .db import SessionLocal
 from .gateway_client import ResearchGatewayClient
-from .identity import consume_telegram_link_code, principal_from_telegram
+from .identity import consume_telegram_link_code, principal_from_telegram, telegram_ids_for
 from .normalization import detect_language
 from .queueing import NORMAL, PRIORITIES, URGENT, normalize_priority
+from .repository import Repository
 from .schemas import DeliveryMode, HitlConfig, ResearchBudget, ResearchProtocol
 from .scoping import slugify
 
 logger = logging.getLogger(__name__)
+
+# Marks a run whose failure has been announced. A run event rather than a column: no
+# migration, and it survives a bot restart so nobody is told twice.
+FAILURE_NOTICE_EVENT = "telegram_failure_notified"
 
 # Every word the bot says, in both languages. One table rather than several: a new string
 # has exactly one place to go, and the key-parity test catches the half that gets
@@ -108,6 +114,13 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
         "runs_header": "Son koşularınız:",
         "runs_empty": "Henüz bir araştırmanız yok. /research ile başlayabilirsiniz.",
         "runs_row": "🧭 <b>{label}</b>\n{status} · {stage} · {date}\n<code>{command}</code>",
+        "run_failed": (
+            "❌ <b>Araştırma başarısız</b>\n\n"
+            "🧭 <b>{label}</b>\n<code>{run_id}</code>\n\n"
+            "{error}\n\n"
+            "<code>/status {run_id}</code> ile ayrıntıya bakabilirsiniz."
+        ),
+        "run_failed_no_reason": "Hata nedeni kaydedilmemiş.",
         "respond_ok": "{run_id}: yanıt alındı, durum {status}",
         "respond_none": "Bekleyen kullanıcı girdisi yok.",
         "respond_plan_usage": "approve veya reject <değişiklik> kullanın.",
@@ -266,6 +279,13 @@ In the commands below you can use the run's name instead of <run_id>.
         "runs_header": "Your recent runs:",
         "runs_empty": "You have no research yet. Start one with /research.",
         "runs_row": "🧭 <b>{label}</b>\n{status} · {stage} · {date}\n<code>{command}</code>",
+        "run_failed": (
+            "❌ <b>Research failed</b>\n\n"
+            "🧭 <b>{label}</b>\n<code>{run_id}</code>\n\n"
+            "{error}\n\n"
+            "Use <code>/status {run_id}</code> for the details."
+        ),
+        "run_failed_no_reason": "No failure reason was recorded.",
         "respond_ok": "{run_id}: answer received, status {status}",
         "respond_none": "There is no pending checkpoint.",
         "respond_plan_usage": "Use approve, or reject <what to change>.",
@@ -1675,6 +1695,48 @@ class TelegramResearchBot:
                 client, chat_id, strings["failed"].format(error=detail[:1000])
             )
 
+    async def _notify_failed_runs(self, client: httpx.AsyncClient) -> None:
+        """Tell the owner when one of their runs has failed.
+
+        Owner-driven rather than driven by `watched_runs`: that dict lives in memory and
+        only holds runs started through the bot, so a run started from MCP, the API or the
+        panel would fail in silence, and a bot restart would lose the rest. Every run has an
+        owner, and `telegram_ids_for` turns that into chats.
+
+        A run is announced once. The marker is an ordinary run event, so it survives a
+        restart without a migration, and it is written even when there was nobody to tell --
+        otherwise an owner with no linked Telegram would be retried on every poll cycle.
+        """
+        settings = get_settings()
+        cutoff = datetime.now(UTC) - timedelta(
+            hours=settings.telegram_failure_notice_window_h
+        )
+        async with SessionLocal() as session:
+            repo = Repository(session, actor=Principal.system())
+            for run in await repo.list_failed_runs_since(cutoff):
+                if await repo.events_by_types(run.id, {FAILURE_NOTICE_EVENT}):
+                    continue
+                chat_ids = (
+                    await telegram_ids_for(session, run.owner_id) if run.owner_id else []
+                )
+                language = reply_language(run={"protocol": run.protocol or {}})
+                strings = text_for(language)
+                reason = " ".join(str(run.error or "").split())
+                text = strings["run_failed"].format(
+                    label=html.escape(run_label({"protocol": run.protocol or {}, "id": run.id})),
+                    run_id=run.id,
+                    error=html.escape(reason[:600] or strings["run_failed_no_reason"]),
+                )
+                for chat_id in chat_ids:
+                    await self._send_message(client, chat_id, text, parse_mode="HTML")
+                if not chat_ids:
+                    logger.warning(
+                        "dusen kosu %s icin bildirilecek telegram hesabi yok (sahip=%s)",
+                        run.id,
+                        run.owner_id,
+                    )
+                await repo.event(run.id, FAILURE_NOTICE_EVENT, {"chat_count": len(chat_ids)})
+
     async def _notify_waiting_runs(self, client: httpx.AsyncClient) -> None:
         """Tell the chat when one of its runs has stopped for input.
 
@@ -1759,6 +1821,12 @@ class TelegramResearchBot:
                     await self._notify_waiting_runs(client)
                 except Exception:
                     logger.exception("plan bildirimi basarisiz")
+                # Its own guard: a failure here must not stop the plan notice, and neither
+                # of them may take the command loop down.
+                try:
+                    await self._notify_failed_runs(client)
+                except Exception:
+                    logger.exception("dusen kosu bildirimi basarisiz")
 
 
 def run() -> None:

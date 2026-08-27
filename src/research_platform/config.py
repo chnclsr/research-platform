@@ -156,6 +156,11 @@ class Settings(BaseSettings):
     telegram_max_wall_minutes: int = Field(180, ge=1, le=1440)
     telegram_default_max_sources: int | None = Field(None, ge=1)
     telegram_default_max_rounds: int = Field(3, ge=1, le=12)
+    # How far back the failure notice looks. It also decides what "already known" means:
+    # a run that failed before this window is never announced, so switching the feature on
+    # does not replay old failures, while a bot that was down for a while still catches the
+    # ones it missed.
+    telegram_failure_notice_window_h: float = Field(24.0, ge=0.5, le=168.0)
     user_agent: str = "ResearchPlatform/0.1 (local research; contact=local)"
 
     # The plan gate waits on a person, not on a service: five minutes -- the window the
