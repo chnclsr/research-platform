@@ -12,8 +12,8 @@ kaynakları ise `results/postgres_bulk_insert.json` ve
   tam bir kez çalıştı.
 - Re-ingest warm-up kolları ölçümden önce gerçekten dolu tablo üzerinde UPDATE yolunu
   çalıştırıyor.
-- `src/research_platform/repository.py` değiştirilmedi. Üretim entegrasyonu için henüz
-  karar, commit, PR veya merge yapılmadı.
+- `src/research_platform/repository.py` **değiştirildi**: `save_passages` batch upsert'e
+  çevrildi. Commit hazır, PR açılmadı, merge edilmedi. Mentör onayı bekleniyor.
 
 ## Ölçülen sonuç
 
@@ -41,26 +41,45 @@ sonuç pgvector şema değişikliği kararı değildir.
 | `scripts/benchmark_partial_conflict.py` | Yüzde 50 çakışmalı ek matris. |
 | `scripts/report_bulk_insert.py` | Markdown raporu, CSV'yi ve SVG grafikleri üretir. |
 | `tests/test_bulk_insert_benchmark.py` | Veri, upsert sütunları, rotasyon ve rapor yardımcı testleri. |
-| `tests/test_passage_persistence.py` | Mevcut `save_passages` davranışını sabitleyen karakterizasyon testleri. |
+| `src/research_platform/repository.py` | Üretim değişikliği: `save_passages` batch upsert. |
+| `tests/test_passage_persistence.py` | 6 karakterizasyon + 5 entegrasyon testi (SQLite). |
+| `tests/test_passage_persistence_postgres.py` | Eşzamanlı writer ve deadlock testleri (gerçek PostgreSQL, container yoksa atlanır). |
 | `research/bulk-insert/REPORT.md` | İncelenecek teknik rapor. |
 
-## Üretim kararı verilirse gerekenler
+## Üretim entegrasyonu: yapıldı
 
-Ölçümlerin işaret ettiği aday, 1.000 satırlık batch'lerle PostgreSQL/SQLite uyumlu
-`INSERT ... ON CONFLICT DO UPDATE` yoludur. Uygulama yapılmadan önce aşağıdaki davranışlar
-testlerle sabitlenmelidir:
+`Repository.save_passages` 1.000 satırlık batch'lerle `INSERT ... ON CONFLICT DO UPDATE`
+kullanıyor. Aşağıdaki yedi davranışın hepsi testlerle sabitlendi:
 
-1. `id`, `source_version_id` ve `chunk_index` conflict UPDATE listesine girmez.
-2. Tüm diğer fiziksel sütunlar, `metadata` dahil, güncellenir.
-3. Aynı çağrıdaki yinelenen chunk'lar ilk `id` ve son içerik semantiğiyle birleştirilir.
-4. Satırlar `(source_version_id, chunk_index)` sırasına dizilerek eşzamanlı kilit alma
-   sırası kararlı tutulur.
-5. Batch sınırını aşan girdide `ceil(N / 1000)` statement ve tek commit üretilir.
-6. Sonraki batch hata verirse önceki batch'ler de rollback edilir.
-7. SQLite karakterizasyon testleri ile PostgreSQL eşzamanlı writer/deadlock testi geçer.
+1. `id`, `source_version_id` ve `chunk_index` conflict UPDATE listesine girmez. ✓
+2. Tüm diğer fiziksel sütunlar, `metadata` dahil, güncellenir. ✓
+3. Aynı çağrıdaki yinelenen chunk'lar ilk `id` ve son içerik semantiğiyle birleşir. ✓
+4. Satırlar `(source_version_id, chunk_index)` sırasına dizilir. ✓
+5. Batch sınırını aşan girdide `ceil(N / 1000)` statement ve tek commit üretilir. ✓
+6. Sonraki batch hata verirse önceki batch'ler de uygulanmamış kalır. ✓
+7. SQLite karakterizasyon testleri ve PostgreSQL eşzamanlılık testi geçer. ✓
 
-Eşzamanlı writer contention throughput'u, bağlantı kaybı ve üst katman retry politikası
-performans matrisinde ölçülmedi. Bunlar entegrasyon PR'ının ayrı risk başlıklarıdır.
+Altı karakterizasyon testi **değiştirilmeden** geçiyor; davranış sözleşmesi korundu.
+
+### Kilit sırası artık varsayım değil
+
+4. maddenin gerekliliği doğrulandı: `_passage_upsert_rows` içindeki `sorted()` geçici
+olarak kaldırıldığında `tests/test_passage_persistence_postgres.py` gerçek PostgreSQL
+üzerinde `DeadlockDetectedError` üretiyor. Sıralama geri konduğunda test geçiyor. Yani
+bu satır bir stil tercihi değil, kaldırılırsa üretimde deadlock üreten bir önlemdir.
+
+### Rollback sahipliği kararı
+
+`save_passages` hata durumunda **kendisi rollback etmez**, hatayı yükseltir. Gerekçe:
+metot session'ın sahibi değil ve sonunda `commit()` çağırıyor, dolayısıyla transaction
+çağıranın daha önce yazdıklarını da kapsıyor; içeride rollback etmek onları da silerdi.
+`pipeline.py` zaten kendi sınırında rollback ediyor. Garanti edilen şey, batch'lerden
+biri hata verirse hiçbirinin uygulanmamış kalmasıdır.
+
+### Kapsanmayanlar
+
+Bağlantı kaybı ve üst katman retry politikası ölçülmedi ve test edilmedi. Eşzamanlı
+writer throughput'u da ölçülmedi; test edilen şey doğruluk ve deadlock yokluğu.
 
 ## Yeniden çalıştırma
 
