@@ -633,6 +633,100 @@ def _figure_matches_section(target: str, section_title: str) -> bool:
     )
 
 
+def _add_literature_topic_map_appendix(
+    document: Document,
+    *,
+    package: SynthesisPackage,
+    figures: dict[str, bytes],
+    sources: list[Any],
+    turkish: bool,
+    linkable_labels: set[str],
+) -> None:
+    """Render the complete literature topic map as Appendix B."""
+    document.add_section(WD_SECTION.NEW_PAGE)
+    document.add_heading(
+        "Ek B. Literatürün Konu Haritası"
+        if turkish
+        else "Appendix B. Thematic Literature Landscape",
+        level=1,
+    )
+    document.add_paragraph(
+        (
+            "Aşağıdaki görseller sistem performansını değil, incelenen çalışmaların neyi "
+            "araştırdığını ve sentezin hangi temalarını beslediğini gösterir."
+        )
+        if turkish
+        else (
+            "The figures below describe what the included studies investigate and which synthesis "
+            "themes they inform; they are not platform-performance charts."
+        )
+    )
+    _add_figure(
+        document,
+        figures["16a_research_contribution_landscape.png"],
+        width=6.35,
+        title="Araştırma katkı türleri" if turkish else "Research contribution types",
+        description=(
+            "İncelenen çalışmaların odaklandığı araştırma katkılarının yatay çubuk grafiği."
+            if turkish
+            else "Horizontal bar chart of the research contributions addressed by included studies."
+        ),
+    )
+    caption = document.add_paragraph(
+        "Şekil B.1. Çalışmaların araştırma amacına göre literatür görünümü."
+        if turkish
+        else "Figure B.1. Literature landscape by study purpose."
+    )
+    caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    _add_figure(
+        document,
+        figures["16b_theme_evidence_map.png"],
+        width=6.35,
+        title="Tema-kanıt haritası" if turkish else "Theme-evidence map",
+        description=(
+            "Her kaynağın rapordaki sentez temalarına yaptığı katkıyı gösteren matris."
+            if turkish
+            else "Matrix showing how each source contributes to the report's synthesis themes."
+        ),
+    )
+    caption = document.add_paragraph(
+        "Şekil B.2. Mavi hücre, ilgili çalışmanın o sentez temasına kanıt sağladığını gösterir."
+        if turkish
+        else "Figure B.2. A blue cell indicates that the study contributes evidence to that theme."
+    )
+    caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    profile_table = document.add_table(rows=1, cols=4)
+    profile_headers = (
+        ("Kaynak", "Araştırma katkısı", "Kanıt / tasarım", "Çalışma")
+        if turkish
+        else ("Source", "Research contribution", "Evidence / design", "Study")
+    )
+    for cell, label in zip(profile_table.rows[0].cells, profile_headers):
+        cell.text = label
+    source_by_id = {str(source.id): source for source in sources}
+    for profile in package.study_profiles:
+        row = profile_table.add_row().cells
+        if profile.source_label in linkable_labels:
+            _add_internal_link(
+                row[0].paragraphs[0], profile.source_label, source_anchor(profile.source_label)
+            )
+        else:
+            row[0].text = profile.source_label
+        row[1].text = profile.contribution
+        row[2].text = profile.evidence_design
+        source = source_by_id.get(profile.source_id)
+        if source is not None:
+            _add_hyperlink(
+                row[3].paragraphs[0],
+                _source_link_label(source, turkish, 150),
+                str(source.url),
+            )
+        else:
+            row[3].text = _text(profile.title, 150)
+    _style_table(profile_table, [0.55, 1.35, 1.35, 3.25], font_size=8)
+
+
 def _build_synthesis_word_report(
     *,
     run_id: str,
@@ -773,87 +867,7 @@ def _build_synthesis_word_report(
     _style_table(frame, [1.65, 4.85])
 
     document.add_heading(
-        "3. Literatürün konu haritası" if turkish else "3. Thematic literature landscape",
-        level=1,
-    )
-    document.add_paragraph(
-        (
-            "Aşağıdaki görseller sistem performansını değil, incelenen çalışmaların neyi "
-            "araştırdığını ve sentezin hangi temalarını beslediğini gösterir."
-        )
-        if turkish
-        else (
-            "The figures below describe what the included studies investigate and which synthesis "
-            "themes they inform; they are not platform-performance charts."
-        )
-    )
-    _add_figure(
-        document,
-        figures["16a_research_contribution_landscape.png"],
-        width=6.35,
-        title="Araştırma katkı türleri" if turkish else "Research contribution types",
-        description=(
-            "İncelenen çalışmaların odaklandığı araştırma katkılarının yatay çubuk grafiği."
-            if turkish
-            else "Horizontal bar chart of the research contributions addressed by included studies."
-        ),
-    )
-    caption = document.add_paragraph(
-        "Şekil 1. Çalışmaların araştırma amacına göre literatür görünümü."
-        if turkish
-        else "Figure 1. Literature landscape by study purpose."
-    )
-    caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _add_figure(
-        document,
-        figures["16b_theme_evidence_map.png"],
-        width=6.35,
-        title="Tema-kanıt haritası" if turkish else "Theme-evidence map",
-        description=(
-            "Her kaynağın rapordaki sentez temalarına yaptığı katkıyı gösteren matris."
-            if turkish
-            else "Matrix showing how each source contributes to the report's synthesis themes."
-        ),
-    )
-    caption = document.add_paragraph(
-        "Şekil 2. Mavi hücre, ilgili çalışmanın o sentez temasına kanıt sağladığını gösterir."
-        if turkish
-        else "Figure 2. A blue cell indicates that the study contributes evidence to that theme."
-    )
-    caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    profile_table = document.add_table(rows=1, cols=4)
-    profile_headers = (
-        ("Kaynak", "Araştırma katkısı", "Kanıt / tasarım", "Çalışma")
-        if turkish
-        else ("Source", "Research contribution", "Evidence / design", "Study")
-    )
-    for cell, label in zip(profile_table.rows[0].cells, profile_headers):
-        cell.text = label
-    source_by_id = {str(source.id): source for source in sources}
-    for profile in package.study_profiles:
-        row = profile_table.add_row().cells
-        if profile.source_label in linkable_labels:
-            _add_internal_link(
-                row[0].paragraphs[0], profile.source_label, source_anchor(profile.source_label)
-            )
-        else:
-            row[0].text = profile.source_label
-        row[1].text = profile.contribution
-        row[2].text = profile.evidence_design
-        source = source_by_id.get(profile.source_id)
-        if source is not None:
-            _add_hyperlink(
-                row[3].paragraphs[0],
-                _source_link_label(source, turkish, 150),
-                str(source.url),
-            )
-        else:
-            row[3].text = _text(profile.title, 150)
-    _style_table(profile_table, [0.55, 1.35, 1.35, 3.25], font_size=8)
-
-    document.add_heading(
-        "4. Tematik kanıt sentezi" if turkish else "4. Thematic evidence synthesis",
+        "3. Tematik kanıt sentezi" if turkish else "3. Thematic evidence synthesis",
         level=1,
     )
     if not package.sections:
@@ -863,7 +877,7 @@ def _build_synthesis_word_report(
             else "No sufficiently sourced findings were available for synthesis."
         )
     for index, section in enumerate(package.sections, 1):
-        document.add_heading(f"4.{index} {_text(section.title, 240)}", level=2)
+        document.add_heading(f"3.{index} {_text(section.title, 240)}", level=2)
         _add_cited_paragraph(document, section.synthesis, linkable_labels)
         comparison_rows = [
             (
@@ -959,9 +973,9 @@ def _build_synthesis_word_report(
             )
 
     document.add_heading(
-        "5. Çalışmalar arası değerlendirme ve sonuç"
+        "4. Çalışmalar arası değerlendirme ve sonuç"
         if turkish
-        else "5. Cross-study assessment and conclusion",
+        else "4. Cross-study assessment and conclusion",
         level=1,
     )
     _add_cited_paragraph(document, package.cross_study_assessment, linkable_labels)
@@ -1017,7 +1031,7 @@ def _build_synthesis_word_report(
             "Edinim ve normalizasyon: erişim stratejisi, sürüm, hash ve kalıcı kimlik kaydı.",
             "Kanıt: pasaj konumu, alıntı, yön ve entailment puanı ile claim bağlantısı.",
             "Sentez: küçük tema paketleri; yalnız izin verilen [Sxx] kaynak kimlikleri.",
-            "Sunum: konu haritası ana gövdede; retrieval ve audit ölçümleri yalnız eklerde.",
+            "Sunum: konu haritası Ek B'de; retrieval ve audit ölçümleri yalnız eklerde.",
         )
         if turkish
         else (
@@ -1025,7 +1039,7 @@ def _build_synthesis_word_report(
             "Acquisition and normalisation: strategy, version, hash, and persistent identifier retained.",
             "Evidence: claims link to passage location, quote, direction, and entailment score.",
             "Synthesis: bounded thematic packets with an allow-list of [Sxx] source identifiers.",
-            "Presentation: topic landscape in the main body; retrieval and audit metrics in appendices.",
+            "Presentation: topic landscape in Appendix B; retrieval and audit metrics in appendices.",
         )
     )
     for index, point in enumerate(method_points, 1):
@@ -1051,9 +1065,18 @@ def _build_synthesis_word_report(
         )
     )
 
+    _add_literature_topic_map_appendix(
+        document,
+        package=package,
+        figures=figures,
+        sources=sources,
+        turkish=turkish,
+        linkable_labels=linkable_labels,
+    )
+
     document.add_section(WD_SECTION.NEW_PAGE)
     document.add_heading(
-        "Ek B. Tam kaynak kataloğu" if turkish else "Appendix B. Complete source catalog",
+        "Ek C. Tam kaynak kataloğu" if turkish else "Appendix C. Complete source catalog",
         level=1,
     )
     source_table = document.add_table(rows=1, cols=6)
@@ -1081,9 +1104,9 @@ def _build_synthesis_word_report(
 
     document.add_section(WD_SECTION.NEW_PAGE)
     document.add_heading(
-        "Ek C. Denetlenmiş iddia kaydı"
+        "Ek D. Denetlenmiş iddia kaydı"
         if turkish
-        else "Appendix C. Audited claim register",
+        else "Appendix D. Audited claim register",
         level=1,
     )
     claim_table = document.add_table(rows=1, cols=5)
@@ -1107,9 +1130,9 @@ def _build_synthesis_word_report(
     if figure_observations:
         document.add_section(WD_SECTION.NEW_PAGE)
         document.add_heading(
-            "Ek D. Kaynak figürü inceleme kaydı"
+            "Ek E. Kaynak figürü inceleme kaydı"
             if turkish
-            else "Appendix D. Source figure observation register",
+            else "Appendix E. Source figure observation register",
             level=1,
         )
         document.add_paragraph(

@@ -6,6 +6,7 @@ import zipfile
 from types import SimpleNamespace
 
 from docx import Document
+from docx.oxml.ns import qn
 from PIL import Image
 
 from research_platform.figure_analysis import FigureObservation, GeneratedResearchFigure
@@ -15,6 +16,12 @@ from research_platform.report_synthesis import (
     SynthesisSection,
 )
 from research_platform.word_report import _figure_matches_section, build_word_report
+
+
+def _body_text_in_order(document: Document) -> str:
+    return "\n".join(
+        node.text or "" for node in document.element.body.iter(qn("w:t"))
+    )
 
 
 def test_figure_section_matching_does_not_duplicate_a_comparison_chart() -> None:
@@ -142,8 +149,16 @@ def test_word_report_is_a_sourced_docx_with_embedded_figures() -> None:
     with zipfile.ZipFile(io.BytesIO(report.document)) as archive:
         assert "word/document.xml" in archive.namelist()
         assert len([name for name in archive.namelist() if name.startswith("word/media/")]) == 3
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+        assert "Research contribution types" in document_xml
+        assert "Theme-evidence map" in document_xml
 
     document = Document(io.BytesIO(report.document))
+    level_one_headings = [
+        paragraph.text
+        for paragraph in document.paragraphs
+        if paragraph.style.name == "Heading 1"
+    ]
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
     text += "\n" + "\n".join(
         cell.text
@@ -154,7 +169,27 @@ def test_word_report_is_a_sourced_docx_with_embedded_figures() -> None:
     assert "Word exporter acceptance" in text
     assert "Thematic evidence synthesis" in text
     assert "platform-performance charts" in text
-    assert "Appendix D. Source figure observation register" in text
+    assert level_one_headings == [
+        "Contents",
+        "1. Summary",
+        "2. Research frame",
+        "3. Thematic evidence synthesis",
+        "4. Cross-study assessment and conclusion",
+        "Appendix A. Method, coverage, and reproducibility",
+        "Appendix B. Thematic Literature Landscape",
+        "Appendix C. Complete source catalog",
+        "Appendix D. Audited claim register",
+        "Appendix E. Source figure observation register",
+    ]
+    ordered_text = _body_text_in_order(document)
+    topic_map_start = ordered_text.index("Appendix B. Thematic Literature Landscape")
+    source_catalog_start = ordered_text.index("Appendix C. Complete source catalog")
+    topic_map_text = ordered_text[topic_map_start:source_catalog_start]
+    assert "Figure B.1. Literature landscape by study purpose." in topic_map_text
+    assert "Figure B.2. A blue cell indicates" in topic_map_text
+    assert "Research contribution" in topic_map_text
+    assert "3. Thematic literature landscape" not in text
+    assert "Appendix E. Source figure observation register" in text
     assert "Model interpretation" in text
     assert "verify rights before distribution" in text
     assert len(document.tables) >= 3
@@ -261,10 +296,31 @@ def test_turkish_synthesis_report_uses_ozet_heading() -> None:
 
     report = build_word_report(**inputs, synthesis_package=package)
     document = Document(io.BytesIO(report.document))
+    level_one_headings = [
+        paragraph.text
+        for paragraph in document.paragraphs
+        if paragraph.style.name == "Heading 1"
+    ]
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
 
     assert "1. Özet" in text
     assert "Yönetici sentezi" not in text
+    assert level_one_headings == [
+        "İçindekiler",
+        "1. Özet",
+        "2. Araştırma çerçevesi",
+        "3. Tematik kanıt sentezi",
+        "4. Çalışmalar arası değerlendirme ve sonuç",
+        "Ek A. Yöntem, kapsam ve yeniden üretilebilirlik",
+        "Ek B. Literatürün Konu Haritası",
+        "Ek C. Tam kaynak kataloğu",
+        "Ek D. Denetlenmiş iddia kaydı",
+    ]
+    assert text.count("Ek B. Literatürün Konu Haritası") == 1
+    assert "Şekil B.1. Çalışmaların araştırma amacına göre literatür görünümü." in text
+    assert "Şekil B.2. Mavi hücre" in text
+    assert "3. Literatürün konu haritası" not in text
+    assert "Ek E. Kaynak figürü inceleme kaydı" not in text
 
 
 def test_english_synthesis_report_uses_summary_heading() -> None:

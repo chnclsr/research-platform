@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.22`
+Belge sürümü: `6.23`
 
 Son güncelleme: `2026-08-27`
 
@@ -16,6 +16,10 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
 
 ## v0.15.0 — 2026-08-25
 
+- **Literatürün Konu Haritası** ana gövdeden **Ek B**'ye taşındı. Ana rapor artık Özet,
+  Araştırma Çerçevesi, Tematik Kanıt Sentezi ve Sonuç sırasını izliyor; kaynak kataloğu
+  Ek C, iddia kaydı Ek D, koşullu kaynak figürü kaydı Ek E olarak raporlanıyor. Konu
+  haritası görselleri Ek B.1/B.2 biçiminde numaralanıyor.
 - Kaynak figürlerinin yayın dilindeki özgün açıklamaları denetim kaydında korunurken,
   raporda görünen caption artık Türkçe raporda Türkçe, İngilizce raporda İngilizce
   hazırlanıyor. Figür görselinin içindeki kaynak etiketlere dokunulmuyor.

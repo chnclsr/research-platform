@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.28`
+Belge sürümü: `12.29`
 
 Son güncelleme: `2026-08-27`
 
@@ -58,6 +58,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 43 | Panel aydınlık modu ve alaka sıralı kaynaklar | _çalışma ağacı_ |
 | 44 | Pipeline zaman çizelgesinin Araştırma Akışı'na birleşmesi | _çalışma ağacı_ |
 | 45 | Kaynak figürü caption'ının rapor diline yerelleştirilmesi | _çalışma ağacı_ |
+| 46 | Literatür konu haritasının Ek B'ye taşınması | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2790,6 +2791,42 @@ gibi raporlanmadı. Etkin veya kuyrukta koşu yokken `docker compose up -d --bui
 tamamlandı; worker imajında yerelleştirici doğrulandı. Rapor sorunundaki gerçek caption
 container içinden yerel modele verildi ve `ŞEKİL 2. ILD'lerin analizi farklı aşamalara
 ayrılmıştır...` biçiminde Türkçe döndü; kaynak figür verisi değiştirilmedi.
+
+---
+
+## 46. Literatür konu haritasının Ek B'ye taşınması
+
+Tarihsel `SYNTHESIS_REPORT_PIPELINE_V0.8.0` raporu konu haritasını ana gövdenin üçüncü
+bölümü olarak konumlandırmıştı. Okuyucunun önce sentez ve sonuçlara ulaşması gerektiği için
+bu yerleşim kararı değiştirildi: konu haritasının açıklaması, iki görseli ve çalışma
+profilleri tablosu birlikte **Ek B**'ye taşındı. `16a_research_contribution_landscape.png`
+ve `16b_theme_evidence_map.png` artifact adları, üretim verileri ve alternatif metinleri
+değişmedi.
+
+Ana gövde artık kesintisiz olarak **1. Özet**, **2. Araştırma çerçevesi**, **3. Tematik
+kanıt sentezi** ve **4. Çalışmalar arası değerlendirme ve sonuç** sırasını izliyor. Ek A
+yöntem bölümünün sunum açıklaması da konu haritasının artık Ek B'de olduğunu söylüyor.
+Yeni başlık Türkçede **Ek B. Literatürün Konu Haritası**, İngilizcede **Appendix B.
+Thematic Literature Landscape**; görsel caption'ları dile göre **Şekil/Figure B.1** ve
+**B.2** biçiminde üretiliyor.
+
+Eski Ek B kaynak kataloğu **Ek C**, eski Ek C iddia kaydı **Ek D** oldu. Tarihsel
+`FIGURE_INTELLIGENCE_V0.9.0` raporunun Ek D olarak tanımladığı koşullu kaynak figürü
+inceleme kaydı ise harf çakışmasını önlemek için **Ek E**'ye kaydı. `Sxx` kaynak yer
+imleri ve iç bağlantı hedefleri korunuyor; İçindekiler alanı Heading 1 başlıklarından
+yenileniyor. Odaklanmış geri dönüş Word şablonundaki ayrı literatür görünümü ile görsel
+içermeyen Markdown rapor ekleri bu değişikliğin dışında bırakıldı.
+
+**Doğrulama:** Türkçe/İngilizce başlık sırası, Ek E'nin koşullu üretimi, B.1/B.2
+caption'ları, gömülü görseller ve kaynak bağlantıları için hedefli Word paketi `7 passed`;
+son kod değişikliğinden sonraki zorunlu tam kapı `503 passed, 2 warnings` sonucuyla
+tamamlandı. Hedefli Ruff taramasında yeni ihlal yok; `word_report.py` içindeki önceden var
+olan 10 ihlal temizmiş gibi raporlanmadı. LibreOffice bulunmadığı için paketli
+`render_docx.py` çalışamadı; bunun yerine Türkçe ve İngilizce yedişer sayfalık örnekler
+Microsoft Word ile PDF/PNG'ye dönüştürüldü ve 14 sayfanın tamamı görsel olarak incelendi.
+İki DOCX'in erişilebilirlik denetimi ayrı ayrı `high=0`, `medium=0`, `low=0` verdi. Etkin
+veya kuyrukta araştırma yokken `docker compose up -d --build` tamamlandı; yeni worker
+imajı örnek Türkçe DOCX üretip beklenen ana bölüm ve Ek A/B/C/D sırasını doğruladı.
 
 ---
 
