@@ -35,7 +35,10 @@ fi
 
 echo "==> Yukleniyor: $DOSYA"
 docker compose cp "$DOSYA" postgres:/tmp/accounts.sql
-docker compose exec -T postgres psql -U research -d research -v ON_ERROR_STOP=1 -f /tmp/accounts.sql
+# --single-transaction: dokum artik BEGIN/COMMIT tasimiyor (export tarafinda
+# PowerShell tirnak yutmasi yuzunden kaldirildi). Yarim yuklenmis bir hesap
+# tablosuna dusmemek icin butunluk burada saglaniyor.
+docker compose exec -T postgres psql -U research -d research \n  --single-transaction -v ON_ERROR_STOP=1 -f /tmp/accounts.sql
 docker compose exec -T postgres rm -f /tmp/accounts.sql
 
 echo "==> Sonuc"

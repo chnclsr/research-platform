@@ -30,3 +30,6 @@ AGENTS.md
 # Ekran görüntüleri ve tek seferlik sunum çıktıları. docs/diagrams/ depoda kalır --
 # README onlara bağlanıyor; buradakiler yalnız o günkü ekranı gösteriyor.
 docs/reports/
+
+# Hesap tasima dokumu: parola ve API anahtari hashleri icerir, depoya girmez.
+accounts.sql
