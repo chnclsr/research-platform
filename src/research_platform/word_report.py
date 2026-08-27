@@ -11,9 +11,10 @@ from __future__ import annotations
 import io
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Iterable
+from datetime import UTC, datetime
+from typing import Any
 
 from docx import Document
 from docx.enum.section import WD_SECTION
@@ -26,7 +27,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
 from .report_synthesis import SynthesisPackage
-
 
 INK = "0B132B"
 BLUE = "2563EB"
@@ -226,7 +226,7 @@ def _style_table(
     font_size: float = 9,
     indent_dxa: int = 120,
 ) -> None:
-    width_dxa = [int(round(width * 1440)) for width in widths]
+    width_dxa = [round(width * 1440) for width in widths]
     total_dxa = sum(width_dxa)
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     table.autofit = False
@@ -785,24 +785,22 @@ def _build_synthesis_word_report(
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
     subtitle.paragraph_format.space_after = Pt(36)
     subtitle_run = subtitle.add_run(
-        (
-            "Çalışmalar arası ortak sonuçlar, ayrışmalar ve araştırma boşlukları"
-            if turkish
-            else "Cross-study findings, disagreements, and research gaps"
-        )
+        "Çalışmalar arası ortak sonuçlar, ayrışmalar ve araştırma boşlukları"
+        if turkish
+        else "Cross-study findings, disagreements, and research gaps"
     )
     _set_run_font(subtitle_run, size=13, color=MUTED)
     cover_meta = document.add_table(rows=3, cols=2)
     cover_values = (
         (
             ("Çalışma kimliği", run_id),
-            ("Üretim zamanı", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
+            ("Üretim zamanı", datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")),
             ("Rapor pipeline sürümü", f"v{REPORT_PIPELINE_VERSION}"),
         )
         if turkish
         else (
             ("Run ID", run_id),
-            ("Generated", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
+            ("Generated", datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")),
             ("Report pipeline version", f"v{REPORT_PIPELINE_VERSION}"),
         )
     )
@@ -1190,11 +1188,11 @@ def _build_synthesis_word_report(
                 " ".join(observation.main_findings[:2])
                 or observation.selection_reason,
                 320,
-            )
+            ) or "—"
             row[6].text = _text(
                 " ".join(observation.limitations[:1]),
                 220,
-            )
+            ) or "—"
         _style_table(
             observation_table,
             [0.5, 0.4, 0.75, 0.4, 0.55, 2.45, 1.45],
@@ -1312,11 +1310,9 @@ def build_word_report(
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
     subtitle.paragraph_format.space_after = Pt(36)
     subtitle_run = subtitle.add_run(
-        (
-            "Kaynak keşfi, kanıt denetimi ve yeniden üretilebilirlik paketi"
-            if turkish
-            else "Source discovery, evidence audit, and reproducibility package"
-        )
+        "Kaynak keşfi, kanıt denetimi ve yeniden üretilebilirlik paketi"
+        if turkish
+        else "Source discovery, evidence audit, and reproducibility package"
     )
     _set_run_font(subtitle_run, size=13, color=MUTED)
 
@@ -1324,13 +1320,13 @@ def build_word_report(
     cover_values = (
         (
             ("Çalışma kimliği", run_id),
-            ("Üretim zamanı", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
+            ("Üretim zamanı", datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")),
             ("Rapor pipeline sürümü", f"v{REPORT_PIPELINE_VERSION}"),
         )
         if turkish
         else (
             ("Run ID", run_id),
-            ("Generated", datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
+            ("Generated", datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")),
             ("Report pipeline version", f"v{REPORT_PIPELINE_VERSION}"),
         )
     )

@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.32`
+Belge sürümü: `12.33`
 
 Son güncelleme: `2026-08-27`
 
@@ -62,6 +62,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 47 | Word raporunun koşu etiketiyle adlandırılması | `ca56390` |
 | 48 | Yapısal çıkarımlarda kaynağı bulan connector | `ca56390` |
 | 49 | Düşen koşunun sahibine Telegram bildirimi | _çalışma ağacı_ |
+| 50 | Figür metinlerinde garantili rapor dili | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2960,6 +2961,62 @@ hedefli Ruff dört dosyada da temiz.
 **Kapsamda olmayan.** Sunucu çökmesi veya elektrik kesintisi bildirimi bilinçli olarak
 ertelendi. Aynı makinede çalışan hiçbir bileşen kendi ölümünü haber veremez; bu ancak makine
 dışı bir izleyiciyle mümkün ve izleyicinin nerede yaşayacağı donanım kararıdır.
+
+---
+
+## 50. Figür metinlerinde garantili rapor dili
+
+`01M115AA5GT7S69STKCAFJE07C` koşusunun Türkçe Word raporunda S85, sayfa 10'daki kaynak
+figürünün caption'ı ve model yorumu İngilizce kaldı. 45. bölümdeki düzeltme caption
+yerelleştirmesini **best effort** olarak uyguluyor; çeviri geçersiz olduğunda güvenli kabul
+edilen figür başlığına dönüyordu. Gerçek koşu bu varsayımı geçersiz kıldı: başlık da model
+analizinden geldiği için rapor diliyle uyuşmayabiliyor, İngilizce raporlar ise bütün
+caption'ları koşulsuz geçerli sayıyordu. Eski olay kaydı ayrıntılı hata nedenini tutmadığı
+için bu koşuda çevirinin HTTP, JSON, eksik öğe, dil veya sayı kapılarından hangisinde
+reddedildiği geriye dönük ayırt edilemedi.
+
+Tarihsel `SOURCE_FIGURE_EMBEDDING_V0.9.1` raporunun provenance kararı korunuyor:
+`FigureObservation.caption` ile modelin ham `analysis` alanları değiştirilmez. Raporda
+gösterilecek metinler aynı JSON içinde isteğe bağlı `_report_display` izdüşümünde, hedef
+dil ve doğrulama durumuyla ayrı tutulur. Böylece yeniden dışa aktarım aynı doğrulanmış
+metni model çağrısı yapmadan kullanırken özgün kaynak caption'ı ve yapılandırılmış analiz
+denetlenebilir kalır.
+
+Türkçe ve İngilizce artık simetrik kapıdan geçer. `Fig 2`, `Figure 2` ve `Şekil 2` gibi
+kısa başlıklar açık kuralla tanınır; diğer caption'lar yalnız rapora seçilen kaynak
+figürleri için ayrı ayrı, en fazla iki kez çevrilir. Dil ve sayılar yeniden doğrulanır;
+`10,000` ile `10.000` gibi yerel binlik yazımları eşdeğer sayılır. Hata nedenleri
+`http_error`, `invalid_json`, `unknown_id`, `missing_item`, `empty_text`,
+`language_mismatch` ve `number_mismatch` olarak ayrıştırılır. İki deneme de başarısızsa
+özgün yabancı metin gösterilmez; figür numarasını koruyan deterministik
+`Şekil 2. Ayrıntılı özgün açıklama kaynak kaydında korunmuştur.` veya İngilizce karşılığı
+kullanılır.
+
+Figür analiz istemindeki sabit `Write Turkish` ifadesi rapor diline bağlandı. `title`,
+`main_findings`, `limitations`, `flow_steps` ve `selection_reason` aynı iki denemeli
+kapıdan geçer. Onarım yalnız bu anlatım alanlarını değiştirebilir; skorlar, boole'ler,
+veri noktaları, eksenler ve seriler ham analizden alınmaya devam eder. Onarılamayan bulgu,
+sınırlılık ve seçim gerekçesi gösterimden çıkarılır: Word'de **Model yorumu** kutusu
+oluşmaz, Ek E hücreleri `—` gösterir. Önbellek sürümü `figure-v5` oldu; böylece dili
+doğrulanmamış `figure-v4` kayıtları yeni rapora taşınmaz. Her koşuya ham caption içermeyen
+tek bir `figure_localization` olayı yazılır; doğrudan kullanılan, çevrilen, cache'den
+yeniden kullanılan, fallback'e düşen ve gizlenen alan sayılarını hata nedenleriyle özetler.
+
+**Doğrulama.** Caption ve analiz yerelleştirmesi, iki deneme, sayı eşdeğerliği, kısa figür
+etiketleri, ayrıştırılmış hata nedenleri, ham verinin korunması, `_report_display` cache
+yeniden kullanımı, `figure-v5` ayrımı ve Word bastırma davranışını kapsayan hedefli paket
+`26 passed`; son kod değişikliğinden sonraki zorunlu tam kapı `535 passed, 2 warnings`
+sonucuyla tamamlandı. Değişen Python satırlarında yeni Ruff ihlali yok; tarihsel
+`figure_analysis.py` beş ve `word_report.py` bir broad-exception bulgusu temizmiş gibi
+raporlanmadı. Paketli `render_docx.py`, LibreOffice bulunmadığı için iki dilde de
+çalışamadı; Microsoft Word yedeğiyle üretilen Türkçe ve İngilizce sekizer sayfalık
+örneklerin 16 sayfası tek tek görsel olarak incelendi, kesilme veya dil sızıntısı görülmedi.
+Güncel worker image'ı aktif koşuyu kesmeden oluşturuldu; kuyruğa bağlanmayan tek kullanımlık
+worker container'ı iki örnek DOCX üretti ve `figure-v5` ile iki dildeki deterministik
+fallback'leri doğruladı. Canlı `docker compose up -d --build`, doğrulama anında
+`01M11EHG64WACS8BFWBQ97A0F9` koşusu `ACQUIRE` aşamasında aktif olduğu için koşuyu kesmemek
+amacıyla uygulanmadı; image hazırdır ancak canlı worker bu koşu tamamlandıktan sonra
+yeniden oluşturulmalıdır.
 
 ---
 

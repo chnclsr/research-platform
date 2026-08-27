@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.26`
+Belge sürümü: `6.27`
 
 Son güncelleme: `2026-08-27`
 
@@ -23,6 +23,11 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
 - Kaynak figürlerinin yayın dilindeki özgün açıklamaları denetim kaydında korunurken,
   raporda görünen caption artık Türkçe raporda Türkçe, İngilizce raporda İngilizce
   hazırlanıyor. Figür görselinin içindeki kaynak etiketlere dokunulmuyor.
+- Figür caption'ı ve model yorumu artık iki yönlü bir dil kapısından geçiyor. Her seçili
+  caption en fazla iki kez ayrı çevriliyor; `Fig 2`/`Figure 2`/`Şekil 2` etiketleri ve
+  yerel sayı yazımları tanınıyor. Çeviri doğrulanamazsa yabancı caption yerine kısa yerel
+  açıklama gösteriliyor; çevrilemeyen model yorumu gizlenip Ek E'de `—` kullanılıyor.
+  Özgün caption ve ham analiz provenance için korunuyor.
 - Panel üst çubuğundan kalıcı aydınlık/koyu tema seçilebiliyor. Açık palet tablolar,
   çekmece, akış, rozetler ve etkileşim kutuları için ayrı kontrastlarla uygulanıyor.
 - **Kaynak Hunisi** artık **Referans Haritası** adını taşıyor. **Kabul Edilen Kaynaklar**

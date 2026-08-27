@@ -240,6 +240,77 @@ def _minimal_report_inputs() -> dict:
     }
 
 
+def test_unlocalized_figure_interpretation_is_hidden_and_audit_uses_dashes() -> None:
+    inputs = _minimal_report_inputs()
+    inputs.update(
+        {
+            "title": "Figür dili testi",
+            "question": "Model performansı nasıl karşılaşıyor?",
+            "language": "tr",
+            "executive_summary": "Rapor dili Türkçedir.",
+            "narrative": "Figür metinleri rapor diliyle aynı olmalıdır.",
+            "uncertainty": "Ek doğrulama gereklidir.",
+        }
+    )
+    image_stream = io.BytesIO()
+    Image.new("RGB", (900, 500), "white").save(image_stream, format="PNG")
+    observation = FigureObservation(
+        source_id="source-1",
+        source_version_id="version-1",
+        source_label="S01",
+        source_title="Independent clinical source",
+        image_hash="z" * 64,
+        image_key="runs/test/figure.png",
+        page_number=3,
+        caption="Figure 2. Reader performance.",
+        figure_type="scatter_plot",
+        title="Şekil 2. Okuyucu performansı",
+        axes={"x": "Readers", "y": "Accuracy"},
+        series=["Model"],
+        data_points=[],
+        flow_steps=[],
+        main_findings=[],
+        limitations=[],
+        recommended_section="Karşılaştırmalı sonuçlar",
+        relevance_score=0.9,
+        exact_values_visible=False,
+        confidence=0.9,
+        vision_model="qwen3.5:4b#figure-v5",
+        include_in_report=True,
+        selection_reason="",
+    )
+    generated = GeneratedResearchFigure(
+        name="17a_source_figure_excerpt.png",
+        data=image_stream.getvalue(),
+        title=observation.title,
+        caption="Kaynak figürü: Şekil 2. Ayrıntılı özgün açıklama kaynak kaydında korunmuştur. [S01, s. 3].",
+        description="S01 kaynağından kırpılan özgün araştırma figürü.",
+        section_title="Karşılaştırmalı sonuçlar",
+        source_labels=["S01"],
+        observation_hash=observation.image_hash,
+        origin="source_excerpt",
+    )
+
+    report = build_word_report(
+        **inputs,
+        figure_observations=[observation],
+        research_figures=[generated],
+    )
+    document = Document(io.BytesIO(report.document))
+    table_texts = [
+        cell.text
+        for table in document.tables
+        for row in table.rows
+        for cell in row.cells
+    ]
+    full_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    full_text += "\n" + "\n".join(table_texts)
+
+    assert "Model yorumu" not in full_text
+    assert "The model outperformed" not in full_text
+    assert sum(cell.count("—") for cell in table_texts) >= 2
+
+
 def test_synthesis_report_links_citations_to_the_source_catalog() -> None:
     """A reader clicking [S01] in the prose should land on that row of the catalog."""
     package = SynthesisPackage(
