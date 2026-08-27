@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="620" viewBox="0 0 1180 620">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:DejaVu Sans,Arial,sans-serif;fill:#172033}.title{font-size:24px;font-weight:700}.axis{font-size:13px}.value{font-size:11px}.legend{font-size:12px}</style>
+<text x="590.0" y="38" text-anchor="middle" class="title">Repository yöntemine göre hızlanma</text>
+<line x1="105" y1="475.00" x2="1145" y2="475.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="479.00" text-anchor="end" class="axis">0.0</text>
+<line x1="105" y1="395.00" x2="1145" y2="395.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="399.00" text-anchor="end" class="axis">1.9</text>
+<line x1="105" y1="315.00" x2="1145" y2="315.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="319.00" text-anchor="end" class="axis">3.9</text>
+<line x1="105" y1="235.00" x2="1145" y2="235.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="239.00" text-anchor="end" class="axis">5.8</text>
+<line x1="105" y1="155.00" x2="1145" y2="155.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="159.00" text-anchor="end" class="axis">7.8</text>
+<line x1="105" y1="75.00" x2="1145" y2="75.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="79.00" text-anchor="end" class="axis">9.7</text>
+<rect x="143.13" y="443.72" width="30.80" height="31.28" fill="#2563eb" rx="2"/>
+<text x="158.53" y="438.72" text-anchor="middle" class="value">0.8</text>
+<rect x="176.93" y="409.63" width="30.80" height="65.37" fill="#059669" rx="2"/>
+<text x="192.33" y="404.63" text-anchor="middle" class="value">1.6</text>
+<rect x="210.73" y="405.88" width="30.80" height="69.12" fill="#7c3aed" rx="2"/>
+<text x="226.13" y="400.88" text-anchor="middle" class="value">1.7</text>
+<rect x="244.53" y="399.42" width="30.80" height="75.58" fill="#ea580c" rx="2"/>
+<text x="259.93" y="394.42" text-anchor="middle" class="value">1.8</text>
+<rect x="278.33" y="400.74" width="30.80" height="74.26" fill="#0891b2" rx="2"/>
+<text x="293.73" y="395.74" text-anchor="middle" class="value">1.8</text>
+<rect x="312.13" y="397.12" width="30.80" height="77.88" fill="#65a30d" rx="2"/>
+<text x="327.53" y="392.12" text-anchor="middle" class="value">1.9</text>
+<rect x="345.93" y="433.84" width="30.80" height="41.16" fill="#dc2626" rx="2"/>
+<text x="361.33" y="428.84" text-anchor="middle" class="value">1.0</text>
+<rect x="379.73" y="388.06" width="30.80" height="86.94" fill="#db2777" rx="2"/>
+<text x="395.13" y="383.06" text-anchor="middle" class="value">2.1</text>
+<text x="278.33" y="503" text-anchor="middle" class="axis">100 kayıt</text>
+<rect x="489.80" y="398.35" width="30.80" height="76.65" fill="#2563eb" rx="2"/>
+<text x="505.20" y="393.35" text-anchor="middle" class="value">1.9</text>
+<rect x="523.60" y="257.28" width="30.80" height="217.72" fill="#059669" rx="2"/>
+<text x="539.00" y="252.28" text-anchor="middle" class="value">5.3</text>
+<rect x="557.40" y="257.28" width="30.80" height="217.72" fill="#7c3aed" rx="2"/>
+<text x="572.80" y="252.28" text-anchor="middle" class="value">5.3</text>
+<rect x="591.20" y="233.86" width="30.80" height="241.14" fill="#ea580c" rx="2"/>
+<text x="606.60" y="228.86" text-anchor="middle" class="value">5.9</text>
+<rect x="625.00" y="236.58" width="30.80" height="238.42" fill="#0891b2" rx="2"/>
+<text x="640.40" y="231.58" text-anchor="middle" class="value">5.8</text>
+<rect x="658.80" y="219.16" width="30.80" height="255.84" fill="#65a30d" rx="2"/>
+<text x="674.20" y="214.16" text-anchor="middle" class="value">6.2</text>
+<rect x="692.60" y="433.84" width="30.80" height="41.16" fill="#dc2626" rx="2"/>
+<text x="708.00" y="428.84" text-anchor="middle" class="value">1.0</text>
+<rect x="726.40" y="153.38" width="30.80" height="321.62" fill="#db2777" rx="2"/>
+<text x="741.80" y="148.38" text-anchor="middle" class="value">7.8</text>
+<text x="625.00" y="503" text-anchor="middle" class="axis">1,000 kayıt</text>
+<rect x="836.47" y="384.81" width="30.80" height="90.19" fill="#2563eb" rx="2"/>
+<text x="851.87" y="379.81" text-anchor="middle" class="value">2.2</text>
+<rect x="870.27" y="237.60" width="30.80" height="237.40" fill="#059669" rx="2"/>
+<text x="885.67" y="232.60" text-anchor="middle" class="value">5.8</text>
+<rect x="904.07" y="236.82" width="30.80" height="238.18" fill="#7c3aed" rx="2"/>
+<text x="919.47" y="231.82" text-anchor="middle" class="value">5.8</text>
+<rect x="937.87" y="206.81" width="30.80" height="268.19" fill="#ea580c" rx="2"/>
+<text x="953.27" y="201.81" text-anchor="middle" class="value">6.5</text>
+<rect x="971.67" y="218.55" width="30.80" height="256.45" fill="#0891b2" rx="2"/>
+<text x="987.07" y="213.55" text-anchor="middle" class="value">6.2</text>
+<rect x="1005.47" y="192.04" width="30.80" height="282.96" fill="#65a30d" rx="2"/>
+<text x="1020.87" y="187.04" text-anchor="middle" class="value">6.9</text>
+<rect x="1039.27" y="433.84" width="30.80" height="41.16" fill="#dc2626" rx="2"/>
+<text x="1054.67" y="428.84" text-anchor="middle" class="value">1.0</text>
+<rect x="1073.07" y="117.86" width="30.80" height="357.14" fill="#db2777" rx="2"/>
+<text x="1088.47" y="112.86" text-anchor="middle" class="value">8.7</text>
+<text x="971.67" y="503" text-anchor="middle" class="axis">5,000 kayıt</text>
+<text transform="translate(24 275.0) rotate(-90)" text-anchor="middle" class="axis">Hızlanma katsayısı</text>
+<rect x="105.00" y="528" width="13" height="13" fill="#2563eb" rx="2"/>
+<text x="123.00" y="539" class="legend">Satır başına commit</text>
+<rect x="365.00" y="528" width="13" height="13" fill="#059669" rx="2"/>
+<text x="383.00" y="539" class="legend">Satır ekle, tek transaction</text>
+<rect x="625.00" y="528" width="13" height="13" fill="#7c3aed" rx="2"/>
+<text x="643.00" y="539" class="legend">ORM add_all</text>
+<rect x="885.00" y="528" width="13" height="13" fill="#ea580c" rx="2"/>
+<text x="903.00" y="539" class="legend">Core executemany</text>
+<rect x="105.00" y="552" width="13" height="13" fill="#0891b2" rx="2"/>
+<text x="123.00" y="563" class="legend">Batch upsert (ON CONFLICT)</text>
+<rect x="365.00" y="552" width="13" height="13" fill="#65a30d" rx="2"/>
+<text x="383.00" y="563" class="legend">COPY</text>
+<rect x="625.00" y="552" width="13" height="13" fill="#dc2626" rx="2"/>
+<text x="643.00" y="563" class="legend">Repository save_passages</text>
+<rect x="885.00" y="552" width="13" height="13" fill="#db2777" rx="2"/>
+<text x="903.00" y="563" class="legend">pgvector executemany</text>
+</svg>

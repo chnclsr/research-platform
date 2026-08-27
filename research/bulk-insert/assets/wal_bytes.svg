@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="620" viewBox="0 0 1180 620">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:DejaVu Sans,Arial,sans-serif;fill:#172033}.title{font-size:24px;font-weight:700}.axis{font-size:13px}.value{font-size:11px}.legend{font-size:12px}</style>
+<text x="590.0" y="38" text-anchor="middle" class="title">Medyan WAL üretimi</text>
+<line x1="105" y1="475.00" x2="1145" y2="475.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="479.00" text-anchor="end" class="axis">0.0</text>
+<line x1="105" y1="395.00" x2="1145" y2="395.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="399.00" text-anchor="end" class="axis">5.0</text>
+<line x1="105" y1="315.00" x2="1145" y2="315.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="319.00" text-anchor="end" class="axis">10.1</text>
+<line x1="105" y1="235.00" x2="1145" y2="235.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="239.00" text-anchor="end" class="axis">15.1</text>
+<line x1="105" y1="155.00" x2="1145" y2="155.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="159.00" text-anchor="end" class="axis">20.1</text>
+<line x1="105" y1="75.00" x2="1145" y2="75.00" stroke="#d7dde8" stroke-width="1"/>
+<text x="95" y="79.00" text-anchor="end" class="axis">25.2</text>
+<rect x="143.13" y="468.22" width="30.80" height="6.78" fill="#2563eb" rx="2"/>
+<text x="158.53" y="463.22" text-anchor="middle" class="value">0.4</text>
+<rect x="176.93" y="468.31" width="30.80" height="6.69" fill="#059669" rx="2"/>
+<text x="192.33" y="463.31" text-anchor="middle" class="value">0.4</text>
+<rect x="210.73" y="468.28" width="30.80" height="6.72" fill="#7c3aed" rx="2"/>
+<text x="226.13" y="463.28" text-anchor="middle" class="value">0.4</text>
+<rect x="244.53" y="468.32" width="30.80" height="6.68" fill="#ea580c" rx="2"/>
+<text x="259.93" y="463.32" text-anchor="middle" class="value">0.4</text>
+<rect x="278.33" y="468.19" width="30.80" height="6.81" fill="#0891b2" rx="2"/>
+<text x="293.73" y="463.19" text-anchor="middle" class="value">0.4</text>
+<rect x="312.13" y="468.33" width="30.80" height="6.67" fill="#65a30d" rx="2"/>
+<text x="327.53" y="463.33" text-anchor="middle" class="value">0.4</text>
+<rect x="345.93" y="468.32" width="30.80" height="6.68" fill="#dc2626" rx="2"/>
+<text x="361.33" y="463.32" text-anchor="middle" class="value">0.4</text>
+<rect x="379.73" y="467.90" width="30.80" height="7.10" fill="#db2777" rx="2"/>
+<text x="395.13" y="462.90" text-anchor="middle" class="value">0.4</text>
+<text x="278.33" y="503" text-anchor="middle" class="axis">100 kayıt</text>
+<rect x="489.80" y="406.94" width="30.80" height="68.06" fill="#2563eb" rx="2"/>
+<text x="505.20" y="401.94" text-anchor="middle" class="value">4.3</text>
+<rect x="523.60" y="407.54" width="30.80" height="67.46" fill="#059669" rx="2"/>
+<text x="539.00" y="402.54" text-anchor="middle" class="value">4.2</text>
+<rect x="557.40" y="407.54" width="30.80" height="67.46" fill="#7c3aed" rx="2"/>
+<text x="572.80" y="402.54" text-anchor="middle" class="value">4.2</text>
+<rect x="591.20" y="407.57" width="30.80" height="67.43" fill="#ea580c" rx="2"/>
+<text x="606.60" y="402.57" text-anchor="middle" class="value">4.2</text>
+<rect x="625.00" y="406.81" width="30.80" height="68.19" fill="#0891b2" rx="2"/>
+<text x="640.40" y="401.81" text-anchor="middle" class="value">4.3</text>
+<rect x="658.80" y="408.19" width="30.80" height="66.81" fill="#65a30d" rx="2"/>
+<text x="674.20" y="403.19" text-anchor="middle" class="value">4.2</text>
+<rect x="692.60" y="407.54" width="30.80" height="67.46" fill="#dc2626" rx="2"/>
+<text x="708.00" y="402.54" text-anchor="middle" class="value">4.2</text>
+<rect x="726.40" y="403.59" width="30.80" height="71.41" fill="#db2777" rx="2"/>
+<text x="741.80" y="398.59" text-anchor="middle" class="value">4.5</text>
+<text x="625.00" y="503" text-anchor="middle" class="axis">1,000 kayıt</text>
+<rect x="836.47" y="134.83" width="30.80" height="340.17" fill="#2563eb" rx="2"/>
+<text x="851.87" y="129.83" text-anchor="middle" class="value">21.4</text>
+<rect x="870.27" y="137.83" width="30.80" height="337.17" fill="#059669" rx="2"/>
+<text x="885.67" y="132.83" text-anchor="middle" class="value">21.2</text>
+<rect x="904.07" y="137.80" width="30.80" height="337.20" fill="#7c3aed" rx="2"/>
+<text x="919.47" y="132.80" text-anchor="middle" class="value">21.2</text>
+<rect x="937.87" y="137.86" width="30.80" height="337.14" fill="#ea580c" rx="2"/>
+<text x="953.27" y="132.86" text-anchor="middle" class="value">21.2</text>
+<rect x="971.67" y="134.17" width="30.80" height="340.83" fill="#0891b2" rx="2"/>
+<text x="987.07" y="129.17" text-anchor="middle" class="value">21.4</text>
+<rect x="1005.47" y="141.08" width="30.80" height="333.92" fill="#65a30d" rx="2"/>
+<text x="1020.87" y="136.08" text-anchor="middle" class="value">21.0</text>
+<rect x="1039.27" y="136.91" width="30.80" height="338.09" fill="#dc2626" rx="2"/>
+<text x="1054.67" y="131.91" text-anchor="middle" class="value">21.3</text>
+<rect x="1073.07" y="117.86" width="30.80" height="357.14" fill="#db2777" rx="2"/>
+<text x="1088.47" y="112.86" text-anchor="middle" class="value">22.5</text>
+<text x="971.67" y="503" text-anchor="middle" class="axis">5,000 kayıt</text>
+<text transform="translate(24 275.0) rotate(-90)" text-anchor="middle" class="axis">MiB</text>
+<rect x="105.00" y="528" width="13" height="13" fill="#2563eb" rx="2"/>
+<text x="123.00" y="539" class="legend">Satır başına commit</text>
+<rect x="365.00" y="528" width="13" height="13" fill="#059669" rx="2"/>
+<text x="383.00" y="539" class="legend">Satır ekle, tek transaction</text>
+<rect x="625.00" y="528" width="13" height="13" fill="#7c3aed" rx="2"/>
+<text x="643.00" y="539" class="legend">ORM add_all</text>
+<rect x="885.00" y="528" width="13" height="13" fill="#ea580c" rx="2"/>
+<text x="903.00" y="539" class="legend">Core executemany</text>
+<rect x="105.00" y="552" width="13" height="13" fill="#0891b2" rx="2"/>
+<text x="123.00" y="563" class="legend">Batch upsert (ON CONFLICT)</text>
+<rect x="365.00" y="552" width="13" height="13" fill="#65a30d" rx="2"/>
+<text x="383.00" y="563" class="legend">COPY</text>
+<rect x="625.00" y="552" width="13" height="13" fill="#dc2626" rx="2"/>
+<text x="643.00" y="563" class="legend">Repository save_passages</text>
+<rect x="885.00" y="552" width="13" height="13" fill="#db2777" rx="2"/>
+<text x="903.00" y="563" class="legend">pgvector executemany</text>
+</svg>
