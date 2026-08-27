@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.29`
+Belge sürümü: `12.31`
 
 Son güncelleme: `2026-08-27`
 
@@ -56,9 +56,11 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 41 | Bağlam güvenli özet sentezi ve rapor kalite kapısı | _çalışma ağacı_ |
 | 42 | Dile göre özet başlığı ve panel ayrıntı düzeni | _çalışma ağacı_ |
 | 43 | Panel aydınlık modu ve alaka sıralı kaynaklar | _çalışma ağacı_ |
-| 44 | Pipeline zaman çizelgesinin Araştırma Akışı'na birleşmesi | _çalışma ağacı_ |
-| 45 | Kaynak figürü caption'ının rapor diline yerelleştirilmesi | _çalışma ağacı_ |
-| 46 | Literatür konu haritasının Ek B'ye taşınması | _çalışma ağacı_ |
+| 44 | Pipeline zaman çizelgesinin Araştırma Akışı'na birleşmesi | `fe6eb42` |
+| 45 | Kaynak figürü caption'ının rapor diline yerelleştirilmesi | `7f47abf` |
+| 46 | Literatür konu haritasının Ek B'ye taşınması | `e8788f5` |
+| 47 | Word raporunun koşu etiketiyle adlandırılması | _çalışma ağacı_ |
+| 48 | Yapısal çıkarımlarda kaynağı bulan connector | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2827,6 +2829,81 @@ Microsoft Word ile PDF/PNG'ye dönüştürüldü ve 14 sayfanın tamamı görsel
 İki DOCX'in erişilebilirlik denetimi ayrı ayrı `high=0`, `medium=0`, `low=0` verdi. Etkin
 veya kuyrukta araştırma yokken `docker compose up -d --build` tamamlandı; yeni worker
 imajı örnek Türkçe DOCX üretip beklenen ana bölüm ve Ek A/B/C/D sırasını doğruladı.
+
+---
+
+## 47. Word raporunun koşu etiketiyle adlandırılması
+
+Her koşu Word raporunu sabit `16_research_report.docx` adıyla üretiyordu. İki koşunun
+raporu aynı klasöre çıkarıldığında hangisinin ne olduğu ad'dan anlaşılmıyordu.
+
+Depoda bu sorunu çözecek alan zaten vardı: `protocol.label`. `VALIDATE_PROTOCOL` sırasında
+`_name_run` konunun `snake_case` tutamağını LLM'e ürettiriyor, `slugify` ile sadeleştiriyor
+ve Telegram bunu ULID yerine basıyor. Rapor artık o tutamağı taşıyor:
+`16_ai_in_lung_ct_report.docx`. Etiket üretilemeyen koşularda — model erişilemez **ve**
+sorunun slug'ı boş çıkarsa `_name_run` etiketsiz dönüyor — bugünkü `16_research_report.docx`
+adı korunuyor.
+
+`16_` öneki bilinçli olarak kaldı. Bundle üyeleri `sorted(selected_names)` ile yazılıyor ve
+ASCII'de rakam harften önce geldiği için öneksiz bir ad, 01–20 dizisindeki 16. sırasını
+kaybedip listenin sonuna düşerdi.
+
+**Güvenlik bulgusu.** `ResearchProtocol.label` istemciden gelebiliyor: şema alanı yalnız
+`max_length=64` ile doğrulanıyor, desen kısıtı yok, API koşu gövdesindeki protokolü olduğu
+gibi alıyor ve `_name_run` protokol zaten etiket taşıyorsa erkenden dönüyor — yani istemci
+etiketi hiç `slugify`'dan geçmiyor. Artifact anahtarı `runs/{run_id}/{name}` biçiminde
+kurulduğu için `../` içeren bir etiket koşunun öneki dışına yazabilirdi. Ad kurulurken
+etikete güvenilmiyor.
+
+Ancak koşulsuz `slugify` de doğru değildi: ilk uygulamada test, `ai_in_lung_ct` etiketinin
+dosya adında `ai_lung_ct` olduğunu gösterdi — `slugify` durak kelimeleri atıyor, dolayısıyla
+zaten slug olan bir etiketi yeniden işlemek koşuyu sessizce yeniden adlandırıyor ve dosya
+adı Telegram'ın bastığı tutamakla eşleşmiyordu. Kural ikiye ayrıldı: anahtar-güvenli
+biçimdeki (`[A-Za-z0-9_]{1,64}`) etiket olduğu gibi korunuyor, bu biçimin dışındaki her şey
+`slugify`'dan geçiriliyor. Sonuç iki durumda da yalnız `[A-Za-z0-9_]` içeriyor.
+
+Ad koşuya göre değiştiği için, daha önce dışa aktarılmış bir koşu yeniden aktarıldığında
+eski docx artifact'i geride kalır ve koşu iki Word raporlu görünürdü. Aynı fonksiyondaki
+mevcut bayat-figür temizliği (`17[a-z]_source_figure_.*\.png`) ikinci bir desenle
+genişletildi; ayrı bir mekanizma kurulmadı.
+
+Kapsam yalnız Word raporu: `02_full_research_report.md` ve diğer çıktılar adlarını koruyor.
+Etiketin benzersiz olmaması bilinçli bir karardır (`schemas.py`: *"two runs on one topic
+share a label, so it never replaces the id"*); aynı konudaki iki koşu aynı dosya adını
+üretir. Depolamada sorun değil, anahtar `runs/{run_id}/` ile ayrışıyor.
+
+Değişen dosyalarda hedefli Ruff temizdir ve mevcut ihlaller artmadı. Adlandırma kuralı altı
+birim testiyle korunuyor; bunlardan biri düşmanca etiketin (`../../etc/passwd`, `a/b`, `..`)
+ad'a sızmadığını doğruluyor. Son kod değişikliğinden sonraki zorunlu tam kapı
+`516 passed, 2 warnings` sonucuyla tamamlandı.
+
+---
+
+## 48. Yapısal çıkarımlarda kaynağı bulan connector
+
+`18_structured_extracts.json` her kayıtta metni okuyan parser'ı (`parser_id`) yazıyordu ama
+kaynağı bulan connector'ı yazmıyordu. Dosya denetlenmiş kanıt değil, parser çıktısının ham
+hâli — bozuk bir hücre bozuk kaydediliyor — dolayısıyla yanlış görünen bir tablonun izini
+sürmek için "bunu kim getirdi, kim okudu" ikilisinin ikisine de ihtiyaç var. Kayıtlara
+`connector_id` eklendi.
+
+Ek sorgu gerekmedi: dışa aktarım zaten `list_source_versions`'ın döndürdüğü
+`(SourceRow, SourceVersionRow)` çiftleri üzerinde yürüyor ve `SourceRow.connector_id` o
+satırda duruyor.
+
+Kayıt üretimi `export_run` içinde gömülü bir liste kavrayışıydı ve bu artifact'in hiç testi
+yoktu. Mantık `structured_extract_rows()` fonksiyonuna çıkarıldı; davranış değişmedi, yalnız
+test edilebilir hâle geldi. Üç test eklendi: kaydın connector ve parser'ı birlikte adlandırdığı,
+yapısal içerik bulunmayan kaynağın boş kayıtla taşınmak yerine tamamen dışarıda bırakıldığı ve
+provenance'ı hiç olmayan eski bir sürümün hata vermediği.
+
+Gerçek veriyle doğrulandı: `01M0YJH3CWTHD40BE171AWNTGS` koşusunun 36 kaydı, 104 tablosu ve 13
+kod bloğu değişmeden üretildi, `connector_id` alanı `agentsearch_web` 18, `arxiv` 12,
+`openalex` 4, `crossref` 2 dağılımıyla doldu. Son kod değişikliğinden sonraki zorunlu tam kapı
+`519 passed, 2 warnings` sonucuyla tamamlandı; hedefli Ruff temiz.
+
+**Geriye dönük değil.** Alan yalnız bundan sonra dışa aktarılan koşularda görünür; mevcut
+artifact'ler yeniden üretilmiyor.
 
 ---
 

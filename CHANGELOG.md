@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.23`
+Belge sürümü: `6.25`
 
 Son güncelleme: `2026-08-27`
 
@@ -64,6 +64,14 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
 - Bir saniyenin altında süren aşamalar `0 sn` yerine gerçek değerlerini gösteriyor
   (`0,01 sn`, `0,31 sn`); böylece kısa süren aşama ile hiç iş yapmadan dönen aşama
   ayırt edilebiliyor.
+- `18_structured_extracts.json` her kayıtta kaynağı bulan connector'ı da yazıyor
+  (`connector_id`). Dosya parser çıktısının ham hâli olduğu için, yanlış görünen bir
+  tablonun izi artık hem connector'a hem parser'a kadar sürülebiliyor. Alan bundan sonra
+  dışa aktarılan koşularda görünür.
+- Word raporu koşunun konu etiketiyle adlandırılıyor: `16_research_report.docx` yerine
+  `16_ai_in_lung_ct_report.docx`. Telegram'ın koşu yanında bastığı tutamağın aynısı
+  kullanılıyor, böylece iki koşunun raporu aynı klasöre indirildiğinde hangisinin ne
+  olduğu ad'dan anlaşılıyor. Etiketi olmayan koşularda eski ad korunuyor.
 
 ## v0.14.0 — 2026-08-25
 
