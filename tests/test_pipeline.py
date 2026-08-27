@@ -555,7 +555,11 @@ async def test_pipeline_resumes_to_auditable_export():
         assert completed.claims_count >= 1
         artifacts = await repo.list_artifacts(row.id)
         assert len(artifacts) == 21
-        word_artifact = next(a for a in artifacts if a.name == "16_research_report.docx")
+        # The report's name now carries the run's topic handle, so it is looked up by the
+        # prefix the naming rule guarantees rather than by a fixed string.
+        word_artifact = next(
+            a for a in artifacts if a.name.startswith("16_") and a.name.endswith(".docx")
+        )
         word_report = await ObjectStore(get_settings()).get(word_artifact.object_key)
         with zipfile.ZipFile(io.BytesIO(word_report)) as archive:
             assert "word/document.xml" in archive.namelist()

@@ -17,6 +17,7 @@ from .llm import LLMProvider
 from .report_synthesis import build_synthesis_package
 from .repository import Repository
 from .schemas import CoverageMetrics, ResearchProtocol
+from .scoping import LABEL_MAX_LENGTH, slugify
 from .storage import ObjectStore
 from .word_report import build_word_report
 
@@ -51,6 +52,68 @@ def _markdown(value: Any, level: int = 0) -> str:
 
 def _summary_heading(language: str) -> str:
     return "Özet" if language.lower().startswith("tr") else "Summary"
+
+
+def structured_extract_rows(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
+    """Tables and code the parsers recovered as structure, one record per source.
+
+    Already rendered inline in the passage text; this exists so a consumer that wants the
+    grid rather than the markdown does not have to re-parse the prose. Each record also
+    names the connector that found the source and the parser that read it -- the two halves
+    of how the grid came to exist, and the first thing to check when a table looks wrong.
+
+    Sources whose parse recovered no structure are left out entirely rather than carried as
+    empty records.
+    """
+    rows = []
+    for source, version in versions:
+        provenance = version.provenance or {}
+        tables = provenance.get("tables", [])
+        code_blocks = provenance.get("code_blocks", [])
+        if not tables and not code_blocks:
+            continue
+        rows.append(
+            {
+                "source_id": source.id,
+                "source_version_id": version.id,
+                "url": source.url,
+                "title": source.title,
+                "connector_id": source.connector_id,
+                "parser_id": provenance.get("parser_id", ""),
+                "tables": tables,
+                "code_blocks": code_blocks,
+            }
+        )
+    return rows
+
+
+WORD_REPORT_FALLBACK = "16_research_report.docx"
+# What a topic handle may contain once it is part of an object key. `_name_run` already
+# produces this shape; anything else has to earn it.
+_SAFE_LABEL = re.compile(r"[A-Za-z0-9_]{1,64}")
+
+
+def word_report_name(label: str | None) -> str:
+    """The Word report's file name, derived from the run's topic handle.
+
+    A client can set `ResearchProtocol.label` over the API -- it is validated for length
+    only, and `_name_run` returns early when the protocol already carries one, so such a
+    label never passes through `slugify`. The name becomes part of the object key
+    `runs/{run_id}/{name}`, where `../` would write outside the run's prefix.
+
+    Rather than slugify unconditionally, a label that is already key-safe is kept verbatim:
+    `slugify` drops stopwords, so re-running it would turn `ai_in_lung_ct` into
+    `ai_lung_ct` and the file would no longer match the handle Telegram prints beside the
+    run. Only a label outside the safe shape is forced through it.
+
+    The `16_` prefix stays because bundle members are written in sorted order, and a name
+    starting with a letter would sort after every numbered artifact instead of keeping the
+    report's place in the reading sequence.
+    """
+    handle = (label or "").strip()
+    if not _SAFE_LABEL.fullmatch(handle):
+        handle = slugify(handle, max_length=LABEL_MAX_LENGTH)
+    return f"16_{handle}_report.docx" if handle else WORD_REPORT_FALLBACK
 
 
 def _is_reportable(claim: Any) -> bool:
@@ -551,23 +614,7 @@ async def build_exports(
         "text/markdown",
         literature_inventory_md.encode("utf-8"),
     )
-    # Tables and code the parsers recovered as structure. They are already rendered inline
-    # in the passage text; this artifact exists so a consumer that wants the grid rather
-    # than the markdown does not have to re-parse the prose.
-    structured_extracts = [
-        {
-            "source_id": source.id,
-            "source_version_id": version.id,
-            "url": source.url,
-            "title": source.title,
-            "parser_id": (version.provenance or {}).get("parser_id", ""),
-            "tables": (version.provenance or {}).get("tables", []),
-            "code_blocks": (version.provenance or {}).get("code_blocks", []),
-        }
-        for source, version in versions
-        if (version.provenance or {}).get("tables")
-        or (version.provenance or {}).get("code_blocks")
-    ]
+    structured_extracts = structured_extract_rows(versions)
     if structured_extracts:
         files["18_structured_extracts.json"] = (
             "application/json",
@@ -609,7 +656,7 @@ async def build_exports(
         figure_observations=figure_result.observations,
         research_figures=figure_result.generated_figures,
     )
-    files["16_research_report.docx"] = (
+    files[word_report_name(protocol.label)] = (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         word_report.document,
     )
@@ -619,20 +666,19 @@ async def build_exports(
         files[research_figure.name] = ("image/png", research_figure.data)
 
     existing_artifacts = await repo.list_artifacts(run_id)
-    current_figure_names = {
-        name
-        for name in files
-        if re.fullmatch(r"17[a-z]_source_figure_.*\.png", name)
-    }
-    stale_figures = [
+    # Artifacts whose name depends on the run itself: a source figure is numbered by how
+    # many were selected, and the Word report now carries the topic handle. Exporting a run
+    # twice would otherwise leave the previous export's copy behind, and both would land in
+    # the bundles.
+    run_named = re.compile(r"17[a-z]_source_figure_.*\.png|16_.*\.docx")
+    stale = [
         artifact
         for artifact in existing_artifacts
-        if re.fullmatch(r"17[a-z]_source_figure_.*\.png", artifact.name)
-        and artifact.name not in current_figure_names
+        if run_named.fullmatch(artifact.name) and artifact.name not in files
     ]
-    for artifact in stale_figures:
+    for artifact in stale:
         await store.delete(artifact.object_key)
-    await repo.delete_artifacts(run_id, {artifact.name for artifact in stale_figures})
+    await repo.delete_artifacts(run_id, {artifact.name for artifact in stale})
 
     saved = []
     for name, (media_type, data) in files.items():
