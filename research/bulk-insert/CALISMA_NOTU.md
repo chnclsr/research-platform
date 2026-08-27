@@ -46,6 +46,47 @@ sonuç pgvector şema değişikliği kararı değildir.
 | `tests/test_passage_persistence_postgres.py` | Eşzamanlı writer ve deadlock testleri (gerçek PostgreSQL, container yoksa atlanır). |
 | `research/bulk-insert/REPORT.md` | İncelenecek teknik rapor. |
 
+## Gerçek koşu doğrulaması
+
+Entegrasyondan sonra platformun tamamı yeniden build edilip (`docker compose build worker api`)
+gerçek bir araştırma koşusu çalıştırıldı: `01M11STV8YQXCFY16AQ8GSJKM3`. Gerçek LLM
+(`qwen3:4b-instruct`), gerçek connector'lar, gerçek PostgreSQL. Koşu öncesi platform
+veritabanı boştu (0 koşu, 0 passage), aktif koşu yoktu.
+
+Sonuç: upsert'in **her iki dalı da üretimde çalıştı.**
+
+| Kontrol | Sonuç |
+|---|---:|
+| CHUNK_INDEX'te yazılan passage | 21 |
+| Embedding'i dolu olan | 21 |
+| RETRIEVE_PASSAGES'ta yerinde UPDATE edilen | 9 |
+| Kopya satır | 0 |
+
+Yani INSERT dalı 21 satır yazdı, UPDATE dalı 9 satırın `retrieval_score` ve
+`matched_questions` alanlarını çakışma üzerinden güncelledi, satır sayısı 21'de kaldı.
+
+Notlar:
+
+- Worker `arq`/Redis kuyruğu kullanıyor; veritabanına koşu satırı yazmak yetmiyor,
+  `queueing.enqueue_run` ile Redis'e de bırakmak gerekiyor.
+- Koşan container'lar kaynağı image'a gömüyor, bind-mount yok. Kod değişikliğinden
+  sonra `docker compose build worker api` yapılmadan eski kod çalışmaya devam eder.
+
+### Üretimde şema kayması: `json` vs `jsonb`
+
+Koşu sırasında fark edildi, **bu çalışmadan bağımsız ve önceden var olan** bir sorun:
+
+- `db.py` içindeki `json_type()`, PostgreSQL'de `JSONB` verir.
+- `migrations/versions/0002_passages.py` sütunu düz `sa.JSON()` ile oluşturmuş.
+- Üretim veritabanında `passages.embedding` ve `passages.metadata` gerçekten `json`.
+
+Sonuçları: JSONB operatörleri (`metadata ? 'anahtar'` gibi) üretimde doğrudan
+çalışmaz, `::jsonb` cast gerekir. Ayrıca bu deneyin matrisi tabloyu ORM modelinden
+kurduğu için **JSONB üzerinde ölçüm yapmıştır**, üretimdeki `json` üzerinde değil.
+Bulk yazımın kazancı ağ gidiş dönüşü azalmasından geldiği için sonucun yönü
+etkilenmez, fakat TOAST ve sıkıştırmaya dair gözlemler ile pgvector karşılaştırması
+JSONB'ye göredir. Rapora bu çekince eklenmelidir.
+
 ## Entegrasyon sonrası bulunan iki regresyon
 
 Entegrasyondan sonra çağıran tarafları tek tek gözden geçirince, testlerin
