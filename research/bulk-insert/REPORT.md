@@ -6,7 +6,7 @@ Bu deney, passage kayıtlarının satır başına commit edilmesi, tek transacti
 
 ## Kısa sonuç
 
-Aday batch upsert, mevcut repository yoluna göre 5.495x (1,000 kayıt), 5.634x (5,000 kayıt) hızlandı. Yüzde 50 çakışmalı ek deneyde aynı boyutlarda hızlanma 6.106x, 5.136x oldu. Karşılaştırma tabanı olan mevcut repository yolu 100 kayıtta 168-179 ms ve 434-518 ms olmak üzere çift tepeli ölçüldüğü için bu boyut manşet oranına alınmamıştır. Ana matriste 300/300, ek matriste 60/60 koşu veri bütünlüğü doğrulamasını geçti. Üretim kodu değiştirilmedi; bu rapor entegrasyon kararı için ölçüm ve risk sınırlarını sunar.
+Aday batch upsert, mevcut repository yoluna göre 5.495x (1,000 kayıt), 5.634x (5,000 kayıt) hızlandı. Yüzde 50 çakışmalı ek deneyde aynı boyutlarda hızlanma 6.106x, 5.136x oldu. Karşılaştırma tabanı olan mevcut repository yolu 100 kayıtta 168-179 ms ve 434-518 ms olmak üzere çift tepeli ölçüldüğü için bu boyut manşet oranına alınmamıştır. Ana matriste 300/300, ek matriste 60/60 koşu veri bütünlüğü doğrulamasını geçti. Ölçümlerin tamamı üretim kodu değiştirilmeden alınmıştır; ölçülen aday yöntemin `Repository.save_passages` içine uygulanması ayrı bir değişikliktir ve kendi testleriyle birlikte sunulmaktadır.
 
 ## Test edilen mimari
 
@@ -262,15 +262,16 @@ Ham sonuç: `results/postgres_bulk_insert_partial.json`
 
 Ölçümler bulk yazımın değerlendirilmesini gerekçelendirir. Teknik aday yöntem `core_upsert_batched`, yani 1,000 satırlık batch'lerle `INSERT ... ON CONFLICT DO UPDATE`. Bu yöntem repository'nin idempotent güncelleme semantiğini korur ve ölçülen tek eşdeğer semantikli bulk yoldur. `copy_records` daha hızlı olabilir fakat çakışma çözümü sunmaz; upsert gerektiren bir yolda ancak geçici tabloya COPY ve ardından tek MERGE ile kullanılabilir, bu da bu deneyin dışındadır.
 
-Uygulama öncesinde şu regresyon ve güvenlik kontrolleri gereklidir:
+Uygulama öncesinde gerekli görülen regresyon ve güvenlik kontrolleri ve bunların hangi testle karşılandığı:
 
-- Yeni ve mevcut passage karışımında alanların doğru insert/update edilmesi.
-- Tekrarlanan kimlik ile `(source_version_id, chunk_index)` çakışmalarının davranışı.
-- Batch ortasında hata olduğunda transaction rollback ve tekrar deneme güvenliği.
-- Büyük batch'lerde statement boyutu, bellek kullanımı ve PostgreSQL parametre sınırı.
-- Eşzamanlı writer, deadlock ve lock süresi testleri.
-- SQLite kullanılan test ortamı ile PostgreSQL davranış farkları.
-- Mevcut repository yetkilendirme ve audit beklentilerinin korunması.
+- Yeni ve mevcut passage karışımında alanların doğru insert/update edilmesi: `test_mixed_batch_inserts_new_chunks_and_updates_existing_ones`.
+- Tekrarlanan `(source_version_id, chunk_index)` davranışı: `test_duplicate_chunks_in_one_call_keep_first_id_and_last_content`.
+- Batch ortasında hata olduğunda tam rollback: `test_a_failing_batch_leaves_no_earlier_batch_behind`, ki test önce ilk batch'in gerçekten gönderildiğini doğrular.
+- Batch sınırının uygulanması: `test_save_passages_sends_one_statement_per_batch_and_commits_once`, 2N+1 kayıtta üç statement ve tek commit.
+- Eşzamanlı writer ve deadlock: `tests/test_passage_persistence_postgres.py`, gerçek PostgreSQL üzerinde. Kilit sırası kaldırıldığında testin `DeadlockDetectedError` ürettiği doğrulanmıştır, yani sıralama önlemi varsayım değil ölçülmüş bir gerekliliktir.
+- SQLite ile PostgreSQL farkı: ana suite SQLite üzerinde, eşzamanlılık dosyası PostgreSQL üzerinde koşar; iki dialect de aynı `on_conflict_do_update` yolunu kullanır.
+- Yetkilendirme beklentilerinin korunması: `save_passages` `run_id` almadığı için `_OwnershipEnforced` sarmalamasının dışındadır ve imzası değişmemiştir.
+- Kapsanmayan tek başlık, bağlantı kaybı ve üst katman retry politikasıdır; entegrasyon PR'ının ayrı risk başlığıdır.
 
 ## Yeniden çalıştırma
 

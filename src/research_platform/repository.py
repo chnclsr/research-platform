@@ -11,6 +11,8 @@ from typing import Any
 from urllib.parse import urlparse, urlsplit
 
 from sqlalchemy import delete, or_, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import Principal
@@ -52,6 +54,30 @@ from .scholarly import candidate_dedupe_key, scholarly_identity, title_fingerpri
 # the run fails with an actionable error instead of an opaque driver exception that also
 # poisons the session.
 CHECKPOINT_MAX_BYTES = get_settings().checkpoint_max_bytes
+
+# Passages arrive one document at a time, so a batch this size holds a whole document in
+# a single statement while keeping the bound parameter payload well inside what both
+# drivers accept. research/bulk-insert measures where the gain comes from.
+PASSAGE_UPSERT_BATCH = 1000
+# A chunk is identified by (source_version_id, chunk_index). Everything else is content
+# that re-ingesting the document is allowed to overwrite. ``id`` is deliberately absent:
+# claims already reference the stored row, so re-chunking must not mint it a new one.
+# These are physical column names, which is how ``excluded`` is keyed.
+_PASSAGE_UPSERT_COLUMNS = (
+    "section_path",
+    "page_number",
+    "start_char",
+    "end_char",
+    "text",
+    "token_count",
+    "content_hash",
+    "embedding",
+    "metadata",
+)
+_PASSAGE_UPSERT_BUILDERS = {
+    "postgresql": postgresql_insert,
+    "sqlite": sqlite_insert,
+}
 
 
 class ActorRequired(RuntimeError):
@@ -852,41 +878,80 @@ class Repository(metaclass=_OwnershipEnforced):
         )
         return list(rows.tuples())
 
-    async def save_passages(self, passages: list[Passage]) -> None:
+    @staticmethod
+    def _passage_values(passage: Passage) -> dict[str, Any]:
+        return {
+            "id": passage.id,
+            "source_version_id": passage.source_version_id,
+            "chunk_index": passage.chunk_index,
+            "section_path": passage.section_path,
+            "page_number": passage.page_number,
+            "start_char": passage.start_char,
+            "end_char": passage.end_char,
+            "text": passage.text,
+            "token_count": passage.token_count,
+            "content_hash": passage.content_hash,
+            "embedding": passage.embedding,
+            "metadata_json": {
+                "retrieval_score": passage.retrieval_score,
+                "matched_questions": passage.matched_questions,
+                "language": passage.language,
+                "document_type": passage.document_type,
+            },
+        }
+
+    @staticmethod
+    def _passage_upsert_rows(passages: list[Passage]) -> list[dict[str, Any]]:
+        """Collapse repeated chunks and order the batch by the conflict key.
+
+        Two rows with the same identity in one statement make PostgreSQL reject the
+        whole batch, so they are merged here instead. The merge keeps the first id and
+        the last content, which is what the previous row-by-row loop produced: its
+        SELECT found the row it had just written and updated it in place.
+
+        Sorting is for concurrency, not tidiness. Upsert takes row locks, so two writers
+        saving overlapping chunks in different orders could deadlock; a fixed order means
+        they always take those locks in the same sequence.
+        """
+        by_chunk: dict[tuple[str, int], dict[str, Any]] = {}
         for passage in passages:
-            row = await self.session.scalar(
-                select(PassageRow).where(
-                    PassageRow.source_version_id == passage.source_version_id,
-                    PassageRow.chunk_index == passage.chunk_index,
-                )
+            key = (passage.source_version_id, passage.chunk_index)
+            values = Repository._passage_values(passage)
+            existing = by_chunk.get(key)
+            if existing is not None:
+                values["id"] = existing["id"]
+            by_chunk[key] = values
+        return [by_chunk[key] for key in sorted(by_chunk)]
+
+    async def save_passages(self, passages: list[Passage]) -> None:
+        """Write passages, overwriting any chunk this source version already has.
+
+        One statement per batch rather than a lookup and a write per passage. The old
+        loop cost 2N round trips because autoflush had to send each pending write before
+        the next existence check could run.
+
+        Every batch shares the caller's transaction and the single commit at the end, so
+        a failure part way through leaves none of them applied. The failure is raised
+        rather than rolled back here: this method does not own the session, and the
+        caller's transaction may hold work of its own that predates this call.
+        """
+        if not passages:
+            return
+        dialect = self.session.get_bind().dialect.name
+        builder = _PASSAGE_UPSERT_BUILDERS.get(dialect)
+        if builder is None:
+            raise RuntimeError(
+                f"save_passages needs ON CONFLICT support; {dialect!r} is not one of "
+                f"{sorted(_PASSAGE_UPSERT_BUILDERS)}."
             )
-            values = {
-                "section_path": passage.section_path,
-                "page_number": passage.page_number,
-                "start_char": passage.start_char,
-                "end_char": passage.end_char,
-                "text": passage.text,
-                "token_count": passage.token_count,
-                "content_hash": passage.content_hash,
-                "embedding": passage.embedding,
-                "metadata_json": {
-                    "retrieval_score": passage.retrieval_score,
-                    "matched_questions": passage.matched_questions,
-                    "language": passage.language,
-                    "document_type": passage.document_type,
-                },
-            }
-            if row is None:
-                row = PassageRow(
-                    id=passage.id,
-                    source_version_id=passage.source_version_id,
-                    chunk_index=passage.chunk_index,
-                    **values,
-                )
-                self.session.add(row)
-            else:
-                for key, value in values.items():
-                    setattr(row, key, value)
+        statement = builder(PassageRow)
+        upsert = statement.on_conflict_do_update(
+            index_elements=[PassageRow.source_version_id, PassageRow.chunk_index],
+            set_={name: statement.excluded[name] for name in _PASSAGE_UPSERT_COLUMNS},
+        )
+        rows = self._passage_upsert_rows(passages)
+        for start in range(0, len(rows), PASSAGE_UPSERT_BATCH):
+            await self.session.execute(upsert, rows[start : start + PASSAGE_UPSERT_BATCH])
         await self.session.commit()
 
     async def list_passages(

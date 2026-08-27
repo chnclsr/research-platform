@@ -9,14 +9,17 @@ merely be faster. Re-ingest is the case that matters. The pipeline saves the sam
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+from unittest import mock
 
 import pytest
 from conftest import acting_principal
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
+from sqlalchemy.exc import IntegrityError
 
-from research_platform.db import PassageRow, SessionLocal, create_schema
-from research_platform.repository import Repository
+from research_platform.db import PassageRow, SessionLocal, create_schema, engine
+from research_platform.repository import PASSAGE_UPSERT_BATCH, Repository
 from research_platform.schemas import Passage
 
 VERSION_A = "01VERSIONA".ljust(26, "0")
@@ -174,3 +177,121 @@ async def test_saving_an_empty_list_is_a_no_op():
 
     async with SessionLocal() as session:
         assert await session.scalar(select(func.count()).select_from(PassageRow)) == 0
+
+
+class StatementLog:
+    """Counts what actually reaches the driver, which is the point of the change."""
+
+    def __init__(self) -> None:
+        self.inserts = 0
+        self.commits = 0
+
+    def on_execute(self, conn, cursor, statement, parameters, context, executemany) -> None:
+        if statement.lstrip().upper().startswith("INSERT INTO PASSAGES"):
+            self.inserts += 1
+
+    def on_commit(self, conn) -> None:
+        self.commits += 1
+
+
+@contextlib.contextmanager
+def statement_log():
+    log = StatementLog()
+    event.listen(engine.sync_engine, "before_cursor_execute", log.on_execute)
+    event.listen(engine.sync_engine, "commit", log.on_commit)
+    try:
+        yield log
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", log.on_execute)
+        event.remove(engine.sync_engine, "commit", log.on_commit)
+
+
+def bulk_passages(count: int, *, version_id: str = VERSION_A) -> list[Passage]:
+    return [
+        make_passage(
+            passage_id=f"01BULK{index:020d}",
+            version_id=version_id,
+            chunk_index=index,
+            text=f"Bulk chunk {index}.",
+        )
+        for index in range(count)
+    ]
+
+
+@pytest.mark.anyio
+async def test_save_passages_sends_one_statement_per_batch_and_commits_once():
+    """The whole point of the rewrite: round trips scale with batches, not passages."""
+    passages = bulk_passages(2 * PASSAGE_UPSERT_BATCH + 1)
+
+    with statement_log() as log:
+        await save(passages)
+
+    assert log.inserts == 3
+    assert log.commits == 1
+    async with SessionLocal() as session:
+        assert await session.scalar(select(func.count()).select_from(PassageRow)) == len(passages)
+
+
+@pytest.mark.anyio
+async def test_a_failing_batch_leaves_no_earlier_batch_behind():
+    """Batches share one transaction, so a late failure must undo the early writes."""
+    await save([make_passage(passage_id="01CLASH".ljust(26, "0"), version_id=VERSION_B)])
+
+    passages = bulk_passages(PASSAGE_UPSERT_BATCH + 1)
+    # Lands in the second batch and collides on the primary key, which the conflict
+    # target does not cover, so the statement fails after batch one has executed.
+    passages[PASSAGE_UPSERT_BATCH].id = "01CLASH".ljust(26, "0")
+
+    with statement_log() as log, pytest.raises(IntegrityError):
+        await save(passages)
+
+    # Without this the test would also pass if the first batch had never been sent,
+    # which would prove nothing about rollback.
+    assert log.inserts == 2
+    assert log.commits == 0
+    async with SessionLocal() as session:
+        surviving = await session.scalar(
+            select(func.count())
+            .select_from(PassageRow)
+            .where(PassageRow.source_version_id == VERSION_A)
+        )
+    assert surviving == 0
+
+
+@pytest.mark.anyio
+async def test_duplicate_chunks_in_one_call_keep_first_id_and_last_content():
+    """The old loop resolved these last-write-wins; a raw batch would be rejected."""
+    first = make_passage(passage_id="01FIRST".ljust(26, "0"), chunk_index=4, text="First write.")
+    second = make_passage(passage_id="01SECOND".ljust(26, "0"), chunk_index=4, text="Last write.")
+
+    await save([first, second])
+
+    rows = await fetch()
+    assert len(rows) == 1
+    assert rows[0].id == "01FIRST".ljust(26, "0")
+    assert rows[0].text == "Last write."
+
+
+@pytest.mark.anyio
+async def test_batch_is_ordered_by_the_conflict_key():
+    """A fixed lock order is what keeps two concurrent writers from deadlocking."""
+    shuffled = [
+        make_passage(passage_id=f"01ORD{index:021d}", chunk_index=index, text=f"Chunk {index}.")
+        for index in (7, 2, 9, 0, 4)
+    ]
+
+    rows = Repository._passage_upsert_rows(shuffled)
+
+    assert [row["chunk_index"] for row in rows] == [0, 2, 4, 7, 9]
+
+
+@pytest.mark.anyio
+async def test_unsupported_dialect_is_refused_rather_than_silently_degraded():
+    """There is no row-by-row fallback, so an unsupported driver must say so."""
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        with (
+            mock.patch.object(type(session.get_bind().dialect), "name", "oracle", create=True),
+            pytest.raises(RuntimeError, match="ON CONFLICT"),
+        ):
+            await repo.save_passages([make_passage(passage_id="01X".ljust(26, "0"))])
