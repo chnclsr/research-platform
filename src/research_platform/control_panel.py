@@ -27,7 +27,7 @@ from fastapi.responses import (
     Response,
 )
 from redis.asyncio import Redis
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auth import Principal, verify_secret
@@ -50,6 +50,7 @@ from .control_panel_auth import (
     throttled,
 )
 from .control_panel_metrics import (
+    PIPELINE_STAGES,
     connector_operations,
     llm_summary,
     pipeline_flow,
@@ -57,7 +58,8 @@ from .control_panel_metrics import (
     query_branch_summary,
     serialize_event,
     source_funnel,
-    stage_timeline,
+    stage_visit_details,
+    stage_visits,
 )
 from .control_panel_ui import CONTROL_PANEL_HTML, LOGIN_HTML
 from .db import (
@@ -527,6 +529,17 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
                 .limit(5000)
             )
         )
+        # The 5000 above is a payload ceiling, and a long run blows past it: a 205-round run
+        # logged 16563 events, so the aggregates below see its first third. Stage boundaries
+        # are cheap enough to read in full (2069 rows for that run), and the flow view has to
+        # be complete -- it reports how many times each stage ran.
+        stage_events = list(
+            await session.scalars(
+                select(EventRow)
+                .where(EventRow.run_id == run_id, EventRow.event_type == "stage")
+                .order_by(EventRow.id)
+            )
+        )
         sources = list(
             await session.scalars(
                 select(SourceRow)
@@ -584,9 +597,9 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
             "interaction": run.interaction,
             "hitl_history": run.hitl_history or [],
         },
-        "timeline": stage_timeline(events, updated or datetime.now(timezone.utc)),
+        "timeline": stage_visits(stage_events, updated or datetime.now(timezone.utc)),
         "flow": pipeline_flow(
-            events,
+            stage_events,
             current_stage=run.current_stage,
             status=run.status,
             round_number=run.round_number,
@@ -640,6 +653,94 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
             for artifact in artifacts
         ],
     }
+
+
+STAGE_PAGE_SIZE = 200
+
+
+async def _run_stage_detail(
+    run_id: str, stage: str, offset: int, principal: Principal
+) -> dict[str, Any]:
+    """Every visit of one stage, with the tools each visit ran.
+
+    Split out of the run detail on purpose: a long run visits a stage hundreds of times, and
+    aggregating tools for all of them up front is what the detail payload cannot afford.
+    """
+    labels = dict(PIPELINE_STAGES)
+    if stage not in labels:
+        raise HTTPException(status_code=404, detail="Aşama bulunamadı")
+    async with SessionLocal() as session:
+        run = await session.get(ResearchRunRow, run_id)
+        if run is None or not _may_see(run, principal):
+            raise HTTPException(status_code=404, detail="Araştırma bulunamadı")
+        # A missing updated_at falls through to the metrics layer's own "now" default.
+        now = run.updated_at
+        stage_events = list(
+            await session.scalars(
+                select(EventRow)
+                .where(EventRow.run_id == run_id, EventRow.event_type == "stage")
+                .order_by(EventRow.id)
+            )
+        )
+        visits = stage_visits(stage_events, now)
+        windows = [visit for visit in visits if visit["stage"] == stage]
+        page = windows[max(0, offset) : max(0, offset) + STAGE_PAGE_SIZE]
+        metric_events: list[EventRow] = []
+        if page:
+            # One range per visit rather than one range spanning the page: a stage visited
+            # 200 times is spread across the whole run, so a single first..last span would
+            # read every other stage's events too -- and then lose the tail to the limit.
+            windows_sql = [
+                (
+                    and_(
+                        EventRow.id >= visit["start_event_id"],
+                        EventRow.id < visit["end_event_id"],
+                    )
+                    if visit["end_event_id"] is not None
+                    else EventRow.id >= visit["start_event_id"]
+                )
+                for visit in page
+            ]
+            metric_events = list(
+                await session.scalars(
+                    select(EventRow)
+                    .where(
+                        EventRow.run_id == run_id,
+                        EventRow.event_type != SAMPLE_EVENT,
+                        or_(*windows_sql),
+                    )
+                    .order_by(EventRow.id)
+                )
+            )
+        details = {
+            row["started_at"]: row for row in stage_visit_details(metric_events, stage, now)
+        }
+        page_rows = []
+        for visit in page:
+            detail = details.get(visit["started_at"], {})
+            # Durations come from the complete boundary list, never from the sliced one: the
+            # last visit on a page has no following boundary inside the slice, so the sliced
+            # walk would measure it against `now` instead of the stage that followed it.
+            page_rows.append(
+                {
+                    "stage": visit["stage"],
+                    "round": visit["round"],
+                    "started_at": visit["started_at"],
+                    "duration_seconds": visit["duration_seconds"],
+                    "active": visit["active"],
+                    "tools": detail.get("tools", []),
+                    "summary": detail.get("summary", {}),
+                }
+            )
+        return {
+            "stage": stage,
+            "label": labels[stage],
+            "visit_count": len(windows),
+            "total_seconds": round(sum(float(v["duration_seconds"]) for v in windows), 2),
+            "offset": max(0, offset),
+            "has_more": max(0, offset) + len(page) < len(windows),
+            "visits": page_rows,
+        }
 
 
 async def _connector_snapshot() -> list[dict[str, Any]]:
@@ -981,6 +1082,16 @@ async def status(principal: Principal = Depends(require_user)) -> dict[str, Any]
 @app.get("/api/runs/{run_id}/detail")
 async def run_detail(run_id: str, principal: Principal = Depends(require_user)) -> dict[str, Any]:
     return await _run_detail(run_id, principal)
+
+
+@app.get("/api/runs/{run_id}/stages/{stage}")
+async def run_stage_detail(
+    run_id: str,
+    stage: str,
+    offset: int = 0,
+    principal: Principal = Depends(require_user),
+) -> dict[str, Any]:
+    return await _run_stage_detail(run_id, stage, offset, principal)
 
 
 @app.get("/api/connectors")

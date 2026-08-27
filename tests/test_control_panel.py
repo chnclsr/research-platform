@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from research_platform import control_panel
 from research_platform.auth import Principal
+from research_platform.control_panel_ui import CONTROL_PANEL_HTML
 from research_platform.db import SessionLocal, create_schema
 from research_platform.identity import create_user, get_user_by_email
 from research_platform.repository import Repository
@@ -16,6 +17,51 @@ from research_platform.schemas import ResearchProtocol
 from research_platform.version import VERSION
 
 PANEL_PASSWORD = "panel-test-password"
+
+
+def test_run_drawer_uses_turkish_title_case_and_collapsible_sources():
+    assert "Kalite ve Kapsam" in CONTROL_PANEL_HTML
+    assert "Sorgu Dalları" in CONTROL_PANEL_HTML
+    assert "Kabul Edilen Kaynaklar" in CONTROL_PANEL_HTML
+    assert "Kalite ve coverage" not in CONTROL_PANEL_HTML
+    assert "detailSection('Sorgu dalları')" not in CONTROL_PANEL_HTML
+    assert "collapsibleDetailSection(`Kabul Edilen Kaynaklar" in CONTROL_PANEL_HTML
+    assert "h('details','drawer-section collapsible-section')" in CONTROL_PANEL_HTML
+
+
+def test_flow_view_absorbs_the_timeline_and_can_go_fullscreen():
+    # The chronological strip is gone: a 205-round run made it 2069 cards long, and the
+    # rounds of one stage were unreachable without hunting through it.
+    assert "detailSection('Pipeline Zaman Çizelgesi')" not in CONTROL_PANEL_HTML
+    assert "detailSection('Araştırma Akışı')" in CONTROL_PANEL_HTML
+    assert "⤢ Tam ekran" in CONTROL_PANEL_HTML
+    assert "flow-fullscreen" in CONTROL_PANEL_HTML
+    # Only a stage that actually ran is clickable, and its rounds come from the new endpoint.
+    assert "if(node.visits){item.classList.add('clickable')" in CONTROL_PANEL_HTML
+    assert "/api/runs/${data.run.id}/stages/${encodeURIComponent(next)}" in CONTROL_PANEL_HTML
+    # Escape leaves fullscreen before it closes the run drawer.
+    assert "const expanded=document.querySelector('.flow-fullscreen');if(expanded)" in (
+        CONTROL_PANEL_HTML
+    )
+
+
+def test_stage_durations_below_a_second_keep_their_decimals():
+    # A recovery round that acquired nothing returns in milliseconds. Math.round turned every
+    # such stage into "0 sn", which read as a broken timeline rather than a no-op stage.
+    assert "if(s>0&&s<1)return`${s.toFixed(2).replace('.',',')} sn`" in CONTROL_PANEL_HTML
+    # Whole seconds, minutes and hours keep the format they already had.
+    assert "if(s<60)return`${Math.round(s)} sn`" in CONTROL_PANEL_HTML
+    assert "if(s<3600)return`${Math.floor(s/60)} dk ${Math.round(s%60)} sn`" in CONTROL_PANEL_HTML
+
+
+def test_panel_has_persistent_light_mode_and_relevance_sorted_sources():
+    assert "☀ Aydınlık Mod" in CONTROL_PANEL_HTML
+    assert "☾ Karanlık Mod" in CONTROL_PANEL_HTML
+    assert "research-platform-theme" in CONTROL_PANEL_HTML
+    assert 'html[data-theme="light"]' in CONTROL_PANEL_HTML
+    assert "detailSection('Referans Haritası')" in CONTROL_PANEL_HTML
+    assert "detailSection('Kaynak Hunisi')" not in CONTROL_PANEL_HTML
+    assert "sort((a,b)=>Number(b.relevance_score??0)-Number(a.relevance_score??0))" in CONTROL_PANEL_HTML
 
 
 def _network_guard_app(networks: list[str]) -> FastAPI:
@@ -99,7 +145,7 @@ async def test_signed_in_user_sees_the_dashboard():
     with TestClient(control_panel.app) as client:
         _sign_in(client, "panel-user@example.test")
         page = client.get("/")
-        assert "Sentinel recall" in page.text
+        assert "Sentinel Recall" in page.text
         assert "Connector operasyon görünümü" in page.text
         assert "flow-nodes" in page.text
         assert f"· v{VERSION}" in page.text
@@ -201,8 +247,8 @@ async def test_panel_run_list_shows_only_the_signed_in_users_runs():
 
 
 @pytest.mark.asyncio
-async def test_run_detail_breaks_each_stage_visit_down_by_tool():
-    """The drawer's stage cards are only clickable if the detail payload carries tools."""
+async def test_stage_endpoint_breaks_each_stage_visit_down_by_tool():
+    """Tools moved off the detail payload: the flow view asks for one stage at a time."""
     owner_id = await _account("panel-tools@example.test", "user")
     async with SessionLocal() as session:
         repo = Repository(session, actor=Principal.user(owner_id))
@@ -222,14 +268,61 @@ async def test_run_detail_breaks_each_stage_visit_down_by_tool():
              "parser_id": "pdf", "latency_seconds": 3.0},
         ]})
 
+    # The detail payload still lists every visit, it just no longer carries tool rows.
     detail = await control_panel._run_detail(run.id, Principal.user(owner_id))
-    search, acquire = detail["timeline"]
-    assert [(row["kind"], row["name"]) for row in search["tools"]] == [("connector", "crossref")]
-    assert search["tools"][0]["results"] == 6
-    assert [(row["kind"], row["name"]) for row in acquire["tools"]] == [
+    assert [row["stage"] for row in detail["timeline"]] == ["SEARCH", "ACQUIRE"]
+    assert "tools" not in detail["timeline"][0]
+
+    principal = Principal.user(owner_id)
+    search = await control_panel._run_stage_detail(run.id, "SEARCH", 0, principal)
+    assert search["visit_count"] == 1
+    assert [(row["kind"], row["name"]) for row in search["visits"][0]["tools"]] == [
+        ("connector", "crossref")
+    ]
+    assert search["visits"][0]["tools"][0]["results"] == 6
+    assert search["visits"][0]["summary"]["connectors"] == 1
+    assert search["has_more"] is False
+
+    acquire = await control_panel._run_stage_detail(run.id, "ACQUIRE", 0, principal)
+    assert [(row["kind"], row["name"]) for row in acquire["visits"][0]["tools"]] == [
         ("method", "direct"),
         ("parser", "pdf"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_stage_endpoint_lists_every_round_and_hides_other_peoples_runs():
+    """A recovery loop visits a stage many times; the flow view has to show all of them."""
+    owner_id = await _account("panel-stage-rounds@example.test", "user")
+    other_id = await _account("panel-stage-other@example.test", "user")
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=Principal.user(owner_id))
+        run = await repo.create_run(ResearchProtocol(
+            title="Looping run",
+            primary_question="How many times did acquisition run in this research?",
+            budget={"max_wall_minutes": 30},
+        ))
+        for round_number in range(1, 6):
+            await repo.event(run.id, "stage", {"stage": "SEARCH", "round": round_number})
+            await repo.event(run.id, "stage", {"stage": "ACQUIRE", "round": round_number})
+            await repo.event(run.id, "acquisition_metrics", {"calls": [
+                {"connector": "crossref", "success": True, "method": "direct",
+                 "parser_id": "pdf", "latency_seconds": 1.0},
+            ]})
+
+    principal = Principal.user(owner_id)
+    acquire = await control_panel._run_stage_detail(run.id, "ACQUIRE", 0, principal)
+    assert acquire["visit_count"] == 5
+    assert [row["round"] for row in acquire["visits"]] == [1, 2, 3, 4, 5]
+    assert all(row["tools"] for row in acquire["visits"])
+
+    with pytest.raises(HTTPException) as excinfo:
+        await control_panel._run_stage_detail(run.id, "NOT_A_STAGE", 0, principal)
+    assert excinfo.value.status_code == 404
+
+    with pytest.raises(HTTPException) as excinfo:
+        await control_panel._run_stage_detail(run.id, "ACQUIRE", 0, Principal.user(other_id))
+    assert excinfo.value.status_code == 404
 
 
 @pytest.mark.asyncio

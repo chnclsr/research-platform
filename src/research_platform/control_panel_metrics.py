@@ -50,7 +50,9 @@ def pipeline_flow(
     round_number: int,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    timeline = stage_timeline(events, now)
+    # Only stage/duration is read below, so the tool-free walk is enough -- and it lets the
+    # caller feed every stage event rather than a truncated slice of the whole event log.
+    timeline = stage_visits(events, now)
     durations: dict[str, float] = defaultdict(float)
     visits: dict[str, int] = defaultdict(int)
     for item in timeline:
@@ -186,8 +188,12 @@ def _tool_rows(events: list[Any]) -> list[dict[str, Any]]:
     return ordered[:MAX_TOOL_ROWS]
 
 
-def stage_timeline(events: list[Any], now: datetime | None = None) -> list[dict[str, Any]]:
-    now = now or datetime.now(timezone.utc)
+def _utc_now(now: datetime | None) -> datetime:
+    return now or datetime.now(timezone.utc)
+
+
+def _walk_stage_boundaries(events: list[Any], now: datetime) -> list[dict[str, Any]]:
+    """Split a run's events into stage visits, in time order."""
     visits: list[dict[str, Any]] = []
     for event in events:
         if _event_value(event, "event_type") == "stage":
@@ -197,6 +203,7 @@ def stage_timeline(events: list[Any], now: datetime | None = None) -> list[dict[
                     "stage": payload.get("stage", "UNKNOWN"),
                     "round": payload.get("round", 0),
                     "created_at": _event_value(event, "created_at"),
+                    "event_id": _event_value(event, "id"),
                     "events": [],
                 }
             )
@@ -207,20 +214,77 @@ def stage_timeline(events: list[Any], now: datetime | None = None) -> list[dict[
             # same stage across rounds separate.
             visits[-1]["events"].append(event)
     visits.sort(key=lambda item: item["created_at"] or now)
+    return visits
+
+
+def _visit_row(visits: list[dict[str, Any]], index: int, now: datetime) -> dict[str, Any]:
+    item = visits[index]
+    start = item["created_at"] or now
+    end = visits[index + 1]["created_at"] if index + 1 < len(visits) else now
+    return {
+        "stage": item["stage"],
+        "round": item["round"],
+        "started_at": start.isoformat(),
+        "duration_seconds": round(max(0.0, (end - start).total_seconds()), 2),
+        "active": index == len(visits) - 1,
+    }
+
+
+def _visit_summary(tools: list[dict[str, Any]]) -> dict[str, int]:
+    """The one-line headline a visit row shows before its tool table is opened."""
+    return {
+        "connectors": sum(1 for row in tools if row["kind"] == "connector"),
+        "calls": sum(int(row["calls"]) for row in tools),
+        "errors": sum(int(row["errors"]) for row in tools),
+        "tokens": sum(int(row["tokens"]) for row in tools),
+    }
+
+
+def stage_visits(events: list[Any], now: datetime | None = None) -> list[dict[str, Any]]:
+    """Every stage visit without its tool rows.
+
+    Aggregating tools is what makes the timeline expensive, so a caller that only needs
+    "which stage ran when, and for how long" can afford to pass every stage event a long
+    run produced instead of a truncated slice of the whole event log.
+    """
+    now = _utc_now(now)
+    visits = _walk_stage_boundaries(events, now)
     output = []
     for index, item in enumerate(visits):
-        start = item["created_at"] or now
-        end = visits[index + 1]["created_at"] if index + 1 < len(visits) else now
-        output.append(
-            {
-                "stage": item["stage"],
-                "round": item["round"],
-                "started_at": start.isoformat(),
-                "duration_seconds": round(max(0.0, (end - start).total_seconds()), 2),
-                "active": index == len(visits) - 1,
-                "tools": _tool_rows(item["events"]),
-            }
+        row = _visit_row(visits, index, now)
+        row["start_event_id"] = item["event_id"]
+        row["end_event_id"] = (
+            visits[index + 1]["event_id"] if index + 1 < len(visits) else None
         )
+        output.append(row)
+    return output
+
+
+def stage_visit_details(
+    events: list[Any], stage: str, now: datetime | None = None
+) -> list[dict[str, Any]]:
+    """The visits of one stage, each with its tool rows and headline counts."""
+    now = _utc_now(now)
+    visits = _walk_stage_boundaries(events, now)
+    output = []
+    for index, item in enumerate(visits):
+        if item["stage"] != stage:
+            continue
+        row = _visit_row(visits, index, now)
+        row["tools"] = _tool_rows(item["events"])
+        row["summary"] = _visit_summary(row["tools"])
+        output.append(row)
+    return output
+
+
+def stage_timeline(events: list[Any], now: datetime | None = None) -> list[dict[str, Any]]:
+    now = _utc_now(now)
+    visits = _walk_stage_boundaries(events, now)
+    output = []
+    for index, item in enumerate(visits):
+        row = _visit_row(visits, index, now)
+        row["tools"] = _tool_rows(item["events"])
+        output.append(row)
     return output
 
 

@@ -506,7 +506,7 @@ def test_settings_validate_the_sampling_interval_and_panel_has_preview_support()
     # _env_file=None reads the code default rather than whatever this deployment's .env says.
     assert Settings(_env_file=None).hardware_telemetry_output_type == "all"
     assert "20_hardware_utilization.svg" in CONTROL_PANEL_HTML
-    assert "Donanım kullanımı" in CONTROL_PANEL_HTML
+    assert "Donanım Kullanımı" in CONTROL_PANEL_HTML
     assert "URL.createObjectURL(blob),img=document.createElement('img')" not in CONTROL_PANEL_HTML
     assert "img.src=`/api/runs/${runId}/artifacts/" in CONTROL_PANEL_HTML
 
