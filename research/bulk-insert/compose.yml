@@ -1,0 +1,27 @@
+name: research-bulk-insert-benchmark
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    command:
+      - postgres
+      - -c
+      - track_io_timing=on
+      - -c
+      - track_wal_io_timing=on
+    environment:
+      POSTGRES_DB: bulk_benchmark
+      POSTGRES_USER: bulk_benchmark
+      POSTGRES_PASSWORD: bulk_benchmark
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - bulk-insert-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bulk_benchmark -d bulk_benchmark"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  bulk-insert-postgres-data:
