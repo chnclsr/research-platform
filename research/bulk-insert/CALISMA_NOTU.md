@@ -46,6 +46,37 @@ sonuç pgvector şema değişikliği kararı değildir.
 | `tests/test_passage_persistence_postgres.py` | Eşzamanlı writer ve deadlock testleri (gerçek PostgreSQL, container yoksa atlanır). |
 | `research/bulk-insert/REPORT.md` | İncelenecek teknik rapor. |
 
+## Entegrasyon sonrası bulunan iki regresyon
+
+Entegrasyondan sonra çağıran tarafları tek tek gözden geçirince, testlerin
+yakalayamadığı iki davranış farkı çıktı. İkisi de önce başarısız bir testle
+üretildi, sonra düzeltildi (`fix(repository): keep two behaviours...`).
+
+**1. Boş listede commit kayboluyordu.** Eski döngü kendisine ne verilirse verilsin
+sonunda `commit()` çağırıyordu. `zotero_sync` buna dayanıyor: `save_document`
+yalnızca `flush()` yapıyor, dolayısıyla hiç chunk üretmeyen bir kayıtta belge
+yazımı kalıcı olmuyor, transaction içinde asılı kalıyordu. Yeni kod erken
+dönüyordu. Düzeltme: boş listede de commit ediliyor.
+
+**2. Session önbelleği bayat kalıyordu.** Core seviyesindeki yazım identity map'e
+dokunmuyor ve bu session'lar `expire_on_commit=False` ile kurulu. Pipeline bir
+koşunun passage'larını listeliyor (satır 1954), retrieval metadata'sını
+`save_passages` ile geri yazıyor (1985) ve **aynı session'da** tekrar listeliyor
+(2046). O ikinci okuma yazımdan önceki nesneleri döndürüyordu, yani yeni yazılan
+metadata görünmüyordu. Eski kod aynı ORM nesnelerini mutasyona uğrattığı için bu
+hiç ortaya çıkmamıştı. Düzeltme: yazımdan sonra ilgili `PassageRow` örnekleri
+expire ediliyor.
+
+**Ders:** ikisini de mevcut test suite yakalamadı. Sebebi aşağıdaki kapsam boşluğu.
+
+### Test kapsamı boşluğu
+
+Pipeline testleri `save_passages`'ı **yalnızca boş listeyle** çağırıyor (ölçüldü:
+`tests/test_pipeline.py` genelinde 1 çağrı, 0 passage). Yani dolu listeyle çalışan
+yolun platform tarafında hiç kapsaması yok; tek kapsama
+`tests/test_passage_persistence.py` ve `tests/test_passage_persistence_postgres.py`
+içinde. `zotero_sync` için hiç test dosyası yok.
+
 ## Üretim entegrasyonu: yapıldı
 
 `Repository.save_passages` 1.000 satırlık batch'lerle `INSERT ... ON CONFLICT DO UPDATE`
