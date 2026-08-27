@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.23`
+Belge sürümü: `12.28`
 
-Son güncelleme: `2026-08-26`
+Son güncelleme: `2026-08-27`
 
 ## Kapsam
 
@@ -53,6 +53,11 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 38 | Tek çalışma zamanı sürümü ve telemetri SVG yerleşimi | `22b75c1` |
 | 39 | Uygulama sabitlerinin `.env` yönetimine alınması (kendi raporu var) | `22b75c1` |
 | 40 | Telemetri çıktı seçimi: `HARDWARE_TELEMETRY_OUTPUT_TYPE` | _çalışma ağacı_ |
+| 41 | Bağlam güvenli özet sentezi ve rapor kalite kapısı | _çalışma ağacı_ |
+| 42 | Dile göre özet başlığı ve panel ayrıntı düzeni | _çalışma ağacı_ |
+| 43 | Panel aydınlık modu ve alaka sıralı kaynaklar | _çalışma ağacı_ |
+| 44 | Pipeline zaman çizelgesinin Araştırma Akışı'na birleşmesi | _çalışma ağacı_ |
+| 45 | Kaynak figürü caption'ının rapor diline yerelleştirilmesi | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2580,6 +2585,211 @@ içindeki tamamen mock'lu bir edinim testi bir kez düştü; izole koşuda, mod�
 koşusunda ve sonraki tam koşularda tekrarlamadı. O test `Settings(_env_file=None)`
 kullandığı için bu bölümün `.env` değişikliğini görmüyor — ilgisiz, aralıklı bir kırılganlık
 olarak not edildi.
+
+---
+
+## 41. Bağlam güvenli özet sentezi ve rapor kalite kapısı
+
+24 saatlik `01M0T4XATMYJVK0XT433EAXTG1` koşusunun Word raporunda özet kutusu
+`hastalıkların takip edilmesi, tahmin edilmesi v`, çalışmalar arası değerlendirme ise
+`klinik karar verme veya ha` sözcük parçalarıyla bitiyordu. Koşu zaman bütçesi veya DOCX
+yazıcısı metni kesmemişti: son integratif LLM çağrısı `done_reason=stop` ile tamamlanmış,
+fakat doğrulama kapısından geçemeyince `_draft_overview()` deterministik geri dönüşe
+geçmişti. Çıktılar geri dönüşteki ham `[:2600]` ve `[:3500]` karakter dilimleriyle birebir
+aynıydı. Son çağrının `prompt_tokens=8192` değeri etkin 8K bağlamın tamamının dolduğunu da
+gösteriyordu.
+
+Tarihsel `SYNTHESIS_REPORT_PIPELINE_V0.8.0` raporunun küçük yerel model için kaynak
+allow-list'i ve deterministik güvenli geri dönüş kararı korunmuştur. Değiştirilen karar,
+geri dönüşün doğrulanmış tema metinlerini görünür raporda ham karakter sınırında kesebilmesi
+ve overview katmanının tema katmanlarından farklı olarak onarım şansı taşımamasıydı.
+
+### Uygulanan çözüm
+
+- Overview istemi artık context, 2.048-token çıktı payı ve sabit istem payından türetilen
+  bir bütçeyle kuruluyor. Beş temadan birini ham toplam dilimin sonunda kaybetmek yerine her
+  tema için dengeli sentez/ortak yön/ayrışma/anlam kartı hazırlanıyor. Etkin 8K profilde
+  tema özeti bütçesi 9.216 karakter; araştırma sorusu ve kaynak kimlikleri ayrıca bu
+  bütçeden düşülüyor.
+- İlk integratif yanıt geçersizse tek bir sınırlı onarım çağrısı yapılıyor. Onarım da
+  kaynak, dil ve alan sözleşmesini geçemezse deterministik yol devreye giriyor.
+- Görünür geri dönüş metni artık yalnız tam cümleleri seçiyor, gerektiğinde kaynak alanının
+  `[Sxx]` atıflarını cümleye bağlıyor ve hiçbir sözcüğü veya atfı ortadan kesmiyor. Kabul
+  edilen model alanları da özet için 2.600, çalışmalar arası değerlendirme için 3.500,
+  sonuç ve belirsizlik için 2.400 karakterlik tam-cümle sınırlarına bağlı.
+- Modelin string yerine `list[str]` döndürmesi güvenli biçimde düzyazıya birleşiyor.
+  Sözlük, iç içe liste ve sayısal biçimler reddediliyor; böylece Python'ın
+  `['birinci', 'ikinci']` gösterimi artık Word veya Markdown raporuna sızmıyor.
+- Tema ve overview katmanlarının `initial_passed`, `repair_passed`, kısmi veya fallback
+  durumu `synthesis_generation` olayına, yeniden üretilebilirlik manifestine ve Word yöntem
+  ekine yazılıyor. Ham model cevabı kaydedilmiyor.
+- Türkçe Word ve Markdown ana bölüm başlığı `Yönetici sentezi` / `Yönetici Özeti` yerine
+  **Özet** oldu. Rapor pipeline sürümü `v0.15.0` olarak ilerletildi; iç artifact/API alan
+  adı olan `executive_summary` geriye dönük sözleşme için korunuyor.
+
+Bu düzeltme context değerini büyütmüyor. Temmuz ayındaki tek-model benchmark'ı Qwen 3 4B
+için 24.576 tokenı tam GPU'da doğrulamış olsa da güncel kurulum GPU'yu ayrı Docling
+servisiyle de paylaşıyor. Kodun önce ilan edilen 8K sınırında güvenli çalışması sağlandı;
+context artışı ancak ortak GPU yük testiyle ayrı bir karar olabilir. `OPEN_ITEMS.md` 15.
+maddedeki çok dilli kanıt çıkarımı bütçesi overview dışında bir yol olduğu için açık
+kalmaya devam ediyor.
+
+**Doğrulama:** Sentez, Word, exporter ve pipeline hedefli paketi `36 passed`; son kod
+değişikliğinden sonraki zorunlu tam kapı `487 passed, 2 warnings` sonucuyla tamamlandı.
+Değiştirilen dosyalardaki hedefli Ruff taramasında yeni ihlal yok; rapor sentezi ve Word
+dosyalarında önceden var olan 20 ihlal temizmiş gibi raporlanmadı. `docker compose up -d
+--build` tamamlandı; worker container'ı `v0.15.0` rapor sürümünü, `1. Özet` başlığını,
+listeyi `Birinci. İkinci.` biçiminde normalleştirdiğini ve 8K profil için 9.216 karakterlik
+overview bütçesini doğruladı. Rebuild öncesinde etkin veya kuyrukta araştırma yoktu.
+
+---
+
+## 42. Dile göre özet başlığı ve panel ayrıntı düzeni
+
+41. bölümde Türkçe raporun ilk sentez bölümü **Özet** yapılmıştı; İngilizce Word yolu
+tarihsel **Executive synthesis** metnini, Markdown teslimleri ise rapor dilinden bağımsız
+olarak Türkçe **Özet** metnini taşımaya devam ediyordu. Başlık artık rapor diliyle aynı
+kapıdan seçiliyor: Türkçe için **Özet**, İngilizce için **Summary**. İç artifact adı
+`01_executive_summary.md` ve veri alanı `executive_summary` geriye dönük sözleşme olarak
+korundu.
+
+Araştırma ayrıntı çekmecesindeki başlıklar Türkçe başlık düzenine getirildi. İçerik
+kelimelerinin ilk harfi büyütülürken **ve** bağlacı küçük bırakılıyor; örneğin **Kalite ve
+Kapsam**, **Sorgu Dalları**, **Kaynak Hunisi**, **LLM ve Kanıt Özeti**. Kart etiketleri ile
+ilgili tablo kolonları da aynı görsel düzene uyarlandı. `CONTROL_PANEL_V0.6.1` raporundaki
+ayrıntıların yalnız araştırma açıldığında yüklenmesi ve kaynak ham içeriğinin panelde
+gösterilmemesi kararları değişmedi.
+
+Uzun kaynak tabloları ayrıntı çekmecesini gereksiz büyüttüğü için **Kabul Edilen
+Kaynaklar (N)** bölümü yerel HTML `details/summary` yapısına taşındı. Bölüm varsayılan
+olarak kapalıdır, klavye odağı alabilir ve başlıktaki göstergeyle açılıp kapanır; tablo ve
+bağlantılar açıldığında önceki işlevini korur.
+
+**Doğrulama:** Word, rapor dili, kontrol paneli ve telemetri hedefli paketi `54 passed`;
+son kod değişikliğinden sonraki zorunlu tam kapı `490 passed, 2 warnings` sonucuyla
+tamamlandı. Hedefli Ruff taramasında yeni ihlal yok; Word ve kontrol paneli testindeki
+tarihsel 11 ihlal temizmiş gibi raporlanmadı. Canlı Chrome kontrolünde 61 kaynaklı bir
+koşunun başlık listesi okundu; kaynak bölümü kapalı → açık → kapalı geçişinde tablo
+görünürlüğü sırasıyla `false → true → false` oldu. Host paneli yeniden başlatıldı,
+Docker imajları etkin koşu yokken yeniden oluşturuldu ve worker içinde `tr=Özet`,
+`en=Summary`, rapor pipeline sürümü `0.15.0` doğrulandı.
+
+---
+
+## 43. Panel aydınlık modu ve alaka sıralı kaynaklar
+
+Araştırma ayrıntısındaki **Kaynak Hunisi** başlığı, içeriğin arama ve kabul sürecindeki
+referans dağılımını gösterdiğini daha açık anlatan **Referans Haritası** adıyla
+değiştirildi. Veri ve huni hesapları değişmedi; yalnız kullanıcıya görünen ad güncellendi.
+
+Panel üst çubuğuna **Aydınlık Mod / Karanlık Mod** düğmesi eklendi. Aydınlık palet yalnız
+ana arka planı ters çevirmiyor; kart, tablo, çekmece, akış düğümü, durum rozeti, HITL
+kutusu, telemetri alanı ve bildirim yüzeylerinin kontrastları da ayrı açık renklerle
+tanımlandı. Seçim `research-platform-theme` anahtarıyla tarayıcıda korunuyor ve sayfa
+yenilenmeden önce uygulandığı için belirgin koyu tema parlaması oluşmuyor. Varsayılan ve
+mevcut kullanıcı tercihi koyu mod olarak korundu.
+
+**Kabul Edilen Kaynaklar** tablosu artık `relevance_score` değerine göre yüksekten düşüğe
+sıralanıyor. Sıralama API cevabının kopyası üzerinde yapılıyor; backend kayıt sırası ve
+başka tüketicilerin aldığı kaynak listesi değiştirilmiyor. Puanı eksik kaynaklar sıfır
+kabul edilerek listenin sonuna taşınıyor.
+
+**Doğrulama:** Hedefli panel/telemetri paketi `36 passed`; son kod değişikliğinden sonraki
+zorunlu tam kapı `491 passed, 2 warnings` sonucuyla tamamlandı. Hedefli Ruff taramasında
+yeni ihlal yok; `test_control_panel.py` içindeki önceden var olan tek `ISC004` ihlali
+temizmiş gibi raporlanmadı. Canlı Chrome kontrolünde aydınlık palet
+`rgb(243, 246, 250)` arka plan, `rgb(23, 33, 43)` metin ve beyaz kart üretti; düğme ve
+`aria-pressed` durumu doğru değişti, tercih yenilemede korundu. 61 kaynaklı koşuda görünen
+alaka yüzdelerinin tamamı azalan sıradaydı; son beş değer `%46, %45, %45, %42, %39`
+olarak okundu. Dağıtım öncesinde etkin ve kuyrukta koşu sayısı sıfırdı.
+
+---
+
+## 44. Pipeline zaman çizelgesinin Araştırma Akışı'na birleşmesi
+
+Koşu çekmecesinde aynı veriyi iki ayrı bölüm gösteriyordu. Araştırma Akışı `PIPELINE_STAGES`
+sırasına göre her aşamanın toplam ziyaret sayısını ve süresini veriyor ama kutuları
+tıklanmıyordu; Pipeline Zaman Çizelgesi ise her ziyareti ayrı kart olarak kronolojik
+diziyordu. Aradaki bağ kurulamıyordu: bir aşamanın kaç turu olduğu üstte yazıyor, o turların
+dökümüne inmek için alttaki şeritte elle avlanmak gerekiyordu. 205 turluk koşuda o şerit
+2.069 kart uzunluğundaydı ve pratikte kullanılamıyordu.
+
+Zaman çizelgesi bölümü kaldırıldı, işlevi akışın içine alındı. Ziyareti olan aşama kutuları
+tıklanabilir; tıklanınca o aşamanın bütün turları tur numarası, başlangıç, süre ve tek
+satırlık özetle listeleniyor, satır açılınca mevcut `renderStageTools` araç tablosu altında
+görünüyor. Akış kutucuğuna tam ekran düğmesi eklendi; tam ekranda düğüm şeridi yatay kaydırma
+yerine sarılıyor. Escape tuşu artık en içteki katmanı kapatıyor — tam ekran açıkken önce onu
+kapatıyor, koşu çekmecesini değil.
+
+**Yol boyunca çıkan asıl hata bu değildi.** Detay uç noktası olayları `limit(5000)` ile ve en
+eskiden çekiyor. 205 turluk koşu 16.563 olay yazmıştı, yani panel bu koşunun ilk üçte birini
+görüyordu ve zaman çizelgesi sessizce kesiliyordu. Ölçüldü: veritabanında 207 `ACQUIRE`
+ziyareti varken eski yol **63** tanesini üretiyordu. Aşama sınırları ayrı ve tavansız çekilir
+hâle getirildi (o koşuda 2.069 satır, ucuz); yeni yol 207'nin tamamını üretiyor.
+
+Araç dökümü, ziyaret listesinden ayrıldı ve talep üzerine gelen
+`GET /api/runs/{id}/stages/{stage}` uç noktasına taşındı. `stage_timeline` ziyaret bulmayı ve
+araç toplamayı tek geçişte yapıyordu; ortak sınır yürüyüşü `_walk_stage_boundaries` altında
+tekleştirilip `stage_visits` (araçsız, tavansız) ve `stage_visit_details` (tek aşama, araçlı)
+ayrıldı. `stage_timeline` bu ikisinin bileşimi olarak imzası değişmeden duruyor, mevcut
+testleri regresyon kapısı olarak koruyor. `pipeline_flow` da araç toplamayan ucuz yola geçti.
+
+Uç noktanın ilk hâli ziyaret aralıklarını tek bir `ilk..son` aralığı olarak sorguluyordu.
+Bir aşamanın 200 ziyareti koşunun tamamına yayıldığı için bu, diğer aşamaların olaylarını da
+okuyor ve kuyruğu tavana kaptırıyordu: 200 turun yalnız 63'ünde araç görünüyordu — kesilmenin
+aynısı. Sorgu ziyaret başına ayrı aralığa çevrildi; artık 200 turun 199'u araç dökümüyle
+geliyor ve gerçek veride 141–484 ms sürüyor.
+
+Bu bölüme, aynı alanın işi olduğu için saniye altı süre biçimi de dahildir. Kurtarma turunda
+hiçbir şey edinmeyen aşamalar milisaniyelerde dönüyor; `Math.round` bunların hepsini `0 sn`
+yapıyor ve çalışan bir aşama ile hiç iş yapmadan dönen aşama ayırt edilemiyordu. Bir saniyenin
+altında gerçek değer iki ondalıkla gösteriliyor (`0,01 sn`, `0,31 sn`); tam sıfır `0 sn`
+olarak bırakıldı, saniye ve üstü biçimler değişmedi. Tek ondalık yeterli değildi: ölçülen
+değerlerin çoğu 0,01–0,05 aralığında ve hepsi `0,0 sn` çıkardı.
+
+Değişen Python dosyalarında hedefli Ruff, `control_panel.py`'deki **tek** yeni `B008` dışında
+temizdir; o da yeni rotanın `Depends(require_user)` kullanmasından geliyor ve dosyadaki 21
+rotanın tamamıyla aynı kalıptır. Panel JS'i `node --check` ile doğrulandı. Son kod
+değişikliğinden sonraki zorunlu tam kapı `494 passed, 2 warnings` sonucuyla tamamlandı.
+
+---
+
+## 45. Kaynak figürü caption'ının rapor diline yerelleştirilmesi
+
+24 saatlik `01M0T4XATMYJVK0XT433EAXTG1` koşusunun Türkçe Word raporunda kaynak figürü
+etiketi ve sayfa gösterimi Türkçe olduğu hâlde aradaki yayın caption'ı İngilizce kalıyordu:
+`Kaynak figürü: FIGURE 2. The analysis of ILDs ... [S30, s. 3].` Koşunun
+`17_figure_observations.json` kaydı aynı figürün `title`, `main_findings` ve `limitations`
+alanlarının Türkçe, `caption` alanının ise özgün İngilizce metin olduğunu doğruladı.
+
+Tarihsel `SOURCE_FIGURE_EMBEDDING_V0.9.1` raporu kaynak caption'ını attribution ile birlikte
+Word'e koymayı bilinçli olarak seçmişti. Bu kararın provenance tarafı korunuyor:
+`FigureObservation.caption`, veritabanı gözlemi ve figür manifestindeki özgün kayıt
+değiştirilmiyor. Değiştirilen karar, aynı ham alanın okuyucuya gösterilecek caption olarak
+da doğrudan kullanılmasıdır.
+
+Figür gözlemleri — önbellekten yüklenenler dahil — hazırlandıktan sonra kaynak caption'ları
+tek sınırlı çağrıda rapor diline çevriliyor. Çeviri istemi caption metnini güvenilmeyen veri
+olarak tanımlıyor; özetleme ve yeni bilgi eklemeyi yasaklıyor; figür numarası, sayılar,
+kısaltmalar ve teknik terimleri koruyor. Dönen metnin hedef dile uyumu ile sayı dizisi
+doğrulanmadan rapora alınmıyor. Çeviri geçici olarak başarısız olursa İngilizce metni Türkçe
+caption içine sessizce karıştırmak yerine figür analizinin zaten yerelleştirilmiş başlığı
+kullanılıyor. İngilizce kaynak caption'ı İngilizce raporda yeniden yazılmıyor.
+
+Yerelleştirilmiş değer yalnız `GeneratedResearchFigure.caption` üretiminde kullanılıyor;
+Word katmanı önceki gibi kendisine verilen görünür caption'ı yazıyor. Özgün figür kırpımı ve
+görselin içindeki `Data Acquisition` gibi yayın etiketleri bu işin kapsamı dışında bırakıldı
+ve baytları değiştirilmedi. Veritabanı şeması veya göç gerekmedi.
+
+**Doğrulama:** Türkçe yerelleştirme, özgün provenance'ın değişmemesi, model hatasında
+Türkçe başlığa güvenli dönüş ve İngilizce caption'ın İngilizce raporda yeniden yazılmaması
+senaryolarını içeren figür paketi `8 passed`; son kod değişikliğinden sonraki zorunlu tam
+kapı `497 passed, 2 warnings` sonucuyla tamamlandı. Hedefli Ruff taramasında eklenen
+satırlarda yeni ihlal yok; `figure_analysis.py` ve mevcut testteki tarihsel ihlaller temizmiş
+gibi raporlanmadı. Etkin veya kuyrukta koşu yokken `docker compose up -d --build`
+tamamlandı; worker imajında yerelleştirici doğrulandı. Rapor sorunundaki gerçek caption
+container içinden yerel modele verildi ve `ŞEKİL 2. ILD'lerin analizi farklı aşamalara
+ayrılmıştır...` biçiminde Türkçe döndü; kaynak figür verisi değiştirilmedi.
 
 ---
 

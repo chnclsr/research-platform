@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.17`
+Belge sürümü: `6.22`
 
-Son güncelleme: `2026-08-26`
+Son güncelleme: `2026-08-27`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -16,6 +16,24 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
 
 ## v0.15.0 — 2026-08-25
 
+- Kaynak figürlerinin yayın dilindeki özgün açıklamaları denetim kaydında korunurken,
+  raporda görünen caption artık Türkçe raporda Türkçe, İngilizce raporda İngilizce
+  hazırlanıyor. Figür görselinin içindeki kaynak etiketlere dokunulmuyor.
+- Panel üst çubuğundan kalıcı aydınlık/koyu tema seçilebiliyor. Açık palet tablolar,
+  çekmece, akış, rozetler ve etkileşim kutuları için ayrı kontrastlarla uygulanıyor.
+- **Kaynak Hunisi** artık **Referans Haritası** adını taşıyor. **Kabul Edilen Kaynaklar**
+  tablosu en alakalı referans üstte olacak biçimde alaka yüzdesine göre sıralanıyor.
+- Sentez bölümünün adı rapor dilini izliyor: Türkçede **Özet**, İngilizcede **Summary**.
+  Word ve Markdown teslimleri aynı dil eşlemesini kullanıyor.
+- Araştırma ayrıntısındaki başlıklar **Kalite ve Kapsam**, **Sorgu Dalları** gibi Türkçe
+  başlık düzenine getirildi. **Kabul Edilen Kaynaklar** listesi varsayılan olarak kapalı,
+  erişilebilir bir açılır/kapanır bölümdür.
+- Raporun Türkçe ilk ana bölümü artık **Özet** adını taşıyor. Beş temalı uzun koşul
+  sentezleri 8K model bağlamını doldurmayacak biçimde dengeli bütçeleniyor; geçersiz son
+  sentez bir kez onarılıyor ve güvenli geri dönüş sözcük ya da atıf ortasında kesilmiyor.
+- Modelin metin alanında JSON listesi döndürmesi Python liste gösterimi olarak rapora
+  sızmıyor. Hangi tema veya overview katmanının onarım/geri dönüş kullandığı koşu olayında,
+  yeniden üretilebilirlik manifestinde ve Word yöntem ekinde görülebiliyor.
 - Güvenlik, kapasite, worker, veritabanı, kuyruk, telemetri, API/istemci ve pipeline
   davranışını belirleyen uygulama sabitleri `.env` üzerinden yönetilebilir hâle geldi;
   mevcut kurulumun değerleri değiştirilmeden `.env` ve `.env.example` içine yazıldı.
@@ -31,6 +49,17 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   Varsayılan `all` olduğu için anahtarı tanımlamayan kurulum aynı dosyaları almaya devam
   ediyor. `csv` modunda grafik üretilip atılmıyor, hiç çizilmiyor; koşunun teslimat
   paketleri de yalnız üretilmiş dosyaları alıyor.
+- Pipeline zaman çizelgesi ayrı bölüm olmaktan çıkıp Araştırma Akışı'nın içine alındı.
+  Ziyareti olan aşama kutusuna tıklanınca o aşamanın bütün turları süresi ve özetiyle
+  listeleniyor, satır açılınca turun connector/parser/model dökümü görünüyor. Akış
+  kutucuğunun tam ekran düğmesi var; Escape önce tam ekranı, sonra koşu çekmecesini
+  kapatıyor.
+- Uzun koşularda zaman çizelgesi sessizce kesiliyordu: panel olayların ilk 5.000'ini
+  okuduğu için 207 `ACQUIRE` turu olan bir koşuda yalnız 63 tur görünüyordu. Aşama
+  sınırları artık tavansız okunuyor ve tur listesi eksiksiz.
+- Bir saniyenin altında süren aşamalar `0 sn` yerine gerçek değerlerini gösteriyor
+  (`0,01 sn`, `0,31 sn`); böylece kısa süren aşama ile hiç iş yapmadan dönen aşama
+  ayırt edilebiliyor.
 
 ## v0.14.0 — 2026-08-25
 
