@@ -16,6 +16,8 @@ STRATEGY_LABELS = {
     "copy_records": "COPY",
     "repository_save_passages": "Repository save_passages",
     "vector_executemany": "pgvector executemany",
+    "core_upsert_batched_reingest": "Batch upsert, re-ingest",
+    "repository_save_passages_reingest": "Repository save_passages, re-ingest",
 }
 COLORS = [
     "#2563eb",
@@ -28,6 +30,17 @@ COLORS = [
     "#db2777",
 ]
 VECTOR_STRATEGIES = frozenset({"vector_executemany"})
+# Arms that write into a table already holding these chunks. They measure the UPDATE
+# branch, so they do not belong in the same bar group or baseline as the insert arms.
+REINGEST_PAIR = ("core_upsert_batched_reingest", "repository_save_passages_reingest")
+
+
+def is_reingest(item: dict[str, Any]) -> bool:
+    return bool(item.get("preseeded"))
+
+
+def path_label(item: dict[str, Any]) -> str:
+    return "Re-ingest" if is_reingest(item) else "Insert"
 
 
 def variant_label(item: dict[str, Any]) -> str:
@@ -54,7 +67,13 @@ def grouped_bar_svg(
     left, right, top, bottom = 105, 35, 75, 145
     plot_width = width - left - right
     plot_height = height - top - bottom
-    datasets = payload["datasets"]
+    datasets = [
+        {
+            **dataset,
+            "configurations": [item for item in dataset["configurations"] if not is_reingest(item)],
+        }
+        for dataset in payload["datasets"]
+    ]
     strategies = [item["strategy"] for item in datasets[0]["configurations"]]
     values = [
         float(item[metric]) / value_scale
@@ -135,11 +154,11 @@ def grouped_bar_svg(
 def speedup_payload(payload: dict[str, Any]) -> dict[str, Any]:
     transformed = {**payload, "datasets": []}
     for dataset in payload["datasets"]:
-        repository = next(
-            item
+        baselines = {
+            is_reingest(item): item
             for item in dataset["configurations"]
-            if item["strategy"] == "repository_save_passages"
-        )
+            if item["strategy"] in {"repository_save_passages", "repository_save_passages_reingest"}
+        }
         transformed["datasets"].append(
             {
                 **dataset,
@@ -154,7 +173,8 @@ def speedup_payload(payload: dict[str, Any]) -> dict[str, Any]:
                         if "total_relation_bytes_median" in item
                         else None,
                         "speedup_vs_repository": round(
-                            repository["wall_ms_median"] / item["wall_ms_median"], 3
+                            baselines[is_reingest(item)]["wall_ms_median"] / item["wall_ms_median"],
+                            3,
                         ),
                     }
                     for item in dataset["configurations"]
@@ -286,6 +306,14 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             "8. `vector_executemany`: 4. yöntemle aynı statement şekli, ama native pgvector "
             "sütununa yazar. Şema karşılaştırması içindir, yöntem karşılaştırması değil."
         ),
+        (
+            "9. `core_upsert_batched_reingest`: 5. yöntemle aynı kod, ama tablo bu chunk'ları "
+            "zaten tutarken çalışır. Upsert'in UPDATE dalını ölçer."
+        ),
+        (
+            "10. `repository_save_passages_reingest`: 7. yöntemle aynı kod, aynı dolu tablo "
+            "üzerinde. 9. yöntemin karşılaştırma tabanı budur."
+        ),
         "",
         "## Veri seti ve ölçüm yöntemi",
         "",
@@ -360,20 +388,20 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
         "## Süre ve throughput sonuçları",
         "",
         (
-            "| Kayıt | Yöntem | Şema | Ortalama ms | Medyan ms | Min ms | Maks ms | Std sapma ms | "
-            "Medyan kayıt/sn | Satır commit'e göre | Repository'ye göre |"
+            "| Kayıt | Yöntem | Şema | Yol | Ortalama ms | Medyan ms | Min ms | Maks ms | "
+            "Std sapma ms | Medyan kayıt/sn | Satır commit'e göre | Repository'ye göre |"
         ),
-        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row_count, item in configurations(enriched):
         lines.append(
             f"| {row_count:,} | `{item['strategy']}` | {variant_label(item)} | "
-            f"{item['wall_ms_mean']:,.3f} | "
+            f"{path_label(item)} | {item['wall_ms_mean']:,.3f} | "
             f"{item['wall_ms_median']:,.3f} | {item['wall_ms_min']:,.3f} | "
             f"{item['wall_ms_max']:,.3f} | {item['wall_ms_stdev']:,.3f} | "
             f"{item['rows_per_second_median']:,.3f} | "
-            f"{item['speedup_vs_row_commit_each']:.3f}x | "
-            f"{item['speedup_vs_repository']:.3f}x |"
+            + ("- | " if is_reingest(item) else f"{item['speedup_vs_row_commit_each']:.3f}x | ")
+            + f"{item['speedup_vs_repository']:.3f}x |"
         )
     lines += [
         "",
@@ -420,19 +448,50 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
         )
     lines += [
         "",
+        "## Re-ingest: upsert'in UPDATE dalı",
+        "",
+        (
+            "Yukarıdaki kolların tamamı boş tabloya yazar. Üretimde bir belge yeniden "
+            "işlendiğinde aynı `(source_version_id, chunk_index)` çiftleri tabloda zaten "
+            "vardır ve `ON CONFLICT DO UPDATE` INSERT dalını değil UPDATE dalını çalıştırır. "
+            "Bu bölümdeki iki kol, tablo bu chunk'ları farklı içerikle tutarken çalışır; "
+            "önceden doldurma ölçüm dışındadır. Her koşuda satırların gerçekten "
+            "üzerine yazıldığı doğrulanır."
+        ),
+        "",
+        (
+            "| Kayıt | Medyan ms, mevcut yöntem | Medyan ms, batch upsert | Hızlanma | "
+            "Insert yoluna göre upsert maliyeti | WAL MiB, mevcut | WAL MiB, upsert |"
+        ),
+        "|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for dataset in enriched["datasets"]:
+        upsert = by_strategy(dataset, "core_upsert_batched_reingest")
+        repository = by_strategy(dataset, "repository_save_passages_reingest")
+        insert_upsert = by_strategy(dataset, "core_upsert_batched")
+        overhead = 100 * (upsert["wall_ms_median"] / insert_upsert["wall_ms_median"] - 1)
+        lines.append(
+            f"| {dataset['row_count']:,} | {repository['wall_ms_median']:,.3f} | "
+            f"{upsert['wall_ms_median']:,.3f} | "
+            f"{repository['wall_ms_median'] / upsert['wall_ms_median']:.3f}x | "
+            f"{overhead:+.1f}% | {repository['wal_bytes_median'] / 1024**2:.3f} | "
+            f"{upsert['wal_bytes_median'] / 1024**2:.3f} |"
+        )
+    lines += [
+        "",
         "## WAL, boyut ve I/O sonuçları",
         "",
         (
-            "| Kayıt | Yöntem | Şema | Medyan WAL MiB | Heap artışı MiB | İndeks artışı MiB | "
-            "TOAST ve yardımcı MiB | Toplam artış MiB | I/O yazma | I/O yazma ms | Extend | "
-            "Extend ms | Fsync | Fsync ms |"
+            "| Kayıt | Yöntem | Şema | Yol | Medyan WAL MiB | Heap artışı MiB | "
+            "İndeks artışı MiB | TOAST ve yardımcı MiB | Toplam artış MiB | I/O yazma | "
+            "I/O yazma ms | Extend | Extend ms | Fsync | Fsync ms |"
         ),
-        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row_count, item in configurations(enriched):
         lines.append(
             f"| {row_count:,} | `{item['strategy']}` | {variant_label(item)} | "
-            f"{item['wal_bytes_median'] / 1024**2:.3f} | "
+            f"{path_label(item)} | {item['wal_bytes_median'] / 1024**2:.3f} | "
             f"{item['heap_bytes_median'] / 1024**2:.3f} | "
             f"{item['index_bytes_median'] / 1024**2:.3f} | "
             f"{item['toast_and_auxiliary_bytes_median'] / 1024**2:.3f} | "
@@ -498,6 +557,14 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             f"{upsert['speedup_vs_row_commit_each']:.3f}x hızlandı. En hızlı kolun satır başına "
             f"commit'e göre medyan WAL azalması yüzde {wal_reduction:.2f} oldu."
         )
+    reingest_gain_text = ", ".join(
+        f"{by_strategy(dataset, 'repository_save_passages_reingest')['wall_ms_median'] / by_strategy(dataset, 'core_upsert_batched_reingest')['wall_ms_median']:.2f}x"
+        for dataset in enriched["datasets"]
+    )
+    reingest_overhead_text = ", ".join(
+        f"{100 * (by_strategy(dataset, 'core_upsert_batched_reingest')['wall_ms_median'] / by_strategy(dataset, 'core_upsert_batched')['wall_ms_median'] - 1):+.1f}%"
+        for dataset in enriched["datasets"]
+    )
     upsert_penalty_text = ", ".join(
         f"{100 * (by_strategy(dataset, 'core_upsert_batched')['wall_ms_median'] / by_strategy(dataset, 'core_executemany')['wall_ms_median'] - 1):+.1f}%"
         for dataset in enriched["datasets"]
@@ -531,6 +598,12 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             f"`core_executemany` ile arasında {copy_gain_text} fark bıraktı. Sebebi, aşağıdaki "
             "serileştirme tavanıdır; iki yöntem de aynı istemci tarafı JSON maliyetini öder ve "
             "COPY yalnızca sunucu tarafındaki farkı kazanır."
+        ),
+        (
+            f"- Re-ingest yolunda kazanç korunuyor: dolu tabloya yazarken batch upsert, "
+            f"mevcut yönteme göre {reingest_gain_text} hızlıydı. UPDATE dalı INSERT dalından "
+            f"pahalı ({reingest_overhead_text}), ama bu maliyet iki yöntemde de ortaya çıkar ve "
+            "aradaki farkı kapatmıyor."
         ),
         (
             f"- Ölçülen en büyük tekil kazanç yöntem değil şema değişikliğinden geldi: "
@@ -567,6 +640,11 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
         "",
         "- Sonuçlar tek bir makine ve tek container üzerinde alınmıştır.",
         (
+            "- Re-ingest kollarında tablo, ölçüm dışında kalan bir dolum adımıyla "
+            "hazırlanır. Bu satırlar taze yazıldığı için üretimdeki bir tablonun "
+            "parçalanma ve autovacuum durumunu birebir temsil etmez."
+        ),
+        (
             f"- Her hücrede {methodology['repeats']} ölçüm vardır; özellikle repository yönteminde "
             "yüksek varyans gözlendi."
         ),
@@ -575,9 +653,9 @@ def markdown_report(payload: dict[str, Any], result_path: Path) -> str:
             "edilmiştir, ancak kernel ve depolama katmanı zamanlaması tamamen ayrıştırılamaz."
         ),
         (
-            "- Deney boş tabloya yazma yolunu ölçer. `core_upsert_batched` idempotent yolu "
-            "kullanır, fakat çakışan kayıtların bulunduğu bir tabloya yazma senaryosu ayrıca "
-            "ölçülmemiştir; UPDATE yolu INSERT yolundan pahalıdır."
+            "- Re-ingest kolları tek geçişte tüm satırların çakıştığı durumu ölçer. Kısmen "
+            "çakışan bir batch, yani bir belgenin bazı chunk'larının değişip bazılarının "
+            "eklendiği durum, ayrıca ölçülmemiştir."
         ),
         (
             "- Eşzamanlı yazarlar, lock contention, bağlantı kaybı ve transaction retry davranışı "

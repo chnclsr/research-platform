@@ -15,6 +15,7 @@ from scripts.benchmark_bulk_insert import (
     copy_record,
     passage_row_values,
     rotated_strategies,
+    seed_variant,
     validate_benchmark_url,
     validate_parameters,
     vector_literal,
@@ -61,6 +62,7 @@ def test_bulk_benchmark_aggregate_reports_speed_and_validity() -> None:
         {
             "strategy": "core_executemany",
             "table": "passages",
+            "preseeded": False,
             "wall_ms": wall_ms,
             "rows_per_second": 1000 / (wall_ms / 1000),
             "sql_statement_count": 1,
@@ -212,3 +214,27 @@ def test_bulk_benchmark_measures_client_serialization_without_a_database() -> No
 
     assert measured["embedding_json_dumps_ms"] > 0
     assert measured["embedding_vector_literal_ms"] > 0
+
+
+def test_bulk_benchmark_seed_variant_changes_content_but_not_identity() -> None:
+    """Re-ingest arms only measure the UPDATE branch if the seed really differs."""
+    row = passage_row_values(build_passages(count=1, dimensions=4, text_chars=64)[0])
+
+    seeded = seed_variant(row)
+
+    assert seeded["id"] == row["id"]
+    assert seeded["source_version_id"] == row["source_version_id"]
+    assert seeded["chunk_index"] == row["chunk_index"]
+    assert seeded["text"] != row["text"]
+    assert seeded["content_hash"] != row["content_hash"]
+    assert seeded["embedding"] != row["embedding"]
+    assert row is not seeded and row["embedding"] != seeded["embedding"]
+
+
+def test_bulk_benchmark_reingest_arms_are_preseeded() -> None:
+    preseeded = {spec.name for spec in STRATEGIES if spec.preseed}
+
+    assert preseeded == {"core_upsert_batched_reingest", "repository_save_passages_reingest"}
+    # Each re-ingest arm must pair with an insert arm running the same code.
+    for name in preseeded:
+        assert name.removesuffix("_reingest") in {spec.name for spec in STRATEGIES}

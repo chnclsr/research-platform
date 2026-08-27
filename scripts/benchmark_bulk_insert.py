@@ -78,6 +78,10 @@ UPDATABLE_COLUMNS = [
 # flush that PostgreSQL rate limits to once per second. Without forcing the flush, any
 # measurement window shorter than that second reports another window's I/O.
 FORCE_STATS_FLUSH = "select pg_stat_force_next_flush()"
+# Re-ingest arms start from a table already holding these chunks with different
+# content, so the upsert takes its UPDATE branch and the ORM path sees real changes
+# rather than skipping a no-op flush.
+SEED_PREFIX = "seed "
 DIMENSION_EXPRESSIONS = {
     PASSAGE_TABLE: "jsonb_array_length(embedding)",
     VECTOR_TABLE: "vector_dims(embedding)",
@@ -191,6 +195,7 @@ class StrategyContext:
     engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
     rows: list[dict[str, Any]]
+    seed_rows: list[dict[str, Any]]
     passages: list[Passage]
     upsert_batch: int
     dimensions: int
@@ -247,6 +252,16 @@ async def driver_connection(connection: Any) -> Any:
     return raw.driver_connection
 
 
+def seed_variant(values: dict[str, Any]) -> dict[str, Any]:
+    """Same chunk identity, different content, so a re-ingest really rewrites it."""
+    seeded = dict(values)
+    seeded["text"] = SEED_PREFIX + values["text"]
+    seeded["token_count"] = max(1, len(seeded["text"].split()))
+    seeded["content_hash"] = hashlib.sha256(seeded["text"].encode("utf-8")).hexdigest()
+    seeded["embedding"] = [-value for value in values["embedding"]]
+    return seeded
+
+
 async def row_commit_each(ctx: StrategyContext) -> StrategyResult:
     commits = 0
     async with ctx.session_factory() as session:
@@ -279,13 +294,17 @@ async def core_executemany(ctx: StrategyContext) -> StrategyResult:
     return StrategyResult(commits=1)
 
 
-async def core_upsert_batched(ctx: StrategyContext) -> StrategyResult:
-    """The candidate production path: idempotent upsert in bounded batches."""
+def passage_upsert() -> Any:
     statement = pg_insert(PassageRow)
-    upsert = statement.on_conflict_do_update(
+    return statement.on_conflict_do_update(
         constraint="uq_passage_version_chunk",
         set_={name: statement.excluded[name] for name in UPDATABLE_COLUMNS},
     )
+
+
+async def core_upsert_batched(ctx: StrategyContext) -> StrategyResult:
+    """The candidate production path: idempotent upsert in bounded batches."""
+    upsert = passage_upsert()
     async with ctx.session_factory() as session:
         for start in range(0, len(ctx.rows), ctx.upsert_batch):
             await session.execute(upsert, ctx.rows[start : start + ctx.upsert_batch])
@@ -311,6 +330,23 @@ async def vector_executemany(ctx: StrategyContext) -> StrategyResult:
     return StrategyResult(commits=1)
 
 
+async def core_upsert_batched_reingest(ctx: StrategyContext) -> StrategyResult:
+    """Identical to core_upsert_batched, but every row already exists."""
+    return await core_upsert_batched(ctx)
+
+
+async def repository_save_passages_reingest(ctx: StrategyContext) -> StrategyResult:
+    """Identical to repository_save_passages, but every row already exists."""
+    return await repository_save_passages(ctx)
+
+
+async def preseed_table(ctx: StrategyContext) -> None:
+    """Fill the table outside the timed section so the arm measures the UPDATE branch."""
+    async with ctx.session_factory() as session:
+        await session.execute(insert(PassageRow), ctx.seed_rows)
+        await session.commit()
+
+
 async def repository_save_passages(ctx: StrategyContext) -> StrategyResult:
     async with ctx.session_factory() as session:
         repo = Repository(session, actor=Principal.system())
@@ -326,6 +362,7 @@ class StrategySpec:
     name: str
     run: Strategy
     table: str
+    preseed: bool = False
 
 
 STRATEGIES: list[StrategySpec] = [
@@ -337,6 +374,18 @@ STRATEGIES: list[StrategySpec] = [
     StrategySpec("copy_records", copy_records, PASSAGE_TABLE),
     StrategySpec("repository_save_passages", repository_save_passages, PASSAGE_TABLE),
     StrategySpec("vector_executemany", vector_executemany, VECTOR_TABLE),
+    StrategySpec(
+        "core_upsert_batched_reingest",
+        core_upsert_batched_reingest,
+        PASSAGE_TABLE,
+        preseed=True,
+    ),
+    StrategySpec(
+        "repository_save_passages_reingest",
+        repository_save_passages_reingest,
+        PASSAGE_TABLE,
+        preseed=True,
+    ),
 ]
 
 
@@ -508,11 +557,12 @@ async def validate_rows(
                       count(distinct content_hash) as distinct_content_hashes,
                       count(distinct id) as distinct_ids,
                       count(distinct chunk_index) as distinct_chunk_indexes,
-                      count(*) filter (where embedding is null) as null_embeddings
+                      count(*) filter (where embedding is null) as null_embeddings,
+                      count(*) filter (where text like :seed_pattern) as stale_seed_rows
                     from {table}
                     """
                     ),
-                    {"dimensions": dimensions},
+                    {"dimensions": dimensions, "seed_pattern": SEED_PREFIX + "%"},
                 )
             )
             .mappings()
@@ -526,6 +576,8 @@ async def validate_rows(
         and validation["distinct_ids"] == expected_count
         and validation["distinct_chunk_indexes"] == expected_count
         and validation["null_embeddings"] == 0
+        # A re-ingest arm that silently skipped its writes would leave these behind.
+        and validation["stale_seed_rows"] == 0
     )
     return validation
 
@@ -540,6 +592,9 @@ async def run_case(
 ) -> dict[str, Any]:
     rows = context.rows
     await reset_table(engine)
+    if spec.preseed:
+        await preseed_table(context)
+    expected_start = len(rows) if spec.preseed else 0
     before = await stats_snapshot(engine, spec.table)
     start_row_count = await row_count(engine, spec.table)
     wal_before = await wal_position(engine)
@@ -563,6 +618,7 @@ async def run_case(
     return {
         "strategy": spec.name,
         "table": spec.table,
+        "preseeded": spec.preseed,
         "repeat": repeat,
         "row_count": len(rows),
         "embedding_dimensions": context.dimensions,
@@ -579,7 +635,7 @@ async def run_case(
         },
         "validation": validation,
         "success": error is None
-        and start_row_count == 0
+        and start_row_count == expected_start
         and end_row_count == len(rows)
         and validation["valid"],
         "error": error,
@@ -596,6 +652,7 @@ def aggregate_runs(runs: list[dict[str, Any]], baseline_ms: float) -> dict[str, 
         return {
             "strategy": runs[0]["strategy"],
             "table": runs[0]["table"],
+            "preseeded": runs[0]["preseeded"],
             "repeats": len(runs),
             "successful_repeats": 0,
             "failed_repeats": len(runs),
@@ -609,6 +666,7 @@ def aggregate_runs(runs: list[dict[str, Any]], baseline_ms: float) -> dict[str, 
     return {
         "strategy": runs[0]["strategy"],
         "table": runs[0]["table"],
+        "preseeded": runs[0]["preseeded"],
         "repeats": len(runs),
         "successful_repeats": len(successful_runs),
         "failed_repeats": len(runs) - len(successful_runs),
@@ -744,6 +802,7 @@ async def run_benchmark(
                 engine=engine,
                 session_factory=session_factory,
                 rows=rows,
+                seed_rows=[seed_variant(values) for values in rows],
                 passages=passages,
                 upsert_batch=upsert_batch,
                 dimensions=dimensions,
@@ -785,7 +844,7 @@ async def run_benchmark(
                 }
             )
         return {
-            "benchmark_version": "postgres_bulk_insert_v2",
+            "benchmark_version": "postgres_bulk_insert_v3",
             "generated_at": datetime.now(UTC).isoformat(),
             "environment": {
                 "python": sys.version.split()[0],
