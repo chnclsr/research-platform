@@ -1,0 +1,31 @@
+# SearXNG, ana compose projesinin DISINDA calisir -- Windows kurulumunda da oyleydi.
+# Fark su: orada 3939 portu host'a yayinlaniyordu ve container'lar ona
+# host.docker.internal uzerinden ulasiyordu. Linux'ta bunun yerine servisi dogrudan
+# arastirma agina takiyoruz: port yayinlamaya gerek kalmiyor, dolayisiyla disariya
+# kapatilacak bir port da olmuyor.
+#
+#   docker compose -f scripts/linux/searxng/docker-compose.searxng.yml up -d
+#
+# .env icinde karsiligi:  SEARXNG_URL=http://searxng:8080
+name: searxng
+
+services:
+  searxng:
+    image: searxng/searxng:latest
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?SEARXNG_SECRET tanimlanmali -- 'openssl rand -hex 32'}
+    volumes:
+      # Dizin olarak ve yazilabilir: giris scripti secret_key yer tutucusunu burada degistirir.
+      - .:/etc/searxng:rw
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    restart: unless-stopped
+    networks: [research]
+
+networks:
+  # Ana compose projesi (name: research-platform) tarafindan olusturulur.
+  # Once 'docker compose up -d' calismis olmali, yoksa bu ag bulunamaz.
+  research:
+    external: true
+    name: research-platform_research

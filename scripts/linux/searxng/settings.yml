@@ -1,0 +1,26 @@
+# SearXNG -- AgentSearch baglayicilarinin arkasindaki gercek arama motoru.
+#
+# BU DOSYANIN VAROLMA SEBEBI: agentsearch_adapter.py /search'e format=json ile gider.
+# SearXNG varsayilan olarak YALNIZ html doner ve json istegini 403 ile reddeder; adapter
+# de istisnayi yutup bos sonuc listesi dondurur. Yani yanlis yapilandirma "arama
+# bozuldu" diye degil, "hicbir sey bulunamadi" diye gorunur. Ayari container icinde
+# elle duzeltmek ise ilk imaj guncellemesinde kaybolur -- bu yuzden mount ediliyor.
+use_default_settings: true
+
+server:
+  # "ultrasecretkey" bir yer tutucu, kalmasi gerekiyor: imajin giris scripti bu dizgeyi
+  # acilista SEARXNG_SECRET degeriyle degistirir. Bu yuzden dosya salt-okunur degil,
+  # yazilabilir mount edilir -- :ro yapilirsa sed basarisiz olur ve servis kalkmaz.
+  secret_key: "ultrasecretkey"
+  limiter: false
+  image_proxy: false
+
+search:
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+
+ui:
+  static_use_hash: true

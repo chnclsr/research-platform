@@ -1,0 +1,54 @@
+# Kontrol paneli compose'un DISINDA calisir, cunku isi compose'u yonetmek: servisleri
+# durdurup baslatir, log akitir (control_panel.py icindeki 'docker compose' cagrilari).
+# Kendisi de o projenin bir servisi olsaydi, kendini yeniden baslatmasi gereken her
+# durumda kilitlenirdi.
+#
+# KURULUM (proje kokunde):
+#   sudo cp scripts/linux/research-control-panel.service /etc/systemd/system/
+#   sudo sed -i "s|__KULLANICI__|$USER|g; s|__KOK__|$PWD|g" \
+#       /etc/systemd/system/research-control-panel.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now research-control-panel
+#
+# Onkosul: __KOK__/.venv icinde paket kurulu olmali:
+#   python3 -m venv .venv && .venv/bin/pip install -e .
+
+[Unit]
+Description=Research Platform kontrol paneli
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=__KULLANICI__
+# 'docker compose' cagirabilmesi icin kullanici docker grubunda olmali.
+SupplementaryGroups=docker
+WorkingDirectory=__KOK__
+
+# EnvironmentFile=.env YOK, bilerek. Ayarlar zaten pydantic-settings tarafindan
+# calisma dizinindeki .env'den okunuyor ve python-dotenv JSON listelerini
+# (MCP_ALLOWED_NETWORKS=["10.0.10.0/24"]) dogru ayristiriyor; systemd'nin kendi
+# ayristiricisi ayni satirdaki tirnaklari yiyip listeyi bozardi.
+#
+# Asagidakiler ise .env'i EZMEK icin var. .env container'lar icin yazilmistir:
+# oradaki postgres/redis/minio adlarini yalnizca compose agi cozer. Panel host
+# uzerinde natif calisir, dolayisiyla ayni servislere 127.0.0.1'e yayinlanmis
+# portlarindan gitmek zorunda. Ortam degiskeni .env'den once gelir, bu yuzden tek
+# tek ezmek yeterli -- gerisi .env'den okunmaya devam eder.
+Environment=DATABASE_URL=postgresql+asyncpg://research:research@127.0.0.1:5433/research
+Environment=REDIS_URL=redis://127.0.0.1:6380/0
+Environment=MINIO_ENDPOINT=127.0.0.1:9000
+Environment=RESEARCH_API_URL=http://127.0.0.1:8000
+# Panel servisleri PowerShell scriptleriyle degil compose ile yonetsin. "native"
+# kalirsa durdur/baslat dugmeleri Linux'ta olmayan powershell.exe'yi arar.
+Environment=CONTROL_PANEL_DEPLOYMENT=docker
+
+ExecStart=__KOK__/.venv/bin/research-control-panel
+Restart=always
+RestartSec=5
+StandardOutput=append:__KOK__/logs/control-panel.log
+StandardError=append:__KOK__/logs/control-panel.log
+
+[Install]
+WantedBy=multi-user.target
