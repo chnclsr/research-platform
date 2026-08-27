@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-26`
+Son güncelleme: `2026-08-27`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -34,6 +34,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 20 | Metadata'sız GitHub adayında boyut sınırı klon sonrası | Büyük repo geçici ağ/disk tüketebilir | Düşük |
 | 21 | Tam-depo Ruff tabanı 1.053 ihlal taşıyor | Yeni lint hataları tarihsel gürültüde saklanabilir | Orta |
 | 22 | `_acquire_node` beklenmeyen istisnayı izole etmiyor | Tek bağlayıcı hatası ACQUIRE adımını düşürebilir | Orta |
+| 23 | Edinim testi aralıklı düşüyor, tetikleyici bilinmiyor | Commit kapısı sebepsiz kapanabilir | Orta |
 
 ---
 
@@ -396,6 +397,43 @@ beklenmeyen istisnayı `AcquiredDocument(success=False)` benzeri bir kayda çevi
 yazmak. Değişiklikle birlikte, `acquire()` istisna attığında diğer indirmelerin tamamlandığını
 gösteren bir test eklenmeli. Bu deneyin kapsamı ölçümdü, davranış değişikliği değildi;
 bu yüzden burada açık bırakıldı.
+
+## 23. Edinim testi aralıklı düşüyor, tetikleyici bilinmiyor
+
+**Durum:** `tests/test_academic_connectors.py::test_acquisition_preserves_scholarly_abstract_when_full_text_is_blocked`
+tam paket koşusunda ara sıra düşüyor. İki kez gözlendi: `2026-08-26`'da telemetri çıktı
+seçimi çalışmasının kapı koşusunda (`1 failed, 482 passed`) ve `2026-08-27`'de `04201d6`
+alındıktan sonraki merge doğrulamasında (`1 failed, 509 passed`).
+
+**Ölçümler:** Her iki seferde de izole koşuda geçti (`1 passed`, ~1,3–1,9 sn). İlk olaydan
+sonra modül tek başına beş kez arka arkaya koşturuldu, beşi de `15 passed`. İkinci olaydan
+sonra tam paket üç kez daha koşturuldu: `510 passed`, `510 passed` ve traceback yakalamak
+için yapılan koşu — üçünde de tekrarlamadı. Yani gözlenen sıklık iki tam koşu / yaklaşık on
+tam koşu.
+
+**Bilinmeyen:** Hangi assert'in düştüğü **kaydedilmedi**. İki olayda da hata özet satırından
+görüldü, traceback yakalanmadı; sonraki denemelerde tekrarlamadığı için de alınamadı. Test
+üç şey doğruluyor: `success is True`, `acquisition_method == "scholarly_metadata"` ve
+`strategies_tried == ["direct", "scholarly_metadata"]`. Bunlardan hangisinin bozulduğu
+bilinmeden kök neden aranamaz.
+
+**Elenen açıklamalar:** Test tamamen mock'lu (`httpx.MockTransport`), ağa çıkmıyor.
+`Settings(_env_file=None, testing=True)` kullandığı için makinenin `.env` dosyasından
+etkilenmiyor — telemetri çalışmasında `.env`'e eklenen anahtarlar sebep değil. İkinci olayla
+birlikte gelen `tests/test_bulk_insert_benchmark.py` `os.environ`'a, `monkeypatch`'e veya
+`Settings`'e dokunmuyor; o da sebep değil.
+
+**Neden önemli:** Kendi başına bir ürün hatası değil, ama commit/push kapısı tam paketin
+sıfır çıkışına bağlı. Aralıklı bir düşüş, ilgisiz bir işin yayınını sebepsiz durdurur ve
+"bir daha koştur, geçer" alışkanlığını besler — kapının değerini aşındıran şey tam olarak
+budur.
+
+**Yapılacak:** Önce tetikleyiciyi yakalamak: testi `-p no:randomly` yerine tam paket
+sırasında tekrarlı koşturup (`pytest --lf` ya da bir döngü içinde tam paket) düştüğü anın
+traceback'ini kaydetmek. `strategies_tried` bozuluyorsa `AcquisitionService.acquire`'ın
+strateji sırasını belirleyen ayarların testler arası sızıntıyla değişip değişmediğine
+bakmak; `success` bozuluyorsa zamanlama/timeout yarışını aramak. Kök neden bulunana kadar
+test devre dışı bırakılmamalı — aralıklı da olsa gerçek bir sinyal taşıyor olabilir.
 
 ## Kapsam dışı bırakılanlar
 
