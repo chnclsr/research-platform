@@ -936,6 +936,11 @@ class Repository(metaclass=_OwnershipEnforced):
         caller's transaction may hold work of its own that predates this call.
         """
         if not passages:
+            # Commit anyway. The previous implementation ended in a commit whatever it
+            # was handed, and callers lean on that: zotero_sync only flushes its
+            # document row and lets this call make it durable, so an item that chunks
+            # to nothing would otherwise leave that write hanging in the transaction.
+            await self.session.commit()
             return
         dialect = self.session.get_bind().dialect.name
         builder = _PASSAGE_UPSERT_BUILDERS.get(dialect)
@@ -953,6 +958,14 @@ class Repository(metaclass=_OwnershipEnforced):
         for start in range(0, len(rows), PASSAGE_UPSERT_BATCH):
             await self.session.execute(upsert, rows[start : start + PASSAGE_UPSERT_BATCH])
         await self.session.commit()
+        # A core-level write leaves any PassageRow already in the identity map holding
+        # its pre-write state, and this session is deliberately configured not to expire
+        # on commit. The pipeline reads a run's passages, writes retrieval metadata back
+        # through here, and lists them again on the same session, so those instances are
+        # dropped or that second read silently returns what was there before.
+        for instance in list(self.session.identity_map.values()):
+            if isinstance(instance, PassageRow):
+                self.session.expire(instance)
 
     async def list_passages(
         self,

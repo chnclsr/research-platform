@@ -295,3 +295,46 @@ async def test_unsupported_dialect_is_refused_rather_than_silently_degraded():
             pytest.raises(RuntimeError, match="ON CONFLICT"),
         ):
             await repo.save_passages([make_passage(passage_id="01X".ljust(26, "0"))])
+
+
+@pytest.mark.anyio
+async def test_saving_an_empty_list_still_commits_the_callers_pending_work():
+    """zotero_sync flushes a document and leans on this call to make it durable.
+
+    ``save_document`` only flushes, so for an item that chunks to nothing the
+    document write is still hanging in the transaction when save_passages runs.
+    Returning early without committing would drop it on session close.
+    """
+    pending = make_passage(passage_id="01PENDING".ljust(26, "0"))
+
+    async with SessionLocal() as session:
+        session.add(PassageRow(**Repository._passage_values(pending)))
+        await session.flush()
+        await Repository(session, actor=acting_principal()).save_passages([])
+        # No explicit commit here: leaving the block rolls back anything uncommitted.
+
+    assert [row.id for row in await fetch()] == ["01PENDING".ljust(26, "0")]
+
+
+@pytest.mark.anyio
+async def test_rows_already_loaded_in_the_session_see_the_update():
+    """The pipeline reads passages, saves them, then reads them again on one session.
+
+    RETRIEVE_PASSAGES loads the run's passages, writes retrieval metadata back
+    through save_passages, and a later stage lists them again from the same session.
+    A core-level write leaves the identity map holding the pre-write objects, so
+    without expiring them that second read would miss the metadata just written.
+    """
+    await save([make_passage(passage_id="01SEEN".ljust(26, "0"), text="Original.")])
+
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        loaded = await session.scalars(select(PassageRow))
+        assert [row.text for row in loaded] == ["Original."]
+
+        await repo.save_passages(
+            [make_passage(passage_id="01SEEN".ljust(26, "0"), text="Rewritten.")]
+        )
+
+        reread = await session.scalars(select(PassageRow))
+        assert [row.text for row in reread] == ["Rewritten."]
