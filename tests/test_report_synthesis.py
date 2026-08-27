@@ -3,7 +3,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from research_platform.llm import LLMProvider
-from research_platform.report_synthesis import build_synthesis_package
+from research_platform.report_synthesis import (
+    SynthesisSection,
+    _clean_cited_text,
+    _draft_overview,
+    build_synthesis_package,
+)
 
 
 class SynthesisLLM(LLMProvider):
@@ -29,6 +34,49 @@ class InventingLLM(LLMProvider):
             "synthesis": "An invented source proves the result [S99].",
             "executive_summary": "An invented source proves the result [S99].",
             "conclusion": "Done [S99].",
+        }
+
+
+class OverviewRepairLLM(LLMProvider):
+    def __init__(self) -> None:
+        self.settings = SimpleNamespace(
+            llm_context_tokens=8192,
+            llm_max_output_tokens=2048,
+        )
+        self.requests: list[tuple[str, str]] = []
+
+    async def complete_json(self, system: str, user: str):
+        self.requests.append((system, user))
+        if "Repair or regenerate" not in system:
+            return {
+                "executive_summary": "Geçersiz kaynaklı ilk taslak [S99].",
+                "cross_study_assessment": "Geçersiz kaynaklı değerlendirme [S99].",
+                "conclusion": "Geçersiz kaynaklı sonuç [S99].",
+                "uncertainty": "Geçersiz kaynaklı belirsizlik [S99].",
+            }
+        return {
+            "executive_summary": [
+                "Kanıt temalar arasında tutarlı bir yön göstermektedir [S01].",
+                "Dış doğrulama yine de gereklidir [S01].",
+            ],
+            "cross_study_assessment": "Çalışmaların tasarımları farklıdır [S01].",
+            "conclusion": "Genelleme öncesinde doğrulama gereklidir [S01].",
+            "uncertainty": "Karşılaştırılabilirlik sınırlıdır [S01].",
+        }
+
+
+class InvalidOverviewLLM(LLMProvider):
+    settings = SimpleNamespace(
+        llm_context_tokens=8192,
+        llm_max_output_tokens=2048,
+    )
+
+    async def complete_json(self, system: str, user: str):
+        return {
+            "executive_summary": "Uydurma kaynak [S99].",
+            "cross_study_assessment": "Uydurma kaynak [S99].",
+            "conclusion": "Uydurma kaynak [S99].",
+            "uncertainty": "Uydurma kaynak [S99].",
         }
 
 
@@ -82,3 +130,81 @@ async def test_unknown_source_citations_trigger_grounded_fallback() -> None:
     assert package.generated_by_llm is False
     assert "[S99]" not in package.narrative
     assert "[S01]" in package.narrative
+
+
+def test_flat_string_lists_become_prose_without_python_serialisation() -> None:
+    cleaned = _clean_cited_text(
+        ["İlk tam cümle [S01].", "İkinci tam cümle [S01]."],
+        {"[S01]"},
+    )
+
+    assert cleaned == "İlk tam cümle [S01]. İkinci tam cümle [S01]."
+    assert "['" not in cleaned
+    assert _clean_cited_text({"sentence": "Metin [S01]."}, {"[S01]"}) == ""
+
+
+async def test_overview_is_budgeted_and_repaired_once() -> None:
+    llm = OverviewRepairLLM()
+    long_sentence = (
+        "Çok merkezli kanıt farklı klinik ortamlarda dikkatle doğrulanmalıdır [S01]. "
+        * 80
+    )
+    sections = [
+        SynthesisSection(
+            title=f"Tema {index}",
+            synthesis=long_sentence,
+            consensus=long_sentence,
+            disagreements=long_sentence,
+            implications=long_sentence,
+            source_ids=["S01"],
+        )
+        for index in range(5)
+    ]
+
+    overview, succeeded, diagnostic = await _draft_overview(
+        llm,
+        question="Kanıt ne gösteriyor?",
+        sections=sections,
+        language="tr",
+        turkish=True,
+    )
+
+    assert succeeded is True
+    assert diagnostic == "repair_passed"
+    assert len(llm.requests) == 2
+    assert len(llm.requests[0][1]) < 12000
+    assert "THEME: Tema 4" in llm.requests[0][1]
+    assert "['" not in overview["executive_summary"]
+    assert overview["executive_summary"].endswith("[S01].")
+
+
+async def test_deterministic_overview_fallback_uses_complete_sentences() -> None:
+    sentence = "Bulgular farklı merkezlerde yeniden doğrulanmalıdır [S01]."
+    sections = [
+        SynthesisSection(
+            title=f"Tema {index}",
+            synthesis=" ".join([sentence] * 100),
+            consensus=" ".join([sentence] * 100),
+            disagreements=" ".join([sentence] * 100),
+            implications=" ".join([sentence] * 100),
+            source_ids=["S01"],
+        )
+        for index in range(5)
+    ]
+
+    overview, succeeded, diagnostic = await _draft_overview(
+        InvalidOverviewLLM(),
+        question="Kanıt ne gösteriyor?",
+        sections=sections,
+        language="tr",
+        turkish=True,
+    )
+
+    assert succeeded is False
+    assert diagnostic.startswith("fallback:")
+    assert len(overview["executive_summary"]) <= 2600
+    assert len(overview["cross_study_assessment"]) <= 3500
+    assert len(overview["conclusion"]) <= 2400
+    assert overview["executive_summary"].endswith("[S01].")
+    assert overview["cross_study_assessment"].endswith("[S01].")
+    assert overview["conclusion"].endswith("[S01].")

@@ -239,6 +239,53 @@ def test_synthesis_report_links_citations_to_the_source_catalog() -> None:
     assert "src_S01" in anchors, "citations must link to it"
 
 
+def test_turkish_synthesis_report_uses_ozet_heading() -> None:
+    package = SynthesisPackage(
+        executive_summary="Ölçülen sonuç iyileşmiştir [S01].",
+        sections=[
+            SynthesisSection(
+                title="Ölçülen sonuç",
+                synthesis="Mevcut kanıt iyileşme bildirmektedir [S01].",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        study_profiles=[],
+        cross_study_assessment="Tek çalışma bağlamı bulunmaktadır [S01].",
+        conclusion="Bağımsız doğrulama gereklidir [S01].",
+        uncertainty="Kanıt tek çalışmayla sınırlıdır [S01].",
+        generated_by_llm=True,
+    )
+    inputs = _minimal_report_inputs()
+    inputs["language"] = "tr"
+
+    report = build_word_report(**inputs, synthesis_package=package)
+    document = Document(io.BytesIO(report.document))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    assert "1. Özet" in text
+    assert "Yönetici sentezi" not in text
+
+
+def test_english_synthesis_report_uses_summary_heading() -> None:
+    package = SynthesisPackage(
+        executive_summary="The measured outcome improved [S01].",
+        sections=[],
+        study_profiles=[],
+        cross_study_assessment="One study is available [S01].",
+        conclusion="Independent validation is required [S01].",
+        uncertainty="Evidence is limited to one study [S01].",
+        generated_by_llm=True,
+    )
+
+    report = build_word_report(**_minimal_report_inputs(), synthesis_package=package)
+    document = Document(io.BytesIO(report.document))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+    assert "1. Summary" in text
+    assert "Executive synthesis" not in text
+
+
 def test_focused_answer_report_also_bookmarks_its_catalog() -> None:
     """The two templates build separate catalogs; fixing one does not fix the other."""
     report = build_word_report(**_minimal_report_inputs(), synthesis_package=None)

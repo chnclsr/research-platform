@@ -45,6 +45,7 @@ class SynthesisPackage:
     uncertainty: str
     study_profiles: list[StudyProfile]
     generated_by_llm: bool
+    generation_diagnostics: dict[str, str] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -71,6 +72,124 @@ class SynthesisPackage:
 _TOKEN_RE = re.compile(r"\[S\d{2,3}\]")
 _BRACKET_RE = re.compile(r"\[([^\]]{1,80})\]")
 _WORD_RE = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+_SENTENCE_END_RE = re.compile(
+    r"[.!?](?:\s*(?:\[S\d{2,3}\]\s*)*)?(?=\s|$)",
+    flags=re.UNICODE,
+)
+_OVERVIEW_FIELD_LIMITS = {
+    "executive_summary": 2600,
+    "cross_study_assessment": 3500,
+    "conclusion": 2400,
+    "uncertainty": 2400,
+}
+
+
+def _normalise_text_value(value: Any) -> str:
+    """Accept prose or a flat JSON string list without leaking Python syntax.
+
+    Small structured-output models sometimes return a list where the schema requests a
+    string.  ``str(value)`` rendered that list as ``['first', 'second']`` in the report.
+    A flat list is still unambiguous prose and can be joined safely; every other shape is
+    rejected so the caller can repair or fall back instead of publishing serialization
+    syntax.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return " ".join(item.strip() for item in value if item.strip())
+    return ""
+
+
+def _sentences(text: str) -> list[str]:
+    """Split report prose at complete sentence boundaries, keeping citation suffixes."""
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return []
+    sentences: list[str] = []
+    start = 0
+    for match in _SENTENCE_END_RE.finditer(cleaned):
+        sentence = cleaned[start:match.end()].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = match.end()
+    tail = cleaned[start:].strip()
+    tail_citations = _TOKEN_RE.findall(tail)
+    if tail_citations and tail.endswith(tail_citations[-1]):
+        sentences.append(tail)
+    return sentences
+
+
+def _ground_sentence(sentence: str, source_text: str) -> str:
+    """Keep a selected fallback sentence tied to the citations of its source field."""
+    if _TOKEN_RE.search(sentence):
+        return sentence
+    citations = list(dict.fromkeys(_TOKEN_RE.findall(source_text)))[:3]
+    if not citations:
+        return sentence
+    punctuation = sentence[-1] if sentence[-1:] in ".!?" else "."
+    body = sentence[:-1].rstrip() if sentence[-1:] in ".!?" else sentence.rstrip()
+    return f"{body} {' '.join(citations)}{punctuation}"
+
+
+def _bounded_grounded_join(values: list[str], max_chars: int) -> str:
+    """Join only complete, grounded sentences without slicing a visible report field."""
+    selected: list[str] = []
+    size = 0
+    for value in values:
+        for sentence in _sentences(value):
+            grounded = _ground_sentence(sentence, value)
+            projected = size + len(grounded) + int(bool(selected))
+            if projected > max_chars:
+                continue
+            selected.append(grounded)
+            size = projected
+    return " ".join(selected)
+
+
+def _prompt_excerpt(value: str, max_chars: int) -> str:
+    """Make a compact internal-only excerpt, preferring complete sentences."""
+    cleaned = " ".join(value.split())
+    if len(cleaned) <= max_chars:
+        return cleaned
+    complete = _bounded_grounded_join([cleaned], max_chars)
+    if complete:
+        return complete
+    boundary = cleaned.rfind(" ", 0, max_chars)
+    return cleaned[: boundary if boundary > 0 else max_chars].rstrip()
+
+
+def _overview_digest_budget(llm: LLMProvider) -> int:
+    """Reserve output and fixed-prompt room before constructing the overview digest."""
+    settings = getattr(llm, "settings", None)
+    context_tokens = int(getattr(settings, "llm_context_tokens", 8192))
+    output_tokens = int(getattr(settings, "llm_max_output_tokens", 2048))
+    available_tokens = max(2048, context_tokens - output_tokens - 1536)
+    # Two characters per token is conservative for mixed Turkish/English medical prose.
+    return max(6000, min(24000, available_tokens * 2))
+
+
+def _overview_digest(sections: list[SynthesisSection], max_chars: int) -> str:
+    """Create balanced theme cards instead of truncating one monolithic digest."""
+    if not sections:
+        return ""
+    per_theme = max(900, max_chars // len(sections))
+    cards: list[str] = []
+    for section in sections:
+        synthesis_budget = max(360, int(per_theme * 0.46))
+        secondary_budget = max(140, int(per_theme * 0.16))
+        rows = [
+            f"THEME: {_prompt_excerpt(section.title, 240)}",
+            f"SYNTHESIS: {_prompt_excerpt(section.synthesis, synthesis_budget)}",
+            f"CONSENSUS: {_prompt_excerpt(section.consensus, secondary_budget)}",
+            f"DISAGREEMENTS: {_prompt_excerpt(section.disagreements, secondary_budget)}",
+            f"IMPLICATIONS: {_prompt_excerpt(section.implications, secondary_budget)}",
+        ]
+        cards.append("\n".join(rows))
+    digest = "\n\n".join(cards)
+    if len(digest) <= max_chars:
+        return digest
+    boundary = digest.rfind("\n\n", 0, max_chars)
+    return digest[: boundary if boundary > 0 else max_chars].rstrip()
 
 
 def _metadata(source: Any) -> dict[str, Any]:
@@ -249,7 +368,7 @@ def _evidence_packet(
 
 
 def _clean_cited_text(value: Any, allowed_sources: set[str]) -> str:
-    text = " ".join(str(value or "").replace("\x00", "").split())
+    text = " ".join(_normalise_text_value(value).replace("\x00", "").split())
     if not text:
         return ""
     invalid_source = False
@@ -379,7 +498,7 @@ def _force_ground_text(value: Any, source_ids: list[str], language: str) -> str:
     to translation/reformatting of an already evidence-bounded draft, so the
     deterministic citation suffix restores provenance without expanding facts.
     """
-    text = " ".join(str(value or "").replace("\x00", "").split())
+    text = " ".join(_normalise_text_value(value).replace("\x00", "").split())
     text = _BRACKET_RE.sub("", text).strip()
     text = re.sub(
         r"\b(?:Evidans|Kanıt) paketi içindeki kaynaklar\b",
@@ -409,9 +528,9 @@ async def _draft_section(
     claim_ids: list[str],
     language: str,
     fallback: SynthesisSection,
-) -> tuple[SynthesisSection, bool]:
+) -> tuple[SynthesisSection, bool, str]:
     if not packet:
-        return fallback, False
+        return fallback, False, "fallback:no_evidence_packet"
     allowed = {f"[{source_id}]" for source_id in source_ids}
     try:
         data = await llm.complete_json(
@@ -436,7 +555,7 @@ async def _draft_section(
             language=language,
         )
         if section is not None:
-            return section, True
+            return section, True, "initial_passed"
         repair = await llm.complete_json(
             "Repair the supplied draft as a research synthesis section. Return JSON with keys "
             "synthesis, consensus, disagreements, implications. Write entirely in the requested "
@@ -456,7 +575,7 @@ async def _draft_section(
             language=language,
         )
         if repaired is not None:
-            return repaired, True
+            return repaired, True, "repair_passed"
         if isinstance(repair, dict):
             forced_synthesis = _force_ground_text(
                 repair.get("synthesis"),
@@ -481,10 +600,11 @@ async def _draft_section(
                         claim_ids=claim_ids,
                     ),
                     True,
+                    "repair_forced_grounding",
                 )
-        return fallback, False
-    except Exception:
-        return fallback, False
+        return fallback, False, "fallback:invalid_repair"
+    except Exception as exc:  # noqa: BLE001 - provider failures must use the safe fallback
+        return fallback, False, f"fallback:{type(exc).__name__}"
 
 
 async def _draft_overview(
@@ -494,35 +614,38 @@ async def _draft_overview(
     sections: list[SynthesisSection],
     language: str,
     turkish: bool,
-) -> tuple[dict[str, str], bool]:
+) -> tuple[dict[str, str], bool, str]:
     allowed = {
         f"[{source_id}]"
         for section in sections
         for source_id in section.source_ids
     }
-    section_digest = "\n\n".join(
-        f"THEME: {section.title}\nSYNTHESIS: {section.synthesis}\n"
-        f"CONSENSUS: {section.consensus}\nDISAGREEMENTS: {section.disagreements}\n"
-        f"IMPLICATIONS: {section.implications}"
-        for section in sections
-    )[:24000]
-    fallback = {
-        "executive_summary": (
-            "Kanıt, tek bir genel hükümden çok tema bazında değerlendirilmelidir. "
-            + " ".join(section.synthesis for section in sections[:2])[:2600]
-            if turkish
-            else "The evidence is best interpreted by theme rather than as one universal conclusion. "
-            + " ".join(section.synthesis for section in sections[:2])[:2600]
-        ),
-        "cross_study_assessment": " ".join(
+    prefix = (
+        "Kanıt, tek bir genel hükümden çok tema bazında değerlendirilmelidir. "
+        if turkish
+        else "The evidence is best interpreted by theme rather than as one universal conclusion. "
+    )
+    executive_body = _bounded_grounded_join(
+        [section.synthesis for section in sections[:3]],
+        _OVERVIEW_FIELD_LIMITS["executive_summary"] - len(prefix),
+    )
+    cross_study = _bounded_grounded_join(
+        [
             value
             for section in sections
             for value in (section.consensus, section.disagreements)
             if value
-        )[:3500],
-        "conclusion": " ".join(
-            section.implications or section.synthesis for section in sections[-2:]
-        )[:2400],
+        ],
+        _OVERVIEW_FIELD_LIMITS["cross_study_assessment"],
+    )
+    conclusion = _bounded_grounded_join(
+        [section.implications or section.synthesis for section in sections[-2:]],
+        _OVERVIEW_FIELD_LIMITS["conclusion"],
+    )
+    fallback = {
+        "executive_summary": f"{prefix}{executive_body}".strip(),
+        "cross_study_assessment": cross_study,
+        "conclusion": conclusion,
         "uncertainty": (
             "Bulgular yalnız raporda kaynaklandırılan çalışma bağlamlarında geçerlidir; "
             "aynı sonlanımı ölçmeyen çalışmaların sayısal sonuçları doğrudan karşılaştırılmamalıdır."
@@ -531,10 +654,51 @@ async def _draft_overview(
             "that do not measure the same endpoint should not be compared directly."
         ),
     }
+    digest_budget = max(
+        3000,
+        _overview_digest_budget(llm) - len(question) - (len(allowed) * 8) - 500,
+    )
+    section_digest = _overview_digest(sections, digest_budget)
     if not section_digest or not allowed:
-        return fallback, False
+        return fallback, False, "fallback:no_grounded_sections"
+
+    def candidate(data: Any) -> tuple[dict[str, str] | None, list[str]]:
+        if not isinstance(data, dict):
+            return None, ["response_not_object"]
+        cleaned: dict[str, str] = {}
+        errors: list[str] = []
+        for key, fallback_value in fallback.items():
+            raw = data.get(key)
+            normalised = _normalise_text_value(raw)
+            value = _clean_cited_text(raw, allowed)
+            if not normalised:
+                reason = "missing" if raw is None or raw == "" else "invalid_type"
+                errors.append(f"{key}:{reason}")
+            elif not value:
+                errors.append(f"{key}:invalid_or_ungrounded")
+            if value and len(value) > _OVERVIEW_FIELD_LIMITS[key]:
+                value = _bounded_grounded_join(
+                    [value],
+                    _OVERVIEW_FIELD_LIMITS[key],
+                )
+                if not value:
+                    errors.append(f"{key}:no_complete_sentence_within_limit")
+            if value and not _language_matches(value, language):
+                errors.append(f"{key}:language_mismatch")
+                value = ""
+            cleaned[key] = value or fallback_value
+        required_errors = [
+            error
+            for error in errors
+            if error.startswith(("executive_summary:", "conclusion:"))
+        ]
+        return (None if required_errors else cleaned), errors
+
+    initial_data: Any = None
+    initial_candidate: dict[str, str] | None = None
+    initial_errors: list[str] = []
     try:
-        data = await llm.complete_json(
+        initial_data = await llm.complete_json(
             "Write the integrative layer of a research report as one JSON object with keys "
             "executive_summary, cross_study_assessment, conclusion, uncertainty. Synthesize themes; "
             "do not repeat a source-by-source inventory. Preserve the supplied [Sxx] citations and "
@@ -545,24 +709,62 @@ async def _draft_overview(
             f"RESEARCH_QUESTION:\n{question}\n\nALLOWED_SOURCE_IDS: "
             f"{', '.join(sorted(allowed))}\n\nSECTION_DRAFTS:\n{section_digest}",
         )
-        if not isinstance(data, dict):
-            return fallback, False
-        cleaned = {
-            key: _clean_cited_text(data.get(key), allowed)
-            for key in fallback
-        }
-        if (
-            not cleaned["executive_summary"]
-            or not cleaned["conclusion"]
-            or not _language_matches(cleaned["executive_summary"], language)
-            or not _language_matches(cleaned["conclusion"], language)
-        ):
-            return fallback, False
-        for key, value in fallback.items():
-            cleaned[key] = cleaned[key] or value
-        return cleaned, True
-    except Exception:
-        return fallback, False
+        initial_candidate, initial_errors = candidate(initial_data)
+        if initial_candidate is not None and not initial_errors:
+            return initial_candidate, True, "initial_passed"
+    except Exception as exc:  # noqa: BLE001 - retry any provider/decoder failure once
+        initial_errors = [f"initial:{type(exc).__name__}"]
+
+    try:
+        repair_budget = max(
+            3000,
+            _overview_digest_budget(llm) - (len(allowed) * 8) - 500,
+        )
+        serialised_draft = json.dumps(initial_data, ensure_ascii=False)
+        draft_boundary = serialised_draft.rfind(" ", 0, repair_budget)
+        bounded_draft = serialised_draft[
+            : draft_boundary if draft_boundary > 0 else repair_budget
+        ].rstrip()
+        repair_source = (
+            f"DRAFT:\n{bounded_draft}"
+            if initial_data is not None
+            else f"SECTION_DRAFTS:\n{section_digest}"
+        )
+        repaired_data = await llm.complete_json(
+            "Repair or regenerate the integrative layer of a research report. Return one JSON "
+            "object with string fields executive_summary, cross_study_assessment, conclusion, "
+            "uncertainty. Flat arrays of sentences are allowed only when they can be joined as "
+            "prose. Write entirely in the requested language. Keep only the allowed [Sxx] "
+            "citations. Do not add facts, numbers, sources, URLs, or conclusions absent from the "
+            "supplied draft or theme cards. Every factual field must retain at least one allowed "
+            "citation.",
+            f"LANGUAGE: {language}\nALLOWED_SOURCE_IDS: {', '.join(sorted(allowed))}\n"
+            f"{repair_source}",
+        )
+        repaired_candidate, repair_errors = candidate(repaired_data)
+        if repaired_candidate is not None and not repair_errors:
+            return repaired_candidate, True, "repair_passed"
+        if repaired_candidate is not None:
+            return (
+                repaired_candidate,
+                False,
+                f"repair_partial:{','.join(repair_errors)}",
+            )
+        if initial_candidate is not None:
+            return (
+                initial_candidate,
+                False,
+                f"initial_partial:{','.join(initial_errors)};repair_invalid",
+            )
+        return fallback, False, f"fallback:{','.join(repair_errors)}"
+    except Exception as exc:  # noqa: BLE001 - preserve a bounded fallback on provider failure
+        if initial_candidate is not None:
+            return (
+                initial_candidate,
+                False,
+                f"initial_partial:{','.join(initial_errors)};repair:{type(exc).__name__}",
+            )
+        return fallback, False, f"fallback:repair_{type(exc).__name__}"
 
 
 async def build_synthesis_package(
@@ -591,7 +793,8 @@ async def build_synthesis_package(
     )
     sections: list[SynthesisSection] = []
     llm_successes = 0
-    for title, theme_claims in theme_plan:
+    generation_diagnostics: dict[str, str] = {}
+    for index, (title, theme_claims) in enumerate(theme_plan, 1):
         packet, source_ids, claim_ids = _evidence_packet(
             theme_claims,
             evidence_by_claim,
@@ -604,7 +807,7 @@ async def build_synthesis_package(
             source_labels,
             turkish=turkish,
         )
-        section, succeeded = await _draft_section(
+        section, succeeded, diagnostic = await _draft_section(
             llm,
             question=question,
             title=title,
@@ -616,14 +819,16 @@ async def build_synthesis_package(
         )
         sections.append(section)
         llm_successes += int(succeeded)
+        generation_diagnostics[f"theme_{index}"] = diagnostic
 
-    overview, overview_succeeded = await _draft_overview(
+    overview, overview_succeeded, overview_diagnostic = await _draft_overview(
         llm,
         question=question,
         sections=sections,
         language=language,
         turkish=turkish,
     )
+    generation_diagnostics["overview"] = overview_diagnostic
     return SynthesisPackage(
         executive_summary=overview["executive_summary"],
         sections=sections,
@@ -632,6 +837,7 @@ async def build_synthesis_package(
         uncertainty=overview["uncertainty"],
         study_profiles=profiles,
         generated_by_llm=bool(sections) and llm_successes == len(sections) and overview_succeeded,
+        generation_diagnostics=generation_diagnostics,
     )
 
 

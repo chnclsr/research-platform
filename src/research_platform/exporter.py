@@ -11,11 +11,11 @@ from typing import Any
 
 import yaml
 
-from .llm import LLMProvider
 from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
-from .repository import Repository
+from .llm import LLMProvider
 from .report_synthesis import build_synthesis_package
+from .repository import Repository
 from .schemas import CoverageMetrics, ResearchProtocol
 from .storage import ObjectStore
 from .word_report import build_word_report
@@ -47,6 +47,10 @@ def _markdown(value: Any, level: int = 0) -> str:
                 lines.append(f"**{label}:** {rendered}")
         return "\n\n".join(lines)
     return str(value)
+
+
+def _summary_heading(language: str) -> str:
+    return "Özet" if language.lower().startswith("tr") else "Summary"
 
 
 def _is_reportable(claim: Any) -> bool:
@@ -136,6 +140,14 @@ async def build_exports(
         evidence_by_claim=evidence_by_claim,
         # Sub-questions become section headings in the report, so these are printed text.
         sub_questions=protocol.sub_questions_for_report(),
+    )
+    await repo.event(
+        run_id,
+        "synthesis_generation",
+        {
+            "generated_by_llm": synthesis_package.generated_by_llm,
+            "layers": synthesis_package.generation_diagnostics,
+        },
     )
     figure_result = FigurePipelineResult()
     if protocol.output_mode != "raw":
@@ -279,10 +291,11 @@ async def build_exports(
         )
         + "\n"
     )
+    summary_heading = _summary_heading(protocol.report_language)
     report_md = (
         f"# {protocol.title}\n\n"
         f"## Araştırma sorusu\n\n{protocol.question_for_report()}\n\n"
-        f"## Yönetici sentezi\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"## {summary_heading}\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"## Tematik kanıt sentezi\n\n{_markdown(synthesis.get('report'))}\n\n"
         f"## Belirsizlikler ve araştırma boşlukları\n\n"
         f"{_markdown(synthesis.get('uncertainty'))}\n\n"
@@ -293,7 +306,7 @@ async def build_exports(
         "çıkarılan bulgularıyla `15_literature_inventory.md` dosyasında listelenmiştir.\n"
     )
     executive_md = (
-        "# Yönetici Özeti\n\n"
+        f"# {summary_heading}\n\n"
         f"{_markdown(synthesis.get('executive_summary'))}\n\n"
         "Kaynak kataloğu, atomik claim kayıtları ve retrieval/coverage ölçümleri teslim "
         "paketinin denetim eklerinde ayrıca korunmuştur.\n"
@@ -454,6 +467,10 @@ async def build_exports(
         "source_ids": [s.id for s in sources],
         "parsing": _parsing_manifest(versions),
         "coverage": coverage.model_dump(),
+        "synthesis": {
+            "generated_by_llm": synthesis_package.generated_by_llm,
+            "layers": synthesis_package.generation_diagnostics,
+        },
     }
     files["10_reproducibility_manifest.json"] = (
         "application/json",

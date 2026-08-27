@@ -39,7 +39,7 @@ RISK = "B91C1C"
 PALE_BLUE = "EAF2FF"
 PALE_GREEN = "E8F5EE"
 PALE_GOLD = "FFF5DD"
-REPORT_PIPELINE_VERSION = "0.9.1"
+REPORT_PIPELINE_VERSION = "0.15.0"
 
 
 @dataclass(frozen=True)
@@ -723,7 +723,7 @@ def _build_synthesis_word_report(
     _add_toc_field(document, turkish)
 
     document.add_heading(
-        "1. Yönetici sentezi" if turkish else "1. Executive synthesis",
+        "1. Özet" if turkish else "1. Summary",
         level=1,
     )
     lead = document.add_table(rows=1, cols=1)
@@ -1033,14 +1033,20 @@ def _build_synthesis_word_report(
         marker = paragraph.add_run(f"{index}. ")
         _set_run_font(marker, size=10.5, color=BLUE, bold=True)
         _set_run_font(paragraph.add_run(point), size=10.5, color=INK)
+    diagnostic_text = ", ".join(
+        f"{layer}={status}"
+        for layer, status in package.generation_diagnostics.items()
+    )
     document.add_paragraph(
         (
             f"LLM sentez kapısı: {'tam olarak geçti' if package.generated_by_llm else 'kısmen deterministik geri dönüş kullandı'}. "
+            f"Katman kaydı: {diagnostic_text or 'mevcut değil'}. "
             f"Connector kapsamı: {', '.join(connector_ids or []) or 'protokol varsayılanları'}."
         )
         if turkish
         else (
             f"LLM synthesis gate: {'fully passed' if package.generated_by_llm else 'used deterministic fallback for at least one layer'}. "
+            f"Layer record: {diagnostic_text or 'not available'}. "
             f"Connector scope: {', '.join(connector_ids or []) or 'protocol defaults'}."
         )
     )

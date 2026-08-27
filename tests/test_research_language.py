@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from conftest import acting_principal
+
 from research_platform.config import get_settings
 from research_platform.db import SessionLocal, create_schema
+from research_platform.exporter import _summary_heading
 from research_platform.pipeline import ResearchPipeline
 from research_platform.repository import Repository
 from research_platform.schemas import ResearchProtocol
 
 TURKISH_QUESTION = "Akciğer BT görüntülemesinde yapay zeka tanısal doğruluğu ne sağlıyor?"
 ENGLISH_QUESTION = "What does AI provide for diagnostic accuracy in lung CT imaging?"
+
+
+def test_summary_heading_follows_the_report_language():
+    assert _summary_heading("tr") == "Özet"
+    assert _summary_heading("tr-TR") == "Özet"
+    assert _summary_heading("en") == "Summary"
 
 
 class TranslatingLLM:
