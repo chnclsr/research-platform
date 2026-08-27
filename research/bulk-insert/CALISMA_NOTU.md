@@ -20,10 +20,11 @@ Aşağıdaki her şey commit'li; kaybolan tek şey koşunun kendisi olabilir.
 | `5606fd9` | Temiz ağaçtan yeniden koşu, rapor ve bu not. |
 | `ee768a7` | Re-ingest kolları eklendi (`v3`). **Bu koşunun sonucu henüz commit'li değil.** |
 
-### Şu anda koşan iş
+### v3 koşusu tamamlandı
 
-`ee768a7` üzerinden `v3` düzeneğiyle tam koşu başlatıldı. On kol, üç boyut, 7 tekrar;
-toplam 210 ölçüm koşusu, yaklaşık 22 dakika.
+`v3` düzeneğinin tam koşusu bitti: on kol, üç boyut, 7 tekrar, 210 koşunun 210'u geçerli.
+Sonuç `results/postgres_bulk_insert.json` içinde ve commit'li. Komut, yeniden koşmak
+gerekirse:
 
 ```bash
 PYTHONPATH=src .venv311/bin/python scripts/benchmark_bulk_insert.py \
@@ -32,19 +33,10 @@ PYTHONPATH=src .venv311/bin/python scripts/benchmark_bulk_insert.py \
   --output research/bulk-insert/results/postgres_bulk_insert.json
 ```
 
-İlerleme kaydı: `results/run_v3_progress.log`. Bu dosya koşunun ortasında alınmış bir
-kopyadır, tam değildir; koşunun kendi çıktısı `postgres_bulk_insert.json` dosyasıdır.
-
-**Devralan ne yapmalı:**
-
-1. `results/postgres_bulk_insert.json` içindeki `benchmark_version` alanına bak.
-   `postgres_bulk_insert_v3` ise ve `datasets[*].configurations` on kol içeriyorsa koşu
-   tamamlanmıştır; adım 3'e geç.
-2. Değilse koşu yarıda kalmıştır. Container'ın ayakta olduğunu doğrulayıp
-   (`docker compose -f research/bulk-insert/compose.yml up -d --wait postgres`) yukarıdaki
-   komutu baştan çalıştır. Koşu kaldığı yerden devam etmez, baştan başlar.
-3. Raporu üret: `PYTHONPATH=src .venv311/bin/python scripts/report_bulk_insert.py`
-4. `research/bulk-insert/` altındaki her şeyi commit'le.
+Koşu kaldığı yerden devam etmez, baştan başlar. Container ayakta değilse önce
+`docker compose -f research/bulk-insert/compose.yml up -d --wait postgres`. Koşu bitince
+`PYTHONPATH=src .venv311/bin/python scripts/report_bulk_insert.py` ile rapor üretilir;
+`REPORT.md` ve `results/postgres_bulk_insert_summary.csv` elle düzenlenmez.
 
 ### Bu koşuyla cevaplanan soru
 
@@ -53,9 +45,12 @@ Deneyin tamamı boş tabloya yazıyordu. Üretimde re-ingest dolu tabloya yazar 
 dalından pahalı olduğu için, kazancın re-ingest senaryosunda da korunup korunmadığı
 bilinmiyordu. Eğer korunmuyorsa entegrasyonun gerekçesi kalmaz.
 
-Küçük ölçekli ön koşu (200 kayıt, 64 boyut) kazancın korunduğunu gösterdi: mevcut yöntem
-298.6 ms, batch upsert 81.3 ms, yani 3.67x; upsert'in UPDATE dalı kendi INSERT dalından
-%7 pahalı. Kanonik rakamlar tam koşudan gelecek.
+Cevap: kazanç korunuyor, hatta insert yolundan daha büyük. Batch upsert dolu tabloya
+yazarken mevcut yönteme göre 5.29x / 6.91x / 6.58x hızlı. Upsert'in UPDATE dalı kendi
+INSERT dalından yalnızca %7.7 / %5.5 / %4.5 pahalı; mevcut yöntem ise aynı geçişte
+belirgin biçimde yavaşlıyor, çünkü UPDATE yolunda satır başına iki gidiş dönüşünün
+üstüne ORM'in değişiklik takibi biniyor. Entegrasyonun gerekçesi re-ingest senaryosunda
+da geçerli.
 
 ### Karara bağlananlar
 
