@@ -4,7 +4,77 @@ Bu dosya deneyin kendi raporu değildir. `REPORT.md` ölçümü anlatır; bu not
 kimin ne değiştirdiğini ve sıradaki işin ne olduğunu tutar. Deney üzerinde çalışan
 herkes buradan devam edebilsin diye tutuluyor.
 
-Son güncelleme: 2026-08-27.
+## Devam eden iş ve devralma notu
+
+Son güncelleme: 2026-08-27, `ee768a7` commit'i sonrası.
+
+Bu bölüm, çalışma yarıda kalırsa kaldığı yerden devam edilebilsin diye tutuluyor.
+Aşağıdaki her şey commit'li; kaybolan tek şey koşunun kendisi olabilir.
+
+### Commit geçmişi
+
+| Commit | Ne yaptı |
+|---|---|
+| `04201d6` | İlk deney: beş yöntem, `postgres_bulk_insert_v1`. I/O ölçümü hatalıydı. |
+| `3404703` | I/O ölçümü düzeltildi, üç kol eklendi, `save_passages` karakterizasyon testleri yazıldı. `v2`. |
+| `5606fd9` | Temiz ağaçtan yeniden koşu, rapor ve bu not. |
+| `ee768a7` | Re-ingest kolları eklendi (`v3`). **Bu koşunun sonucu henüz commit'li değil.** |
+
+### Şu anda koşan iş
+
+`ee768a7` üzerinden `v3` düzeneğiyle tam koşu başlatıldı. On kol, üç boyut, 7 tekrar;
+toplam 210 ölçüm koşusu, yaklaşık 22 dakika.
+
+```bash
+PYTHONPATH=src .venv311/bin/python scripts/benchmark_bulk_insert.py \
+  --sizes 100 1000 5000 --repeats 7 --warmups 1 \
+  --dimensions 768 --text-chars 512 --upsert-batch 1000 \
+  --output research/bulk-insert/results/postgres_bulk_insert.json
+```
+
+İlerleme kaydı: `results/run_v3_progress.log`. Bu dosya koşunun ortasında alınmış bir
+kopyadır, tam değildir; koşunun kendi çıktısı `postgres_bulk_insert.json` dosyasıdır.
+
+**Devralan ne yapmalı:**
+
+1. `results/postgres_bulk_insert.json` içindeki `benchmark_version` alanına bak.
+   `postgres_bulk_insert_v3` ise ve `datasets[*].configurations` on kol içeriyorsa koşu
+   tamamlanmıştır; adım 3'e geç.
+2. Değilse koşu yarıda kalmıştır. Container'ın ayakta olduğunu doğrulayıp
+   (`docker compose -f research/bulk-insert/compose.yml up -d --wait postgres`) yukarıdaki
+   komutu baştan çalıştır. Koşu kaldığı yerden devam etmez, baştan başlar.
+3. Raporu üret: `PYTHONPATH=src .venv311/bin/python scripts/report_bulk_insert.py`
+4. `research/bulk-insert/` altındaki her şeyi commit'le.
+
+### Bu koşuyla cevaplanan soru
+
+Deneyin tamamı boş tabloya yazıyordu. Üretimde re-ingest dolu tabloya yazar ve
+`ON CONFLICT DO UPDATE` INSERT dalını değil UPDATE dalını çalıştırır. UPDATE dalı INSERT
+dalından pahalı olduğu için, kazancın re-ingest senaryosunda da korunup korunmadığı
+bilinmiyordu. Eğer korunmuyorsa entegrasyonun gerekçesi kalmaz.
+
+Küçük ölçekli ön koşu (200 kayıt, 64 boyut) kazancın korunduğunu gösterdi: mevcut yöntem
+298.6 ms, batch upsert 81.3 ms, yani 3.67x; upsert'in UPDATE dalı kendi INSERT dalından
+%7 pahalı. Kanonik rakamlar tam koşudan gelecek.
+
+### Karara bağlananlar
+
+- **Fallback konulmayacak.** Eski satır satır döngü silinecek, yerine yalnızca
+  PostgreSQL ve SQLite destekli upsert gelecek. Gerekçe: testler SQLite'ta koştuğu için
+  fallback hiç çalışmayan, test edilmeyen ölü kod olurdu.
+- **Mentör onayı olmadan merge edilmeyecek.** Burası ingest yazma yolu. Rapor tek başına
+  değil, hazırlanmış diff ile birlikte gösterilecek.
+- Mentöre açıkça işaretlenecek iki nokta: eşzamanlılık/deadlock ölçülmedi (satırları
+  sabit sıraya dizme önerisi argümandır, ölçüm değildir) ve pgvector ayrı, daha büyük
+  bir karardır.
+
+### Entegrasyon henüz yapılmadı
+
+`src/research_platform/repository.py` içindeki `save_passages` **değiştirilmedi**. Tasarım
+aşağıdaki bölümde; karakterizasyon testleri `tests/test_passage_persistence.py` içinde
+hazır ve mevcut implementasyonda geçiyor. Değişiklik yapıldığında bu altı testin
+değiştirilmeden geçmesi gerekir. Değiştirilmeleri gerekiyorsa davranış değişmiş
+demektir ve bu ayrıca tartışılmalıdır.
 
 ## Durum
 
@@ -52,8 +122,8 @@ istemci tarafı serileştirme maliyeti ayrı bir metrik olarak ölçülmeye baş
 
 | Dosya | Durum | Ne değişti |
 |---|---|---|
-| `scripts/benchmark_bulk_insert.py` | değişti | Stats flush düzeltmesi, `pool_size=1`, üç yeni kol, `StrategySpec`/`StrategyContext`/`StrategyResult` modeli, tablo bazında parametrelenmiş `stats_snapshot`/`validate_rows`/`row_count`, `passages_vector` tablosunun kurulumu, `client_serialization_ms`, `--upsert-batch`. Çıktı sürümü `postgres_bulk_insert_v2`. |
-| `scripts/report_bulk_insert.py` | yeni (commit'lendi) | Sekiz kol için etiket ve renk, iki satırlı legend, şema sütunu, `pg_stat_io` ölçüm notu bölümü, serileştirme tavanı bölümü, upsert/COPY/pgvector bulguları, elma-armut çekincesi, CSV'ye I/O sütunları. |
+| `scripts/benchmark_bulk_insert.py` | değişti | (`ee768a7`) `preseed` bayrağı, `seed_variant`, `preseed_table` ve iki re-ingest kolu; doğrulama artık kalan seed satırı varsa koşuyu başarısız sayar. Çıktı sürümü `v3`. (`3404703`) Stats flush düzeltmesi, `pool_size=1`, üç yeni kol, `StrategySpec`/`StrategyContext`/`StrategyResult` modeli, tablo bazında parametrelenmiş `stats_snapshot`/`validate_rows`/`row_count`, `passages_vector` tablosunun kurulumu, `client_serialization_ms`, `--upsert-batch`. Çıktı sürümü `postgres_bulk_insert_v2`. |
+| `scripts/report_bulk_insert.py` | yeni (commit'lendi) | (`ee768a7`) Re-ingest bölümü, "Yol" sütunu, re-ingest kolları için ayrı karşılaştırma tabanı; grafiklerden çıkarıldılar. (`3404703`) Sekiz kol için etiket ve renk, iki satırlı legend, şema sütunu, `pg_stat_io` ölçüm notu bölümü, serileştirme tavanı bölümü, upsert/COPY/pgvector bulguları, elma-armut çekincesi, CSV'ye I/O sütunları. |
 | `tests/test_bulk_insert_benchmark.py` | değişti | Yeni yardımcılar için testler; rotasyon testi kol sayısından bağımsız hale geldi. `test_bulk_benchmark_upsert_updates_every_mutable_column` upsert'in hiçbir sütunu atlamadığını yapısal olarak doğrular. |
 | `tests/test_passage_persistence.py` | yeni | `save_passages` için karakterizasyon testleri. Aşağıya bakınız. |
 | `research/bulk-insert/REPORT.md` | yeniden üretildi | Yalnızca `report_bulk_insert.py` üretir, elle düzenlenmez. |
@@ -94,10 +164,10 @@ Ayrıntı `REPORT.md`'de. Karar açısından önemli olanlar:
 
 ### Ölçülmemiş, entegrasyondan önce ölçülmesi gereken
 
-- [ ] **UPDATE yolu.** Deneyin tamamı boş tabloya yazar. Üretimde re-ingest dolu tabloya
-      yazar ve `ON CONFLICT DO UPDATE`'in UPDATE dalı INSERT dalından pahalıdır. Kazancın
-      re-ingest senaryosunda ne olduğu bilinmiyor. Kol olarak eklenebilir: aynı veriyi
-      iki kez yaz, ikinci yazımı ölç.
+- [x] **UPDATE yolu.** `ee768a7` ile iki re-ingest kolu eklendi ve koşuldu; yukarıdaki
+      devralma notuna bakınız.
+- [ ] **Kısmi çakışma.** Re-ingest kolları tüm satırların çakıştığı durumu ölçer. Bir
+      belgenin bazı chunk'larının değişip bazılarının eklendiği karışık batch ölçülmedi.
 - [ ] **Eşzamanlı writer.** Lock contention, deadlock ve retry davranışı matriste yok.
       Batch'li upsert'e geçerken en gerçek risk bu.
 
