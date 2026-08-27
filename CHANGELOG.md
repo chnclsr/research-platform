@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.25`
+Belge sürümü: `6.26`
 
 Son güncelleme: `2026-08-27`
 
@@ -72,6 +72,13 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   `16_ai_in_lung_ct_report.docx`. Telegram'ın koşu yanında bastığı tutamağın aynısı
   kullanılıyor, böylece iki koşunun raporu aynı klasöre indirildiğinde hangisinin ne
   olduğu ad'dan anlaşılıyor. Etiketi olmayan koşularda eski ad korunuyor.
+- Bir koşu `failed` olduğunda koşuyu başlatan kişiye Telegram'dan bildirim gidiyor: koşu
+  adı, kimliği ve hata nedeni mesajda yer alıyor. Bildirim sahiplik üzerinden kurulduğu
+  için MCP, API ve panelden başlatılan koşular da kapsanıyor; her koşu bir kez duyuruluyor
+  ve duyuru kaydı bot yeniden başlasa da korunuyor. `TELEGRAM_FAILURE_NOTICE_WINDOW_H`
+  (varsayılan 24 saat) ne kadar geriye bakılacağını belirliyor, böylece özellik açıldığında
+  eski hatalar yeniden duyurulmuyor. Yalnız `failed` bildiriliyor — `cancelled` kullanıcının
+  kendi iptali, `completed_incomplete` ise bir kapsam teşhisi.
 
 ## v0.14.0 — 2026-08-25
 

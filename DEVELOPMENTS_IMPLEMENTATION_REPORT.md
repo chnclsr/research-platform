@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.31`
+Belge sürümü: `12.32`
 
 Son güncelleme: `2026-08-27`
 
@@ -59,8 +59,9 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 44 | Pipeline zaman çizelgesinin Araştırma Akışı'na birleşmesi | `fe6eb42` |
 | 45 | Kaynak figürü caption'ının rapor diline yerelleştirilmesi | `7f47abf` |
 | 46 | Literatür konu haritasının Ek B'ye taşınması | `e8788f5` |
-| 47 | Word raporunun koşu etiketiyle adlandırılması | _çalışma ağacı_ |
-| 48 | Yapısal çıkarımlarda kaynağı bulan connector | _çalışma ağacı_ |
+| 47 | Word raporunun koşu etiketiyle adlandırılması | `ca56390` |
+| 48 | Yapısal çıkarımlarda kaynağı bulan connector | `ca56390` |
+| 49 | Düşen koşunun sahibine Telegram bildirimi | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -2904,6 +2905,61 @@ kod bloğu değişmeden üretildi, `connector_id` alanı `agentsearch_web` 18, `
 
 **Geriye dönük değil.** Alan yalnız bundan sonra dışa aktarılan koşularda görünür; mevcut
 artifact'ler yeniden üretilmiyor.
+
+---
+
+## 49. Düşen koşunun sahibine Telegram bildirimi
+
+Bir koşu `failed` olduğunda kimse haber almıyordu; koşuyu başlatan kişi ya paneli açıp
+bakıyor ya da saatler sonra fark ediyordu. Oysa hata metinleri eyleme dönük bilgi taşıyor:
+`PipelineStageTimeout: ACQUIRE exceeded its 900 second safety limit` ve
+`GraphRecursionError: Recursion limit of 380 reached...`.
+
+Boşluk kodda görünürdü. Bot'un yoklama döngüsü koşuları zaten izliyordu ama terminal duruma
+gelen koşuyu **sessizce izleme listesinden çıkarıyordu** — `failed` dâhil, tek kelime
+etmeden.
+
+**Neden mevcut izleme listesi kullanılmadı.** `watched_runs` bellekte tutuluyor ve yalnız
+bot üzerinden başlatılan koşular oraya giriyor. MCP, API veya kontrol panelinden başlatılan
+koşular hiç izlenmiyor, bot yeniden başlarsa liste de kayboluyordu. Bildirim bu yüzden
+sahiplik üzerinden kuruldu: her koşunun `owner_id`'si var ve `telegram_ids_for` bunu
+sohbetlere çeviriyor. Böylece hangi kapıdan başlatılmış olursa olsun sahibine ulaşıyor.
+
+**Bir kez duyurulması** `telegram_failure_notified` adlı olağan bir koşu olayıyla sağlanıyor;
+sütun veya göç gerektirmiyor ve bot yeniden başlasa da kimseye iki kez söylenmiyor. İşaret,
+**gönderim olmasa bile** yazılıyor: sahibinin bağlı Telegram'ı yoksa liste boş döner ve
+işaret yazılmazsa aynı koşu her yoklama turunda yeniden denenirdi. Ulaşılamayan sahip
+loglanıyor.
+
+**Pencere.** `TELEGRAM_FAILURE_NOTICE_WINDOW_H` (varsayılan 24 saat) hem sorguyu sınırlıyor
+hem de "yalnız bundan sonrakiler" kararını ayrı bir tohumlama adımı olmadan sağlıyor:
+özellik açıldığında 24 Ağustos'ta düşmüş iki koşu pencerenin dışında kalıp sessizleşiyor,
+ama bot bir süre kapalı kalırsa o aralıkta düşen koşu hâlâ yakalanıyor — sabit bir "açılış
+anı" damgasının kaybedeceği şey buydu. `list_runs_by_statuses` zaman filtresi taşımadığı ve
+bugüne kadarki bütün hataları döndüreceği için yanına aynı admin muhafazasını taşıyan
+`list_failed_runs_since` eklendi.
+
+Yalnız `failed` bildiriliyor. `cancelled` kullanıcının kendi iptali; `completed_incomplete`
+ise 17 koşunun 13'ü ve bir kapsam teşhisi, arıza değil — bildirim göndermek bildirimlerin
+ciddiye alınmamasına yol açardı.
+
+Çağrı, mevcut plan bildiriminin yanına **kendi ayrı `try/except`'i** içinde konuldu; biri
+patlarsa diğeri ve komut döngüsü ayakta kalmalı. Gecikme uzun yoklama turu kadar, en fazla
+bir dakika.
+
+Beş test eklendi; ikisi kazayla bozulması kolay olan garantileri sabitliyor: bir koşunun iki
+kez duyurulmaması ve pencereden eski bir hatanın hiç duyurulmaması.
+
+**Doğrulama.** Canlı veritabanında mesaj göndermeden çalıştırıldığında 0 bildirim üretti —
+eski iki hata pencere dışında kaldı ve hiçbir işaret yazılmadı. Ardından tek kullanımlık bir
+`failed` koşu üretilip gerçek bildirim gönderildi (`chat_count: 1`), ikinci turda
+tekrarlamadığı doğrulandı, sonra o koşu ve olayı silindi; mevcut 17 koşuya dokunulmadı. Son
+kod değişikliğinden sonraki zorunlu tam kapı `524 passed, 2 warnings` sonucuyla tamamlandı,
+hedefli Ruff dört dosyada da temiz.
+
+**Kapsamda olmayan.** Sunucu çökmesi veya elektrik kesintisi bildirimi bilinçli olarak
+ertelendi. Aynı makinede çalışan hiçbir bileşen kendi ölümünü haber veremez; bu ancak makine
+dışı bir izleyiciyle mümkün ve izleyicinin nerede yaşayacağı donanım kararıdır.
 
 ---
 
