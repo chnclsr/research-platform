@@ -88,6 +88,12 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   `RTX 4060 VRAM` olarak sabitti ve gösterilecek kart adında `4060` aranarak seçiliyordu;
   başka bir GPU'lu makinede rakamlar doğru gelirken başlık yanlış kalıyordu. Kart yoksa
   nötr `GPU VRAM` yazıyor.
+- `OFFICE_TEAM_SETUP.md` Ubuntu sunucusuna göre güncellendi. Sunucu tarafındaki komutlar
+  bash oldu, panel ve MCP adresleri `10.0.10.171` olarak düzeltildi, olmayan `.env.office`
+  referansları `.env` ile değiştirildi. Windows Firewall ve otomatik başlatma bölümlerinin
+  yerini ufw'nin docker portlarını atlaması, `MCP_BIND_HOST` arayüz sınırı ve
+  `CONTROL_PANEL_ALLOWED_HOSTS` aldı. Ekip bilgisayarlarındaki istemci kurulumu
+  (`install_codex_client.ps1`, `install_claude_client.ps1`) PowerShell olarak korundu.
 
 ## v0.14.0 — 2026-08-25
 

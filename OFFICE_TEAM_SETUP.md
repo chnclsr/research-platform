@@ -1,10 +1,16 @@
 # Research Platform Ofis Sunucusu
 
-Belge sürümü: `1.5`
+Belge sürümü: `1.6`
 
-Platform sürümü: `v0.6.6`
+Platform sürümü: `v0.15.0`
 
-Tarih: `2026-07-20`
+Tarih: `2026-08-28`
+
+> **Sunucu Ubuntu'ya taşındı** (`server-cezeri`, `10.0.10.171`). Sunucuda çalışan komutlar
+> artık bash'tir; `.ps1` operasyon scriptlerinin yerini [scripts/linux/](scripts/linux/)
+> aldı. **Ekip bilgisayarlarındaki istemci kurulumu değişmedi** — `install_codex_client.ps1`
+> ve `install_claude_client.ps1` hâlâ Windows'ta çalışır. Taşıma öyküsü
+> [UBUNTU_MIGRATION.md](UBUNTU_MIGRATION.md) içindedir.
 
 ## Amaç
 
@@ -22,7 +28,7 @@ Telegram ── Telegram API long polling ────────────�
                                                   │
                          Worker + Redis + PostgreSQL + MinIO
                                                   │
-                          AgentSearch + Crawl4AI + Ollama/RTX 4060
+                       AgentSearch + Crawl4AI + Ollama/Quadro RTX 4000
 ```
 
 Yalnız MCP portu ofis ağına açılır. Research API, PostgreSQL, Redis, MinIO, Crawl4AI,
@@ -30,45 +36,62 @@ AgentSearch ve Ollama localhost/container sınırında kalır.
 
 ## Sunucu kurulumu
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\initialize_office_server.ps1
-.\scripts\start_office_server.ps1
-.\scripts\office_server_status.ps1
+İlk kurulum [UBUNTU_MIGRATION.md](UBUNTU_MIGRATION.md) içinde adım adım anlatılıyor.
+Kurulu bir makinede günlük komutlar:
+
+```bash
+cd ~/research-platform
+./scripts/linux/start_server.sh      # kaldır + sağlık doğrula
+./scripts/linux/server_status.sh     # yalnız bak, hiçbir şey başlatma
+docker compose logs -f worker
 ```
 
-İlk komut:
+Ayarlar tek bir `.env` dosyasındadır; `.env.office` diye bir dosya **yoktur**.
 
-- Wi‑Fi IPv4 adresini ve `/24` ağı belirler.
-- Güçlü API/MCP/MinIO anahtarları üretir.
-- `.env.office` dosyasını oluşturur.
-- Paylaşılacak adres ve tokenı `data/office-access/TEAM_ACCESS.txt` içine yazar.
+Yığın `docker compose` ile çalışır. Compose'un dışında üç şey vardır: Ollama (host,
+systemd — GPU'yu docling ile paylaşır), SearXNG (ayrı compose projesi) ve kontrol paneli
+(host, systemd — işi compose'u yönetmek olduğu için kendi yönettiği projenin servisi
+olamaz).
 
-## Windows firewall
+## Ağ ve güvenlik duvarı
 
-Bu bilgisayarda Wi‑Fi profili `Public` olduğundan inbound TCP 8010 için LocalSubnet kapsamlı
-bir Windows Firewall kuralı gerekir. İşlem yönetici yetkisiyle yapılmalıdır:
+`setup_ubuntu_server.sh` ufw'yi kurar ve 22 ile panel portunu (1111) LAN'a açar. **Ancak
+docker'ın yayınladığı portlar ufw'yi atlar** — MCP 8010 buna dahildir. Bu yüzden sınır iki
+katmandadır:
 
-```powershell
-.\scripts\configure_office_firewall.ps1
+1. **Arayüz sınırı** — `.env` içindeki `MCP_BIND_HOST=10.0.10.171`. Port yalnız LAN
+   arayüzünde açılır, loopback'te değil. `curl 127.0.0.1:8010` bu yüzden yanıt vermez;
+   doğru adres `http://10.0.10.171:8010/mcp` ve kimliksiz istek `401` döner.
+2. **Uygulama sınırı** — `MCP_ALLOWED_NETWORKS` ve kişiye özel `rp_` anahtarları. Asıl kapı
+   budur.
+
+Kaynak IP'ye göre kısıtlamak isterseniz `ufw allow/deny` **işe yaramaz**; kural
+`DOCKER-USER` zincirine yazılır:
+
+```bash
+sudo iptables -I DOCKER-USER -p tcp --dport 8010 ! -s 10.0.10.0/24 -j DROP
+sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save
 ```
 
-Kural yalnız mevcut Wi‑Fi IP’sinin `8010` portunu ve `LocalSubnet` kaynaklarını kabul eder.
-MCP ayrıca bearer token ve uygulama katmanı CIDR allowlist uygular.
+Container'ların host'taki Ollama'ya erişebilmesi için köprü alt ağının 11434'e izni olmalıdır;
+aksi hâlde worker her LLM çağrısında zaman aşımına düşer:
+
+```bash
+sudo ufw allow from 172.19.0.0/16 to any port 11434 proto tcp
+```
+
+Dışarı **açılmaması gerekenler:** 8000, 5433, 6380, 9000/9001, 7860, 3940, 3941, 11235,
+11434. Compose bunları zaten `127.0.0.1`'e bağlar.
 
 ## Otomatik başlatma
 
-```powershell
-.\scripts\register_office_autostart.ps1
-```
+Ayrı bir iş gerekmez. Compose servisleri `restart: unless-stopped` taşır ve Docker açılışta
+başlar; kontrol paneli systemd'de `enable`lidir. Windows'taki "uyku kapatılmalı" sorunu bu
+makinede yoktur — sunucu uyumaz.
 
-Görev kullanıcı oturum açtığında çalışır, Docker Desktop hazır olana kadar bekler ve servisleri
-başlatır. Bilgisayar uykuya girerse ekip erişimi kesilir; Windows güç planında uyku kapatılmalıdır.
-
-Prize bağlı kullanımda uyku ve hazırda bekletmeyi kapatmak için:
-
-```powershell
-.\scripts\configure_office_power.ps1
+```bash
+systemctl status research-control-panel
+sudo journalctl -u research-control-panel -f
 ```
 
 ## Ajan uçları: önce kendi API anahtarınızı alın
@@ -80,7 +103,7 @@ reddediyordu.
 
 Anahtarı iki yoldan biriyle alırsınız:
 
-```powershell
+```bash
 # Kişi kendi alır: panelde Hesabım -> API anahtarları -> Yeni anahtar
 # Ya da yönetici verir:
 docker compose exec api research-admin issue-key ali@ornek.com --name claude-desktop
@@ -124,7 +147,7 @@ Elle yapmak isterseniz tek komut:
 
 ```powershell
 [Environment]::SetEnvironmentVariable("RESEARCH_MCP_TOKEN", "rp_...", "User")
-claude mcp add --transport http research-platform "http://10.0.10.179:8010/mcp" `
+claude mcp add --transport http research-platform "http://10.0.10.171:8010/mcp" `
   --header "Authorization: Bearer `${RESEARCH_MCP_TOKEN}" --scope user
 ```
 
@@ -150,11 +173,17 @@ görünür ve başlattığınız araştırma yine anahtarın sahibine ait olur.
 
 ### MCP kapısına neden ulaşılabiliyor
 
-8010 portu tüm arayüzlerde yayınlanır. `MCP_ALLOWED_NETWORKS` ayarı **bu kurulumda gerçek
-bir filtre değildir**: Docker Desktop kaynak IP'yi NAT'ladığı için container her istemciyi
-`172.x` olarak görür. Gerçek ağ kapısı Windows Firewall'daki *Docker Desktop Backend*
-kuralıdır; ağı daraltmak isterseniz oradan yapın. `.env` içindeki `172.16.0.0/12` satırını
-**silmeyin** — silerseniz bütün MCP istemcileri 403 alır.
+8010 portu **yalnız LAN arayüzünde** yayınlanır (`MCP_BIND_HOST=10.0.10.171`), tüm
+arayüzlerde değil. Erişim iki katmandan geçer: arayüz sınırı ve `MCP_ALLOWED_NETWORKS` +
+kişiye özel `rp_` anahtarı.
+
+> **`MCP_ALLOWED_NETWORKS`'ü ölçmeden daraltmayın.** Windows kurulumunda bu liste gerçek bir
+> filtre değildi: Docker Desktop kaynak IP'yi NAT'layıp her istemciyi `172.20.0.1` gösterdiği
+> için `172.16.0.0/12` satırı silindiğinde **bütün MCP istemcileri 403 alıyordu**; oradaki
+> gerçek kapı Windows Firewall kuralıydı. Bu makinede o kural yok ve docker'ın gerçek kaynak
+> IP'yi koruması **beklenir ama henüz ölçülmedi**. Daraltmadan önce LAN'daki bir istemciden
+> bağlanıp container'ın gördüğü kaynak IP'yi doğrulayın; o zamana kadar `172.16.0.0/12`
+> satırını silmeyin.
 
 Bulut ortamında çalışan Codex görevleri veya Claude.ai web oturumları özel `10.x.x.x` Wi‑Fi
 adresine doğrudan ulaşamaz. Bu sürümün hedefi ekip bilgisayarlarında yerel çalışan Codex
@@ -164,19 +193,27 @@ uygulaması/CLI/IDE ve Claude Code’dur.
 
 BotFather’dan alınan tokenı kaydedin:
 
-```powershell
-.\scripts\configure_telegram.ps1 -BotToken "<BOT_TOKEN>"
-.\scripts\start_office_server.ps1
+```bash
+# .env icinde TELEGRAM_BOT_TOKEN ve TELEGRAM_BOT_USERNAME satirlarini doldurun,
+# sonra botu profiliyle birlikte baslatin:
+docker compose --profile telegram up -d --build telegram-bot
 ```
+
+> **Aynı anda tek bot.** Telegram bir token için tek aktif `getUpdates` bağlantısına izin
+> verir. Windows kurulumu hâlâ ayaktaysa ve aynı token'ı taşıyorsa iki örnek birbirini keser,
+> her mesaj rastgele birine gider ve veritabanları ayrı olduğu için biri "böyle bir koşu yok"
+> diyebilir. Devir sırası: önce Windows'ta `docker compose stop telegram-bot`, sonra burada
+> yukarıdaki komut.
+
+`TELEGRAM_BOT_USERNAME` boş bırakılırsa paneldeki bağlama akışı kullanıcıya hangi bota
+gideceğini söyleyemez.
 
 Telegram’da bota `/whoami` gönderin. Bot kendi `user_id` ve `chat_id` değerlerinizi döndürür;
 araştırma yetkisi vermez. Sonra allowlist’i kaydedin:
 
-```powershell
-.\scripts\configure_telegram.ps1 `
-  -BotToken "<BOT_TOKEN>" `
-  -AllowedUserIds 123456789,987654321
-.\scripts\start_office_server.ps1
+```bash
+# .env: TELEGRAM_ALLOWED_USER_IDS=123456789,987654321
+docker compose --profile telegram up -d telegram-bot
 ```
 
 Komutlar:
@@ -205,9 +242,16 @@ coverage, saturation veya tur kriteriyle durur. Örnek kullanıcı limiti:
 ## Yerel kontrol paneli
 
 Sunucu bilgisayarındaki servis, kuyruk, aktif run ve log yönetimi bağımsız panelden yapılır.
-Adres ve port `.env.office` içindeki `CONTROL_PANEL_HOST` / `CONTROL_PANEL_PORT` ile
-belirlenir; bu makinede sunucuda `http://127.0.0.1:1111`, aynı ağdaki ekip
-bilgisayarlarında `http://10.0.10.179:1111`. Panel yalnız `CONTROL_PANEL_ALLOWED_NETWORKS`
+Adres ve port `.env` içindeki `CONTROL_PANEL_HOST` / `CONTROL_PANEL_PORT` ile belirlenir;
+bu makinede sunucuda `http://127.0.0.1:1111`, aynı ağdaki ekip bilgisayarlarında
+`http://10.0.10.171:1111`. Panel host üzerinde systemd biriminden çalışır
+(`research-control-panel`), compose içinde değil.
+
+> LAN'dan gelen tarayıcı `Host: 10.0.10.171` gönderir; bu ne loopback ne de makinenin
+> hostname'idir. Sunucunun kendi adresini otomatik bulma denemesi Ubuntu'da `127.0.1.1`'e
+> çözüldüğü için yetmez — `.env` içinde `CONTROL_PANEL_ALLOWED_HOSTS=["10.0.10.171"]`
+> bulunmalıdır, yoksa panel `400 Invalid host header` döner. Yanlış
+> `CONTROL_PANEL_ALLOWED_NETWORKS` ise `403` verir; ikisi farklı belirtidir. Panel yalnız `CONTROL_PANEL_ALLOWED_NETWORKS`
 ile verilen CIDR'ı kabul eder; kullanım ve güvenlik ayrıntıları `CONTROL_PANEL_GUIDE.md`
 belgesindedir.
 
@@ -226,12 +270,12 @@ Panelde kayıt formu yoktur — hesaplar aşağıdaki komutlarla açılır.
 
 Hepsi `research-admin` aracının alt komutlarıdır ve aynı veritabanına yazarlar. İki yol var:
 
-```powershell
+```bash
 # Docker kurulumunda (bu makinede geçerli olan)
 docker compose exec api research-admin <komut> ...
 
 # Panel host üzerinde .venv'den çalıştığı için oradan da olur
-.\.venv\Scripts\research-admin.exe <komut> ...
+.venv/bin/research-admin <komut> ...
 ```
 
 Aşağıdaki örneklerde Docker biçimi kullanılıyor. Komutlar depo kökünden çalıştırılır.
@@ -240,7 +284,7 @@ Aşağıdaki örneklerde Docker biçimi kullanılıyor. Komutlar depo kökünden
 
 ### Mevcut kişilere bakma
 
-```powershell
+```bash
 docker compose exec api research-admin list-users
 ```
 
@@ -262,7 +306,7 @@ Sahipsiz koşu varsa listenin altında ayrıca belirtilir; bunlar yalnız yönet
 
 Daha fazla sütun gerekiyorsa (`token_version`, `last_login_at`) doğrudan veritabanına bakın:
 
-```powershell
+```bash
 docker compose exec -T postgres psql -U research -d research -c "select email, display_name, role, is_active, token_version, last_login_at from users order by created_at;"
 ```
 
@@ -273,7 +317,7 @@ değişiminde ve her hesap kapatmada bir artar. Parola özetleri hiçbir komutta
 
 ### Kişi ekleme
 
-```powershell
+```bash
 docker compose exec api research-admin create-user ali@ornek.com --display-name "Ali Yilmaz"
 ```
 
@@ -294,13 +338,13 @@ parola sizde kalmaya devam eder.
 > ```
 
 Kişi giriş yaptığı anda kendi araştırmasını başlatabilir ve yalnız onları görür.
-Panel adresi bu makinede **`http://10.0.10.179:1111`**.
+Panel adresi bu makinede **`http://10.0.10.171:1111`**.
 
 ---
 
 ### Yetki ayarlama
 
-```powershell
+```bash
 docker compose exec api research-admin set-role ali@ornek.com admin   # yönetici yap
 docker compose exec api research-admin set-role ali@ornek.com user    # geri al
 ```
@@ -327,7 +371,7 @@ görür.
 
 ### Kişi çıkarma
 
-```powershell
+```bash
 docker compose exec api research-admin deactivate ali@ornek.com
 ```
 
@@ -337,7 +381,7 @@ paylaşılan token düzeninde herkesin yeniden yapılandırılması gerekiyordu,
 
 Geri açmak için:
 
-```powershell
+```bash
 docker compose exec api research-admin activate ali@ornek.com
 ```
 
@@ -356,7 +400,7 @@ bilgisi kaybolur.
 Bir hesabı gerçekten silmeniz gerekiyorsa (yanlışlıkla açılmış, hiç koşusu olmayan bir test
 hesabı gibi) önce koşularının olmadığını doğrulayın, sonra doğrudan veritabanından silin:
 
-```powershell
+```bash
 # 1. Koşusu var mı? list-users'daki KOSU sütunu 0 olmalı.
 docker compose exec api research-admin list-users
 
@@ -380,7 +424,7 @@ Parolasını **bilen** kullanıcının yöneticiye ihtiyacı yoktur: panelde **H
 
 Parolasını **unutan** için sıfırlama e-postası yoktur, bir yönetici koyar:
 
-```powershell
+```bash
 docker compose exec api research-admin set-password ali@ornek.com
 ```
 
@@ -393,7 +437,7 @@ Her iki yol da o kişinin tüm açık oturumlarını düşürür.
 Betik, Langflow ve MCP erişimi için. Kişi bunları panelden kendisi üretip iptal edebilir;
 aşağıdakiler yönetici tarafı içindir.
 
-```powershell
+```bash
 docker compose exec api research-admin issue-key ali@ornek.com --name langflow
 docker compose exec api research-admin list-keys                      # hepsi
 docker compose exec api research-admin list-keys --email ali@ornek.com # tek kişi
@@ -420,7 +464,7 @@ o kişinin platform hesabına bağlayıp onun adına araştırma başlatabilirdi
 Elle bağlamak gerekirse (kişi bota `/whoami` yazıp kendi ID'sini söyler) ve eşlemeleri
 görmek için:
 
-```powershell
+```bash
 docker compose exec api research-admin link-telegram ali@ornek.com 123456789
 docker compose exec api research-admin list-telegram
 ```
@@ -429,7 +473,7 @@ docker compose exec api research-admin list-telegram
 
 ### Koşuların sahipliği
 
-```powershell
+```bash
 # Bir kişinin tüm koşularını başkasına devret (ayrılan biri için)
 docker compose exec api research-admin assign-runs veli@ornek.com --from-email ali@ornek.com
 
@@ -479,8 +523,8 @@ sekmen açık kalır.
 **Yönetici parolasını kaybettik.** Komutlar veritabanına erişebilen herkes tarafından
 çalıştırılabilir — sunucuda `docker compose exec api research-admin set-password <e-posta>`.
 
-**Herkes sürekli çıkışa zorlanıyor.** `.env.office` içinde `SESSION_SECRET` boştur. Doldurup paneli
-yeniden başlatın.
+**Herkes sürekli çıkışa zorlanıyor.** `.env` içinde `SESSION_SECRET` boştur. Doldurup paneli
+`sudo systemctl restart research-control-panel` ile yeniden başlatın.
 
 **Kişi kendi koşusunu göremiyor.** Koşu başka bir kanaldan (Telegram, Langflow) başlatılmış ve o
 kanal onun hesabına bağlı değil olabilir. `list-users` koşu sayılarını gösterir; `assign-runs`
@@ -493,7 +537,7 @@ ile düzeltilir.
 `profiles: ["telegram"]` arkasında olduğu için düz `docker compose up -d --build` ona
 dokunmaz. Doğrusu:
 
-```powershell
+```bash
 docker compose --profile telegram up -d --build telegram-bot
 ```
 
@@ -505,7 +549,8 @@ hareket etmesi gereken kişi aynı olmayabilir.
 
 ### Değişmeyenler
 
-- `.env.office` ve `.env` Git'te değildir; bu makineye özgüdür.
+- `.env` Git'te değildir; bu makineye özgüdür. `.env.office` diye bir dosya yoktur.
 - `SERVICE_TOKEN` ve `SESSION_SECRET` Git'e, Telegram grubuna veya normal e-postaya yazılmamalıdır.
-- Ağ değişirse `.env.office` yeniden üretilmeli ve firewall kuralı güncellenmelidir.
+- Ağ değişirse `.env` içindeki `MCP_BIND_HOST`, `CONTROL_PANEL_ALLOWED_HOSTS` ve
+  `*_ALLOWED_NETWORKS` satırları güncellenmelidir.
 - Ofis CIDR sınırı kaldırılmamalıdır: panel düz HTTP üzerinden çalışırken oturum çerezi ağda açıktır.
