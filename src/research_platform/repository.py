@@ -373,6 +373,34 @@ class Repository(metaclass=_OwnershipEnforced):
         )
         return list(rows)
 
+    async def list_runs_cancelled_by_event_since(
+        self, cutoff: datetime, event_type: str
+    ) -> list[ResearchRunRow]:
+        """Recently cancelled runs carrying `event_type`, for the notice their owners get.
+
+        Cancellation is normally the user's own doing and stays silent on purpose. A
+        cancellation the platform decided is a different thing wearing the same status, and
+        the event is what tells them apart -- so the caller names the event rather than
+        this widening to every cancelled run.
+
+        Carries the same admin guard as the other whole-queue reads.
+        """
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        rows = await self.session.scalars(
+            select(ResearchRunRow)
+            .join(EventRow, EventRow.run_id == ResearchRunRow.id)
+            .where(
+                ResearchRunRow.status == RunStatus.CANCELLED.value,
+                ResearchRunRow.updated_at >= cutoff,
+                EventRow.event_type == event_type,
+            )
+            .order_by(ResearchRunRow.updated_at)
+            .distinct()
+        )
+        return list(rows)
+
     async def running_normal_run(self) -> ResearchRunRow | None:
         """The normal-priority run currently holding the worker, if there is one.
 

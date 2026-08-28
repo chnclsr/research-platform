@@ -23,7 +23,13 @@ from research_platform.db import SessionLocal, create_schema
 from research_platform.identity import create_user, get_user_by_email, link_telegram
 from research_platform.repository import Repository
 from research_platform.schemas import ResearchProtocol, RunStatus
-from research_platform.telegram_bot import FAILURE_NOTICE_EVENT, TelegramResearchBot
+from research_platform.telegram_bot import (
+    FAILURE_NOTICE_EVENT,
+    PLAN_CANCEL_NOTICE_EVENT,
+    PLAN_LIMIT_EVENT,
+    TelegramResearchBot,
+    plan_summary,
+)
 
 
 class RecordingBot(TelegramResearchBot):
@@ -156,3 +162,79 @@ async def test_a_failure_with_no_recorded_reason_still_says_something():
 
     assert len(bot.sent) == 1
     assert "kaydedilmemiş" in bot.sent[0][1]
+
+
+async def _cancelled_by_the_plan_gate(owner_id: str, *, mark: bool = True) -> str:
+    """A run the gate closed after the revision limit, not one its owner cancelled."""
+    run_id = await _run(owner_id, status=RunStatus.CANCELLED, error=None)
+    if mark:
+        async with SessionLocal() as session:
+            repo = Repository(session, actor=acting_principal())
+            await repo.event(run_id, PLAN_LIMIT_EVENT, {"revisions": 3})
+    return run_id
+
+
+@pytest.mark.asyncio
+async def test_the_gate_cancelling_a_run_reaches_its_owner_once():
+    """The complaint this closes: three revisions and then nothing at all."""
+    owner = await _user("plancancel-owner@example.test", 5151)
+    run_id = await _cancelled_by_the_plan_gate(owner)
+    bot = RecordingBot()
+
+    await bot._notify_plan_cancelled_runs(None)
+
+    assert len(bot.sent) == 1
+    chat_id, text = bot.sent[0]
+    assert chat_id == 5151
+    assert run_id in text
+    assert "iptal edildi" in text
+    # The limit is named, so the number is not a mystery the reader has to infer.
+    assert "3" in text
+
+    await bot._notify_plan_cancelled_runs(None)
+    assert len(bot.sent) == 1
+    async with SessionLocal() as session:
+        marks = await Repository(session, actor=acting_principal()).events_by_types(
+            run_id, {PLAN_CANCEL_NOTICE_EVENT}
+        )
+    assert len(marks) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_run_the_user_cancelled_stays_silent():
+    """Announcing someone's own cancellation back to them is noise, and always was."""
+    owner = await _user("selfcancel-owner@example.test", 5252)
+    await _cancelled_by_the_plan_gate(owner, mark=False)
+    bot = RecordingBot()
+
+    await bot._notify_plan_cancelled_runs(None)
+
+    assert bot.sent == []
+
+
+@pytest.mark.asyncio
+async def test_the_two_notices_do_not_consume_each_others_marker():
+    """A run can carry both markers; neither may suppress the other."""
+    owner = await _user("bothnotice-owner@example.test", 5353)
+    run_id = await _cancelled_by_the_plan_gate(owner)
+    bot = RecordingBot()
+    await bot._notify_plan_cancelled_runs(None)
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        assert not await repo.events_by_types(run_id, {FAILURE_NOTICE_EVENT})
+    # The failure notifier still ignores it: the run is cancelled, not failed.
+    await bot._notify_failed_runs(None)
+    assert len(bot.sent) == 1
+
+
+def test_the_plan_warns_before_the_last_revision_is_spent():
+    """The limit was being reached without the person rejecting having been told."""
+    base = {
+        "questions": {"primary": "q"},
+        "budget": {"max_wall_minutes": 30, "max_sources": 8, "max_rounds": 4},
+    }
+    warned = plan_summary({"id": "R1", "protocol": {}}, {**base, "revisions_left": 1})
+    assert "Bir değişiklik hakkınız kaldı" in warned
+    for left in (3, 2, 0):
+        text = plan_summary({"id": "R1", "protocol": {}}, {**base, "revisions_left": left})
+        assert "hakkınız kaldı" not in text

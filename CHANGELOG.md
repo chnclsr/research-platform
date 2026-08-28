@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.30`
+Belge sürümü: `6.31`
 
 Son güncelleme: `2026-08-28`
 
@@ -107,6 +107,13 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   yani istek sessizce geri alınıyordu. Reddetme metni artık kapsam sorularıyla aynı
   sözlükten geçiyor. Kaynak ailesi yalnız açık bir "sadece/yalnızca" ifadesiyle
   değişiyor, tarih penceresi ise üç hazır seçenekle sınırlı değil ("son 2 yıl" da geçerli).
+- Plan üç kez değiştirilmek istendikten sonra koşu iptal edilirse Telegram'dan bildirim
+  gidiyor. Önceden bu iptal tamamen sessizdi: bildirim yalnız `failed` koşuları kapsıyordu
+  ve `cancelled` kullanıcının kendi iptali sayıldığı için dışarıda bırakılmıştı. Kullanıcının
+  kendi iptali sessiz kalmaya devam ediyor; ayrım artık statüye değil, kapının yazdığı olaya
+  bakılarak yapılıyor.
+- Plan mesajı son değişiklik hakkı kaldığında uyarıyor. Sınırın varlığı, dolana kadar
+  kullanıcıya hiç söylenmiyordu.
 
 ## v0.14.0 — 2026-08-25
 

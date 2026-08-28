@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.36`
+Belge sürümü: `12.37`
 
 Son güncelleme: `2026-08-28`
 
@@ -3142,6 +3142,40 @@ da bağlanması, geri bildirimin protokole ve satıra ulaşması ve kapsamın so
 yeniden türetilmemesi. Tam kapı `579 passed, 1 warning`. Hedefli Ruff taban ölçümüyle
 karşılaştırıldı: `pipeline.py` HEAD'de 23 tarihsel ihlal veriyor, değişiklik sonrası da 23;
 `scoping.py` tabanda da sonrada da temiz.
+
+
+## 54. Plan kapısının kendi iptalini kullanıcıya söylemesi
+
+Üç değişiklik isteğinden sonra koşu iptale düşüyor ve kullanıcı hiçbir şey duymuyordu.
+Sohbet, planı reddettiği yerde sessizleşiyordu.
+
+İki ayrı boşluk vardı. `_plan_review_gate` limitte koşuyu `CANCELLED` yapıp
+`plan_rejection_limit` olayını yazıyor ve duruyor. Bildirici ise yalnız `FAILED` durumunu
+sorguluyordu — ve bu **bilerek** böyleydi: 49. bölümde `cancelled`, kullanıcının kendi
+iptali sayıldığı için kapsam dışı bırakılmıştı, çünkü insanın kendi yaptığı bir şeyi ona
+geri duyurmak gürültüdür. Bu iptal ise kullanıcının değil; aynı durumu giyen farklı bir
+olay.
+
+Ayrım statüye değil olaya bakılarak yapıldı. `list_runs_cancelled_by_event_since` çağıran
+tarafın olayı adlandırmasını istiyor, böylece sorgu "her iptal edilen koşu"ya genişlemiyor
+ve kullanıcının kendi iptali sessiz kalmaya devam ediyor. Bildirim kendi işaret olayını
+kullanıyor (`telegram_plan_cancel_notified`), `FAILURE_NOTICE_EVENT`'ten ayrı: bir koşu
+iki işareti birden taşıyabilmeli ve biri diğerini yutmamalı.
+
+İkinci boşluk daha temeldi: kullanıcı böyle bir sınırın varlığından haberdar değildi.
+Limit, kimse ona söylemeden doluyordu. Plan yükü artık `revisions_left` taşıyor ve
+Telegram mesajı son hak kaldığında uyarıyor — uyarı, o hakkı harcayacak düğmenin yanında
+duruyor, çünkü kişinin bu bilgiye ihtiyaç duyduğu an tam olarak yeniden reddedip
+reddetmeyeceğine karar verdiği andır.
+
+`plan_max_revisions` varsayılanı 3 ve `.env`'de tanımlı değil; bildirim metni sayıyı
+ayardan okuyup yazıyor, böylece değer değiştirilirse mesaj da değişiyor.
+
+**Doğrulama.** Beş yeni test: kapının iptalinin sahibine bir kez ulaşması, kullanıcının
+kendi iptalinin sessiz kalması, iki bildirimin birbirinin işaretini tüketmemesi, uyarının
+yalnız son hakta görünmesi ve `revisions_left`'in negatife düşmemesi. Tam kapı
+`584 passed, 1 warning`. Hedefli Ruff taban ölçümüyle karşılaştırıldı: `telegram_bot.py`
+2/2, `repository.py` 3/3, `research_plan.py` 1/1 — hiçbirinde artış yok.
 
 
 ---

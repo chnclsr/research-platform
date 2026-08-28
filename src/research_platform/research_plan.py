@@ -185,6 +185,13 @@ def build_research_plan(
         # separately because it is the only part the run is obliged to honour.
         "applied_settings": list(state.get("applied_settings", [])),
         "feedback": list(state.get("plan_feedback", [])),
+        # Rejections left before the gate gives up and cancels the run. Carried in the plan
+        # because the moment a person needs it is the moment they are deciding whether to
+        # reject again, and the limit was being reached without anyone having been told it
+        # existed.
+        "revisions_left": max(
+            settings.plan_max_revisions - len(state.get("plan_feedback", []) or []), 0
+        ),
         "strategy_note": "",
     }
 

@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 # migration, and it survives a bot restart so nobody is told twice.
 FAILURE_NOTICE_EVENT = "telegram_failure_notified"
 
+# The plan gate's own cancellation, and the marker saying its owner has been told. Kept
+# apart from FAILURE_NOTICE_EVENT so a run that failed after being cancelled -- or the
+# reverse -- still gets both notices exactly once.
+PLAN_LIMIT_EVENT = "plan_rejection_limit"
+PLAN_CANCEL_NOTICE_EVENT = "telegram_plan_cancel_notified"
+
 # Every word the bot says, in both languages. One table rather than several: a new string
 # has exactly one place to go, and the key-parity test catches the half that gets
 # forgotten. The research itself still runs in English -- this is only what the chat reads.
@@ -121,6 +127,13 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
             "<code>/status {run_id}</code> ile ayrıntıya bakabilirsiniz."
         ),
         "run_failed_no_reason": "Hata nedeni kaydedilmemiş.",
+        "run_plan_cancelled": (
+            "🚫 <b>Araştırma iptal edildi</b>\n\n"
+            "🧭 <b>{label}</b>\n<code>{run_id}</code>\n\n"
+            "Plan {limit} kez değişiklik istendikten sonra onaylanmadığı için koşu "
+            "kapatıldı. İsterseniz /research ile yeniden başlatabilirsiniz; son "
+            "istediğiniz değişiklikleri baştan yazmanız yeterli."
+        ),
         "respond_ok": "{run_id}: yanıt alındı, durum {status}",
         "respond_none": "Bekleyen kullanıcı girdisi yok.",
         "respond_plan_usage": "approve veya reject <değişiklik> kullanın.",
@@ -186,6 +199,7 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
             "answers": "Verdiğiniz yanıtlar",
             "feedback": "Önceki geri bildiriminiz",
             "strategy": "Strateji",
+            "last_revision": "⚠️ Bir değişiklik hakkınız kaldı; sonrasında koşu iptal edilir.",
             "applied": "Uyguladığım ayarlar",
             "approve_button": "✅ Onayla",
             "reject_button": "✏️ Değişiklik iste",
@@ -286,6 +300,13 @@ In the commands below you can use the run's name instead of <run_id>.
             "Use <code>/status {run_id}</code> for the details."
         ),
         "run_failed_no_reason": "No failure reason was recorded.",
+        "run_plan_cancelled": (
+            "🚫 <b>Research cancelled</b>\n\n"
+            "🧭 <b>{label}</b>\n<code>{run_id}</code>\n\n"
+            "The plan was not approved after {limit} rounds of changes, so the run was "
+            "closed. Start again with /research whenever you like -- just say what you "
+            "wanted changed."
+        ),
         "respond_ok": "{run_id}: answer received, status {status}",
         "respond_none": "There is no pending checkpoint.",
         "respond_plan_usage": "Use approve, or reject <what to change>.",
@@ -350,6 +371,7 @@ In the commands below you can use the run's name instead of <run_id>.
             "answers": "Your answers",
             "feedback": "Your earlier feedback",
             "strategy": "Strategy",
+            "last_revision": "⚠️ One round of changes left; after that the run is cancelled.",
             "applied": "Settings I applied",
             "approve_button": "✅ Approve",
             "reject_button": "✏️ Request changes",
@@ -697,6 +719,10 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
             f"{item.get('label', '')} → {item.get('detail', '')}" for item in applied
         )
         decision.append(f"⚙️ <b>{text['applied']}</b>: {html.escape(summary[:300])}")
+    # Beside the button that spends it, because the limit was being reached without the
+    # person rejecting having been told there was one.
+    if plan.get("revisions_left") == 1:
+        decision.append(text["last_revision"])
 
     # (shed rank, lines). Rendered in the order built, dropped highest rank first: the
     # reading order a person expects is not the order in which these stop being worth their
@@ -1828,6 +1854,50 @@ class TelegramResearchBot:
                     )
                 await repo.event(run.id, FAILURE_NOTICE_EVENT, {"chat_count": len(chat_ids)})
 
+    async def _notify_plan_cancelled_runs(self, client: httpx.AsyncClient) -> None:
+        """Tell the owner when the plan gate gave up and cancelled their run.
+
+        `_notify_failed_runs` covers `failed` only, and deliberately: `cancelled` is
+        normally the user's own doing and announcing it back to them is noise. This
+        cancellation is not theirs -- it is the revision limit being reached -- and it was
+        landing in complete silence. Same once-only marker, same reason.
+        """
+        settings = get_settings()
+        cutoff = datetime.now(UTC) - timedelta(
+            hours=settings.telegram_failure_notice_window_h
+        )
+        async with SessionLocal() as session:
+            repo = Repository(session, actor=Principal.system())
+            runs = await repo.list_runs_cancelled_by_event_since(
+                cutoff, PLAN_LIMIT_EVENT
+            )
+            for run in runs:
+                if await repo.events_by_types(run.id, {PLAN_CANCEL_NOTICE_EVENT}):
+                    continue
+                chat_ids = (
+                    await telegram_ids_for(session, run.owner_id) if run.owner_id else []
+                )
+                strings = text_for(reply_language(run={"protocol": run.protocol or {}}))
+                text = strings["run_plan_cancelled"].format(
+                    label=html.escape(
+                        run_label({"protocol": run.protocol or {}, "id": run.id})
+                    ),
+                    run_id=run.id,
+                    limit=settings.plan_max_revisions,
+                )
+                for chat_id in chat_ids:
+                    await self._send_message(client, chat_id, text, parse_mode="HTML")
+                if not chat_ids:
+                    logger.warning(
+                        "iptal edilen kosu %s icin bildirilecek telegram hesabi yok "
+                        "(sahip=%s)",
+                        run.id,
+                        run.owner_id,
+                    )
+                await repo.event(
+                    run.id, PLAN_CANCEL_NOTICE_EVENT, {"chat_count": len(chat_ids)}
+                )
+
     async def _notify_waiting_runs(self, client: httpx.AsyncClient) -> None:
         """Tell the chat when one of its runs has stopped for input.
 
@@ -1918,6 +1988,12 @@ class TelegramResearchBot:
                     await self._notify_failed_runs(client)
                 except Exception:
                     logger.exception("dusen kosu bildirimi basarisiz")
+                # Same rule again: its own guard, so one silent notice does not silence
+                # the others.
+                try:
+                    await self._notify_plan_cancelled_runs(client)
+                except Exception:
+                    logger.exception("iptal edilen kosu bildirimi basarisiz")
 
 
 def run() -> None:

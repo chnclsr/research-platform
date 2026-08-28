@@ -180,3 +180,17 @@ async def test_strategy_note_is_optional_and_never_blocks_approval():
     plan = plan_for(protocol())
     assert await plan_strategy(BrokenLLM(), plan) == ""
     assert await plan_strategy(NotesLLM(), plan) == "Search academic sources first."
+
+
+def test_the_plan_says_how_many_revisions_are_left():
+    """The gate cancels at the limit; the person deciding whether to reject needs to know."""
+    settings = get_settings()
+    fresh = plan_for(protocol())
+    assert fresh["revisions_left"] == settings.plan_max_revisions
+    once = plan_for(protocol(), plan_feedback=["Add regulatory sources"])
+    assert once["revisions_left"] == settings.plan_max_revisions - 1
+    spent = plan_for(
+        protocol(), plan_feedback=[f"note {n}" for n in range(settings.plan_max_revisions + 2)]
+    )
+    # Never negative: the count is read as "how many are left", not as an offset.
+    assert spent["revisions_left"] == 0
