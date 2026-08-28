@@ -321,6 +321,60 @@ def test_plan_summary_stays_inside_a_telegram_message():
     assert "(sorudan çıkarıldı)" in text
 
 
+def test_plan_summary_shows_the_answers_and_the_feedback_behind_the_plan():
+    """The questions were already in the chat; what the reader gave back was not.
+
+    Without them the approval screen asks someone to judge a plan against choices they
+    can no longer see, and a revision shows only that one happened.
+    """
+    plan = {
+        "questions": {"primary": "open source alternatives"},
+        "budget": {"max_wall_minutes": 120, "max_sources": None, "max_rounds": 3},
+        "planning_answers": ["Hangi dönem? -> Son 3 yıl", "Kaynak türü? -> web, academic"],
+        "feedback": ["Tarihi son 1 yıl yap"],
+    }
+    text = plan_summary({"id": "RUN1", "protocol": {}}, plan)
+    assert "Verdiğiniz yanıtlar (2)" in text
+    assert "Son 3 yıl" in text
+    assert "Kaynak türü? → web, academic" in text
+    assert "Önceki geri bildiriminiz (1)" in text
+    assert "Tarihi son 1 yıl yap" in text
+
+
+def test_plan_summary_ends_the_strategy_note_on_a_boundary():
+    """A fixed slice used to stop mid-word with nothing to show that anything was cut."""
+    note = "Cümle bir burada biter. " * 200
+    plan = {
+        "questions": {"primary": "q"},
+        "budget": {"max_wall_minutes": 30, "max_sources": 8, "max_rounds": 4},
+        "strategy_note": note,
+    }
+    text = plan_summary({"id": "RUN1", "protocol": {}}, plan)
+    assert len(text) < 4096
+    assert "…" in text
+    # The note gets the room the rest of the plan left, well past the old fixed 500.
+    assert text.count("Cümle bir burada biter.") > 500 // len("Cümle bir burada biter.")
+    body = text.rsplit("<blockquote expandable>", 1)[1]
+    assert body.replace("</blockquote>", "").rstrip().endswith("biter. …")
+
+
+def test_plan_summary_shrinks_the_strategy_note_when_the_plan_is_long():
+    """The budget is shared: a plan with long lists must not push the message over."""
+    plan = {
+        "questions": {
+            "primary": "P" * 500,
+            "sub_questions": [f"sub {i} " + "x" * 200 for i in range(8)],
+        },
+        "query_plan": [{"query": f"query {i} " + "y" * 200} for i in range(12)],
+        "budget": {"max_wall_minutes": 30, "max_sources": 8, "max_rounds": 4},
+        "planning_answers": [f"soru {i} -> " + "a" * 200 for i in range(8)],
+        "feedback": ["f" * 400, "g" * 400, "h" * 400],
+        "strategy_note": "S" * 4000,
+    }
+    text = plan_summary({"id": "RUN1", "protocol": {"label": "nodules"}}, plan)
+    assert len(text) < 4096
+
+
 class PlanGateway:
     """Records what the plan buttons actually send."""
 

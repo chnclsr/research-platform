@@ -589,6 +589,36 @@ def parse_research_request(
     )
 
 
+# Telegram rejects a message over this rather than truncating it, so the plan summary
+# spends its room deliberately: everything the reader decides on is built first and the
+# strategy note takes what is left.
+MESSAGE_LIMIT = 4096
+# Assembly stays strictly under the limit rather than exactly on it: the margin costs
+# one character and removes a whole class of off-by-one rejection.
+# Below this the note stops being a summary and starts being a fragment; if the rest of
+# the plan is long enough to squeeze it this far, the reader is better served by the panel.
+STRATEGY_FLOOR = 400
+STRATEGY_CEILING = 1600
+
+
+def _trim(value: str, limit: int) -> str:
+    """Shorten to `limit`, breaking on a boundary and saying that something was cut.
+
+    A bare slice used to end the strategy note in the middle of a word with nothing to
+    show for it, which reads as a broken message rather than as a summary.
+    """
+    value = value.strip()
+    if len(value) <= limit:
+        return value
+    window = value[: max(limit - 2, 1)]
+    for boundary in (". ", "! ", "? ", "\n"):
+        cut = window.rfind(boundary)
+        if cut >= limit // 2:
+            return f"{window[: cut + 1].rstrip()} …"
+    cut = window.rfind(" ")
+    return f"{(window[:cut] if cut >= limit // 2 else window).rstrip()} …"
+
+
 def _quote(items: list[str]) -> str:
     """Long lists as a collapsed quote so the message stays scannable.
 
@@ -600,6 +630,10 @@ def _quote(items: list[str]) -> str:
     return f"<blockquote expandable>{body}</blockquote>"
 
 
+#: What `_quote` costs before any content, so the strategy budget can account for it.
+QUOTE_OVERHEAD = len("<blockquote expandable></blockquote>")
+
+
 def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
     """The approval document compressed to something readable in a chat window.
 
@@ -608,6 +642,11 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
     asked, how long it may run, and which limit will really stop it. HTML rather than
     MarkdownV2: everything interpolated here is user text, and HTML needs three characters
     escaped instead of eighteen.
+
+    The blocks below are capped individually, but the caps alone no longer guarantee the
+    limit: a plan carrying every optional block measured 5756 characters. So the message is
+    assembled against a shared budget and sheds context blocks, lowest value first, until
+    it fits. The panel keeps every one of them in full.
     """
     questions = plan.get("questions") or {}
     branches = plan.get("query_plan") or []
@@ -618,7 +657,7 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
     # translation can still be rejected here.
     translated = bool(questions.get("translated") and questions.get("original"))
     lead = questions["original"] if translated else questions.get("primary", "")
-    lines = [
+    head = [
         f"🧭 <b>{html.escape(run_label(run))}</b> — {text['waiting']}",
         f"<code>{html.escape(str(run.get('id') or ''))}</code>",
         "",
@@ -626,27 +665,14 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
         html.escape(str(lead)[:300]),
     ]
     if translated:
-        lines.append(
+        head.append(
             f"<i>{text['research_wording']}: "
             f"{html.escape(str(questions['primary'])[:300])}</i>"
         )
-    # Collapsing the long lists buys room, but not unlimited room: every cap below is
-    # chosen so the worst case still lands inside Telegram's 4096 characters, because a
-    # message over the limit is not truncated by Telegram -- it is rejected.
-    subs = questions.get("sub_questions_display") or questions.get("sub_questions") or []
-    if subs:
-        lines.append("")
-        lines.append(f"<b>{text['sub_questions']} ({len(subs)})</b>")
-        lines.append(_quote([f"{n}. {str(item)[:140]}" for n, item in enumerate(subs[:8], 1)]))
-    if branches:
-        lines.append("")
-        lines.append(f"<b>{text['branches']} ({len(branches)})</b>")
-        shown = [f"· {str(item.get('query', ''))[:120]}" for item in branches[:10]]
-        if len(branches) > 10:
-            shown.append(f"· … {text['more'].format(count=len(branches) - 10)}")
-        lines.append(_quote(shown))
-    lines.append("")
-    lines.append(
+    # The decision itself: budget, the limit that will really stop the run, and the dates.
+    # Never dropped, because these are what the buttons are answering.
+    decision = [""]
+    decision.append(
         f"⏱ <b>{budget.get('max_wall_minutes')} {text['minutes']}</b> · "
         f"{text['sources']}: {html.escape(str(budget.get('max_sources') or text['unlimited']))} · "
         f"{text['rounds']}: {budget.get('max_rounds')}"
@@ -657,10 +683,10 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
         if not row.get("binding")
     ]
     if inert:
-        lines.append(f"{text['inert']}: {html.escape(', '.join(inert))}")
+        decision.append(f"{text['inert']}: {html.escape(', '.join(inert))}")
     if scope.get("start_date"):
         note = f" ({text['inferred']})" if scope.get("inferred_from_question") else ""
-        lines.append(
+        decision.append(
             f"📅 {str(scope['start_date'])[:10]} → {str(scope.get('end_date'))[:10]}{note}"
         )
     applied = plan.get("applied_settings") or []
@@ -670,14 +696,79 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
         summary = " · ".join(
             f"{item.get('label', '')} → {item.get('detail', '')}" for item in applied
         )
-        lines.append(f"⚙️ <b>{text['applied']}</b>: {html.escape(summary[:300])}")
-    if plan.get("feedback"):
-        lines.append(f"{text['feedback']}: {len(plan['feedback'])}")
-    if plan.get("strategy_note"):
-        lines.append("")
-        lines.append(f"<b>{text['strategy']}</b>")
-        lines.append(f"<i>{html.escape(str(plan['strategy_note'])[:500])}</i>")
-    return "\n".join(lines)
+        decision.append(f"⚙️ <b>{text['applied']}</b>: {html.escape(summary[:300])}")
+
+    # (shed rank, lines). Rendered in the order built, dropped highest rank first: the
+    # reading order a person expects is not the order in which these stop being worth their
+    # characters.
+    blocks: list[tuple[int, list[str]]] = []
+    subs = questions.get("sub_questions_display") or questions.get("sub_questions") or []
+    if subs:
+        blocks.append((2, [
+            "",
+            f"<b>{text['sub_questions']} ({len(subs)})</b>",
+            _quote([f"{n}. {str(item)[:140]}" for n, item in enumerate(subs[:8], 1)]),
+        ]))
+    answers = plan.get("planning_answers") or []
+    if answers:
+        # What the reader chose while scoping, beside the plan those choices produced.
+        # Judging the plan means judging whether the answers landed where they were meant
+        # to, and the questions alone were already in the chat -- the answers were not.
+        blocks.append((0, [
+            "",
+            f"<b>{text['answers']} ({len(answers)})</b>",
+            _quote([f"· {str(item).replace(' -> ', ' → ')[:160]}" for item in answers[:8]]),
+        ]))
+    feedback = plan.get("feedback") or []
+    if feedback:
+        # A bare count said a revision happened but not what was asked for -- which is
+        # precisely what the reader has to check the rebuilt plan against.
+        blocks.append((1, [
+            "",
+            f"<b>{text['feedback']} ({len(feedback)})</b>",
+            _quote([f"· {str(item)[:200]}" for item in feedback[-3:]]),
+        ]))
+    if branches:
+        shown = [f"· {str(item.get('query', ''))[:120]}" for item in branches[:10]]
+        if len(branches) > 10:
+            shown.append(f"· … {text['more'].format(count=len(branches) - 10)}")
+        blocks.append((3, [
+            "",
+            f"<b>{text['branches']} ({len(branches)})</b>",
+            _quote(shown),
+        ]))
+    note = str(plan.get("strategy_note") or "").strip()
+
+    # Shed from the end: the query branches and the strategy note restate what the rest of
+    # the plan already implies, while the answers and the feedback are the only record of
+    # what this reader asked for.
+    kept = list(blocks)
+    while True:
+        lines = [*head, *[line for _, block in kept for line in block], *decision]
+        candidate = _with_strategy(lines, note, text["strategy"])
+        if len(candidate) < MESSAGE_LIMIT or not kept:
+            return candidate[: MESSAGE_LIMIT - 1]
+        kept.remove(max(kept, key=lambda item: item[0]))
+
+
+def _with_strategy(lines: list[str], note: str, label: str) -> str:
+    """Append the strategy note in whatever room the rest of the message left.
+
+    Measured rather than computed: the assembled string is the only thing Telegram counts,
+    and a budget worked out from the parts kept being off by the separators between them.
+    """
+    body = "\n".join(lines)
+    if not note:
+        return body
+    header = f"\n\n<b>{label}</b>\n"
+    room = min(MESSAGE_LIMIT - len(body) - len(header) - QUOTE_OVERHEAD, STRATEGY_CEILING)
+    while room >= STRATEGY_FLOOR:
+        candidate = f"{body}{header}{_quote([_trim(note, room)])}"
+        if len(candidate) < MESSAGE_LIMIT:
+            return candidate
+        room -= 64
+    # No room for a note worth reading. The plan still stands; the panel has the note.
+    return body
 
 
 _TAG = re.compile(r"<[^>]+>")

@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.34`
+Belge sürümü: `12.35`
 
 Son güncelleme: `2026-08-28`
 
@@ -3048,6 +3048,51 @@ Kod değişikliğinden sonraki zorunlu tam kapı `568 passed, 1 warning` sonucuy
 tamamlandı.
 Panel systemd biriminden çalıştığı ve venv editable kurulu olduğu için değişikliğin
 görünmesi `sudo systemctl restart research-control-panel` gerektirir.
+
+
+## 52. Telegram plan mesajında yanıtlar, geri bildirim ve kesilmeyen strateji
+
+Ekip iki şey bildirdi. Koşu başlatılırken sorulan kapsam soruları sohbette görünüyordu ama
+**verilen yanıtlar görünmüyordu**; ve strateji notu cümle ortasında kesiliyordu
+(`… bazı AI araçlarının fiyatlandırma mode`).
+
+Yanıtlar zaten taşınıyordu. `build_research_plan` yükü `planning_answers` alanını
+üretiyor, panel bunu basıyor ve `MESSAGES` tablosunda iki dilde `answers` dizesi tanımlı —
+ama `plan_summary()` alanı hiç okumuyordu, dize ölüydü. Geri bildirim de yalnız sayı
+olarak basılıyordu (`Önceki geri bildiriminiz: 1`), oysa yeniden kurulan planı neye karşı
+denetleyeceğini söyleyen tek kayıt onun içeriği.
+
+Kesilme sabit bir dilimden geliyordu: `strategy_note[:500]`, sınır işareti yok. Sınırı
+büyütmek tek başına çözüm değildi — Telegram 4096'yı aşan mesajı kırpmaz, **reddeder**.
+
+Ölçüm, dosyadaki "her üst sınır en kötü durum 4096'nın içinde kalacak şekilde seçildi"
+notunun artık doğru olmadığını gösterdi: her opsiyonel bloğu taşıyan bir plan **5756**
+karakter üretiyordu ve yanıt/geri bildirim eklenmeden önce bile en kötü durum 3701'di,
+yani 395 karakterlik boşluk kalmıştı. Bu yüzden bağımsız üst sınırlar yerine **paylaşılan
+bütçe** kuruldu: karar veren kısım (soru, süre, bağlayıcı sınır, tarih, uygulanan ayarlar)
+her zaman basılır; bağlam blokları sığmadıkça, değeri en düşük olandan başlayarak düşer.
+
+Düşme sırası gösterim sırasından ayrıldı, çünkü insanın okumak istediği sıra ile bir
+bloğun karakterine değmeyi bıraktığı sıra aynı değil. Sorgu dalları ve alt sorular önce
+düşer — ikisi de plandan türetilmiş içerik. Kullanıcının verdiği yanıtlar ile geri
+bildirimi en son düşer: bu koşuda ne istendiğinin tek kaydı onlar. Strateji notu, kalan
+yerin izin verdiği kadarını alır, cümle ya da kelime sınırında kesilir ve kesildiğini `…`
+ile söyler; yer `STRATEGY_FLOOR`'un altına inerse hiç basılmaz, çünkü o noktada not bir
+özet değil bir parçadır ve tamamı zaten panelde durur.
+
+Bütçe hesaplanmıyor, **ölçülüyor**: parçalardan çıkarılan tahmin aradaki ayraçlar yüzünden
+sürekli şaşıyordu, bu yüzden `_with_strategy` kurduğu dizenin gerçek uzunluğunu sayıp
+sığmıyorsa daraltıyor. Montaj 4096'ya tam oturmak yerine kesin olarak altında kalır; marj
+bir karaktere mal oluyor ve bir sınıf off-by-one reddini ortadan kaldırıyor.
+
+**Doğrulama.** En kötü durum ölçüldü: eskiden 5756 olan mesaj artık 4032 ve o uçta
+korunanlar yanıtlar, geri bildirim ve strateji; düşenler türetilmiş alt sorular ve sorgu
+dalları. Ekibin bildirdiği gerçek plan 1383 karakter üretiyor ve strateji notu tam
+basılıyor. Üç yeni test eklendi: yanıt/geri bildirim bloklarının varlığı, notun sınırda
+bitip `…` ile işaretlenmesi ve uzun planda mesajın sınırı aşmaması. Tam kapı
+`571 passed, 1 warning`. `telegram_bot.py` üzerinde hedefli Ruff taban ölçümüyle
+karşılaştırıldı: `.ruffbase/` içindeki HEAD kopyası 2 tarihsel ihlal veriyor, değişiklik
+sonrası da 2 — yeni ihlal yok, temizmiş gibi de raporlanmadı.
 
 
 ---

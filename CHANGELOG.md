@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.28`
+Belge sürümü: `6.29`
 
 Son güncelleme: `2026-08-28`
 
@@ -94,6 +94,13 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   yerini ufw'nin docker portlarını atlaması, `MCP_BIND_HOST` arayüz sınırı ve
   `CONTROL_PANEL_ALLOWED_HOSTS` aldı. Ekip bilgisayarlarındaki istemci kurulumu
   (`install_codex_client.ps1`, `install_claude_client.ps1`) PowerShell olarak korundu.
+- Telegram'daki plan onay mesajı artık kapsam sorularına **verilen yanıtları** ve önceki
+  geri bildirimin metnini gösteriyor; eskiden yalnız sorular sohbette kalıyor, geri bildirim
+  ise `Önceki geri bildiriminiz: 1` gibi bir sayıya iniyordu.
+- Strateji notu cümle ortasında kesilmiyor. Sabit 500 karakterlik dilim yerine mesajın
+  kalan bütçesi kullanılıyor, kesme cümle veya kelime sınırında yapılıp `…` ile
+  işaretleniyor. Plan çok uzunsa mesaj sınırı aşmak yerine türetilmiş blokları (sorgu
+  dalları, alt sorular) düşürüyor; kullanıcının yanıtları ve geri bildirimi en son düşer.
 
 ## v0.14.0 — 2026-08-25
 
