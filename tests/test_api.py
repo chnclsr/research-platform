@@ -68,6 +68,26 @@ async def test_create_and_read_run():
 
 
 @pytest.mark.asyncio
+async def test_run_invocation_source_is_persisted_without_entering_the_protocol():
+    await ensure_test_user()
+    with TestClient(app) as client:
+        client.headers.update(api_headers())
+        response = client.post("/v1/research-runs", json={
+            "protocol": {
+                "title": "Telegram preparation provenance",
+                "primary_question": "Which model should prepare this Telegram run?",
+                "budget": {"max_wall_minutes": 30},
+            },
+            "invocation_source": "telegram",
+        })
+    assert response.status_code == 200, response.text
+    async with SessionLocal() as session:
+        row = await Repository(session, actor=acting_principal()).get_run(response.json()["id"])
+    assert row.state == {"invocation_source": "telegram"}
+    assert "invocation_source" not in row.protocol
+
+
+@pytest.mark.asyncio
 async def test_api_rejects_bad_protocol():
     await ensure_test_user()
     with TestClient(app) as client:

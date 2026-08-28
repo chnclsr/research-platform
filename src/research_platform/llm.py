@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
 from abc import ABC, abstractmethod
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 
@@ -17,7 +18,12 @@ from .schemas import AcquiredDocument, ExtractedClaim
 def _json_from_text(text: str) -> Any:
     text = text.strip()
     if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.I | re.S)
+        text = re.sub(
+            r"^```(?:json)?\s*|\s*```$",
+            "",
+            text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
     start_candidates = [p for p in (text.find("{"), text.find("[")) if p >= 0]
     if start_candidates:
         text = text[min(start_candidates):]
@@ -231,6 +237,89 @@ class OpenAICompatibleProvider(LLMProvider):
         return _json_from_text(payload["choices"][0]["message"]["content"])
 
 
+class GeminiProvider(LLMProvider):
+    """Gemini Developer API provider used only for Telegram run preparation."""
+
+    _RETRYABLE_STATUSES: ClassVar[set[int]] = {429, 500, 502, 503, 504}
+
+    def __init__(self, settings: Settings, client: httpx.AsyncClient):
+        if not settings.gemini_api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is required when TELEGRAM_PREPARATION_LLM_ENABLED=true"
+            )
+        self.settings, self.client = settings, client
+
+    async def complete_json(self, system: str, user: str) -> Any:
+        url = (
+            f"{self.settings.gemini_api_url.rstrip('/')}/v1beta/models/"
+            f"{self.settings.gemini_preparation_model}:generateContent"
+        )
+        headers = {
+            "x-goog-api-key": str(self.settings.gemini_api_key),
+            "Content-Type": "application/json",
+        }
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {
+                "temperature": 0,
+                "maxOutputTokens": self.settings.llm_max_output_tokens,
+                "responseMimeType": "application/json",
+            },
+        }
+        started = time.perf_counter()
+        attempts = self.settings.gemini_preparation_max_retries + 1
+        response: httpx.Response | None = None
+        for attempt in range(attempts):
+            try:
+                response = await self.client.post(
+                    url,
+                    headers=headers,
+                    json=body,
+                    timeout=self.settings.gemini_preparation_timeout_s,
+                )
+            except httpx.TransportError:
+                if attempt + 1 >= attempts:
+                    raise
+                await asyncio.sleep(min(2**attempt, 8))
+                continue
+            if response.status_code not in self._RETRYABLE_STATUSES:
+                break
+            if attempt + 1 >= attempts:
+                break
+            retry_after = response.headers.get("Retry-After", "")
+            try:
+                delay = max(0.0, min(float(retry_after), 30.0))
+            except ValueError:
+                delay = min(2**attempt, 8)
+            await asyncio.sleep(delay)
+        if response is None:
+            raise RuntimeError("Gemini request produced no response")
+        if response.is_error:
+            # Do not include the response body: providers may echo request details, and
+            # operational events need only the stable status/model tuple.
+            raise RuntimeError(
+                f"Gemini API request failed with HTTP {response.status_code} "
+                f"for model {self.settings.gemini_preparation_model}"
+            )
+        payload = response.json()
+        usage = payload.get("usageMetadata") or {}
+        self.record_metric({
+            "provider": "gemini",
+            "model": self.settings.gemini_preparation_model,
+            "wall_seconds": round(time.perf_counter() - started, 4),
+            "prompt_tokens": usage.get("promptTokenCount", 0),
+            "completion_tokens": usage.get("candidatesTokenCount", 0),
+            "total_tokens": usage.get("totalTokenCount", 0),
+        })
+        try:
+            parts = payload["candidates"][0]["content"]["parts"]
+            content = "".join(str(part.get("text", "")) for part in parts)
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ValueError("Gemini did not return a text candidate") from exc
+        return _json_from_text(content)
+
+
 class DeterministicProvider(LLMProvider):
     """Offline test provider; never selected outside explicit test configuration."""
 
@@ -256,6 +345,17 @@ def build_llm(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
     if settings.llm_provider == "openai-compatible":
         return OpenAICompatibleProvider(settings, client)
     return OllamaProvider(settings, client)
+
+
+def build_preparation_llm(
+    settings: Settings,
+    client: httpx.AsyncClient,
+) -> LLMProvider | None:
+    if not settings.telegram_preparation_llm_enabled:
+        return None
+    if settings.testing:
+        return DeterministicProvider()
+    return GeminiProvider(settings, client)
 
 
 async def translate_research_request(

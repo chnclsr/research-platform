@@ -3278,6 +3278,17 @@ yolu aynen çalışıyor. Hedefli Ruff taban ölçümüyle karşılaştırıldı
 
 ---
 
+## 57. Telegram hazırlık çağrılarının Gemini'ye ayrılması
+
+API, worker ve Telegram servisini kapsayan v0.16.0 değişikliğinin tasarımı, güvenlik
+sınırı, hata davranışı ve doğrulaması ayrı rapordadır:
+[TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md).
+
+Bu çalışma 56. bölümdeki “koşunun hangi yüzeyden başladığı kayıtlı değil” kararını bilinçli
+olarak aşar. Yeni kayıt şema kolonu değil, koşunun zaten kalıcı olan `state` belgesindeki
+`invocation_source` alanıdır; bu yüzden migration gerektirmez.
+
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her

@@ -26,6 +26,7 @@ class ResearchGatewayClient:
         timeout_s: float | None = None,
         artifact_max_chars: int | None = None,
         actor_user_id: str | None = None,
+        invocation_source: str = "api",
     ) -> None:
         settings = get_settings()
         self.base_url = base_url.rstrip("/")
@@ -38,14 +39,16 @@ class ResearchGatewayClient:
             if artifact_max_chars is not None
             else settings.gateway_artifact_max_chars
         )
+        self.invocation_source = invocation_source
 
-    def for_actor(self, actor_user_id: str) -> "ResearchGatewayClient":
+    def for_actor(self, actor_user_id: str) -> ResearchGatewayClient:
         """A copy of this client bound to one user, leaving the original untouched."""
         clone = ResearchGatewayClient(
             self.base_url,
             "",
             timeout_s=self.timeout_s,
             artifact_max_chars=self.artifact_max_chars,
+            invocation_source=self.invocation_source,
         )
         clone.headers = {**self.headers, "X-Actor-User": actor_user_id}
         return clone
@@ -64,6 +67,7 @@ class ResearchGatewayClient:
                     # Beside the protocol, not inside it: how urgent a run is says nothing
                     # about what it researches.
                     "priority": priority,
+                    "invocation_source": self.invocation_source,
                 },
             )
             response.raise_for_status()

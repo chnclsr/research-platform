@@ -374,6 +374,9 @@ class ResearchRunCreate(BaseModel):
     # Scheduling, kept beside the protocol rather than inside it: the protocol is the
     # document approved at the plan gate and describes what to research, not when.
     priority: Literal["normal", "urgent"] = "normal"
+    # The worker uses this durable provenance to select a preparation-only LLM without
+    # changing the model used for the research itself. Existing clients remain API runs.
+    invocation_source: Literal["api", "telegram", "panel", "mcp", "internal"] = "api"
 
 
 class RunPriorityRequest(BaseModel):

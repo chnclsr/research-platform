@@ -867,6 +867,7 @@ class TelegramResearchBot:
         self.gateway = ResearchGatewayClient(
             self.settings.research_api_url,
             self.settings.service_token or self.settings.api_token,
+            invocation_source="telegram",
         )
         self.allowed_users = set(self.settings.telegram_allowed_user_ids)
         self.allowed_chats = set(self.settings.telegram_allowed_chat_ids)

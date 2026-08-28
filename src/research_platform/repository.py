@@ -289,6 +289,7 @@ class Repository(metaclass=_OwnershipEnforced):
         *,
         owner_id: str | None = None,
         priority: str = NORMAL,
+        invocation_source: str = "api",
     ) -> ResearchRunRow:
         """Create a run owned by ``owner_id``, defaulting to the acting user.
 
@@ -311,7 +312,7 @@ class Repository(metaclass=_OwnershipEnforced):
             priority=normalize_priority(priority),
             current_stage="INIT",
             protocol=protocol.model_dump(mode="json"),
-            state={},
+            state={"invocation_source": invocation_source},
             coverage=CoverageMetrics().model_dump(),
             interaction=None,
             hitl_history=[],

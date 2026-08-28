@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     enable_scrapling_fallback: bool = True
     openai_compatible_url: str | None = None
     openai_compatible_api_key: str | None = None
+    telegram_preparation_llm_enabled: bool = False
+    gemini_api_key: str | None = None
+    gemini_api_url: str = "https://generativelanguage.googleapis.com"
+    gemini_preparation_model: str = "gemini-3.6-flash"
+    gemini_preparation_timeout_s: float = Field(60.0, ge=10.0, le=300.0)
+    gemini_preparation_max_retries: int = Field(2, ge=0, le=5)
 
     github_token: str | None = None
     epo_ops_key: str | None = None

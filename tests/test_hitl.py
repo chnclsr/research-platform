@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 import respx
+from conftest import acting_principal
 from fastapi import HTTPException
 
 from research_platform.api import _validate_hitl_response
@@ -12,7 +14,6 @@ from research_platform.config import get_settings
 from research_platform.db import SessionLocal, SourceRow, create_schema
 from research_platform.gateway_client import ResearchGatewayClient
 from research_platform.pipeline import PipelineHalted, ResearchPipeline
-from conftest import acting_principal
 from research_platform.repository import Repository
 from research_platform.schemas import HitlConfig, ResearchProtocol, RunStatus, new_id
 from research_platform.worker import expire_hitl_interactions
@@ -483,6 +484,27 @@ async def test_gateway_posts_hitl_response():
     assert route.called
     assert route.calls[0].request.headers["authorization"] == "Bearer token"
     assert result["status"] == "queued"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_telegram_gateway_marks_runs_and_keeps_the_mark_when_bound_to_an_actor():
+    route = respx.post("http://research.test/v1/research-runs").mock(
+        return_value=httpx.Response(200, json={"id": "RUN1", "status": "queued"})
+    )
+    protocol = ResearchProtocol(
+        title="Telegram preparation",
+        primary_question="Which provider prepares this Telegram research run?",
+        budget={"max_wall_minutes": 30},
+    )
+    client = ResearchGatewayClient(
+        "http://research.test", "service-token", invocation_source="telegram"
+    ).for_actor("USER1")
+
+    await client.start(protocol)
+
+    assert route.calls[0].request.headers["x-actor-user"] == "USER1"
+    assert json.loads(route.calls[0].request.content)["invocation_source"] == "telegram"
 
 
 @pytest.mark.asyncio

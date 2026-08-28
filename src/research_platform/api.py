@@ -351,11 +351,29 @@ async def create_research_run(
     body: ResearchRunCreate, request: Request, repo: Repository = Depends(repository)
 ) -> RunView:
     settings = get_settings()
+    if body.invocation_source == "telegram":
+        authorization = request.headers.get("Authorization", "")
+        presented = authorization.removeprefix("Bearer ").strip()
+        service_token = settings.service_token or settings.api_token
+        if (
+            not request.headers.get("X-Actor-User")
+            or not secrets.compare_digest(presented, service_token)
+        ):
+            # Telegram provenance selects a separately quota-limited external provider;
+            # accepting it from a normal API key would let callers spend that quota.
+            raise HTTPException(
+                status_code=403,
+                detail="telegram invocation_source requires an acting service credential",
+            )
     redis = await _connect_redis(request.app, attempts=settings.redis_operation_connect_attempts)
     if redis is None and not settings.testing:
         raise HTTPException(status_code=503, detail="Redis queue unavailable; run was not created")
     try:
-        row = await repo.create_run(body.protocol, priority=body.priority)
+        row = await repo.create_run(
+            body.protocol,
+            priority=body.priority,
+            invocation_source=body.invocation_source,
+        )
     except ActorRequired as exc:
         # The shared service token identifies a service, not a person, and a run with
         # no owner would be invisible to everyone but an admin. Callers using the

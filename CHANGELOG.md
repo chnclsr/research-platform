@@ -1,8 +1,8 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.15.0`
+Platform sürümü: `v0.16.0`
 
-Belge sürümü: `6.34`
+Belge sürümü: `6.35`
 
 Son güncelleme: `2026-08-28`
 
@@ -12,7 +12,19 @@ Ayrıntılı gerekçeler ve ölçümler
 ve [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md](DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md)
 ve [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md)
 ve [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md)
+ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.16.0 — 2026-08-28
+
+- Telegram'dan açılan koşuların çeviri, okunabilir koşu adı, ayrıştırma, kapsam soruları,
+  sorgu dalları ve plan stratejisi çağrıları isteğe bağlı olarak Gemini Developer API'ye
+  yönlendirilebiliyor; araştırmanın geri kalanındaki LLM çağrıları yerel Qwen'de kalıyor.
+- Koşu kaynağı migration gerektirmeden kalıcı state içinde tutuluyor. Telegram kaynağı
+  yalnız kullanıcı adına hareket eden servis kimliğiyle kabul ediliyor; sıradan API
+  anahtarı ayrı Gemini kotasını tüketemiyor.
+- Gemini anahtarı URL'ye veya hata metnine konmuyor. Kota ve geçici servis hataları sınırlı
+  yeniden denemeye tabi; zorunlu Telegram hazırlığı Qwen'e sessizce düşmüyor.
 
 ## v0.15.0 — 2026-08-25
 

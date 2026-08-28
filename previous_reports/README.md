@@ -78,6 +78,7 @@ Böylece okuyan yanılmaz, kayıt bozulmaz. Mevcut örnekler:
 | v0.12.0 | [PARALLEL_RUNS_V0.12.0_IMPLEMENTATION_REPORT](../PARALLEL_RUNS_V0.12.0_IMPLEMENTATION_REPORT.md) | Donanıma göre paralel koşular — **kökte**, arşivde değil |
 | v0.13.0 | [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT](../DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md) | Ağır PDF yolu ve GPU'lu Docling servisi — **kökte**, arşivde değil |
 | v0.14.0 | [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT](../HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md) | Koşu penceresi donanım telemetrisi — **kökte**, arşivde değil |
+| v0.16.0 | [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT](../TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md) | Telegram hazırlık çağrılarının Gemini'ye ayrılması — **kökte**, arşivde değil |
 | — | [AGENT_GATEWAY_ARCHITECTURE_REPORT](AGENT_GATEWAY_ARCHITECTURE_REPORT.md) | Agent gateway mimarisi |
 | — | [COVERAGE_RECOVERY_REDESIGN_REPORT](COVERAGE_RECOVERY_REDESIGN_REPORT.md) | Coverage recovery yeniden tasarımı |
 | — | [COVERAGE_RECOVERY_IMPLEMENTATION_REPORT](COVERAGE_RECOVERY_IMPLEMENTATION_REPORT.md) | Coverage recovery uygulaması |

@@ -29,6 +29,7 @@ from .hardware_telemetry import TelemetryHub
 from .llm import (
     LLMProvider,
     build_llm,
+    build_preparation_llm,
     decompose,
     extract_claims,
     generate_search_queries,
@@ -143,6 +144,7 @@ class PipelineState(TypedDict, total=False):
     applied_settings: list[dict[str, Any]]
     plan_feedback: list[str]
     report_outline_guidance: str
+    invocation_source: str
 
 
 class PipelineHalted(RuntimeError):
@@ -171,10 +173,17 @@ class ResearchPipeline:
         self.registry = build_registry(settings, client)
         self.acquisition = AcquisitionService(settings, client)
         self.llm: LLMProvider = build_llm(settings, client)
+        self.preparation_llm = build_preparation_llm(settings, client)
+        self._telegram_preparation = False
         self.embeddings = EmbeddingClient(settings, client)
         self.store = ObjectStore(settings)
         self.telemetry = telemetry
         self.graph = self._build_graph()
+
+    def _preparation_provider(self) -> LLMProvider:
+        if self._telegram_preparation and self.preparation_llm is not None:
+            return self.preparation_llm
+        return self.llm
 
     def _build_graph(self):
         graph = StateGraph(PipelineState)
@@ -412,7 +421,7 @@ class ResearchPipeline:
         if language != "en":
             try:
                 display_subs = await translate_for_display(
-                    self.llm,
+                    self._preparation_provider(),
                     list(planning_state.get("sub_questions", [])),
                     language,
                 )
@@ -426,8 +435,12 @@ class ResearchPipeline:
             settings=self.settings,
             sub_questions_display=display_subs,
         )
-        plan["strategy_note"] = await plan_strategy(self.llm, plan, language)
-        await self._emit_llm_metrics(run_id, "PLAN")
+        plan["strategy_note"] = await plan_strategy(
+            self._preparation_provider(), plan, language
+        )
+        await self._emit_llm_metrics(
+            run_id, "PLAN", provider=self._preparation_provider()
+        )
         await self.repo.event(run_id, "research_plan", plan)
         await self._request_input(
             planning_state,
@@ -438,8 +451,14 @@ class ResearchPipeline:
         )
         return output
 
-    async def _emit_llm_metrics(self, run_id: str, stage: str) -> None:
-        metrics = self.llm.drain_metrics()
+    async def _emit_llm_metrics(
+        self,
+        run_id: str,
+        stage: str,
+        *,
+        provider: LLMProvider | None = None,
+    ) -> None:
+        metrics = (provider or self.llm).drain_metrics()
         if metrics:
             await self.repo.event(run_id, "llm_metrics", {"stage": stage, "calls": metrics})
 
@@ -502,6 +521,9 @@ class ResearchPipeline:
         row = await self.repo.get_run(run_id)
         if row is None:
             raise KeyError(run_id)
+        self._telegram_preparation = (
+            (row.state or {}).get("invocation_source") == "telegram"
+        )
         if row.status in {RunStatus.CANCEL_REQUESTED.value, RunStatus.CANCELLED.value}:
             await self.repo.update_run(run_id, status=RunStatus.CANCELLED.value)
             await self.repo.event(
@@ -517,6 +539,7 @@ class ResearchPipeline:
             "round_number": row.round_number,
             "started_monotonic": time.monotonic(),
             "coverage": row.coverage or {},
+            "invocation_source": (row.state or {}).get("invocation_source", "api"),
         }
         checkpoint = await self.repo.latest_checkpoint(run_id)
         if checkpoint and row.status == RunStatus.RUNNING.value:
@@ -585,11 +608,15 @@ class ResearchPipeline:
         if protocol.label:
             return protocol
         try:
-            answer = await research_label(self.llm, protocol.primary_question)
+            answer = await research_label(
+                self._preparation_provider(), protocol.primary_question
+            )
         except Exception:
             answer = ""
         finally:
-            await self._emit_llm_metrics(run_id, "VALIDATE_PROTOCOL")
+            await self._emit_llm_metrics(
+                run_id, "VALIDATE_PROTOCOL", provider=self._preparation_provider()
+            )
         label = slugify(answer, max_length=LABEL_MAX_LENGTH) or slugify(
             protocol.primary_question, max_length=LABEL_MAX_LENGTH
         )
@@ -639,7 +666,7 @@ class ResearchPipeline:
             return await self._record_request_language(run_id, protocol, "en")
         try:
             question, sub_questions, source = await translate_research_request(
-                self.llm,
+                self._preparation_provider(),
                 protocol.primary_question,
                 list(protocol.sub_questions),
             )
@@ -653,7 +680,9 @@ class ResearchPipeline:
             )
             return await self._record_request_language(run_id, protocol, detected)
         finally:
-            await self._emit_llm_metrics(run_id, "VALIDATE_PROTOCOL")
+            await self._emit_llm_metrics(
+                run_id, "VALIDATE_PROTOCOL", provider=self._preparation_provider()
+            )
         # The model reports the language it translated from; detect_language() only gets a
         # vote when the model declines to, because it answers "und" for anything short.
         language = source if source in {"tr", "en"} else detected
@@ -700,7 +729,7 @@ class ResearchPipeline:
         )
         applied = [*applied, *revised]
         sub_questions, concepts = await decompose(
-            self.llm,
+            self._preparation_provider(),
             protocol.primary_question,
             protocol.sub_questions,
             guidance=[*planning, *feedback],
@@ -713,7 +742,9 @@ class ResearchPipeline:
             )
             for question in sub_questions
         ]
-        await self._emit_llm_metrics(state["run_id"], "DECOMPOSE")
+        await self._emit_llm_metrics(
+            state["run_id"], "DECOMPOSE", provider=self._preparation_provider()
+        )
         output = {"sub_questions": sub_questions[:12], "concepts": concepts[:20]}
         if applied:
             output["protocol"] = protocol.model_dump(mode="json")
@@ -835,14 +866,18 @@ class ResearchPipeline:
         language = protocol.display_language()
         try:
             questions = await planning_choices(
-                self.llm,
+                self._preparation_provider(),
                 protocol.primary_question,
                 list(output.get("sub_questions", [])),
                 language,
             )
         except Exception:
             questions = []
-        await self._emit_llm_metrics(state["run_id"], "PLANNING_QUESTIONS")
+        await self._emit_llm_metrics(
+            state["run_id"],
+            "PLANNING_QUESTIONS",
+            provider=self._preparation_provider(),
+        )
         if not questions:
             # The checkpoint predates options and still works without them; a model that
             # returns nothing usable costs the tailored wording, not the checkpoint.
@@ -864,7 +899,7 @@ class ResearchPipeline:
         protocol = ResearchProtocol.model_validate(state["protocol"])
         try:
             generated = await generate_search_queries(
-                self.llm,
+                self._preparation_provider(),
                 protocol.primary_question,
                 state.get("sub_questions", []),
                 [f.value for f in protocol.connectors.included_families],
@@ -875,6 +910,8 @@ class ResearchPipeline:
                 ],
             )
         except Exception:
+            if self._telegram_preparation and self.preparation_llm is not None:
+                raise
             generated = []
         generated = [
             constrain_text_to_scope(
@@ -884,7 +921,11 @@ class ResearchPipeline:
             )
             for query in generated
         ]
-        await self._emit_llm_metrics(state["run_id"], "BUILD_QUERY_BRANCHES")
+        await self._emit_llm_metrics(
+            state["run_id"],
+            "BUILD_QUERY_BRANCHES",
+            provider=self._preparation_provider(),
+        )
         queries = list(
             dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated])
         )
