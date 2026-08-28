@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.33`
+Belge sürümü: `6.34`
 
 Son güncelleme: `2026-08-28`
 
@@ -129,6 +129,13 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   checkpoint panelde tam olarak görünmeye devam ediyor — sorular, planın tamamı, taslak ve
   kaynak domainleri — kartın altında kararın nerede verileceğini söyleyen bir not var.
 - Panelin duraklat/devam/iptal ve öncelik düğmeleri değişmedi; bunlar kuyruk işlemleri.
+- `CONTROL_PANEL_GUIDE.md` Ubuntu sunucusuna göre güncellendi: panel adresi `10.0.10.171`,
+  olmayan `.env.office` referansları `.env`, PowerShell başlatma komutlarının yerine systemd,
+  Windows Firewall yerine ufw. LAN'dan gelen `400 Invalid host header` ile `403`'ü ayıran not
+  eklendi. Telemetri satırındaki sabit "RTX 4060" kaldırıldı; kart adı `pynvml`'den okunuyor.
+- Üç açık iş `OPEN_ITEMS.md`'ye yazıldı: kanalsız başlatılan koşunun plan kapısında asılı
+  kalabilmesi, panelde çağıranı olmayan koşu başlatma ucu ve `research_runs` sütunlarının
+  `json` olması (bu sonuncusu bir sorguyu üretimde sessizce kırmıştı).
 
 ## v0.14.0 — 2026-08-25
 

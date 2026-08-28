@@ -3263,7 +3263,8 @@ olarak `true` ve o koşunun insan yüzeyi olmayabilir; panelden **iptal** edileb
 duruyor) ama tamamlanamaz. `POST /api/runs` route'u da panelde duruyor ve UI'da onu çağıran
 hiçbir yer yok — kalırsa panelin başlatıp yanıtlayamayacağı koşular üretmek mümkün olur.
 İkisi de bu değişikliğin kapsamı dışında bırakıldı ve [OPEN_ITEMS.md](OPEN_ITEMS.md)'a
-taşınmalı.
+24. ve 25. madde olarak yazıldı; 55. bölümün ortaya çıkardığı `json`/`JSONB` kayması da 26.
+madde oldu.
 
 **Doğrulama.** Dört yeni test: proxy route'unun ve `run_respond` fonksiyonunun bulunmaması,
 kuyruk route'larının durması, kartın dört tipi de basmaya devam etmesiyle birlikte

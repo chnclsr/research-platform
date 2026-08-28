@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-27`
+Son güncelleme: `2026-08-28`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -35,6 +35,9 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 21 | Tam-depo Ruff tabanı 1.053 ihlal taşıyor | Yeni lint hataları tarihsel gürültüde saklanabilir | Orta |
 | 22 | `_acquire_node` beklenmeyen istisnayı izole etmiyor | Tek bağlayıcı hatası ACQUIRE adımını düşürebilir | Orta |
 | 23 | Edinim testi aralıklı düşüyor, tetikleyici bilinmiyor | Commit kapısı sebepsiz kapanabilir | Orta |
+| 24 | Kanalsız koşu plan kapısında asılı kalabilir | API/Langflow koşusu tamamlanamaz | Orta |
+| 25 | Panelde çağıranı olmayan `POST /api/runs` route'u | Yanıtlanamayan koşu üretebilir | Düşük |
+| 26 | `research_runs` sütunları `json`, model `JSONB` türetiyor | Sorgular sessizce üretimde kırılır | Orta |
 
 ---
 
@@ -434,6 +437,62 @@ traceback'ini kaydetmek. `strategies_tried` bozuluyorsa `AcquisitionService.acqu
 strateji sırasını belirleyen ayarların testler arası sızıntıyla değişip değişmediğine
 bakmak; `success` bozuluyorsa zamanlama/timeout yarışını aramak. Kök neden bulunana kadar
 test devre dışı bırakılmamalı — aralıklı da olsa gerçek bir sinyal taşıyor olabilir.
+
+## 24. Kanalsız bir koşu plan kapısında asılı kalabilir
+
+**Durum:** Panel artık HITL checkpoint'i yanıtlamıyor (raporun 56. bölümü); karar koşunun
+başlatıldığı kanaldan veriliyor. Telegram'ın düğmeleri, MCP'nin `respond_to_research_checkpoint`
+aracı var. Ama **API ya da Langflow'dan** başlatılan bir koşuda `plan_review` varsayılan olarak
+`true` ([schemas.py:105](src/research_platform/schemas.py#L105)) ve o koşunun insan yüzeyi
+olmayabilir.
+
+**Etki:** Koşu plan kapısında bekler. `plan_max_revisions` dolmadığı için kendiliğinden de
+kapanmaz. Panelden **iptal** edilebilir — o düğme duruyor — ama tamamlanamaz.
+
+**Neden ertelendi:** Henüz gerçekleşmiş bir vaka yok; bu makinede koşular Telegram'dan
+başlatılıyor. Kural basit tutuldu, önce çift başlılık kapatıldı.
+
+**Yapılacak:** Üç yoldan biri. (a) Çağıran kanalı koşuya yazmak ve yalnız o kanalın
+yanıtlamasına izin vermek — 25. ve bu maddeyi birlikte çözer. (b) Kanalsız başlatılan koşularda
+`plan_review`'ı varsayılan kapalı yapmak. (c) Panele yalnız yönetici için açık bir kaçış kapısı
+koymak. (a) doğru olanı; migration yerine `run_events` üzerine kurulabilir.
+
+## 25. Panelde çağıranı olmayan `POST /api/runs` route'u
+
+**Durum:** [control_panel.py](src/research_platform/control_panel.py) koşu başlatma ucu taşıyor
+ama panel arayüzündeki sekiz POST çağrısının hiçbiri oraya gitmiyor. Route, panelin koşu
+sahipliğini doğrudan kurabilmesi için eklenmişti; arayüzü hiç yazılmadı.
+
+**Etki:** Kaldığı sürece, panelin başlatıp **yanıtlayamayacağı** koşular üretmek mümkün —
+56. bölümdeki kuralla tutarsız. Şu an kimse çağırmadığı için pratik bir zarar yok.
+
+**Yapılacak:** Ya route kaldırılmalı, ya da 24. madde (a) yoluyla çözülüp panelden başlatılan
+koşuların panelden yanıtlanmasına izin verilmeli. İkisi aynı kararın iki yüzü.
+
+## 26. `research_runs` sütunları `json`, model `JSONB` türetiyor
+
+**Durum:** Model PostgreSQL'de `JSONB` türetiyor ama migration `protocol`, `state`, `coverage`,
+`interaction` ve `hitl_history` sütunlarını düz `sa.JSON` yaratmış; üretimde gerçekten `json`
+duruyor. Doğrulandı:
+
+```
+protocol = json   state = json   coverage = json   interaction = json   hitl_history = json
+```
+
+**Etki:** PostgreSQL `json` için eşitlik operatörü tanımlamıyor. Bu sütunları içeren bir satır
+üzerinde `DISTINCT`, `GROUP BY` ya da `UNION` **üretimde patlar, testlerde geçer** — paket
+SQLite üzerinde koşuyor ve şema modelden kurulunca sütunlar zaten `JSONB` oluyor. Bir kez
+gerçekleşti: 55. bölümdeki `list_runs_cancelled_by_event_since` üretimde her poll turunda
+`UndefinedFunctionError` verdi, testlerden sorunsuz geçti. JSONB operatörleri de burada cast
+ister.
+
+**Neden ertelendi:** Kayma 51. bölümde belgelendi ve bu çalışmadan eski. Taşımak bir migration
+ve ayrı bir karar; tek tek sorgular kaçınarak yazılabiliyor.
+
+**Yapılacak:** `ALTER TABLE ... TYPE jsonb USING <col>::jsonb` migration'ı. Tablo boyutuna göre
+kilit süresi ölçülmeli. O zamana kadar: bu tabloyu okuyan sorgularda `DISTINCT`/`GROUP BY`
+kullanmamak, üyelik testi (`id.in_(...)`) tercih etmek — ve **yeni sorguları canlı veritabanında
+doğrulamak**, çünkü test paketi bu sınıf hatayı göremiyor.
 
 ## Kapsam dışı bırakılanlar
 

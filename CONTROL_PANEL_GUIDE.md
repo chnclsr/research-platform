@@ -14,14 +14,21 @@ MCP veya Telegram kapatılsa bile panel açık kalır ve sistem yeniden panel ü
 Panel adresleri:
 
 - Sunucu bilgisayarı: `http://127.0.0.1:1111`
-- Aynı ağdaki ekip bilgisayarları: `http://10.0.10.179:1111`
+- Aynı ağdaki ekip bilgisayarları: `http://10.0.10.171:1111`
 
-Adres ve port sabit değildir; `.env.office` içindeki `CONTROL_PANEL_HOST` ve
-`CONTROL_PANEL_PORT` belirler. Yukarıdakiler bu makinedeki güncel değerlerdir.
+Adres ve port sabit değildir; `.env` içindeki `CONTROL_PANEL_HOST` ve `CONTROL_PANEL_PORT`
+belirler. Yukarıdakiler bu makinedeki güncel değerlerdir. (`.env.office` diye bir dosya
+**yoktur** — ayarların tamamı tek `.env` dosyasındadır.)
 
 Panel `0.0.0.0` üzerinde dinler; uygulama katmanı yalnız yapılandırılmış CIDR'ı ve loopback
-istemcilerini kabul eder. Windows Firewall'da da yalnız `LocalSubnet` istemcilerine izin veren
-bir kural bulunmalıdır. Panel internet yönlendiricisinde port-forward edilmemelidir.
+istemcilerini kabul eder. Ağ sınırını `ufw` çizer: `setup_ubuntu_server.sh` 1111'i LAN'a açar.
+Panel internet yönlendiricisinde port-forward edilmemelidir.
+
+> **LAN'dan `400 Invalid host header` alıyorsanız** `.env` içinde
+> `CONTROL_PANEL_ALLOWED_HOSTS=["10.0.10.171"]` eksiktir. Tarayıcı `Host: 10.0.10.171`
+> gönderir; bu ne loopback ne de makinenin hostname'idir ve sunucunun kendi adresini otomatik
+> bulma denemesi Ubuntu'da `127.0.1.1`'e çözüldüğü için yetmez. Yanlış
+> `CONTROL_PANEL_ALLOWED_NETWORKS` ise `403` verir — iki belirti farklıdır.
 
 ## Giriş ve yetkiler
 
@@ -91,14 +98,14 @@ Her kullanıcı kendi hesabını buradan yönetir; yönetici gerekmez.
 
 - Oturum çerezi 12 saat geçerlidir (`SESSION_MAX_AGE_SECONDS`).
 - Parola değiştirmek veya hesabı kapatmak, o kullanıcının **açık tüm oturumlarını anında düşürür.**
-- Panel yeniden başladığında oturumlar korunur — ancak `.env.office` içinde `SESSION_SECRET`
+- Panel yeniden başladığında oturumlar korunur — ancak `.env` içinde `SESSION_SECRET`
   tanımlıysa. Boş bırakılırsa her yeniden başlatma herkesi çıkışa zorlar.
 - Art arda 8 başarısız giriş, o IP adresini 5 dakika kilitler.
 - Yanlış parola ile var olmayan hesap **aynı** yanıtı verir; form hesap var mı diye yoklamak için
   kullanılamaz.
 
 Panel düz HTTP üzerinden çalıştığı sürece oturum çerezi ağda açıktır; ofis CIDR sınırı bu yüzden
-kaldırılmamalıdır. TLS arkasına alınırsa `.env.office` içinde `CONTROL_PANEL_HTTPS=true`
+kaldırılmamalıdır. TLS arkasına alınırsa `.env` içinde `CONTROL_PANEL_HTTPS=true`
 yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 
 ## Görünen bilgiler
@@ -119,7 +126,8 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 - Query branch başına connector, sonuç, başarı ve gecikme bilgisi.
 - Kaynakların connector, aile, admission, keşif yöntemi, relevance ve provenance bilgisi.
 - Connector health, credential eksikleri, çağrı başarı oranı, ortalama/p95 gecikme ve hata sınıfları.
-- RTX 4060 kullanım, VRAM, sıcaklık ve güç; CPU, RAM, disk ve model telemetrisi.
+- GPU kullanımı, VRAM, sıcaklık ve güç; CPU, RAM, disk ve model telemetrisi. Kart adı
+  `pynvml` üzerinden okunur, sabit değildir — bu makinede Quadro RTX 4000.
 - Araştırma çıktı paketlerini panelden güvenli indirme.
 - HITL checkpoint geldiğinde bekleyen kararın kartı: sorular ve seçenekleri, planın tamamı,
   taslak ve kaynak domainleri AI önerileriyle. **Kart salt-okunurdur** — yanıt, koşunun
@@ -130,8 +138,8 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 
 - **Başlat** *(yalnız admin)*: PostgreSQL, Redis, MinIO ve Crawl4AI durumunu doğrular; API, worker,
   MCP ve Telegram'ı başlatır.
-- **Yeniden başlat** *(yalnız admin)*: Aynı güvenli başlangıç akışını çalıştırarak native servisleri
-  yeniler.
+- **Yeniden başlat** *(yalnız admin)*: Aynı güvenli başlangıç akışını çalıştırarak compose
+  servislerini yeniler.
 - **Servisleri durdur** *(yalnız admin)*: API, worker, MCP ve Telegram'ı durdurur. Panel ile veri
   container'ları açık kalır; PostgreSQL/Redis verisi ve araştırma kayıtları korunur.
 - **Duraklat / Devam / İptal:** Run yaşam döngüsü komutlarını Research API'ye gönderir. Aktif LLM veya
@@ -141,27 +149,31 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 
 ## Çalıştırma
 
-Masaüstündeki `Research Platform Control Panel` kısayolu paneli açar. Elle başlatmak için:
+Panel host üzerinde **systemd biriminden** çalışır ve açılışta kendiliğinden başlar; ayrı bir
+başlatma işlemi gerekmez.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\scripts\start_control_panel.ps1
+```bash
+systemctl status research-control-panel
+sudo systemctl restart research-control-panel     # kod veya .env değiştiyse
+sudo journalctl -u research-control-panel -f
 ```
 
-Yalnız panel sürecini kapatmak için:
+Panel compose'un **dışındadır**, bilerek: işi compose'u yönetmek olduğu için kendi yönettiği
+projenin servisi olsaydı, kendini yeniden başlatması gereken durumda kilitlenirdi.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\scripts\stop_control_panel.ps1
-```
+Birim `.env`'i `EnvironmentFile` ile okumaz — systemd'nin ayrıştırıcısı
+`MCP_ALLOWED_NETWORKS=["10.0.10.0/24"]` satırındaki tırnakları yiyip listeyi bozardı;
+pydantic-settings çalışma dizininden zaten doğru okuyor. Buna karşılık birim veritabanı, Redis
+ve MinIO adreslerini **ezer**: `.env` container'lar için yazılmıştır ve oradaki `postgres:5432`
+adını host üzerindeki bir süreç çözemez.
 
-Panel kullanıcı oturumu açıldığında `Research Platform Control Panel` Scheduled Task'ı tarafından
-arka planda başlatılır. Bu görev ana `Research Platform Office Server` görevinden bağımsızdır.
+Panel paketi `.venv`'den editable kurulu olduğu için `src/` değişiklikleri konteyner rebuild'i
+değil, yalnız birim yeniden başlatması ister.
 
 ## İşletim sınırları
 
-- Panel Docker Desktop'ı kurmaz; Docker çalışmıyorsa Başlat işlemi mevcut sunucu betiğinin beş
-  dakikalık hazır olma kontrolünü kullanır.
+- Panel Docker'ı kurmaz; Docker çalışmıyorsa Başlat işlemi sunucu betiğinin hazır olma
+  kontrolünü kullanır.
 - `Servisleri durdur` Ollama'yı veya veri container'larını kapatmaz. Amaç geliştirme sırasında agent
   erişimini ve GPU kullanan yeni araştırma işlerini güvenle durdurmaktır.
 - Panel açıkken tarayıcı sekmesi üç saniyede bir yenilenir; panel kapalıyken araştırma worker'ı normal
