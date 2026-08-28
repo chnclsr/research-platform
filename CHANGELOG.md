@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.27`
+Belge sürümü: `6.28`
 
-Son güncelleme: `2026-08-27`
+Son güncelleme: `2026-08-28`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -84,6 +84,10 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   (varsayılan 24 saat) ne kadar geriye bakılacağını belirliyor, böylece özellik açıldığında
   eski hatalar yeniden duyurulmuyor. Yalnız `failed` bildiriliyor — `cancelled` kullanıcının
   kendi iptali, `completed_incomplete` ise bir kapsam teşhisi.
+- Panelin üst özet kartı GPU modelini artık kartın kendisinden okuyor. Önceden başlık
+  `RTX 4060 VRAM` olarak sabitti ve gösterilecek kart adında `4060` aranarak seçiliyordu;
+  başka bir GPU'lu makinede rakamlar doğru gelirken başlık yanlış kalıyordu. Kart yoksa
+  nötr `GPU VRAM` yazıyor.
 
 ## v0.14.0 — 2026-08-25
 

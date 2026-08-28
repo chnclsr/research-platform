@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.33`
+Belge sürümü: `12.34`
 
-Son güncelleme: `2026-08-27`
+Son güncelleme: `2026-08-28`
 
 ## Kapsam
 
@@ -3017,6 +3017,38 @@ fallback'leri doğruladı. Canlı `docker compose up -d --build`, doğrulama an�
 `01M11EHG64WACS8BFWBQ97A0F9` koşusu `ACQUIRE` aşamasında aktif olduğu için koşuyu kesmemek
 amacıyla uygulanmadı; image hazırdır ancak canlı worker bu koşu tamamlandıktan sonra
 yeniden oluşturulmalıdır.
+
+## 51. Panel GPU kartının karttan okunması
+
+Ubuntu sunucusuna taşımadan sonra panel, makinede **Quadro RTX 4000** varken üst özet
+kartında `RTX 4060 VRAM` yazıyordu. Rakamlar doğruydu; yanlış olan yalnız etiketti.
+
+İki ayrı sabit vardı. Kart başlığı `control_panel_ui.py` içinde düz metin olarak
+`RTX 4060 VRAM` yazılıydı. `renderTelemetry` ise gösterilecek kartı
+`gpus.find(g => String(g.name).includes('4060')) || gpus[0]` ile seçiyordu: önce adında
+`4060` geçen kartı arıyor, bulamayınca ilk karta düşüyordu. Geliştirmenin yapıldığı RTX
+4060 Laptop makinesinde iki yol da aynı kartı verdiği için ayrım görünmüyordu; bu
+makinede fallback devreye girdi, dolayısıyla veri doğru gelirken başlık geride kaldı.
+
+Telemetrinin kendisi zaten dinamikti — `hardware_telemetry.py` kart adını `pynvml`
+üzerinden okuyor ve `gpu_name` alanında taşıyor. Aynı sayfadaki kart tablosu (`gpu-rows`)
+ve kaynak listesindeki `GPU VRAM` satırı bu adı doğru basıyordu. Tutarsızlık yalnız üst
+özet kartındaydı.
+
+Düzeltme sabitleri kaldırır. Başlık `id="gpu-label"` taşıyan bir öğeye dönüştü ve
+`renderTelemetry` içinde kartın kendi adından dolduruluyor; kart yoksa nötr `GPU VRAM`
+yazıyor. Kart seçimindeki `4060` araması atıldı, doğrudan `gpus[0]` kullanılıyor — tek
+kartlı makinelerde davranış aynı, çok kartlı bir makinede ise artık "adında 4060 geçen"
+gibi bu kuruluma özgü bir varsayım yok. Model adı artık kaynağının olduğu yerden, karttan
+geliyor.
+
+**Doğrulama.** Değişiklik yalnız panel arayüzünü etkiliyor; sunucu tarafı telemetri
+yollarına dokunulmadı. `control_panel_ui.py` üzerinde hedefli Ruff `All checks passed`.
+Kod değişikliğinden sonraki zorunlu tam kapı `568 passed, 1 warning` sonucuyla
+tamamlandı.
+Panel systemd biriminden çalıştığı ve venv editable kurulu olduğu için değişikliğin
+görünmesi `sudo systemctl restart research-control-panel` gerektirir.
+
 
 ---
 
