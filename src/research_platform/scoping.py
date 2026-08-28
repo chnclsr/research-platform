@@ -159,11 +159,26 @@ def fixed_questions(protocol: ResearchProtocol, language: str) -> list[dict]:
     return [dates, families]
 
 
+def _window_days(value: str) -> int | None:
+    """Days behind `value`, for the three offered windows and any `last_<n>y` besides.
+
+    The buttons offer three; typed feedback says "son 2 yil" as readily as "son 1 yil" and
+    there is no reason the same sentence should bind only when it names a preset.
+    """
+    if value in _DATE_WINDOWS:
+        return _DATE_WINDOWS[value]
+    match = re.fullmatch(r"last_(\d{1,2})y", value)
+    if match and 1 <= int(match.group(1)) <= 50:
+        return int(match.group(1)) * 365
+    return None
+
+
 def _apply_date_scope(payload: dict, value: str, text: dict[str, str]) -> str | None:
     scope = payload.setdefault("scope", {})
     if value == "keep":
         return None
-    if value not in _DATE_WINDOWS and value != "any":
+    days = _window_days(value)
+    if days is None and value != "any":
         return None
     # No longer inferred from wording: the user was shown the alternatives and picked one.
     # `dates_chosen` is what stops the validator inferring the window straight back after
@@ -175,7 +190,7 @@ def _apply_date_scope(payload: dict, value: str, text: dict[str, str]) -> str | 
         scope["end_date"] = None
         return text["dates_any"]
     end = utcnow()
-    start = end - timedelta(days=_DATE_WINDOWS[value])
+    start = end - timedelta(days=days or 0)
     scope["start_date"] = start.isoformat()
     scope["end_date"] = end.isoformat()
     return f"{start.date().isoformat()} → {end.date().isoformat()}"
@@ -198,6 +213,53 @@ def _apply_families(payload: dict, value: str, text: dict[str, str]) -> str | No
 
 
 _APPLIERS = {"date_scope": _apply_date_scope, "source_families": _apply_families}
+
+# Typed plan feedback, matched against the same closed vocabulary the buttons write. Kept
+# deterministic on purpose: the gate already waits on a person, and a model asked to read
+# an intent out of one sentence would make the protocol depend on a guess nobody sees.
+# Anything these do not match stays exactly what it was before -- guidance for the prompts.
+_FEEDBACK_YEARS = re.compile(
+    r"(?:son|last|past)\s*(\d{1,2})\s*(?:y[ıi]l|sene|year)", re.IGNORECASE
+)
+_FEEDBACK_ANY_DATE = re.compile(
+    r"(?:t[üu]m\s+zamanlar|tarih\s+(?:s[ıi]n[ıi]r[ıi]|k[ıi]s[ıi]t[ıi])\s*(?:olmas[ıi]n|kalks[ıi]n|yok)"
+    r"|no\s+date\s+(?:limit|filter)|any\s+time|all\s+time)",
+    re.IGNORECASE,
+)
+# Families bind only behind an explicit "only", because feedback that merely mentions a
+# family ("akademik kaynaklarin maliyeti") is describing the topic, not narrowing the run.
+_FEEDBACK_FAMILIES = (
+    (re.compile(r"(?:sadece|yaln[ıi]zca?|only)\b[^.\n]{0,40}akademik|academic[^.\n]{0,20}only",
+                re.IGNORECASE), "academic"),
+    (re.compile(r"(?:sadece|yaln[ıi]zca?|only)\b[^.\n]{0,40}(?:resm[ıi]|mevzuat)"
+                r"|official[^.\n]{0,20}only", re.IGNORECASE), "official"),
+    (re.compile(r"(?:sadece|yaln[ıi]zca?|only)\b[^.\n]{0,40}(?:kod|veri)"
+                r"|(?:code|data)[^.\n]{0,20}only", re.IGNORECASE), "code_data"),
+)
+
+
+def feedback_answers(feedback: list[str]) -> list[dict]:
+    """Read plan feedback as scoping answers, so a rejection can move the protocol.
+
+    Rejection notes used to reach the prompts and nothing else, which meant "make it the
+    last year" left the dates exactly where they were and the rebuilt plan showed the
+    window the user had just asked to change. The later note wins: a person revising twice
+    means the second one.
+    """
+    answers: dict[str, dict] = {}
+    for note in feedback:
+        text = str(note)
+        years = _FEEDBACK_YEARS.search(text)
+        if years and 1 <= int(years.group(1)) <= 50:
+            answers["date_scope"] = {"id": "date_scope", "value": f"last_{int(years.group(1))}y"}
+        elif _FEEDBACK_ANY_DATE.search(text):
+            answers["date_scope"] = {"id": "date_scope", "value": "any"}
+        for pattern, value in _FEEDBACK_FAMILIES:
+            if pattern.search(text):
+                answers["source_families"] = {"id": "source_families", "value": value}
+                break
+    return list(answers.values())
+
 _APPLIED_LABEL = {"date_scope": "applied_dates", "source_families": "applied_families"}
 
 

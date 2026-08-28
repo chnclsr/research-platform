@@ -483,3 +483,87 @@ async def test_gateway_posts_hitl_response():
     assert route.called
     assert route.calls[0].request.headers["authorization"] == "Bearer token"
     assert result["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_plan_feedback_naming_a_window_moves_the_protocol():
+    """The complaint this closes: "make it the last year" left the dates where they were.
+
+    A rejected plan rewinds to DECOMPOSE, and the rejection reached the prompts only. The
+    window the user asked to change was then re-derived from the unchanged scoping answer
+    and shown back to them.
+    """
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(
+            repo, hitl=HitlConfig(planning_questions=True, plan_review=True)
+        )
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = ScopingLLM()
+        await repo.update_run(
+            row.id,
+            hitl_history=[
+                {
+                    "type": "planning_questions",
+                    "response": {"answers": [
+                        {"question": "Hangi dönem?", "answer": "Son 3 yıl",
+                         "id": "date_scope", "value": "last_3y"},
+                    ]},
+                },
+                {
+                    "type": "plan_review",
+                    "response": {"approved": False,
+                                 "modifications": "Tarih aralığını son 1 yıl yap"},
+                },
+            ],
+        )
+        output = await pipeline.decompose_question(
+            {"run_id": row.id, "protocol": row.protocol, "round_number": 0}
+        )
+        scope = output["protocol"]["scope"]
+        start = datetime.fromisoformat(scope["start_date"])
+        end = datetime.fromisoformat(scope["end_date"])
+        assert 360 <= (end - start).days <= 370
+        # The plan says the dates moved, and that the user is why.
+        dates = [item for item in output["applied_settings"] if item["id"] == "date_scope"]
+        assert dates and dates[-1]["source"] == "feedback"
+        stored = await repo.get_run(row.id)
+        assert stored.protocol["scope"]["start_date"] == scope["start_date"]
+
+
+@pytest.mark.asyncio
+async def test_scoping_is_not_re_derived_over_a_later_change():
+    """Re-reading the same answers on every pass silently reverted anything applied since."""
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(repo, hitl=HitlConfig(planning_questions=True))
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = ScopingLLM()
+        await repo.update_run(
+            row.id,
+            hitl_history=[
+                {
+                    "type": "planning_questions",
+                    "response": {"answers": [
+                        {"question": "Hangi kaynaklar?", "answer": "Resmî",
+                         "id": "source_families", "value": "official"},
+                    ]},
+                }
+            ],
+        )
+        first = await pipeline.decompose_question(
+            {"run_id": row.id, "protocol": row.protocol, "round_number": 0}
+        )
+        # Something changed the protocol after scoping settled -- a later gate, or the
+        # feedback binder above.
+        moved = {**first["protocol"]}
+        moved["connectors"] = {**moved["connectors"], "included_families": ["web"]}
+        await repo.update_run(row.id, protocol=moved)
+        second = await pipeline.decompose_question(
+            {"run_id": row.id, "protocol": moved, "round_number": 1}
+        )
+        assert second["protocol"]["connectors"]["included_families"] == ["web"]
+        # The report still names what scoping applied, read back rather than re-derived.
+        assert [item["id"] for item in second["applied_settings"]] == ["source_families"]

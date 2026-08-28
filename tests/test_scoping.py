@@ -7,6 +7,7 @@ from research_platform.scoping import (
     LABEL_MAX_LENGTH,
     apply_planning_answers,
     date_suffix,
+    feedback_answers,
     fixed_questions,
     slugify,
 )
@@ -162,3 +163,55 @@ def test_a_label_is_short_enough_to_retype_into_a_command():
     assert len(slug) <= LABEL_MAX_LENGTH
     for filler in ("research", "studies", "study", "that", "about", "using", "review"):
         assert filler not in slugify(f"{filler} nodule detection").casefold()
+
+
+def test_feedback_naming_a_window_binds_it_like_a_tapped_option():
+    """A rejection is another way of answering the question the gate already asked."""
+    assert feedback_answers(["Tarih aralığını son 1 yıl yap"]) == [
+        {"id": "date_scope", "value": "last_1y"}
+    ]
+    assert feedback_answers(["make it the last 2 years please"]) == [
+        {"id": "date_scope", "value": "last_2y"}
+    ]
+    assert feedback_answers(["tarih sınırı olmasın"]) == [
+        {"id": "date_scope", "value": "any"}
+    ]
+
+
+def test_the_later_note_wins_when_the_user_revises_twice():
+    assert feedback_answers(["son 5 yıl olsun", "aslında son 1 yıl yeter"]) == [
+        {"id": "date_scope", "value": "last_1y"}
+    ]
+
+
+def test_feedback_binds_a_family_only_behind_an_explicit_only():
+    """Mentioning a family describes the topic; narrowing to it is a different sentence."""
+    assert feedback_answers(["sadece akademik kaynak kullan"]) == [
+        {"id": "source_families", "value": "academic"}
+    ]
+    # The topic happens to be academic sources. Nothing binds; it stays prompt guidance.
+    assert feedback_answers(["akademik kaynakların maliyetini de ele al"]) == []
+
+
+def test_feedback_that_names_nothing_bindable_changes_nothing():
+    assert feedback_answers(["daha derin analiz istiyorum"]) == []
+
+
+def test_a_window_from_feedback_reaches_the_protocol():
+    before = protocol()
+    answers = feedback_answers(["son 1 yıl olsun"])
+    after, applied = apply_planning_answers(before, answers)
+    window = (after.scope.end_date - after.scope.start_date).days
+    assert 360 <= window <= 370
+    assert after.scope.dates_chosen is True
+    assert [item["id"] for item in applied] == ["date_scope"]
+
+
+def test_an_arbitrary_year_count_binds_even_though_no_button_offers_it():
+    """The buttons offer three windows; a typed sentence is not limited to them."""
+    after, applied = apply_planning_answers(
+        protocol(), feedback_answers(["son 2 yıl yeterli"])
+    )
+    window = (after.scope.end_date - after.scope.start_date).days
+    assert 720 <= window <= 740
+    assert applied

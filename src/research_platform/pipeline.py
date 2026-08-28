@@ -87,6 +87,7 @@ from .scoping import (
     LABEL_MAX_LENGTH,
     apply_planning_answers,
     date_suffix,
+    feedback_answers,
     fixed_questions,
     slugify,
 )
@@ -692,6 +693,12 @@ class ResearchPipeline:
         # questions: they are preferences about the run, not things to go and find out.
         planning = await self._planning_answers(state["run_id"])
         feedback = await self._plan_feedback(state["run_id"])
+        # A rejection can also name a protocol value, and until it could, the run rewound
+        # here and re-applied the window the user had just asked to change.
+        protocol, revised = await self._apply_feedback_scope(
+            state["run_id"], protocol, feedback
+        )
+        applied = [*applied, *revised]
         sub_questions, concepts = await decompose(
             self.llm,
             protocol.primary_question,
@@ -761,6 +768,11 @@ class ResearchPipeline:
         option the model invented -- changes nothing here and still reaches the prompts
         through _planning_answers().
         """
+        # Re-deriving on every pass would undo anything applied since: a rejected plan
+        # rewinds to this stage, and the scoping answers it re-reads have not changed.
+        settled = await self.repo.events_by_types(run_id, {"scoping_applied"})
+        if settled:
+            return protocol, list(settled[-1].payload.get("settings") or [])
         items = await self._planning_response_items(run_id)
         if not items:
             return protocol, []
@@ -775,6 +787,33 @@ class ResearchPipeline:
             return protocol, []
         await self.repo.update_run(run_id, protocol=updated.model_dump(mode="json"))
         await self.repo.event(run_id, "scoping_applied", {"settings": applied})
+        return updated, applied
+
+    async def _apply_feedback_scope(
+        self,
+        run_id: str,
+        protocol: ResearchProtocol,
+        feedback: list[str],
+    ) -> tuple[ResearchProtocol, list[dict]]:
+        """Write the protocol values a rejection named, through the scoping binder.
+
+        Same table, same validation, same "binds or stays guidance" rule as the scoping
+        gate -- a rejection is another way of answering the questions it asked. Recorded as
+        its own event so the plan can say the dates moved because the user said so, not
+        because the question implied it.
+        """
+        if not feedback:
+            return protocol, []
+        answers = feedback_answers(feedback)
+        if not answers:
+            return protocol, []
+        updated, applied = apply_planning_answers(protocol, answers)
+        if not applied:
+            return protocol, []
+        for item in applied:
+            item["source"] = "feedback"
+        await self.repo.update_run(run_id, protocol=updated.model_dump(mode="json"))
+        await self.repo.event(run_id, "feedback_scope_applied", {"settings": applied})
         return updated, applied
 
     async def _planning_gate(

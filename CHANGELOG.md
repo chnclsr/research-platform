@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.29`
+Belge sürümü: `6.30`
 
 Son güncelleme: `2026-08-28`
 
@@ -101,6 +101,12 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   kalan bütçesi kullanılıyor, kesme cümle veya kelime sınırında yapılıp `…` ile
   işaretleniyor. Plan çok uzunsa mesaj sınırı aşmak yerine türetilmiş blokları (sorgu
   dalları, alt sorular) düşürüyor; kullanıcının yanıtları ve geri bildirimi en son düşer.
+- Planı reddedip "tarih aralığı son 1 yıl olsun" demek artık gerçekten tarihi
+  değiştiriyor. Önceden reddetme notu yalnız yönlendirme olarak kullanılıyordu ve koşu
+  plan aşamasına geri sardığında ilk seçilen pencere protokolün üzerine yeniden yazılıyordu;
+  yani istek sessizce geri alınıyordu. Reddetme metni artık kapsam sorularıyla aynı
+  sözlükten geçiyor. Kaynak ailesi yalnız açık bir "sadece/yalnızca" ifadesiyle
+  değişiyor, tarih penceresi ise üç hazır seçenekle sınırlı değil ("son 2 yıl" da geçerli).
 
 ## v0.14.0 — 2026-08-25
 

@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.35`
+Belge sürümü: `12.36`
 
 Son güncelleme: `2026-08-28`
 
@@ -3093,6 +3093,55 @@ bitip `…` ile işaretlenmesi ve uzun planda mesajın sınırı aşmaması. Tam
 `571 passed, 1 warning`. `telegram_bot.py` üzerinde hedefli Ruff taban ölçümüyle
 karşılaştırıldı: `.ruffbase/` içindeki HEAD kopyası 2 tarihsel ihlal veriyor, değişiklik
 sonrası da 2 — yeni ihlal yok, temizmiş gibi de raporlanmadı.
+
+
+## 53. Plan geri bildiriminin protokolü gerçekten değiştirmesi
+
+Kullanıcı planı reddedip "tarih aralığı son 1 yıl olsun" dediğinde yeniden kurulan plan
+hâlâ son 3 yılı gösteriyordu. Belirti "gösterilmiyor" gibi okunuyor ama davranış daha
+kötüydü: istek **aktif olarak geri alınıyordu.**
+
+Reddedilen plan koşuyu `DECOMPOSE`'a geri sarıyor. `_apply_scoping` her geçişte
+`planning_questions` yanıtlarını yeniden okuyup `protocol.scope`'a yazıyordu — ve o
+yanıtlar değişmemişti. Geri bildirimin ulaştığı tek yer `sub_questions` ile prompt
+yönlendirmesiydi; protokole hiç dokunmuyordu. Sonuç: kullanıcı ne yazarsa yazsın tarih her
+turda ilk seçime dönüyordu.
+
+İki parça hâlinde düzeltildi.
+
+**Yeniden türetme durduruldu.** `_apply_scoping` artık `scoping_applied` olayı varsa
+protokolü yeniden yazmıyor, kayıtlı ayarları geri okuyor. Zaten kalıcıydı; her geçişte
+yeniden uygulamak yalnız araya giren değişiklikleri eziyordu.
+
+**Reddetme metni bağlayıcıdan geçiriliyor.** `scoping.feedback_answers()` serbest metni
+kapsam kapısının kullandığı **aynı kapalı sözlüğe** eşliyor ve sonuç
+`apply_planning_answers` ile aynı doğrulamadan geçiyor: bir reddetme, kapının zaten
+sorduğu soruyu cevaplamanın başka bir yolu. Eşleşme deterministik, LLM çağrısı yok —
+kapı zaten bir insanı bekletiyor ve tek cümleden niyet çıkarması istenen bir modelin
+tahmini protokolü kimsenin görmediği bir varsayıma bağlardı.
+
+Eşleşmeyen metin eskisi gibi prompt yönlendirmesi olarak kalıyor; `apply_planning_answers`
+zaten "bağlanır ya da yönlendirme olur" kuralını taşıyordu, aynı kural burada da geçerli.
+Kaynak aileleri yalnız açık bir "sadece/yalnızca/only" nitelemesinin arkasında bağlanıyor:
+"akademik kaynakların maliyeti" konuyu tarif eder, koşuyu daraltmaz — bu ayrımı yapmayan
+bir eşleşme sessiz bir yanlış üretirdi.
+
+Yan kazanım: tarih penceresi artık düğmelerin sunduğu üç değerle sınırlı değil.
+`last_<n>y` biçimi genelleştirildi, çünkü yazılan cümle "son 2 yıl" demeyi "son 1 yıl"
+demek kadar kolay yapıyor ve aynı cümlenin yalnız hazır bir değeri adlandırdığında
+bağlanması için bir sebep yok.
+
+Değişiklik `feedback_scope_applied` olayına yazılıyor ve `applied_settings` kaydına
+`source: feedback` düşüyor; böylece plan, tarihlerin sorudan çıkarıldığı için değil
+kullanıcı öyle dediği için değiştiğini söyleyebiliyor.
+
+**Doğrulama.** Sekiz yeni test: penceresi adlayan geri bildirimin bağlanması, iki kez
+revize edildiğinde sonraki notun kazanması, ailenin yalnız açık nitelemeyle bağlanması,
+konuyu tarif eden metnin hiçbir şeyi değiştirmemesi, düğmelerin sunmadığı bir yıl sayısının
+da bağlanması, geri bildirimin protokole ve satıra ulaşması ve kapsamın sonraki geçişte
+yeniden türetilmemesi. Tam kapı `579 passed, 1 warning`. Hedefli Ruff taban ölçümüyle
+karşılaştırıldı: `pipeline.py` HEAD'de 23 tarihsel ihlal veriyor, değişiklik sonrası da 23;
+`scoping.py` tabanda da sonrada da temiz.
 
 
 ---
