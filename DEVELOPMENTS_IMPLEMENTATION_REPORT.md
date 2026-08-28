@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.38`
+Belge sürümü: `12.39`
 
 Son güncelleme: `2026-08-28`
 
@@ -3223,6 +3223,56 @@ hatayı üreten şey tam olarak migration ile model arasındaki fark. Dört yeni
 kesme işaretinin sözcüğün parçası kalması, çift tırnağın gruplamayı sürdürmesi, dengesiz
 tırnağın koşuyu durdurmaması ve yanıt dilinin soruyu istemci diline tercih etmesi. Tam kapı
 `588 passed, 1 warning`. Hedefli Ruff: `telegram_bot.py` 2/2, `repository.py` 3/3.
+
+
+## 56. Panelin koşu kararlarından çekilmesi
+
+Koşular Telegram'dan başlatılıyor ama HITL checkpoint'leri hem sohbetten hem panelden
+yanıtlanabiliyordu. Aynı kapının iki ağzı olması çift başlılık üretiyordu: sohbette bir plan
+onayı beklenirken aynı koşu panelden onaylanınca Telegram'daki düğmeler artık var olmayan
+bir kararı gösteriyor ve konuşma ortasından kopuyordu.
+
+Yaptırımın nerede olacağı ölçüldü. Panel ve bot API'ye **aynı kimlikle** gidiyor — ikisi de
+`service token` + `X-Actor-User` taşıyor — dolayısıyla API katmanı çağıranı ayırt edemiyor.
+Kural panelin kendi içinde uygulandı: `/api/runs/{run_id}/respond` proxy'si kaldırıldı.
+API'nin `/v1/research-runs/{run_id}/respond` ucuna dokunulmadı; Telegram ve MCP
+(`respond_to_research_checkpoint`) onu kullanmaya devam ediyor.
+
+Kaldırılan yalnız yanıtlama. Duraklat/devam/iptal ve öncelik düğmeleri kaldı — bunlar kuyruk
+işlemleri, sohbete müdahale değil; servis yönetimi de kaldı, panelin varlık sebebi zaten o.
+
+**Checkpoint görünmeye devam ediyor.** Bir koşuyu izlemek, neyi beklediğini görmek demektir;
+kartı gizlemek paneli takip aracı olmaktan çıkarırdı. `renderHitl` dört tipin dördünü de tam
+basıyor — sorular ve seçenekleri, planın tamamı (`planView` yeniden kullanılıyor), taslak
+JSON'u, kaynak domainleri AI önerileriyle — yalnız girdiler ve düğmeler gitti. Kartın altına
+kararın nerede verildiğini söyleyen bir satır eklendi, çünkü düğmenin yokluğu tek başına bir
+açıklama değil. Bölüm başlığı `Kullanıcı Kararı Gerekiyor` yerine `Kullanıcı Kararı
+Bekleniyor` oldu: panelde artık verilecek bir karar yok.
+
+`planLabels` içindeki `approve`, `reject` ve `rejectNeedsReason` anahtarları silindi; hiçbir
+şeyin basmadığı bir etiket sessizce çürür — bu turda `text['answers']`'ın tam olarak öyle
+durduğu görülmüştü.
+
+**Kapsam kararı.** Koşunun hangi yüzeyden başladığı hiçbir yerde kayıtlı değil ve bunun için
+migration açılmadı; kural tek cümle olarak uygulandı: panel checkpoint yanıtlamaz. "Her kanal
+yalnız kendi koşusunu yanıtlar" istenirse gereken temel, `run_events` üzerine kurulabilecek
+bir yüzey kaydıdır.
+
+**Bilinen sınır.** API ya da Langflow'dan başlatılan bir koşuda `plan_review` varsayılan
+olarak `true` ve o koşunun insan yüzeyi olmayabilir; panelden **iptal** edilebilir (o düğme
+duruyor) ama tamamlanamaz. `POST /api/runs` route'u da panelde duruyor ve UI'da onu çağıran
+hiçbir yer yok — kalırsa panelin başlatıp yanıtlayamayacağı koşular üretmek mümkün olur.
+İkisi de bu değişikliğin kapsamı dışında bırakıldı ve [OPEN_ITEMS.md](OPEN_ITEMS.md)'a
+taşınmalı.
+
+**Doğrulama.** Dört yeni test: proxy route'unun ve `run_respond` fonksiyonunun bulunmaması,
+kuyruk route'larının durması, kartın dört tipi de basmaya devam etmesiyle birlikte
+`submitHitl` ve `/respond` dizgelerinin arayüzde hiç geçmemesi, ve ölü onay etiketlerinin
+kalmaması. Tam kapı `592 passed, 1 warning`.
+`tests/test_hitl.py::test_gateway_posts_hitl_response` değişmeden geçiyor — Telegram ve MCP
+yolu aynen çalışıyor. Hedefli Ruff taban ölçümüyle karşılaştırıldı: `control_panel.py`
+33 → **32** (kaldırılan route bir ihlali de götürdü), `control_panel_ui.py` 0/0,
+`tests/test_control_panel.py` 1/1.
 
 
 ---

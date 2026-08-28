@@ -1219,20 +1219,14 @@ async def run_action(
     return response.json()
 
 
-@app.post("/api/runs/{run_id}/respond")
-async def run_respond(
-    run_id: str, body: dict[str, Any], principal: Principal = Depends(require_csrf)
-) -> dict[str, Any]:
-    try:
-        response = await _api_request(
-            "POST", f"/v1/research-runs/{run_id}/respond", principal, timeout=10, json_body=body
-        )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=503, detail="Research API erişilemiyor") from exc
-    if not response.is_success:
-        detail = response.json().get("detail", response.text[:500])
-        raise HTTPException(status_code=response.status_code, detail=detail)
-    return response.json()
+# There is deliberately no respond route here. A checkpoint is answered from the surface
+# the run was started on -- the Telegram buttons, or MCP's respond_to_research_checkpoint.
+# When the panel could answer too, one gate had two mouths: a plan approved here left the
+# chat holding buttons that no longer did anything, mid-conversation. The panel still shows
+# the pending checkpoint, because watching a run means seeing what it is waiting for.
+#
+# The API's own /v1/research-runs/{id}/respond stays as it is; this removes the panel's
+# proxy, not the endpoint the other surfaces depend on.
 
 
 @app.post("/api/runs")

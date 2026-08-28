@@ -696,3 +696,53 @@ async def test_password_change_requires_a_session_and_the_csrf_token():
         ).status_code == 403
         # Empty new password is refused before anything is written.
         assert _change_password(client, csrf, PANEL_PASSWORD, "").status_code == 400
+
+
+def _panel_route_paths() -> set[str]:
+    return {getattr(route, "path", "") for route in control_panel.app.routes}
+
+
+def test_the_panel_cannot_answer_a_checkpoint():
+    """One gate, one mouth.
+
+    Answering from the panel while Telegram was waiting left the chat holding buttons for
+    a decision already made. The API's own /v1/research-runs/{id}/respond stays -- this is
+    only the panel's proxy, and its absence is what makes the rule enforceable rather than
+    a convention.
+    """
+    assert "/api/runs/{run_id}/respond" not in _panel_route_paths()
+    assert not hasattr(control_panel, "run_respond")
+
+
+def test_the_panel_still_manages_the_queue():
+    """Pause, resume, cancel and priority are queue operations, not chat interventions."""
+    paths = _panel_route_paths()
+    assert "/api/runs/{run_id}/priority" in paths
+    assert "/api/runs/{run_id}/{action}" in paths
+
+
+def test_the_checkpoint_card_shows_the_decision_without_offering_it():
+    """Watching a run means seeing what it is waiting for; only the inputs are gone."""
+    # No way back to the removed route, by button or by fetch.
+    assert "submitHitl" not in CONTROL_PANEL_HTML
+    assert "/respond" not in CONTROL_PANEL_HTML
+    # The payload is still rendered in full for every checkpoint type.
+    assert "function renderHitl(" in CONTROL_PANEL_HTML
+    assert "card.append(planView(plan))" in CONTROL_PANEL_HTML
+    assert "JSON.stringify(payload.outline||payload,null,2)" in CONTROL_PANEL_HTML
+    assert "payload.domains||[]" in CONTROL_PANEL_HTML
+    assert "payload.questions||[]" in CONTROL_PANEL_HTML
+    # The title no longer asks the reader for a decision they cannot give here.
+    assert "detailSection('Kullanıcı Kararı Bekleniyor')" in CONTROL_PANEL_HTML
+    assert "Kullanıcı Kararı Gerekiyor" not in CONTROL_PANEL_HTML
+    # And it says where the decision does happen.
+    assert "koşunun başlatıldığı kanaldan veriliyor" in CONTROL_PANEL_HTML
+
+
+def test_no_dead_approval_strings_are_left_in_the_plan_labels():
+    """A label nothing renders rots quietly; the plan text keeps only what is used."""
+    assert "rejectNeedsReason" not in CONTROL_PANEL_HTML
+    assert "Onayla ve başlat" not in CONTROL_PANEL_HTML
+    assert "Approve and start" not in CONTROL_PANEL_HTML
+    # The duration label survives: the plan card still reports the budget it was given.
+    assert "Araştırma süresi (dakika)" in CONTROL_PANEL_HTML

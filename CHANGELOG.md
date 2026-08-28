@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.32`
+Belge sürümü: `6.33`
 
 Son güncelleme: `2026-08-28`
 
@@ -122,6 +122,13 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
 - Plan limiti bildirimi üretimde çalışmıyordu: sorgu `json` sütunları üzerinde `DISTINCT`
   kullanıyordu ve PostgreSQL bu tip için eşitlik operatörü tanımlamıyor. Bekleyen iki koşu
   bildirimlerini alacak.
+- Panel artık HITL checkpoint'lerini yanıtlamıyor, yalnız gösteriyor. Aynı kapıya hem
+  sohbetten hem panelden cevap verilebilmesi çift başlılık üretiyordu: panelden onaylanan bir
+  plan, Telegram'da bekleyen düğmeleri geçersiz kılıyordu. Karar artık koşunun başlatıldığı
+  kanaldan veriliyor (Telegram düğmeleri, MCP `respond_to_research_checkpoint`). Bekleyen
+  checkpoint panelde tam olarak görünmeye devam ediyor — sorular, planın tamamı, taslak ve
+  kaynak domainleri — kartın altında kararın nerede verileceğini söyleyen bir not var.
+- Panelin duraklat/devam/iptal ve öncelik düğmeleri değişmedi; bunlar kuyruk işlemleri.
 
 ## v0.14.0 — 2026-08-25
 

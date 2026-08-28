@@ -1,10 +1,10 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `3.2`
+Belge sürümü: `3.3`
 
-Platform sürümü: `v0.12.0`
+Platform sürümü: `v0.15.0`
 
-Tarih: `2026-08-18`
+Tarih: `2026-08-28`
 
 ## Amaç
 
@@ -38,10 +38,11 @@ Panelde **kayıt formu yoktur.** Hesaplar kabuktan açılır; komutlar ve ekip y
 | Kendi araştırmaları | ✔ | ✔ |
 | **Başkalarının araştırmaları** | ✘ | ✔ |
 | Başkalarının **süren** işleri | sansürlü liste | ✔ tam |
-| Araştırma başlatma, duraklat/devam/iptal | kendi koşularında | tümünde |
+| Duraklat/devam/iptal, öncelik | kendi koşularında | tümünde |
 | Rapor indirme | kendi koşularında | tümünde |
 | Kendi API anahtarlarını üretme/iptal | ✔ | ✔ |
-| HITL sorularını yanıtlama | kendi koşularında | tümünde |
+| Bekleyen HITL checkpoint'ini **görme** | kendi koşularında | tümünde |
+| HITL sorularını **yanıtlama** | ✘ — koşunun kanalından | ✘ — koşunun kanalından |
 | **Başlat / Yeniden başlat / Servisleri durdur** | ✘ | ✔ |
 | **Servis logları** | ✘ | ✔ |
 | **Connector testi** | ✘ | ✔ |
@@ -120,8 +121,10 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 - Connector health, credential eksikleri, çağrı başarı oranı, ortalama/p95 gecikme ve hata sınıfları.
 - RTX 4060 kullanım, VRAM, sıcaklık ve güç; CPU, RAM, disk ve model telemetrisi.
 - Araştırma çıktı paketlerini panelden güvenli indirme.
-- HITL checkpoint geldiğinde soru yanıtlama, plan/taslak onaylama veya değişiklik isteme ve
-  kaynak domainlerini dahil etme/dışlama kartları.
+- HITL checkpoint geldiğinde bekleyen kararın kartı: sorular ve seçenekleri, planın tamamı,
+  taslak ve kaynak domainleri AI önerileriyle. **Kart salt-okunurdur** — yanıt, koşunun
+  başlatıldığı kanaldan verilir (Telegram düğmeleri, MCP `respond_to_research_checkpoint`).
+  Aynı kapıya iki yerden cevap verilebilmesi, sohbette bekleyen düğmeleri geçersiz kılıyordu.
 
 ## Kontroller
 
