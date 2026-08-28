@@ -447,6 +447,25 @@ def run_label(run: Mapping[str, Any]) -> str:
     return slugify(source) or str(run.get("id") or "")
 
 
+def split_command(text: str) -> list[str]:
+    """Split a chat line into arguments without reading an apostrophe as a quote.
+
+    `shlex.split` uses POSIX quoting, where `'` opens a string. Turkish attaches suffixes
+    to proper nouns and abbreviations with one -- "BT'sinde", "Türkiye'de" -- so an
+    ordinary question raised ValueError and the bot answered with the help screen instead
+    of starting the run. Double quotes still group, because that is the quoting people type
+    on purpose; an unbalanced one falls back to a plain split rather than to help, since
+    running the research is closer to what was asked than a command list is.
+    """
+    lexer = shlex.shlex(text, posix=True)
+    lexer.whitespace_split = True
+    lexer.quotes = '"'
+    try:
+        return list(lexer)
+    except ValueError:
+        return text.split()
+
+
 def reply_language(
     *,
     run: dict | None = None,
@@ -1554,13 +1573,13 @@ class TelegramResearchBot:
         text_body = str(message.get("text") or "").strip()
         if await self._consume_interview_text(client, message):
             return
-        language = reply_language(message=message)
+        # The text is a language signal even before it parses: answering a Turkish
+        # question with the English help screen was the second half of one complaint.
+        language = reply_language(
+            message=message, question=text_body.partition(" ")[2]
+        )
         strings = text_for(language)
-        try:
-            parts = shlex.split(text_body)
-        except ValueError:
-            await self._send_message(client, chat_id, strings["help"])
-            return
+        parts = split_command(text_body)
         telegram_user_id = int((message.get("from") or {}).get("id", 0))
         command = parts[0].split("@", 1)[0].lower() if parts else ""
 

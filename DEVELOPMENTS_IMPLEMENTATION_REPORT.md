@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `12.37`
+Belge sürümü: `12.38`
 
 Son güncelleme: `2026-08-28`
 
@@ -3176,6 +3176,53 @@ kendi iptalinin sessiz kalması, iki bildirimin birbirinin işaretini tüketmeme
 yalnız son hakta görünmesi ve `revisions_left`'in negatife düşmemesi. Tam kapı
 `584 passed, 1 warning`. Hedefli Ruff taban ölçümüyle karşılaştırıldı: `telegram_bot.py`
 2/2, `repository.py` 3/3, `research_plan.py` 1/1 — hiçbirinde artış yok.
+
+
+## 55. Kesme işaretli soru, yardım ekranına düşen komut ve `json` sütunlu DISTINCT
+
+Ekipten gelen ekran görüntüsü `/research Akciğer BT'sinde yapay zeka kullanımı`
+komutuna karşılık koşu değil, İngilizce komut listesi gösteriyordu. Üç ayrı kusur çıktı.
+
+**Kesme işareti tırnak sayılıyordu.** `_handle`, satırı `shlex.split` ile ayırıyor;
+POSIX alıntılamada `'` bir dize açar. Türkçe özel adlara ve kısaltmalara eki kesme
+işaretiyle bağlar — `BT'sinde`, `Türkiye'de` — dolayısıyla **kesme işareti içeren her
+Türkçe soru** `ValueError` üretiyor ve `except` dalı yardım ekranı basıyordu. Belirti bir
+hata mesajı bile değildi: komut sessizce başka bir şeye dönüşüyordu.
+
+`split_command()` artık lexer'ı yalnız çift tırnakla alıntılayacak biçimde kuruyor.
+Kesme işareti sıradan bir karakter oluyor, çift tırnak gruplamayı sürdürüyor — insanların
+bilerek yazdığı alıntılama o. Dengesiz bir çift tırnak da yardıma değil düz bölmeye
+düşüyor: istenen şey araştırmaydı, komut listesi değil.
+
+**Yardım yanlış dilde geliyordu.** `reply_language(message=message)` soru metnini hiç
+görmüyordu; ayrıştırma çöktüğü için elde yalnız Telegram istemcisinin dil kodu kalıyor ve
+kullanıcının istemcisi İngilizceydi. Metin, ayrıştırılamasa bile bir dil sinyali — artık
+`question` olarak geçiliyor ve Türkçe soru Türkçe yanıt alıyor. İstemci dili, okunacak
+metin yokken hâlâ en iyi sinyal olarak duruyor.
+
+**54. bölümdeki sorgu üretimde çalışmıyordu.** `list_runs_cancelled_by_event_since`
+join + `DISTINCT` kullanıyordu. `research_runs` tablosu `protocol` ve `state` taşıyor;
+model `JSONB` türetiyor ama migration bu sütunları düz `sa.JSON` yaratmış, PostgreSQL ise
+`json` için eşitlik operatörü tanımlamıyor. Sonuç: üretimde her poll turunda
+`UndefinedFunctionError`, testlerde ise sorunsuz geçiş — çünkü paket SQLite üzerinde
+koşuyor. Bu, 51. bölümün belgelediği şema kaymasının ilk kez bir şeyi kırdığı yer.
+
+Join'in yerini üyelik testi (`id.in_(...)`) aldı; soru tamamen ortadan kalkıyor. Kayma
+kendisi bu bölümün konusu değil ve düzeltilmedi — `json` sütunlarını `jsonb`'ye taşımak
+bir migration ve ayrı bir karar.
+
+**Doğrulama.** Düzeltme canlı üretim veritabanında doğrulandı: sütunların gerçekten `json`
+olduğu, eski sorgunun `could not identify an equality operator for type json` verdiği ve
+yenisinin çalışıp plan limiti yüzünden iptal edilmiş **2 gerçek koşuyu** bulduğu tek tek
+görüldü. Bu koşular bildirimlerini dağıtımdan sonra alacak.
+
+Regresyon SQLite üzerinden yakalanamayacağı — zaten kaçtığı — için yapısal olarak
+sabitlendi: test, sorgunun `DISTINCT` içermediğini ve üyelik testi kullandığını doğruluyor.
+Postgres'li bir test de üretmezdi, çünkü şema modelden kurulunca sütunlar `JSONB` oluyor;
+hatayı üreten şey tam olarak migration ile model arasındaki fark. Dört yeni test daha:
+kesme işaretinin sözcüğün parçası kalması, çift tırnağın gruplamayı sürdürmesi, dengesiz
+tırnağın koşuyu durdurmaması ve yanıt dilinin soruyu istemci diline tercih etmesi. Tam kapı
+`588 passed, 1 warning`. Hedefli Ruff: `telegram_bot.py` 2/2, `repository.py` 3/3.
 
 
 ---

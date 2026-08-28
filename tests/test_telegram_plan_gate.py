@@ -4,7 +4,8 @@ import pytest
 
 from research_platform.schemas import HitlConfig, ResearchProtocol
 from research_platform.telegram_bot import (
-    TelegramResearchBot, has_explicit_duration, plan_summary,
+    TelegramResearchBot, has_explicit_duration, plan_summary, reply_language,
+    split_command,
 )
 
 
@@ -755,3 +756,32 @@ async def test_the_listing_marks_urgent_runs_without_breaking_their_command():
     assert "⚡" in listing
     # The badge is display only: the command has to stay resolvable as typed.
     assert "<code>/status ai_in_lung_ct</code>" in listing
+
+
+def test_an_apostrophe_is_part_of_the_word_not_a_quote():
+    """The complaint this closes: a Turkish question answered with the help screen.
+
+    shlex's POSIX quoting reads ' as the start of a string, and Turkish attaches suffixes
+    to proper nouns with one, so "/research Akciğer BT'sinde yapay zeka" raised ValueError
+    and the bot printed its command list instead of starting the run.
+    """
+    assert split_command("/research Akciğer BT'sinde yapay zeka kullanımı") == [
+        "/research", "Akciğer", "BT'sinde", "yapay", "zeka", "kullanımı",
+    ]
+    assert split_command("/research Türkiye'de yapay zeka")[1] == "Türkiye'de"
+
+
+def test_double_quotes_still_group_and_an_unbalanced_one_does_not_stop_the_run():
+    assert split_command('/research "iki kelime" tek') == ["/research", "iki kelime", "tek"]
+    # Better to research the words than to answer with a command list.
+    assert split_command('/research bozuk "tirnak') == ["/research", "bozuk", '"tirnak']
+
+
+def test_the_reply_language_follows_the_question_over_the_telegram_client():
+    """The other half of the same report: a Turkish question, an English help screen."""
+    english_client = {"from": {"language_code": "en"}}
+    assert reply_language(
+        message=english_client, question="Akciğer BT'sinde yapay zeka kullanımı"
+    ) == "tr"
+    # With nothing to read, the client's own language is still the best signal there is.
+    assert reply_language(message=english_client) == "en"

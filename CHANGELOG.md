@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.15.0`
 
-Belge sürümü: `6.31`
+Belge sürümü: `6.32`
 
 Son güncelleme: `2026-08-28`
 
@@ -114,6 +114,14 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   bakılarak yapılıyor.
 - Plan mesajı son değişiklik hakkı kaldığında uyarıyor. Sınırın varlığı, dolana kadar
   kullanıcıya hiç söylenmiyordu.
+- Kesme işareti içeren Türkçe sorular artık çalışıyor. `/research Akciğer BT'sinde yapay
+  zeka` gibi bir komut, kesme işareti tırnak sayıldığı için koşu başlatmak yerine sessizce
+  komut listesi bastırıyordu. Çift tırnaklı gruplama korundu.
+- Yardım ve hata mesajları sorunun dilinde geliyor. Komut ayrıştırılamadığında dil yalnız
+  Telegram istemcisinden okunuyordu, bu yüzden Türkçe soruya İngilizce yanıt dönebiliyordu.
+- Plan limiti bildirimi üretimde çalışmıyordu: sorgu `json` sütunları üzerinde `DISTINCT`
+  kullanıyordu ve PostgreSQL bu tip için eşitlik operatörü tanımlamıyor. Bekleyen iki koşu
+  bildirimlerini alacak.
 
 ## v0.14.0 — 2026-08-25
 

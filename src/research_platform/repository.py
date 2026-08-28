@@ -388,16 +388,20 @@ class Repository(metaclass=_OwnershipEnforced):
         actor = self.require_actor()
         if not actor.is_admin:
             raise RunAccessDenied("*")
+        # A membership test rather than a join with DISTINCT: this table carries `protocol`
+        # and `state`, the migration created them as plain `json`, and PostgreSQL has no
+        # equality operator for that type -- so DISTINCT over the row raised
+        # UndefinedFunctionError in production while passing on SQLite in the tests.
         rows = await self.session.scalars(
             select(ResearchRunRow)
-            .join(EventRow, EventRow.run_id == ResearchRunRow.id)
             .where(
                 ResearchRunRow.status == RunStatus.CANCELLED.value,
                 ResearchRunRow.updated_at >= cutoff,
-                EventRow.event_type == event_type,
+                ResearchRunRow.id.in_(
+                    select(EventRow.run_id).where(EventRow.event_type == event_type)
+                ),
             )
             .order_by(ResearchRunRow.updated_at)
-            .distinct()
         )
         return list(rows)
 

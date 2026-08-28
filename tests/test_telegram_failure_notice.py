@@ -13,6 +13,8 @@ keeps switching the feature on from replaying every old failure at whoever is li
 
 from __future__ import annotations
 
+import inspect
+
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -238,3 +240,30 @@ def test_the_plan_warns_before_the_last_revision_is_spent():
     for left in (3, 2, 0):
         text = plan_summary({"id": "R1", "protocol": {}}, {**base, "revisions_left": left})
         assert "hakkınız kaldı" not in text
+
+
+def test_the_cancelled_run_query_does_not_distinct_over_json_columns():
+    """A regression the suite cannot reach through SQLite, pinned structurally instead.
+
+    `research_runs` carries `protocol` and `state`. The model derives JSONB but the
+    migration created them as plain `json`, and PostgreSQL has no equality operator for
+    that type -- so a join with DISTINCT raised UndefinedFunctionError against production
+    while passing here, where SQLite does not care. The membership test avoids the whole
+    question, and this asserts it stays that way.
+    """
+    from sqlalchemy import select as sa_select
+
+    from research_platform.db import EventRow, ResearchRunRow
+
+    statement = (
+        sa_select(ResearchRunRow)
+        .where(
+            ResearchRunRow.id.in_(
+                sa_select(EventRow.run_id).where(EventRow.event_type == "x")
+            )
+        )
+    )
+    assert "DISTINCT" not in str(statement).upper()
+    source = inspect.getsource(Repository.list_runs_cancelled_by_event_since)
+    assert ".distinct()" not in source
+    assert ".in_(" in source
