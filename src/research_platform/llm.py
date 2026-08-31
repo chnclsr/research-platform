@@ -2,17 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import time
 from abc import ABC, abstractmethod
 from difflib import SequenceMatcher
-from typing import Any, ClassVar
+from typing import Any
 
 import httpx
 
 from .capacity import model_lease
-from .config import Settings
+from .config import PREPARATION_PROVIDERS, Settings
 from .schemas import AcquiredDocument, ExtractedClaim
+
+# Statuses worth trying again -- on this provider if the wait is short, on the next one
+# otherwise. Everything else is the request's own fault and will fail identically anywhere.
+RETRYABLE_STATUSES: frozenset[int] = frozenset({408, 409, 429, 500, 502, 503, 504})
+# A wrong key, a revoked project or a retired model does not heal on its own, so a provider
+# answering one of these is passed over until the process is restarted with a fixed config.
+UNRECOVERABLE_STATUSES: frozenset[int] = frozenset({401, 403, 404})
+# Retry-After is provider-supplied; a long one still must not park a run indefinitely.
+MAX_COOLDOWN_S = 900.0
 
 
 def _json_from_text(text: str) -> Any:
@@ -33,6 +43,47 @@ def _json_from_text(text: str) -> Any:
         except json.JSONDecodeError:
             continue
     raise ValueError("LLM did not return valid JSON")
+
+
+class ProviderUnavailable(RuntimeError):
+    """This provider could not serve the call; another one might.
+
+    A RuntimeError subclass because that is what callers already catch, and because a
+    single-provider setup should keep failing exactly as it did before the chain existed.
+    Never carries the response body: providers echo request details, and some echo the key.
+    """
+
+    def __init__(
+        self,
+        provider: str,
+        status: int | None,
+        *,
+        retry_after: float | None = None,
+        model: str = "",
+    ):
+        self.provider = provider
+        self.status = status
+        self.retry_after = retry_after
+        where = f" for model {model}" if model else ""
+        super().__init__(
+            f"{provider} request failed with HTTP {status}{where}"
+            if status is not None
+            else f"{provider} request did not reach the service{where}"
+        )
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """The provider's own wait, in seconds, or None when it did not state one."""
+    header = response.headers.get("Retry-After", "")
+    try:
+        return max(0.0, min(float(header), MAX_COOLDOWN_S))
+    except ValueError:
+        return None
+
+
+def _inline_delay(response: httpx.Response, attempt: int) -> float:
+    stated = _retry_after_seconds(response)
+    return min(stated, 30.0) if stated is not None else float(min(2**attempt, 8))
 
 
 class LLMProvider(ABC):
@@ -206,41 +257,75 @@ class OllamaProvider(LLMProvider):
 
 
 class OpenAICompatibleProvider(LLMProvider):
-    def __init__(self, settings: Settings, client: httpx.AsyncClient):
-        self.settings, self.client = settings, client
+    """Any chat-completions endpoint: a self-hosted gateway, OpenRouter, DeepSeek.
+
+    Everything that differs between those is passed in rather than read off Settings, so the
+    same class can appear twice in one fallback chain with its own key, model and timeout.
+    """
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        name: str,
+        base_url: str,
+        api_key: str | None,
+        model: str,
+        timeout_s: float,
+    ):
+        if not base_url:
+            raise RuntimeError(f"{name} provider needs a base URL")
+        self.client = client
+        self.name = name
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+        self.timeout_s = timeout_s
 
     async def complete_json(self, system: str, user: str) -> Any:
-        if not self.settings.openai_compatible_url:
-            raise RuntimeError("OPENAI_COMPATIBLE_URL is required")
         headers = {}
-        if self.settings.openai_compatible_api_key:
-            headers["Authorization"] = f"Bearer {self.settings.openai_compatible_api_key}"
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         started = time.perf_counter()
-        response = await self.client.post(
-            f"{self.settings.openai_compatible_url.rstrip('/')}/chat/completions",
-            headers=headers,
-            json={
-                "model": self.settings.llm_model, "temperature": 0,
-                "response_format": {"type": "json_object"},
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            }, timeout=self.settings.llm_timeout_s,
-        )
-        response.raise_for_status()
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json={
+                    "model": self.model, "temperature": 0,
+                    # Every preparation prompt already asks for JSON in words, which is what
+                    # DeepSeek's JSON mode requires; models that ignore the flag are still
+                    # handled by _json_from_text.
+                    "response_format": {"type": "json_object"},
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                }, timeout=self.timeout_s,
+            )
+        except httpx.TransportError as exc:
+            raise ProviderUnavailable(self.name, None, model=self.model) from exc
+        if response.is_error:
+            raise ProviderUnavailable(
+                self.name,
+                response.status_code,
+                retry_after=_retry_after_seconds(response),
+                model=self.model,
+            )
         payload = response.json()
         usage = payload.get("usage", {})
         self.record_metric({
-            "provider": "openai-compatible", "model": self.settings.llm_model,
+            "provider": self.name, "model": self.model,
             "wall_seconds": round(time.perf_counter() - started, 4),
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
         })
-        return _json_from_text(payload["choices"][0]["message"]["content"])
+        try:
+            content = payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ValueError(f"{self.name} did not return a message") from exc
+        return _json_from_text(content)
 
 
 class GeminiProvider(LLMProvider):
     """Gemini Developer API provider used only for Telegram run preparation."""
-
-    _RETRYABLE_STATUSES: ClassVar[set[int]] = {429, 500, 502, 503, 504}
 
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
         if not settings.gemini_api_key:
@@ -278,29 +363,36 @@ class GeminiProvider(LLMProvider):
                     json=body,
                     timeout=self.settings.gemini_preparation_timeout_s,
                 )
-            except httpx.TransportError:
+            except httpx.TransportError as exc:
                 if attempt + 1 >= attempts:
-                    raise
+                    raise ProviderUnavailable(
+                        "gemini", None, model=self.settings.gemini_preparation_model
+                    ) from exc
                 await asyncio.sleep(min(2**attempt, 8))
                 continue
-            if response.status_code not in self._RETRYABLE_STATUSES:
+            if response.status_code not in RETRYABLE_STATUSES:
                 break
             if attempt + 1 >= attempts:
                 break
-            retry_after = response.headers.get("Retry-After", "")
-            try:
-                delay = max(0.0, min(float(retry_after), 30.0))
-            except ValueError:
-                delay = min(2**attempt, 8)
+            delay = _inline_delay(response, attempt)
+            # Waiting here only pays off while the wait is shorter than moving on costs.
+            # A minute-long Retry-After is a quota window, and a quota window is the
+            # caller's cooldown to hold, not this loop's sleep.
+            if delay > self.settings.preparation_retry_inline_max_s:
+                break
             await asyncio.sleep(delay)
         if response is None:
-            raise RuntimeError("Gemini request produced no response")
+            raise ProviderUnavailable(
+                "gemini", None, model=self.settings.gemini_preparation_model
+            )
         if response.is_error:
             # Do not include the response body: providers may echo request details, and
             # operational events need only the stable status/model tuple.
-            raise RuntimeError(
-                f"Gemini API request failed with HTTP {response.status_code} "
-                f"for model {self.settings.gemini_preparation_model}"
+            raise ProviderUnavailable(
+                "gemini",
+                response.status_code,
+                retry_after=_retry_after_seconds(response),
+                model=self.settings.gemini_preparation_model,
             )
         payload = response.json()
         usage = payload.get("usageMetadata") or {}
@@ -339,11 +431,148 @@ class DeterministicProvider(LLMProvider):
         return {}
 
 
+class FallbackProvider(LLMProvider):
+    """Tries providers in order and remembers which ones are currently refusing work.
+
+    Preparation is a conversation with a waiting user, so a rate-limited provider must cost
+    one failed request, not a retry storm: the provider that turned the call away is passed
+    over for its stated Retry-After -- or the configured cooldown -- and the run continues on
+    the next one. A provider whose credentials or model are wrong is passed over for good,
+    because that cannot resolve itself while the process runs.
+
+    The switch is not silent: every fallback is recorded for the pipeline to write as a run
+    event, so a run planned by the second-choice model says so in its own history.
+    """
+
+    def __init__(self, providers: list[tuple[str, LLMProvider]], cooldown_s: float):
+        self._providers = providers
+        self._cooldown_s = cooldown_s
+        self._blocked: dict[str, float] = {}
+        self._fallbacks: list[dict[str, Any]] = []
+
+    @property
+    def provider_names(self) -> list[str]:
+        return [name for name, _ in self._providers]
+
+    async def complete_json(self, system: str, user: str) -> Any:
+        skipped: list[str] = []
+        last_error: Exception | None = None
+        for name, provider in self._providers:
+            if self._blocked.get(name, 0.0) > time.monotonic():
+                skipped.append(f"{name}:cooling")
+                continue
+            try:
+                result = await provider.complete_json(system, user)
+            except ProviderUnavailable as exc:
+                self._block(name, exc)
+                skipped.append(f"{name}:{exc.status if exc.status is not None else 'transport'}")
+                last_error = exc
+                continue
+            except ValueError as exc:
+                # An answer that is not JSON is this model's failing, not the endpoint's;
+                # another model may well parse. No cooldown -- nothing says it is unhealthy.
+                skipped.append(f"{name}:invalid-json")
+                last_error = exc
+                continue
+            if skipped:
+                self._fallbacks.append({"served_by": name, "skipped": skipped})
+            return result
+        raise RuntimeError(
+            f"every preparation provider failed ({', '.join(skipped) or 'none configured'})"
+        ) from last_error
+
+    def _block(self, name: str, error: ProviderUnavailable) -> None:
+        if error.status in UNRECOVERABLE_STATUSES:
+            self._blocked[name] = math.inf
+            return
+        wait = error.retry_after if error.retry_after is not None else self._cooldown_s
+        self._blocked[name] = time.monotonic() + min(wait, MAX_COOLDOWN_S)
+
+    def drain_metrics(self) -> list[dict[str, Any]]:
+        metrics = super().drain_metrics()
+        for _, provider in self._providers:
+            metrics.extend(provider.drain_metrics())
+        return metrics
+
+    def drain_fallbacks(self) -> list[dict[str, Any]]:
+        switches = list(self._fallbacks)
+        self._fallbacks = []
+        return switches
+
+
+def _preparation_gemini(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
+    return GeminiProvider(settings, client)
+
+
+def _preparation_openrouter(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
+    if not settings.openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is required when PREPARATION_LLM_CHAIN lists openrouter")
+    return OpenAICompatibleProvider(
+        client,
+        name="openrouter",
+        base_url=settings.openrouter_api_url,
+        api_key=settings.openrouter_api_key,
+        model=settings.openrouter_preparation_model,
+        timeout_s=settings.openrouter_preparation_timeout_s,
+    )
+
+
+def _preparation_groq(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
+    if not settings.groq_api_key:
+        raise RuntimeError("GROQ_API_KEY is required when PREPARATION_LLM_CHAIN lists groq")
+    return OpenAICompatibleProvider(
+        client,
+        name="groq",
+        base_url=settings.groq_api_url,
+        api_key=settings.groq_api_key,
+        model=settings.groq_preparation_model,
+        timeout_s=settings.groq_preparation_timeout_s,
+    )
+
+
+def _preparation_deepseek(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
+    if not settings.deepseek_api_key:
+        raise RuntimeError("DEEPSEEK_API_KEY is required when PREPARATION_LLM_CHAIN lists deepseek")
+    return OpenAICompatibleProvider(
+        client,
+        name="deepseek",
+        base_url=settings.deepseek_api_url,
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_preparation_model,
+        timeout_s=settings.deepseek_preparation_timeout_s,
+    )
+
+
+def _preparation_local(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
+    # Its own instance rather than the pipeline's: the two are drained at different points
+    # and sharing one would file research-stage calls under a preparation stage.
+    return OllamaProvider(settings, client)
+
+
+PREPARATION_BUILDERS = {
+    "gemini": _preparation_gemini,
+    "openrouter": _preparation_openrouter,
+    "groq": _preparation_groq,
+    "deepseek": _preparation_deepseek,
+    "local": _preparation_local,
+}
+assert set(PREPARATION_BUILDERS) == set(PREPARATION_PROVIDERS)
+
+
 def build_llm(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
     if settings.testing or settings.llm_provider == "deterministic":
         return DeterministicProvider()
     if settings.llm_provider == "openai-compatible":
-        return OpenAICompatibleProvider(settings, client)
+        if not settings.openai_compatible_url:
+            raise RuntimeError("OPENAI_COMPATIBLE_URL is required")
+        return OpenAICompatibleProvider(
+            client,
+            name="openai-compatible",
+            base_url=settings.openai_compatible_url,
+            api_key=settings.openai_compatible_api_key,
+            model=settings.llm_model,
+            timeout_s=settings.llm_timeout_s,
+        )
     return OllamaProvider(settings, client)
 
 
@@ -351,18 +580,30 @@ def build_preparation_llm(
     settings: Settings,
     client: httpx.AsyncClient,
 ) -> LLMProvider | None:
+    """The preparation chain, or a bare provider when only one is configured.
+
+    A provider named in the chain but missing its key fails here, at worker start, rather
+    than being skipped: the operator asked for it, and quietly planning runs on the next
+    provider would hide the misconfiguration behind a working system.
+    """
     if not settings.telegram_preparation_llm_enabled:
         return None
     if settings.testing:
         return DeterministicProvider()
-    return GeminiProvider(settings, client)
+    chain = [
+        (name, PREPARATION_BUILDERS[name](settings, client))
+        for name in settings.preparation_chain
+    ]
+    if len(chain) == 1:
+        return chain[0][1]
+    return FallbackProvider(chain, settings.preparation_provider_cooldown_s)
 
 
 async def translate_research_request(
     llm: LLMProvider,
     question: str,
     sub_questions: list[str],
-) -> tuple[str, list[str], str]:
+) -> tuple[str, list[str], str, str]:
     """Render the request in English so the whole research side speaks one language.
 
     Scholarly indexes answer English queries and the lexical relevance gates compare
@@ -373,13 +614,21 @@ async def translate_research_request(
     The source language comes back with the translation because the model already knows it:
     detect_language() answers "und" for anything short, which is too weak to decide which
     language the approval screen and the report should speak.
+
+    The run label rides along for the same reason -- it is read off the same question, by
+    the same model, in the same breath. Asking for it separately doubled the requests this
+    stage spends against an external quota. A model that omits it costs nothing: the caller
+    falls back to the standalone research_label() call it used before.
     """
     data = await llm.complete_json(
         "Translate the research request into English. Keep the meaning, scope, named "
         "entities, acronyms and identifiers exactly as they are; do not answer, expand or "
         "reinterpret the question. Return JSON with question (string), sub_questions "
-        "(array of strings, same order and count as the input) and source_language (the "
-        "ISO 639-1 code of the language the request was written in). No prose.",
+        "(array of strings, same order and count as the input), source_language (the "
+        "ISO 639-1 code of the language the request was written in) and label (a "
+        "snake_case English handle for the topic, at most 4 words, ASCII letters digits "
+        "and underscores only; name the subject itself, never the act of researching it, "
+        "so no research, study, analysis or review). No prose.",
         f"QUESTION:\n{question}\nSUB_QUESTIONS:\n"
         f"{json.dumps(sub_questions, ensure_ascii=False)}",
     )
@@ -388,29 +637,7 @@ async def translate_research_request(
     if not translated:
         raise ValueError("translation returned no question")
     source = str(data.get("source_language", "")).strip().lower()[:2]
-    return translated, items, source
-
-
-async def translate_for_display(
-    llm: LLMProvider,
-    items: list[str],
-    language: str,
-) -> list[str]:
-    """Translate text that is only shown to a reader, never used to drive the run.
-
-    The research side keeps its English strings; this exists so the approval screen can be
-    read in the language the request arrived in.
-    """
-    if not items:
-        return []
-    target = "Turkish" if language == "tr" else "English"
-    data = await llm.complete_json(
-        f"Translate each item into {target}. Keep named entities, acronyms and identifiers "
-        "as they are. Return JSON with items (array of strings, same order and count as the "
-        "input). No prose.",
-        json.dumps(items, ensure_ascii=False),
-    )
-    return _display_items(data, items)
+    return translated, items, source, str(data.get("label") or "").strip()
 
 
 async def planning_choices(
@@ -492,7 +719,7 @@ def _choice_questions(data: Any) -> list[dict[str, Any]]:
     return questions
 
 
-def _display_items(data: Any, items: list[str]) -> list[str]:
+def display_items(data: Any, items: list[str]) -> list[str]:
     """Accept the shapes the model actually returns, not only the one it was asked for.
 
     A small model answers this prompt with a bare array or with a source-to-translation

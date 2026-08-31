@@ -746,3 +746,72 @@ def test_no_dead_approval_strings_are_left_in_the_plan_labels():
     assert "Approve and start" not in CONTROL_PANEL_HTML
     # The duration label survives: the plan card still reports the budget it was given.
     assert "Araştırma süresi (dakika)" in CONTROL_PANEL_HTML
+
+
+@pytest.mark.asyncio
+async def test_the_main_table_names_who_started_each_run():
+    """An admin's table is the only one that mixes owners, and it was anonymous."""
+    admin_id = await _account("panel-owner-admin@example.test", "admin")
+    other_id = await _account("panel-owner-other@example.test", "user")
+    async with SessionLocal() as session:
+        await Repository(session, actor=Principal.user(other_id)).create_run(
+            ResearchProtocol(
+                title="Started by somebody else",
+                primary_question="Who started this run?",
+                budget={"max_wall_minutes": 30},
+            )
+        )
+
+    snapshot = await control_panel._run_snapshot(
+        {"jobs": []}, Principal.user(admin_id, "admin")
+    )
+    row = next(
+        item
+        for item in snapshot["active"] + snapshot["recent"]
+        if item["title"] == "Started by somebody else"
+    )
+    assert row["owner_name"] == "panel-owner-other"
+    assert row["owner_id"] == other_id
+
+
+@pytest.mark.asyncio
+async def test_a_run_without_an_owner_is_not_attributed_to_the_reader():
+    admin_id = await _account("panel-owner-orphan@example.test", "admin")
+    async with SessionLocal() as session:
+        run = await Repository(session, actor=Principal.user(admin_id, "admin")).create_run(
+            ResearchProtocol(
+                title="Predates ownership",
+                primary_question="Whose run is this?",
+                budget={"max_wall_minutes": 30},
+            )
+        )
+        row = await session.get(control_panel.ResearchRunRow, run.id)
+        row.owner_id = None
+        await session.commit()
+
+    snapshot = await control_panel._run_snapshot(
+        {"jobs": []}, Principal.user(admin_id, "admin")
+    )
+    orphan = next(
+        item
+        for item in snapshot["active"] + snapshot["recent"]
+        if item["title"] == "Predates ownership"
+    )
+    assert orphan["owner_name"] is None
+    assert orphan["owner_id"] is None
+
+
+def test_the_owner_column_is_revealed_by_the_session_not_by_the_payload():
+    """Every table renders the column; only an admin's session shows it."""
+    assert '<th class="owner-col">Başlatan</th>' in CONTROL_PANEL_HTML
+    assert "body:not(.is-admin) .owner-col{display:none}" in CONTROL_PANEL_HTML
+    assert "document.body.classList.toggle('is-admin',!!s.is_admin)" in CONTROL_PANEL_HTML
+    assert "tr.append(runTitle(run),ownerCell(run))" in CONTROL_PANEL_HTML
+
+
+def test_the_query_branch_table_collapses_like_the_source_table():
+    assert "collapsibleDetailSection(`Sorgu Dalları" in CONTROL_PANEL_HTML
+    assert "detailSection('Sorgu Dalları')" not in CONTROL_PANEL_HTML
+    assert "branchSection.content.append(branchWrap);body.append(branchSection.wrap)" in (
+        CONTROL_PANEL_HTML
+    )

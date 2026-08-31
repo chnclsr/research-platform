@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import json
 import math
 import re
 import time
@@ -27,6 +29,7 @@ from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .exporter import build_exports
 from .hardware_telemetry import TelemetryHub
 from .llm import (
+    FallbackProvider,
     LLMProvider,
     build_llm,
     build_preparation_llm,
@@ -35,7 +38,6 @@ from .llm import (
     generate_search_queries,
     planning_choices,
     research_label,
-    translate_for_display,
     translate_research_request,
 )
 from .normalization import canonicalize_url, detect_language
@@ -68,7 +70,7 @@ from .relevance import (
     temporal_relevance,
 )
 from .repository import Repository
-from .research_plan import build_research_plan, plan_strategy
+from .research_plan import build_research_plan, plan_display_and_strategy, plan_strategy
 from .schemas import (
     AcquiredDocument,
     AuthorityLevel,
@@ -145,12 +147,30 @@ class PipelineState(TypedDict, total=False):
     planning_answers: list[str]
     applied_settings: list[dict[str, Any]]
     plan_feedback: list[str]
+    # Fingerprints of what the preparation calls read. A checkpointed run re-enters at
+    # DECOMPOSE after every answer, and without these the same question would be
+    # decomposed and re-queried from scratch on each pass -- including the approval pass,
+    # whose inputs are identical to the pass the user just approved.
+    decompose_signature: str
+    generated_queries: list[str]
+    query_signature: str
     report_outline_guidance: str
     invocation_source: str
 
 
 class PipelineHalted(RuntimeError):
     pass
+
+
+def preparation_signature(*parts: Any) -> str:
+    """A stable fingerprint of everything one preparation call reads.
+
+    Reused output is only correct while the inputs are unchanged, so the fingerprint has to
+    cover every value that reaches the prompt -- the question, the user's steering and the
+    date scope the answers can move.
+    """
+    payload = json.dumps(parts, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
 class PipelineStageTimeout(RuntimeError):
@@ -419,27 +439,28 @@ class ResearchPipeline:
         # The approval screen speaks the language the request arrived in. This is display
         # only: the English strings the plan describes are the ones the run will use.
         language = protocol.display_language()
-        display_subs: list[str] = []
-        if language != "en":
-            try:
-                display_subs = await translate_for_display(
-                    self._preparation_provider(),
-                    list(planning_state.get("sub_questions", [])),
-                    language,
-                )
-            except Exception:
-                # A reading aid must never hold the gate shut; the panel falls back to the
-                # operational English list.
-                display_subs = []
         plan = build_research_plan(
             protocol=protocol,
             state=planning_state,
             settings=self.settings,
-            sub_questions_display=display_subs,
         )
-        plan["strategy_note"] = await plan_strategy(
-            self._preparation_provider(), plan, language
-        )
+        if language == "en":
+            # Nothing to translate, so the note is the only thing left to ask for.
+            plan["strategy_note"] = await plan_strategy(
+                self._preparation_provider(), plan, language
+            )
+        else:
+            # One request for both halves of the approval screen. Each half still fails on
+            # its own: a missing translation leaves the operational English list, a missing
+            # note leaves the plan without one, and neither holds the gate shut.
+            display_subs, note = await plan_display_and_strategy(
+                self._preparation_provider(),
+                plan,
+                list(planning_state.get("sub_questions", [])),
+                language,
+            )
+            plan["questions"]["sub_questions_display"] = display_subs
+            plan["strategy_note"] = note
         await self._emit_llm_metrics(
             run_id, "PLAN", provider=self._preparation_provider()
         )
@@ -460,9 +481,17 @@ class ResearchPipeline:
         *,
         provider: LLMProvider | None = None,
     ) -> None:
-        metrics = (provider or self.llm).drain_metrics()
+        target = provider or self.llm
+        metrics = target.drain_metrics()
         if metrics:
             await self.repo.event(run_id, "llm_metrics", {"stage": stage, "calls": metrics})
+        if isinstance(target, FallbackProvider):
+            # A run planned by the second-choice model has to say so in its own history;
+            # the llm_metrics rows name the model but not that a switch happened.
+            for switch in target.drain_fallbacks():
+                await self.repo.event(
+                    run_id, "preparation_provider_fallback", {"stage": stage, **switch}
+                )
 
     async def _interruptible(
         self,
@@ -596,29 +625,41 @@ class ResearchPipeline:
     async def validate_protocol(self, state: PipelineState) -> dict:
         await self._boundary(state, "VALIDATE_PROTOCOL")
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        protocol = await self._to_research_language(state["run_id"], protocol)
-        protocol = await self._name_run(state["run_id"], protocol)
+        protocol, suggested_label = await self._to_research_language(
+            state["run_id"], protocol
+        )
+        protocol = await self._name_run(state["run_id"], protocol, suggested_label)
         return {"protocol": protocol.model_dump(mode="json")}
 
-    async def _name_run(self, run_id: str, protocol: ResearchProtocol) -> ResearchProtocol:
+    async def _name_run(
+        self,
+        run_id: str,
+        protocol: ResearchProtocol,
+        suggested: str = "",
+    ) -> ResearchProtocol:
         """Give the run a short topic handle for chat clients to print instead of a ULID.
 
         Done after translation so the label is English whichever language the question
-        arrived in. A cosmetic field: if the model is unreachable or answers with something
-        unusable, the question itself is slugified and the run carries on.
+        arrived in -- and taken from the translation itself when that call already named the
+        topic, because a second request for four words is a request this stage spends
+        against an external quota for nothing. A cosmetic field either way: if the model is
+        unreachable or answers with something unusable, the question itself is slugified and
+        the run carries on.
         """
         if protocol.label:
             return protocol
-        try:
-            answer = await research_label(
-                self._preparation_provider(), protocol.primary_question
-            )
-        except Exception:
-            answer = ""
-        finally:
-            await self._emit_llm_metrics(
-                run_id, "VALIDATE_PROTOCOL", provider=self._preparation_provider()
-            )
+        answer = suggested
+        if not answer:
+            try:
+                answer = await research_label(
+                    self._preparation_provider(), protocol.primary_question
+                )
+            except Exception:
+                answer = ""
+            finally:
+                await self._emit_llm_metrics(
+                    run_id, "VALIDATE_PROTOCOL", provider=self._preparation_provider()
+                )
         label = slugify(answer, max_length=LABEL_MAX_LENGTH) or slugify(
             protocol.primary_question, max_length=LABEL_MAX_LENGTH
         )
@@ -654,7 +695,7 @@ class ResearchPipeline:
         self,
         run_id: str,
         protocol: ResearchProtocol,
-    ) -> ResearchProtocol:
+    ) -> tuple[ResearchProtocol, str]:
         """Move the request into English before any stage reads it.
 
         Done here, at the first stage, so the plan the user approves already shows the
@@ -662,12 +703,12 @@ class ResearchPipeline:
         spent rather than after.
         """
         if protocol.original_question:
-            return protocol
+            return protocol, ""
         detected = detect_language(protocol.primary_question)
         if detected == "en":
-            return await self._record_request_language(run_id, protocol, "en")
+            return await self._record_request_language(run_id, protocol, "en"), ""
         try:
-            question, sub_questions, source = await translate_research_request(
+            question, sub_questions, source, label = await translate_research_request(
                 self._preparation_provider(),
                 protocol.primary_question,
                 list(protocol.sub_questions),
@@ -680,7 +721,7 @@ class ResearchPipeline:
                 "research_language_fallback",
                 {"language": detected, "error": f"{type(exc).__name__}: {str(exc)[:200]}"},
             )
-            return await self._record_request_language(run_id, protocol, detected)
+            return await self._record_request_language(run_id, protocol, detected), ""
         finally:
             await self._emit_llm_metrics(
                 run_id, "VALIDATE_PROTOCOL", provider=self._preparation_provider()
@@ -693,7 +734,7 @@ class ResearchPipeline:
             # model anyway. When it hands the text back unchanged nothing was translated,
             # and the run should not claim otherwise -- the plan would show the user a
             # pointless "your question" block.
-            return await self._record_request_language(run_id, protocol, language)
+            return await self._record_request_language(run_id, protocol, language), label
         payload = protocol.model_dump(mode="json")
         payload["original_question"] = protocol.primary_question
         payload["original_sub_questions"] = list(protocol.sub_questions)
@@ -712,7 +753,7 @@ class ResearchPipeline:
                 "research_question": question,
             },
         )
-        return translated
+        return translated, label
 
     async def decompose_question(self, state: PipelineState) -> dict:
         await self._boundary(state, "DECOMPOSE")
@@ -730,24 +771,44 @@ class ResearchPipeline:
             state["run_id"], protocol, feedback
         )
         applied = [*applied, *revised]
-        sub_questions, concepts = await decompose(
-            self._preparation_provider(),
+        guidance = [*planning, *feedback]
+        # Every checkpoint answer re-enters the graph here, so this node runs once per
+        # round trip -- including the approval pass, which reads exactly what the pass
+        # before it read. Decomposing again then buys nothing and costs an external
+        # request, so the answer is reused whenever nothing it depends on has moved.
+        signature = preparation_signature(
             protocol.primary_question,
-            protocol.sub_questions,
-            guidance=[*planning, *feedback],
+            list(protocol.sub_questions),
+            guidance,
+            protocol.scope.start_date,
+            protocol.scope.end_date,
         )
-        sub_questions = [
-            constrain_text_to_scope(
-                question,
-                protocol.scope.start_date,
-                protocol.scope.end_date,
+        if state.get("decompose_signature") == signature and state.get("sub_questions"):
+            sub_questions = list(state.get("sub_questions", []))
+            concepts = list(state.get("concepts", []))
+        else:
+            sub_questions, concepts = await decompose(
+                self._preparation_provider(),
+                protocol.primary_question,
+                protocol.sub_questions,
+                guidance=guidance,
             )
-            for question in sub_questions
-        ]
-        await self._emit_llm_metrics(
-            state["run_id"], "DECOMPOSE", provider=self._preparation_provider()
-        )
-        output = {"sub_questions": sub_questions[:12], "concepts": concepts[:20]}
+            sub_questions = [
+                constrain_text_to_scope(
+                    question,
+                    protocol.scope.start_date,
+                    protocol.scope.end_date,
+                )
+                for question in sub_questions
+            ]
+            await self._emit_llm_metrics(
+                state["run_id"], "DECOMPOSE", provider=self._preparation_provider()
+            )
+        output = {
+            "sub_questions": sub_questions[:12],
+            "concepts": concepts[:20],
+            "decompose_signature": signature,
+        }
         if applied:
             output["protocol"] = protocol.model_dump(mode="json")
             output["applied_settings"] = applied
@@ -899,35 +960,54 @@ class ResearchPipeline:
     async def build_query_branches(self, state: PipelineState) -> dict:
         await self._boundary(state, "BUILD_QUERY_BRANCHES")
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        try:
-            generated = await generate_search_queries(
-                self._preparation_provider(),
-                protocol.primary_question,
-                state.get("sub_questions", []),
-                [f.value for f in protocol.connectors.included_families],
-                protocol.languages,
-                guidance=[
-                    *state.get("planning_answers", []),
-                    *state.get("plan_feedback", []),
-                ],
-            )
-        except Exception:
-            if self._telegram_preparation and self.preparation_llm is not None:
-                raise
-            generated = []
-        generated = [
-            constrain_text_to_scope(
-                query,
-                protocol.scope.start_date,
-                protocol.scope.end_date,
-            )
-            for query in generated
+        families = [f.value for f in protocol.connectors.included_families]
+        guidance = [
+            *state.get("planning_answers", []),
+            *state.get("plan_feedback", []),
         ]
-        await self._emit_llm_metrics(
-            state["run_id"],
-            "BUILD_QUERY_BRANCHES",
-            provider=self._preparation_provider(),
+        # Reused on an unchanged pass for the same reason DECOMPOSE is; see there.
+        signature = preparation_signature(
+            protocol.primary_question,
+            list(state.get("sub_questions", [])),
+            families,
+            list(protocol.languages),
+            guidance,
+            protocol.scope.start_date,
+            protocol.scope.end_date,
         )
+        cached = state.get("generated_queries")
+        if state.get("query_signature") == signature and cached is not None:
+            generated = list(cached)
+        else:
+            try:
+                generated = await generate_search_queries(
+                    self._preparation_provider(),
+                    protocol.primary_question,
+                    state.get("sub_questions", []),
+                    families,
+                    protocol.languages,
+                    guidance=guidance,
+                )
+            except Exception:
+                if self._telegram_preparation and self.preparation_llm is not None:
+                    raise
+                # Not remembered: an empty list here is a failure, and the next pass
+                # deserves a fresh attempt rather than a cached disappointment.
+                signature = ""
+                generated = []
+            generated = [
+                constrain_text_to_scope(
+                    query,
+                    protocol.scope.start_date,
+                    protocol.scope.end_date,
+                )
+                for query in generated
+            ]
+            await self._emit_llm_metrics(
+                state["run_id"],
+                "BUILD_QUERY_BRANCHES",
+                provider=self._preparation_provider(),
+            )
         queries = list(
             dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated])
         )
@@ -937,6 +1017,8 @@ class ResearchPipeline:
         missions = initial_missions(protocol, queries)
         output = {
             "queries": queries,
+            "generated_queries": generated,
+            "query_signature": signature,
             "missions": [mission.model_dump(mode="json") for mission in missions],
             "attempted_missions": [],
             "required_branch_ids": [mission.branch_id for mission in missions],
@@ -1506,8 +1588,11 @@ class ResearchPipeline:
             "connector_success_rates": connector_success_rates,
             "discovery_stats": {
                 **state.get("discovery_stats", {}),
+                "round_provider_candidates": len(unique),
                 "pooled_candidates": len(novel),
+                "round_novel_candidates": len(novel),
                 "accepted_candidates": len(ranked),
+                "round_selected_candidates": len(candidates) + len(corpus_documents),
                 "reserve_selected": len(reserve),
                 "hard_rejected": len(rejected),
                 "citation_candidates_selected": sum(

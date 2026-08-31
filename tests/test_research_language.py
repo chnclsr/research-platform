@@ -53,18 +53,18 @@ async def run_with(llm, **protocol_overrides):
         row = await repo.create_run(ResearchProtocol(**payload))
         pipeline = ResearchPipeline(get_settings(), session, client)
         pipeline.llm = llm
-        protocol = await pipeline._to_research_language(
+        protocol, label = await pipeline._to_research_language(
             row.id, ResearchProtocol.model_validate(row.protocol)
         )
         events = {event.event_type for event in await repo.events_after(row.id)}
         stored = await repo.get_run(row.id)
-    return protocol, events, stored
+    return protocol, events, stored, label
 
 
 @pytest.mark.asyncio
 async def test_a_turkish_request_is_researched_in_english_and_keeps_the_original():
     llm = TranslatingLLM()
-    protocol, events, stored = await run_with(llm, sub_questions=["Hangi veri setleri?"])
+    protocol, events, stored, _label = await run_with(llm, sub_questions=["Hangi veri setleri?"])
     assert llm.calls == 1
     assert protocol.primary_question == ENGLISH_QUESTION
     assert protocol.sub_questions == ["Which datasets are used?"]
@@ -81,7 +81,7 @@ async def test_a_turkish_request_is_researched_in_english_and_keeps_the_original
 @pytest.mark.asyncio
 async def test_an_unmistakably_english_request_costs_no_translation_call():
     llm = TranslatingLLM()
-    protocol, events, _ = await run_with(
+    protocol, events, _, _label = await run_with(
         llm,
         primary_question=(
             "What does the evidence say about AI and radiologist performance, "
@@ -101,7 +101,7 @@ async def test_a_short_english_request_is_not_reported_as_translated():
     show the user a "your question" block for a question that never moved.
     """
     llm = TranslatingLLM(result={"question": ENGLISH_QUESTION, "sub_questions": []})
-    protocol, events, stored = await run_with(llm, primary_question=ENGLISH_QUESTION)
+    protocol, events, stored, _label = await run_with(llm, primary_question=ENGLISH_QUESTION)
     assert llm.calls == 1
     assert protocol.original_question is None
     assert protocol.primary_question == ENGLISH_QUESTION
@@ -113,7 +113,7 @@ async def test_a_short_english_request_is_not_reported_as_translated():
 async def test_a_failed_translation_leaves_the_run_alive_in_the_original_language():
     """Researching in Turkish is worse than in English; failing the run is worse than both."""
     llm = TranslatingLLM(fail=True)
-    protocol, events, stored = await run_with(llm)
+    protocol, events, stored, _label = await run_with(llm)
     assert protocol.primary_question == TURKISH_QUESTION
     assert protocol.original_question is None
     assert "research_language_fallback" in events
@@ -123,7 +123,7 @@ async def test_a_failed_translation_leaves_the_run_alive_in_the_original_languag
 @pytest.mark.asyncio
 async def test_translation_does_not_run_twice_when_a_run_resumes():
     llm = TranslatingLLM()
-    protocol, _, _ = await run_with(
+    protocol, _, _, _label = await run_with(
         llm,
         primary_question=ENGLISH_QUESTION,
         original_question=TURKISH_QUESTION,
@@ -204,7 +204,7 @@ async def test_the_model_reports_the_source_language_detect_cannot_settle():
         "sub_questions": [],
         "source_language": "tr",
     })
-    protocol, _, stored = await run_with(llm, primary_question=short_turkish)
+    protocol, _, stored, _label = await run_with(llm, primary_question=short_turkish)
     assert protocol.original_language == "tr"
     assert stored.protocol["original_language"] == "tr"
     assert protocol.display_language() == "tr"
@@ -216,7 +216,7 @@ async def test_the_model_reports_the_source_language_detect_cannot_settle():
 @pytest.mark.asyncio
 async def test_an_english_request_records_its_language_too():
     llm = TranslatingLLM()
-    protocol, _, stored = await run_with(
+    protocol, _, stored, _label = await run_with(
         llm,
         primary_question=(
             "What does the evidence say about AI and radiologist performance, "
@@ -232,19 +232,19 @@ def test_display_translation_accepts_the_shapes_the_model_actually_returns():
     """Asked for {"items": [...]}, a 4B model answers with a bare array or a
     source-to-translation mapping just as often. Measured against the live model: it
     returned the mapping, and the strict reader silently dropped every translation."""
-    from research_platform.llm import _display_items
+    from research_platform.llm import display_items
 
     items = ["What is the diagnostic accuracy?", "Which datasets are used?"]
     expected = ["Tanısal doğruluk nedir?", "Hangi veri setleri kullanılıyor?"]
 
-    assert _display_items({"items": expected}, items) == expected
-    assert _display_items(expected, items) == expected
-    assert _display_items(dict(zip(items, expected)), items) == expected
+    assert display_items({"items": expected}, items) == expected
+    assert display_items(expected, items) == expected
+    assert display_items(dict(zip(items, expected)), items) == expected
 
     # Anything that cannot be lined up one-to-one is dropped rather than misaligned.
-    assert _display_items({"items": expected[:1]}, items) == []
-    assert _display_items({"translation": "tek bir dize"}, items) == []
-    assert _display_items("prose", items) == []
+    assert display_items({"items": expected[:1]}, items) == []
+    assert display_items({"translation": "tek bir dize"}, items) == []
+    assert display_items("prose", items) == []
 
 
 def test_relevance_gates_see_both_languages():

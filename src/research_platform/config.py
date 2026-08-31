@@ -3,8 +3,20 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Providers the run-preparation chain knows how to build, in no particular order; the
+# order that matters is the operator's, in PREPARATION_LLM_CHAIN. "local" is the same
+# Ollama/Qwen the research side uses -- it participates only when it is named, so a
+# mandatory preparation call never quietly drops to the small local model.
+PREPARATION_PROVIDERS: tuple[str, ...] = (
+    "gemini",
+    "openrouter",
+    "groq",
+    "deepseek",
+    "local",
+)
 
 
 class Settings(BaseSettings):
@@ -80,11 +92,37 @@ class Settings(BaseSettings):
     openai_compatible_url: str | None = None
     openai_compatible_api_key: str | None = None
     telegram_preparation_llm_enabled: bool = False
+    # Preparation providers tried in order. A quota or outage on one moves the call to the
+    # next; every name listed here must be configured, because a listed-but-unusable
+    # provider is a misconfiguration, not a silent skip.
+    preparation_llm_chain: str = "gemini"
+    # How long a provider is passed over after it turns a call away. Preparation makes
+    # roughly seven calls per run, so without a cooldown an exhausted daily quota would be
+    # rediscovered -- at full latency -- once per call.
+    preparation_provider_cooldown_s: float = Field(300.0, ge=0.0, le=3600.0)
+    # A provider waits in place only for a delay shorter than this; a longer Retry-After is
+    # cheaper to answer by moving to the next provider than by sleeping on it.
+    preparation_retry_inline_max_s: float = Field(5.0, ge=0.0, le=60.0)
     gemini_api_key: str | None = None
     gemini_api_url: str = "https://generativelanguage.googleapis.com"
     gemini_preparation_model: str = "gemini-3.6-flash"
     gemini_preparation_timeout_s: float = Field(60.0, ge=10.0, le=300.0)
     gemini_preparation_max_retries: int = Field(2, ge=0, le=5)
+    openrouter_api_url: str = "https://openrouter.ai/api/v1"
+    openrouter_api_key: str | None = None
+    # Free models only -- enforced below, not merely documented. Not every free model
+    # accepts response_format; this one does, which keeps the JSON contract intact.
+    openrouter_preparation_model: str = "z-ai/glm-5.2:free"
+    openrouter_preparation_timeout_s: float = Field(60.0, ge=10.0, le=300.0)
+    groq_api_url: str = "https://api.groq.com/openai/v1"
+    groq_api_key: str | None = None
+    # Free tier, and the largest Groq model that answers the preparation prompts in JSON.
+    groq_preparation_model: str = "openai/gpt-oss-120b"
+    groq_preparation_timeout_s: float = Field(60.0, ge=10.0, le=300.0)
+    deepseek_api_url: str = "https://api.deepseek.com/v1"
+    deepseek_api_key: str | None = None
+    deepseek_preparation_model: str = "deepseek-chat"
+    deepseek_preparation_timeout_s: float = Field(60.0, ge=10.0, le=300.0)
 
     github_token: str | None = None
     epo_ops_key: str | None = None
@@ -252,6 +290,38 @@ class Settings(BaseSettings):
     # "csv" keeps the data artifacts and skips the rendered chart; "all" adds the SVG.
     hardware_telemetry_output_type: Literal["csv", "all"] = "all"
     testing: bool = False
+
+    @field_validator("preparation_llm_chain")
+    @classmethod
+    def _validate_preparation_chain(cls, value: str) -> str:
+        names = [name.strip().lower() for name in value.split(",") if name.strip()]
+        if not names:
+            raise ValueError("PREPARATION_LLM_CHAIN must name at least one provider")
+        unknown = [name for name in names if name not in PREPARATION_PROVIDERS]
+        if unknown:
+            raise ValueError(
+                f"PREPARATION_LLM_CHAIN has unknown providers {unknown}; "
+                f"known providers are {list(PREPARATION_PROVIDERS)}"
+            )
+        if len(set(names)) != len(names):
+            raise ValueError("PREPARATION_LLM_CHAIN lists the same provider twice")
+        return ",".join(names)
+
+    @field_validator("openrouter_preparation_model")
+    @classmethod
+    def _openrouter_model_stays_free(cls, value: str) -> str:
+        # The chain exists to survive a quota, not to start spending: a paid OpenRouter
+        # model would bill silently on every Gemini rate limit.
+        if value and not value.endswith(":free"):
+            raise ValueError(
+                "OPENROUTER_PREPARATION_MODEL must be a ':free' model id "
+                f"(got {value!r})"
+            )
+        return value
+
+    @property
+    def preparation_chain(self) -> tuple[str, ...]:
+        return tuple(self.preparation_llm_chain.split(","))
 
 
 @lru_cache

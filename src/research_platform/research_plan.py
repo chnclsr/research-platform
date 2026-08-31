@@ -14,7 +14,7 @@ from typing import Any
 
 from .acquisition import ACQUISITION_STRATEGY_ORDER
 from .config import Settings
-from .llm import LLMProvider
+from .llm import LLMProvider, display_items
 from .parsers import build_parser_registry
 from .schemas import ResearchProtocol
 
@@ -212,13 +212,9 @@ def _strategy_system(language: str) -> str:
     )
 
 
-async def plan_strategy(llm: LLMProvider, plan: dict[str, Any], language: str = "tr") -> str:
-    """One narrative paragraph beside the deterministic dump -- never instead of it.
-
-    A failure here must not block approval: the plan is complete without the note, so the
-    gate opens with an empty string rather than failing the run.
-    """
-    payload = {
+def _strategy_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    """The half of the plan a strategy note may talk about."""
+    return {
         "questions": plan.get("questions", {}),
         "query_plan": plan.get("query_plan", []),
         "budget": plan.get("budget", {}),
@@ -226,10 +222,56 @@ async def plan_strategy(llm: LLMProvider, plan: dict[str, Any], language: str = 
         "date_scope": plan.get("date_scope", {}),
         "feedback": plan.get("feedback", []),
     }
+
+
+async def plan_display_and_strategy(
+    llm: LLMProvider,
+    plan: dict[str, Any],
+    items: list[str],
+    language: str,
+) -> tuple[list[str], str]:
+    """The reading copy of the sub-questions and the strategy note, in one request.
+
+    Both are display-only, both are written in the same language about the same plan, and
+    both are optional -- so they are asked for together rather than spending two calls of an
+    external quota on one approval screen. Failure stays fail-open on each half separately:
+    a missing or mismatched translation leaves the English list, a missing note leaves the
+    plan without one, and neither holds the gate shut.
+    """
+    if not items:
+        return [], await plan_strategy(llm, plan, language)
+    target = "Turkish" if language == "tr" else "English"
+    try:
+        data = await llm.complete_json(
+            f"You prepare an approval screen for a research plan. Write in {target}. Return "
+            'JSON with two keys. items: SUB_QUESTIONS translated into '
+            f"{target}, same order and count, keeping named entities, acronyms and "
+            'identifiers as they are. strategy: 3 to 6 sentences describing only what PLAN '
+            "already states -- how the questions will be approached, what the budget "
+            "implies, and where the plan is weak. Never invent sources, numbers or tools "
+            "that are not in the plan. No prose outside the JSON.",
+            json.dumps(
+                {"PLAN": _strategy_payload(plan), "SUB_QUESTIONS": items},
+                ensure_ascii=False,
+            ),
+        )
+    except Exception:  # noqa: BLE001 - the approval screen is complete without either half
+        return [], ""
+    if not isinstance(data, dict):
+        return [], ""
+    return display_items(data, items), str(data.get("strategy", "")).strip()[:2000]
+
+
+async def plan_strategy(llm: LLMProvider, plan: dict[str, Any], language: str = "tr") -> str:
+    """One narrative paragraph beside the deterministic dump -- never instead of it.
+
+    A failure here must not block approval: the plan is complete without the note, so the
+    gate opens with an empty string rather than failing the run.
+    """
     try:
         data = await llm.complete_json(
             _strategy_system(language),
-            json.dumps(payload, ensure_ascii=False),
+            json.dumps(_strategy_payload(plan), ensure_ascii=False),
         )
     except Exception:
         return ""

@@ -4,7 +4,7 @@
   <br>
 
   <p align="center">
-    <a href="https://github.com/chnclsr/research-platform"><img src="https://img.shields.io/badge/version-v0.16.0-3b82f6.svg?style=flat-square" alt="Version"></a>
+    <a href="https://github.com/chnclsr/research-platform"><img src="https://img.shields.io/badge/version-v0.16.1-3b82f6.svg?style=flat-square" alt="Version"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg?style=flat-square" alt="Python"></a>
     <a href="tests/"><img src="https://img.shields.io/badge/tests-429%20passed-10b981.svg?style=flat-square" alt="Tests"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-emerald.svg?style=flat-square" alt="License"></a>

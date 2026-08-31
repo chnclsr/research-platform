@@ -1,8 +1,8 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.16.1`
+Platform sürümü: `v0.17.0`
 
-Belge sürümü: `6.36`
+Belge sürümü: `6.37`
 
 Son güncelleme: `2026-08-31`
 
@@ -13,7 +13,35 @@ ve [DOCLING_GPU_SERVICE_V0.13.0_IMPLEMENTATION_REPORT.md](DOCLING_GPU_SERVICE_V0
 ve [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md)
 ve [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md)
 ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md)
+ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.17.0 — 2026-08-31
+
+- Telegram hazırlık çağrıları tek sağlayıcıya bağlı değil: `PREPARATION_LLM_CHAIN` ile
+  sıralanan sağlayıcılar (`gemini`, `openrouter`, `groq`, `deepseek`, `local`) sırayla denenir,
+  kota veya kesinti dönen sağlayıcının çağrısı sıradakine geçer.
+- Çağrıyı geri çeviren sağlayıcı `Retry-After` süresince ya da varsayılan cooldown boyunca
+  atlanır; yanlış anahtar, kapalı proje veya kalkmış model (`401/403/404`) alan sağlayıcı
+  süreç boyunca devre dışı kalır. Yerinde bekleme beş saniyeyle sınırlı: uzun kota
+  penceresinde beklemek yerine sıradaki sağlayıcıya geçilir.
+- OpenRouter yalnız `:free` modellerle kullanılabilir; ücretli model kimliği ayar hatası
+  olarak reddedilir. Yerel Qwen'e düşüş yalnız zincirde `local` yazıyorsa mümkündür, yani
+  zorunlu hazırlık hâlâ sessizce küçük modele düşmez.
+- Hazırlık evresi aynı işi tekrar etmiyor: ayrıştırma ve sorgu üretimi, okudukları girdinin
+  parmak izi değişmediği sürece checkpoint dönüşlerinde yeniden çalışmıyor — onay turu artık
+  hiç LLM çağrısı harcamıyor, reddedilen tur eskisi gibi yeniden hesaplıyor.
+- Aynı girdiyi okuyan çağrılar birleşti: koşu etiketi çeviri çağrısının içinde isteniyor,
+  onay ekranının okuma çevirisi ile strateji notu tek çağrıda geliyor. Her ikisinin de
+  yedek davranışı korunuyor. Ölçülen hazırlık maliyeti koşu başına ~11 çağrıdan ~7'ye iniyor.
+- Devretme `preparation_provider_fallback` koşu olayına yazılır; ikinci tercih modelle
+  planlanan koşu bunu kendi geçmişinde gösterir. Zincirdeki her sağlayıcı başarısız olursa
+  koşu, istem ve anahtar sızdırmayan bir hatayla görünür biçimde başarısız olur.
+
+- Panelin ana tablosu koşuyu başlatan kullanıcıyı gösteriyor. Sütun yalnız yönetici
+  oturumunda açılıyor; sahipsiz koşu okuyana atfedilmiyor, "—" olarak kalıyor.
+- Run detayındaki "Sorgu Dalları" tablosu, "Kabul Edilen Kaynaklar" gibi açılır kapanır ve
+  başlığında dal sayısını taşıyor; varsayılan olarak kapalı geliyor.
 
 ## v0.16.1 — 2026-08-31
 

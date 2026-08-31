@@ -67,7 +67,7 @@ kuyruk sırası ve geçen süre.** Başlık, araştırma sorusu, kaynaklar, iddi
 koşu kimliği **görünmez**; satır tıklanamaz ve üzerinde işlem yapılamaz.
 
 Liste boşken bölüm hiç görünmez. Yöneticide de görünmez — onların ana tablosu zaten her
-koşuyu tam gösteriyor.
+koşuyu, artık başlatan kullanıcının adıyla birlikte, tam gösteriyor.
 
 Ayrımın gerekçesi: bu üç yetki kurulumun tamamını etkiler. Log akışı her kullanıcının koşusunu
 birbirine karıştırır, "Servisleri durdur" başkasının süren araştırmasını keser ve connector testi
@@ -115,6 +115,8 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 - ARQ queue derinliği, çalışan/bekleyen iş sayısı ve worker heartbeat TTL'i.
 - Ollama erişimi ve bellekte yüklü yerel model.
 - Aktif ve sıradaki araştırmalar: durum, aşama ilerleme çubuğu, sıra, tur, kaynak ve iddia sayısı.
+- Yöneticide her satırda koşuyu başlatan kullanıcı; "Başlatan" sütunu yalnız yönetici
+  oturumunda görünür, çünkü sıradan kullanıcının tablosundaki her satır zaten kendisinindir.
 - Ekipteki diğer kullanıcıların süren işleri, sansürlü: kim, durum, aşama, sıra ve süre.
 - Son 20 terminal araştırma: tamamlandı, eksik tamamlandı, iptal veya hata.
 - Worker, API, MCP, Telegram ve panel loglarının son bölümü.

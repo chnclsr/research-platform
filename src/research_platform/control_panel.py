@@ -71,6 +71,7 @@ from .db import (
     ResearchRunRow,
     SessionLocal,
     SourceRow,
+    UserRow,
 )
 from .hardware_telemetry import SAMPLE_EVENT
 from .identity import (
@@ -305,6 +306,18 @@ async def _run_snapshot(
         if not principal.is_admin:
             statement = statement.where(ResearchRunRow.owner_id == principal.user_id)
         rows = list(await session.scalars(statement.limit(60)))
+        # Who started each run. An admin's table is the only one that mixes owners, and
+        # without a name the rows are anonymous exactly where accountability is wanted.
+        # Resolved in one query rather than per row, and only for the owners on screen.
+        owner_ids = {row.owner_id for row in rows if row.owner_id}
+        owner_names: dict[str, str] = {}
+        if owner_ids:
+            owner_names = {
+                user.id: user.display_name
+                for user in await session.scalars(
+                    select(UserRow).where(UserRow.id.in_(owner_ids))
+                )
+            }
         # The one cross-owner read, taken through the repository rather than repeated as
         # a query here: the redaction has to have a single implementation or the second
         # copy is the one that eventually returns a title.
@@ -319,6 +332,10 @@ async def _run_snapshot(
                 "id": row.id,
                 "status": row.status,
                 "current_stage": row.current_stage,
+                "owner_id": row.owner_id,
+                # A run from before ownership existed has no owner to name; the panel says
+                # so rather than attributing it to whoever is reading.
+                "owner_name": owner_names.get(row.owner_id or ""),
                 "title": protocol.get("title") or "İsimsiz araştırma",
                 # What the user typed: the pipeline rewrites primary_question into English
                 # so the research side speaks one language, but the list should still show
