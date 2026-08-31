@@ -189,6 +189,30 @@ def test_recovery_does_not_repeat_attempted_mission_signature():
     assert second == []
 
 
+def test_literature_probes_advance_instead_of_repeating_attempted_strategy():
+    protocol = ResearchProtocol(
+        title="Probe deduplication",
+        primary_question="How should a small language model be trained?",
+        research_mode="literature_scan",
+        connectors={"profile": "custom", "included_families": ["web"]},
+        budget={"max_wall_minutes": 30},
+    )
+    attempted: set[str] = set()
+    queries = []
+    for round_number in range(2, 8):
+        missions = literature_scan_probe_missions(
+            protocol,
+            round_number,
+            attempted,
+        )
+        assert missions
+        queries.append(missions[0].query)
+        attempted.update(mission_signature(mission) for mission in missions)
+
+    assert len(set(queries)) == 6
+    assert literature_scan_probe_missions(protocol, 8, attempted) == []
+
+
 def test_saturation_probe_is_added_after_branch_threshold_is_met():
     protocol = official_protocol()
     protocol.stopping_criteria.minimum_query_branch_coverage = 0.8

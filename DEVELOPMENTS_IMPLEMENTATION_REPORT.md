@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.15.0`
+Platform sürümü: `v0.16.1`
 
-Belge sürümü: `12.39`
+Belge sürümü: `12.40`
 
-Son güncelleme: `2026-08-28`
+Son güncelleme: `2026-08-31`
 
 ## Kapsam
 
@@ -63,6 +63,14 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 48 | Yapısal çıkarımlarda kaynağı bulan connector | `ca56390` |
 | 49 | Düşen koşunun sahibine Telegram bildirimi | _çalışma ağacı_ |
 | 50 | Figür metinlerinde garantili rapor dili | _çalışma ağacı_ |
+| 51 | Panel GPU kartının karttan okunması | `a4da82e` |
+| 52 | Telegram plan mesajında yanıtlar, geri bildirim ve kesilmeyen strateji | `5c63351` |
+| 53 | Plan geri bildiriminin protokolü gerçekten değiştirmesi | `332b596` |
+| 54 | Plan kapısının kendi iptalini kullanıcıya söylemesi | `ff8fb2f` |
+| 55 | Kesme işaretli soru, yardım komutu ve PostgreSQL `json` düzeltmesi | `6d643e9` |
+| 56 | Panelin koşu kararlarından çekilmesi | `c2916b6` |
+| 57 | Telegram hazırlık çağrılarının Gemini'ye ayrılması | `eb13579` |
+| 58 | Ardışık boş recovery turlarının kontrollü sonlandırılması | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -3288,6 +3296,62 @@ Bu çalışma 56. bölümdeki “koşunun hangi yüzeyden başladığı kayıtl�
 olarak aşar. Yeni kayıt şema kolonu değil, koşunun zaten kalıcı olan `state` belgesindeki
 `invocation_source` alanıdır; bu yüzden migration gerektirmez.
 
+
+## 58. Ardışık boş recovery turlarının kontrollü sonlandırılması
+
+Canlı `01M14A8RP5ZD36NEX889AXRKSP` koşusu plan onayından sonra 3 dakika 38 saniyede
+28 SEARCH turu ve 215 connector çağrısı yaptı; bütün çağrılar toplam sıfır sonuç döndürdü,
+hiç kaynak sürümü oluşmadı. Koşu araştırma sonucunu dışa aktarmak yerine 280 düğümlük
+LangGraph sınırına çarpıp `GraphRecursionError` ile `failed` oldu. Protokolün
+`max_rounds=3` değeri arıza kapısı değildi: `literature_scan + exhaustive_until_budget`
+yüksek recall için bu sınırı bilerek yok sayıyordu.
+
+İki eski karar birlikte korundu. `LITERATURE_RECALL_V0.7.0_IMPLEMENTATION_REPORT.md`
+üretken literatür taramasının coverage erken yeterli görünse bile süre sonuna kadar farklı
+stratejiler denemesini ister. `COVERAGE_RECOVERY_REDESIGN_REPORT.md` ise aynı mission iki
+farklı stratejide sonuç vermezse gap'in exhausted sayılabileceğini ve başarısızlığın
+"araştırma yeterli" anlamına gelmediğini söyler. İlk kararın sınırsız boş tekrar yorumu bu
+bölümle daraltıldı: süre bütçesi üretken turları sürdürür, kanıtsız tekrar hakkı vermez.
+
+Uygulanan davranış:
+
+- `StoppingCriteria.max_consecutive_empty_recovery_rounds` varsayılan olarak `2` oldu.
+- Sayaç yalnız ikinci ve sonraki arama turlarında, tur sıfır yeni `SourceVersion` ürettiğinde
+  artar; herhangi bir yeni sürümde sıfırlanır.
+- Eşik dolduğunda `stop_reason=recovery_exhausted_no_progress` yazılır, coverage'a
+  `recovery_no_progress` nedeni eklenir ve koşu `completed_incomplete` dışa aktarım yoluna
+  girer. Recursion limiti operasyonel sonlandırıcı olmaktan çıkar.
+- Her boş recovery turu `recovery_no_progress` olayı üretir. Olay; provider adayı, novel
+  aday, seçilmiş aday, başarılı acquisition, içerik reddi ve yeni kaynak sürümü sayılarını
+  taşır; ana nedeni `no_provider_candidates`, `no_novel_candidates`,
+  `no_admitted_candidates`, `acquisition_failed` veya `no_new_source_versions` olarak
+  sınıflandırır.
+- Altı çeşit literature probe `attempted_missions` imzalarına karşı filtrelenir. Başlangıç
+  stratejisi daha önce denenmişse sıradaki denenmemiş strateji seçilir; altısının tamamı
+  tüketildiyse liste yeniden başa sarmaz.
+
+Bu değişiklik şema migration'ı gerektirmez; yeni eşik protokol JSON'unda varsayılanlanan bir
+Pydantic alanıdır. Graceful collection cutoff kararı da korunur: no-progress kapısı yalnız
+yeni discovery döngüsünü keser, mevcut kaynakların normalize, evidence, audit, synthesis ve
+export aşamalarını atlamaz.
+
+Regresyonlar; altı probe stratejisinin yalnız bir kez kullanıldığını, yedinci isteğin boş
+döndüğünü, varsayılan eşiğin iki olduğunu ve ikinci ardışık boş recovery'nin terminal olayla
+kontrollü durduğunu doğrular. Hedefli recovery/pipeline/coverage paketi `42 passed`, son kod
+değişikliğinden sonraki zorunlu tam kapı `601 passed, 1 warning` sonucunu verdi. Değişen altı
+Python dosyasının hedefli Ruff tabanı `34 → 34`; yeni ihlal eklenmedi (mevcut borç 15
+`BLE001`, 11 `UP017`, 4 `I001`, 2 `FURB162`, 2 `UP037`).
+
+Ana Docker uygulama imajları rebuild edildi; çalışan worker içinde sürüm `0.16.1`, eşik
+`2` olarak doğrulandı. API sağlık denetimi tam sağlıklı, worker heartbeat aktif, MCP'nin
+LAN'a bağlı `/health` ucu `0.16.1` döndürüyor. `server_status.sh` MCP'yi sabit
+`127.0.0.1:8010` adresinden yokladığı için kırmızı gösteriyor; servis güvenlik gereği
+`10.0.10.171:8010` üzerinde bağlı ve gerçek LAN ucundan sağlıklı. Host `.venv` editable
+paketi de `0.16.1` oldu. Kontrol paneli systemd restart'ı sudo parolası gerektirdiği için
+bu oturumda yapılamadı; çalışan süreç yeniden başlatılana kadar sağlık cevabında eski
+`0.16.0` sürümünü gösterir. Telegram container'ı ortak long-polling tokenının Windows'taki
+örneğiyle çakışma riski nedeniyle devir kanıtı olmadan yeniden başlatılmadı; recovery
+döngüsünü çalıştıran worker günceldir.
 
 ## Bilinen açık işler
 

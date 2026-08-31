@@ -139,6 +139,8 @@ class PipelineState(TypedDict, total=False):
     unavailable_connectors: list[str]
     available_connectors: list[str]
     connector_success_rates: dict[str, float]
+    round_new_source_versions: int
+    consecutive_empty_recovery_rounds: int
     budget_started_at: str
     planning_answers: list[str]
     applied_settings: list[dict[str, Any]]
@@ -1618,7 +1620,14 @@ class ResearchPipeline:
                 "acquisition_metrics",
                 {"calls": acquisition_metrics},
             )
-        return {"documents": [d.model_dump(mode="json") for d in docs]}
+        discovery_stats = {
+            **state.get("discovery_stats", {}),
+            "round_acquisition_successful": sum(document.success for document in docs),
+        }
+        return {
+            "documents": [d.model_dump(mode="json") for d in docs],
+            "discovery_stats": discovery_stats,
+        }
 
     async def _semantic_source_judgment(
         self,
@@ -1710,6 +1719,10 @@ class ResearchPipeline:
                 "documents": documents,
                 "branch_result_counts": state.get("branch_result_counts", {}),
                 "discovery_stats": state.get("discovery_stats", {}),
+                "round_new_source_versions": state.get(
+                    "round_new_source_versions",
+                    len(documents),
+                ),
             }
         documents = [AcquiredDocument.model_validate(d) for d in state.get("documents", [])]
         existing_version_ids = {
@@ -1910,7 +1923,11 @@ class ResearchPipeline:
         output = {
             "documents": saved_docs,
             "branch_result_counts": dict(branch_counts),
-            "discovery_stats": discovery_stats,
+            "discovery_stats": {
+                **discovery_stats,
+                "round_content_rejected": len(content_rejected),
+            },
+            "round_new_source_versions": len(saved_docs),
         }
         grouped: dict[str, dict[str, Any]] = {}
         for payload in saved_docs:
@@ -2268,6 +2285,18 @@ class ResearchPipeline:
         new_count = max(0, len(sources) - previous_count)
         rate = new_count / max(len(sources), 1)
         previous = CoverageMetrics.model_validate(state.get("coverage", {}))
+        round_number = state.get("round_number", 1)
+        round_new_source_versions = int(
+            state.get("round_new_source_versions", len(state.get("documents", [])))
+        )
+        previous_empty_recovery_rounds = int(
+            state.get("consecutive_empty_recovery_rounds", 0)
+        )
+        consecutive_empty_recovery_rounds = (
+            previous_empty_recovery_rounds + 1
+            if round_number > 1 and round_new_source_versions == 0
+            else 0
+        )
         major = sorted(
             [
                 c
@@ -2447,7 +2476,6 @@ class ResearchPipeline:
             discovery_observations=discovery_observations,
             quality_diagnostics_active=quality_diagnostics_active,
         )
-        round_number = state.get("round_number", 1)
         budget_started_at = datetime.fromisoformat(
             state.get("budget_started_at", datetime.now(timezone.utc).isoformat()).replace(
                 "Z",
@@ -2483,25 +2511,91 @@ class ResearchPipeline:
             state.get("branch_queries", {}),
             missed_sentinels,
         )
+        attempted_missions = set(state.get("attempted_missions", []))
         exhausted = not recovery_missions(
             protocol,
             gaps,
-            set(state.get("attempted_missions", [])),
+            attempted_missions,
         )
         no_operational_connectors = not state.get("available_connectors", [])
+        empty_recovery_exhausted = (
+            consecutive_empty_recovery_rounds
+            >= protocol.stopping_criteria.max_consecutive_empty_recovery_rounds
+        )
+        probe_strategies_exhausted = (
+            literature_budget_mode
+            and round_new_source_versions == 0
+            and exhausted
+            and not literature_scan_probe_missions(
+                protocol,
+                round_number + 1,
+                attempted_missions,
+            )
+        )
         if literature_budget_mode:
             # In inventory mode coverage is a diagnostic, not an early-stop trigger.
             # Continue trying diversified probes while collection time remains.
             stop_reason = (
                 "budget_exhausted"
                 if budget_hit or no_operational_connectors
-                else "expand"
+                else (
+                    "recovery_exhausted_no_progress"
+                    if empty_recovery_exhausted or probe_strategies_exhausted
+                    else "expand"
+                )
             )
         else:
             stop_reason = (
                 "coverage_sufficient"
                 if coverage.sufficient
                 else ("budget_exhausted" if budget_hit or exhausted else "expand")
+            )
+        if stop_reason == "recovery_exhausted_no_progress":
+            coverage.sufficient = False
+            if "recovery_no_progress" not in coverage.reasons:
+                coverage.reasons.append("recovery_no_progress")
+        discovery_stats = dict(state.get("discovery_stats", {}))
+        if round_number > 1 and round_new_source_versions == 0:
+            if int(discovery_stats.get("round_provider_candidates", 0)) == 0:
+                no_progress_reason = "no_provider_candidates"
+            elif int(discovery_stats.get("round_novel_candidates", 0)) == 0:
+                no_progress_reason = "no_novel_candidates"
+            elif int(discovery_stats.get("round_selected_candidates", 0)) == 0:
+                no_progress_reason = "no_admitted_candidates"
+            elif int(discovery_stats.get("round_acquisition_successful", 0)) == 0:
+                no_progress_reason = "acquisition_failed"
+            else:
+                no_progress_reason = "no_new_source_versions"
+            await self.repo.event(
+                state["run_id"],
+                "recovery_no_progress",
+                {
+                    "round": round_number,
+                    "reason": no_progress_reason,
+                    "consecutive_empty_rounds": consecutive_empty_recovery_rounds,
+                    "limit": (
+                        protocol.stopping_criteria.max_consecutive_empty_recovery_rounds
+                    ),
+                    "terminal": stop_reason == "recovery_exhausted_no_progress",
+                    "diagnostics": {
+                        "provider_candidates": int(
+                            discovery_stats.get("round_provider_candidates", 0)
+                        ),
+                        "novel_candidates": int(
+                            discovery_stats.get("round_novel_candidates", 0)
+                        ),
+                        "selected_candidates": int(
+                            discovery_stats.get("round_selected_candidates", 0)
+                        ),
+                        "acquisition_successful": int(
+                            discovery_stats.get("round_acquisition_successful", 0)
+                        ),
+                        "content_rejected": int(
+                            discovery_stats.get("round_content_rejected", 0)
+                        ),
+                        "new_source_versions": round_new_source_versions,
+                    },
+                },
             )
         await self.repo.update_run(
             state["run_id"],
@@ -2535,6 +2629,7 @@ class ResearchPipeline:
             "coverage": coverage.model_dump(),
             "gaps": [gap.model_dump(mode="json") for gap in gaps],
             "stop_reason": stop_reason,
+            "consecutive_empty_recovery_rounds": consecutive_empty_recovery_rounds,
         }
 
     def _coverage_route(self, state: PipelineState) -> str:
@@ -2554,7 +2649,7 @@ class ResearchPipeline:
             and protocol.budget.exhaustive_until_budget
             and not missions
         ):
-            missions = literature_scan_probe_missions(protocol, round_number)
+            missions = literature_scan_probe_missions(protocol, round_number, attempted)
         await self.repo.event(
             state["run_id"],
             "recovery_plan",

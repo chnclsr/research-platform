@@ -63,6 +63,7 @@ def test_plan_review_is_the_default_checkpoint():
     assert protocol.hitl.planning_questions is False
     assert protocol.hitl.source_review is False
     assert protocol.hitl.outline_review is False
+    assert protocol.stopping_criteria.max_consecutive_empty_recovery_rounds == 2
 
 
 def test_coverage_requires_every_threshold():

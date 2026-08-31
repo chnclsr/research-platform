@@ -1,10 +1,10 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.16.0`
+Platform sürümü: `v0.16.1`
 
-Belge sürümü: `6.35`
+Belge sürümü: `6.36`
 
-Son güncelleme: `2026-08-28`
+Son güncelleme: `2026-08-31`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -14,6 +14,18 @@ ve [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.1
 ve [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md)
 ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.16.1 — 2026-08-31
+
+- Yüksek-recall literatür taramasında iki recovery turu art arda yeni kaynak sürümü
+  üretmezse koşu recursion hatasına düşmek yerine `completed_incomplete` olarak kontrollü
+  tamamlanıyor.
+- Sonuçsuz turun nedeni; aday bulunmaması, novel aday kalmaması, kabul kotasına aday
+  girmemesi, acquisition başarısızlığı veya normalizasyon sonrasında yeni sürüm
+  oluşmaması olarak `recovery_no_progress` olayına yazılıyor.
+- Altı çeşit literature probe daha önce denenmiş mission imzalarını yeniden kullanmıyor;
+  üretken bir tur no-progress sayacını sıfırladığı için süre sonuna kadar verimli tarama
+  davranışı korunuyor.
 
 ## v0.16.0 — 2026-08-28
 

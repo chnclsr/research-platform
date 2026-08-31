@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import io
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -527,6 +527,53 @@ async def test_public_semantic_scholar_fanout_is_limited_per_round():
             "queries": [mission.query for mission in missions], "round_number": 1,
         })
     assert registry.connector.search_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_exhaustive_scan_stops_after_two_empty_recovery_rounds():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Empty recovery breaker",
+        primary_question="How should a small language model be trained?",
+        research_mode="literature_scan",
+        output_mode="raw",
+        connectors={"profile": "custom", "included_families": ["web"]},
+        budget={"max_wall_minutes": 30, "max_rounds": 3},
+        hitl={"plan_review": False},
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        result = await asyncio.wait_for(
+            pipeline.check_coverage({
+                "run_id": row.id,
+                "protocol": protocol.model_dump(mode="json"),
+                "round_number": 3,
+                "round_new_source_versions": 0,
+                "consecutive_empty_recovery_rounds": 1,
+                "source_count_before_round": 0,
+                "available_connectors": ["agentsearch_web"],
+                "budget_started_at": datetime.now(UTC).isoformat(),
+                "discovery_stats": {
+                    "round_provider_candidates": 0,
+                    "round_novel_candidates": 0,
+                    "round_selected_candidates": 0,
+                    "round_acquisition_successful": 0,
+                    "round_content_rejected": 0,
+                },
+            }),
+            timeout=5,
+        )
+        events = await repo.events_after(row.id)
+
+    assert result["stop_reason"] == "recovery_exhausted_no_progress"
+    assert result["consecutive_empty_recovery_rounds"] == 2
+    assert result["coverage"]["sufficient"] is False
+    assert "recovery_no_progress" in result["coverage"]["reasons"]
+    no_progress = next(event for event in events if event.event_type == "recovery_no_progress")
+    assert no_progress.payload["reason"] == "no_provider_candidates"
+    assert no_progress.payload["terminal"] is True
 
 
 @pytest.mark.asyncio

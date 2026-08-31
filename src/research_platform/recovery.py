@@ -175,6 +175,7 @@ def initial_missions(
 def literature_scan_probe_missions(
     protocol: ResearchProtocol,
     round_number: int,
+    attempted_signatures: set[str] | None = None,
 ) -> list[SearchMission]:
     """Create diversified recall probes when ordinary gap missions are exhausted.
 
@@ -189,33 +190,40 @@ def literature_scan_probe_missions(
         "dataset benchmark replication independent evaluation",
         "citation review related work references",
     )
-    strategy = strategies[(max(1, round_number) - 1) % len(strategies)]
+    attempted_signatures = attempted_signatures or set()
+    first_strategy = (max(1, round_number) - 1) % len(strategies)
     families = [
         family
         for family, target in protocol.family_targets.items()
         if target.minimum_sources > 0
     ] or list(protocol.connectors.included_families)
-    missions: list[SearchMission] = []
-    for family in families:
-        connector_ids = FAMILY_CONNECTORS.get(family, [])
-        if protocol.connectors.included_connectors:
-            connector_ids = [
-                connector_id
-                for connector_id in connector_ids
-                if connector_id in protocol.connectors.included_connectors
-            ]
-        if not connector_ids:
-            continue
-        missions.append(SearchMission(
-            branch_id=f"literature:{family.value}:{round_number}",
-            query=f"{protocol.primary_question} {strategy}",
-            connector_ids=connector_ids,
-            required_family=family,
-            result_limit=protocol.budget.results_per_connector,
-            acquisition_slots=min(10, protocol.budget.results_per_connector),
-            novelty_required=True,
-        ))
-    return missions
+    for offset in range(len(strategies)):
+        strategy = strategies[(first_strategy + offset) % len(strategies)]
+        missions: list[SearchMission] = []
+        for family in families:
+            connector_ids = FAMILY_CONNECTORS.get(family, [])
+            if protocol.connectors.included_connectors:
+                connector_ids = [
+                    connector_id
+                    for connector_id in connector_ids
+                    if connector_id in protocol.connectors.included_connectors
+                ]
+            if not connector_ids:
+                continue
+            mission = SearchMission(
+                branch_id=f"literature:{family.value}:{round_number}",
+                query=f"{protocol.primary_question} {strategy}",
+                connector_ids=connector_ids,
+                required_family=family,
+                result_limit=protocol.budget.results_per_connector,
+                acquisition_slots=min(10, protocol.budget.results_per_connector),
+                novelty_required=True,
+            )
+            if mission_signature(mission) not in attempted_signatures:
+                missions.append(mission)
+        if missions:
+            return missions
+    return []
 
 
 def targeted_connector_ids(protocol: ResearchProtocol) -> list[str]:

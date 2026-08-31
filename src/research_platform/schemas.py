@@ -72,6 +72,7 @@ class StoppingCriteria(BaseModel):
     maximum_new_source_rate: float = Field(0.05, ge=0, le=1)
     unresolved_major_claim_limit: int = Field(5, ge=0)
     saturation_rounds: int = Field(2, ge=1, le=5)
+    max_consecutive_empty_recovery_rounds: int = Field(2, ge=1, le=10)
     minimum_sentinel_recall: float = Field(1.0, ge=0, le=1)
     minimum_estimated_completeness: float = Field(0.75, ge=0, le=1)
     maximum_reserve_false_negative_rate: float = Field(0.10, ge=0, le=1)
