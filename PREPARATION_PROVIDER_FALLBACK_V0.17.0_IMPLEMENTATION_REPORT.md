@@ -48,9 +48,10 @@ atlanır; sağlayıcı `Retry-After` bildirmişse onun süresi kullanılır, tav
 Hazırlık evresi koşu başına yaklaşık yedi çağrı yapar, cooldown olmasa tükenmiş bir günlük
 kota her çağrıda yeniden — tam gecikmeyle — keşfedilirdi.
 
-`401`, `403` ve `404` süreç boyunca kalıcı sayılır: yanlış anahtar, kapatılmış proje veya
-emekliye ayrılmış model kendiliğinden düzelmez. O sağlayıcı, yapılandırma düzeltilip süreç
-yeniden başlatılana kadar hiç denenmez.
+`401`, `403` ve `404` kalıcı sayılır: yanlış anahtar, kapatılmış proje veya emekliye
+ayrılmış model kendiliğinden düzelmez, o yüzden sağlayıcı cooldown'a değil süresiz bloğa
+alınır. Bu bloğun ömrü zincir nesnesi kadardır; ölçülen kapsamı ve tasarlanandan farkı
+"Kalıcı devre dışı bırakmanın kapsamı" bölümündedir.
 
 ## Sağlayıcılar
 
@@ -133,9 +134,10 @@ kullanıyor.
 ## Kurulum
 
 ```env
-PREPARATION_LLM_CHAIN=gemini,openrouter,groq
+PREPARATION_LLM_CHAIN=gemini,groq,openrouter
 PREPARATION_PROVIDER_COOLDOWN_S=300
 PREPARATION_RETRY_INLINE_MAX_S=5
+GEMINI_PREPARATION_MODEL=gemini-3.6-flash
 OPENROUTER_API_URL=https://openrouter.ai/api/v1
 OPENROUTER_API_KEY=<secret>
 OPENROUTER_PREPARATION_MODEL=z-ai/glm-5.2:free
@@ -151,9 +153,73 @@ DEEPSEEK_PREPARATION_TIMEOUT_S=60
 ```
 
 Varsayılan zincir tek sağlayıcıdır (`gemini`), yani ayar dosyasına dokunmayan bir kurulum
-v0.16.0 davranışını aynen sürdürür. Bu dalın yerel `.env` dosyasında zincir satırı
-anahtarlar girilene kadar `gemini` bırakıldı; anahtarsız bir ad worker'ı açılışta durduracağı
-için çalışan kurulum bilerek tek sağlayıcıda tutuldu.
+v0.16.0 davranışını aynen sürdürür. Bu dalın çalışan kurulumunda zincir, anahtarlar
+girildikten sonra `gemini, groq, openrouter` olarak açıldı; doğrulayıcı boşlukları
+temizlediği için değer `gemini,groq,openrouter` olarak okunur. Groq'un OpenRouter'dan önce
+gelmesinin nedeni aşağıdaki canlı ölçümdür.
+
+## Emekliye ayrılan model ve zincirin ilk gerçek sınavı
+
+Zincir üretime alındıktan sonraki ilk koşuda Gemini hiçbir çağrıyı karşılamadı: devretme
+olayları `gemini:404` gösterdi, birincil sağlayıcı devre dışı kaldı ve bütün hazırlık
+Groq'a düştü. Neden yapılandırmadaydı — çalışan kurulumun `.env` dosyası, Google'ın yeni
+anahtarlara kapattığı `gemini-2.5-flash` modelini sabitliyordu:
+
+```
+This model models/gemini-2.5-flash is no longer available to new users.
+Please update your code to use models/gemini-3.6-flash
+```
+
+Modelin `models.list` çıktısında görünmeye ve `supportedGenerationMethods` içinde
+`generateContent` bildirmeye devam etmesi yanıltıcıdır: liste model kaydını gösterir, o
+anahtarın çağırma hakkını değil. Raporun ilk sürümündeki "Gemini `HTTP 200` verdi" ölçümü
+bu yüzden tutmadı; `generateContent` üzerinde tekrarlandığında `404` döndü. Doğrulamanın
+gerçek çağrı yüzeyinde yapılması gerekir, model listesinde değil.
+
+`config.py` varsayılanı ve `.env.example` zaten `gemini-3.6-flash` idi; geride kalan tek
+yer çalışan kurulumun `.env` dosyasıydı. Düzeltildi ve worker ile telegram-bot yeniden
+yaratıldı. `docker compose restart` bunun için yetmez: container'ı mevcut ortamıyla
+yeniden başlatır, `.env`'i yeniden okumaz. Kalıcı devre dışı bırakma bellekte tutulduğu
+için yeniden başlatma zaten gerekliydi.
+
+Sonucun kendisi zincirin lehinedir: birincil sağlayıcı sessizce ve tamamen kayboldu, koşu
+yine de planını üretip tamamlandı. Aynı arıza v0.16.0'da koşuyu düşürürdü. Ama ders tek
+yönlü değil — zincir arızayı öyle iyi soğurdu ki dışarıdan sistem sağlıklı görünüyordu.
+Yanlış model yalnızca `preparation_provider_fallback` olayına bakınca fark edildi. Zincir,
+sağlayıcı kaybını bir kesinti olmaktan çıkarıp bir kayıt satırına dönüştürür; o satır
+okunmazsa birincil sağlayıcı süresiz ölü kalabilir.
+
+## Kalıcı devre dışı bırakmanın kapsamı
+
+Aynı koşunun olay kaydı, belgelenen davranışla uyuşmayan bir nokta gösterdi.
+`FallbackProvider` `401/403/404` alan sağlayıcıyı `math.inf` ile bloke eder ve bu
+raporun ilk sürümü bunu "süreç yeniden başlatılana kadar hiç denenmez" diye tarif etti.
+Ölçülen davranış farklı:
+
+```
+VALIDATE_PROTOCOL     gemini:404      -> groq
+DECOMPOSE             gemini:cooling  -> groq
+PLANNING_QUESTIONS    gemini:cooling  -> groq
+DECOMPOSE             gemini:404      -> groq
+BUILD_QUERY_BRANCHES  gemini:cooling  -> groq
+PLAN                  gemini:cooling  -> groq
+DECOMPOSE             gemini:404      -> groq
+BUILD_QUERY_BRANCHES  gemini:cooling  -> groq
+PLAN                  gemini:cooling  -> groq
+```
+
+`404` bir kez değil üç kez görünüyor. Nedeni `build_preparation_llm`'in
+`ResearchPipeline.__init__` içinde çağrılması: blok listesi zincir nesnesinin alanıdır,
+süreç değil. HITL kapısı koşuyu durdurup kullanıcı yanıtlayınca yeni bir `ResearchPipeline`
+kuruluyor, yeni bir zincir ve boş bir blok listesi geliyor. Yani kalıcılık süreç ömrü
+boyunca değil, checkpoint'ler arasındaki her koşu parçası boyunca geçerli.
+
+Etkisi sınırlıdır: ölü sağlayıcı, koşunun her yeniden girişinde bir kez daha — tam
+gecikmeyle — yoklanır. Ölçülen koşuda bu, dokuz hazırlık çağrısına karşılık üç boşa giden
+Gemini gidiş-dönüşü demekti. Kota tüketmez, çünkü çağrı zaten reddediliyor. Yine de
+tarif edilen davranış bu değildir ve iki seçenek var: blok listesini süreç ömrüne taşımak,
+ya da belgeyi ölçülene uydurmak. Karar verilmedi; bu bölüm bulguyu kapatmak için değil,
+kaydetmek için duruyor.
 
 ## Doğrulama
 
@@ -172,25 +238,28 @@ etiketsiz çeviride yedek çağrının sürmesi, onay ekranının iki yarısın�
 ve her yarının ayrı ayrı fail-open kalması.
 
 Hedefli paketler `tests/test_gemini_preparation.py` ve `tests/test_preparation_call_budget.py`:
-`14 passed` ve `7 passed`. Tam kapı: `617 passed, 1 warning`; uyarı bu çalışmadan eski Starlette/httpx deprecation uyarısıdır. Kapının ilk
-koşusunda `test_version` başarısız oldu; nedeni bu çalışma değil, çalışma ağacındaki v0.16.1
-yükseltmesinin editable kuruluma o sırada henüz yansımamış olmasıydı, kurulum kendini
-tazeledikten sonra test geçti. Sürüm `0.17.0`'a yükseltildiği için çalışma zamanı yüzeyleri
-(`/health`, API ve panel sürümü) editable kurulum yenilenene kadar `0.16.1` bildirmeye devam
-eder. Değişen satırlarda yeni Ruff ihlali yoktur; `llm.py`
-içindeki iki geniş `except` ihlali bu çalışmadan eskidir ve temiz taban varmış gibi
-raporlanmamıştır.
+`14 passed` ve `7 passed`. Tam kapı: `621 passed, 1 warning`; uyarı bu çalışmadan eski
+Starlette/httpx deprecation uyarısıdır. Sürüm yüzeyleri artık hizalı: editable kurulum,
+worker, API ve kontrol paneli `0.17.0` bildiriyor. Değişen satırlarda yeni Ruff ihlali
+yoktur; `llm.py` içindeki iki geniş `except` ihlali bu çalışmadan eskidir ve temiz taban
+varmış gibi raporlanmamıştır — depo geneli taban için açık iş #21.
 
-Canlı uç noktalar operatörün anahtarlarıyla ayrı ayrı yoklandı. Gemini'nin kurulumda seçili
-`gemini-2.5-flash` modeli `HTTP 200` verdi. Groq `openai/gpt-oss-120b`, hazırlık istemlerinden
-biriyle (`sub_questions` + `concepts`) `response_format: json_object` altında geçerli ve
-İngilizce JSON döndürdü. OpenRouter'ın `z-ai/glm-5.2:free` modeli ise ilk denemede
-`HTTP 429` + `Retry-After: 5` verdi: ücretsiz havuz yukarı akışta paylaşımlıdır ve bu yanıt
-istisna değil olağan durumdur — zincirin tam olarak karşıladığı hâl. Bu nedenle sıralamada
-Groq'un OpenRouter'dan önce gelmesi önerilir.
+Canlı uç noktalar operatörün anahtarlarıyla ayrı ayrı yoklandı. Groq `openai/gpt-oss-120b`,
+hazırlık istemlerinden biriyle (`sub_questions` + `concepts`) `response_format: json_object`
+altında geçerli ve İngilizce JSON döndürdü. OpenRouter'ın `z-ai/glm-5.2:free` modeli ilk
+denemede `HTTP 429` + `Retry-After: 5` verdi: ücretsiz havuz yukarı akışta paylaşımlıdır ve
+bu yanıt istisna değil olağan durumdur — zincirin tam olarak karşıladığı hâl. Bu nedenle
+sıralamada Groq OpenRouter'dan önce gelir. Gemini'nin durumu iki bölüm yukarıdadır;
+düzeltmeden sonra `gemini-3.6-flash` `HTTP 200` veriyor.
 
-Uçtan uca canlı doğrulama, yani gerçek bir Telegram koşusunun devretme sırasında ürettiği
-plan, henüz yapılmamıştır; imajlar yeniden kurulduktan sonra yapılmalıdır. Ücretsiz model
-listeleri zamanla değişir: `:free` doğrulayıcısı kimliğin ücretsiz olduğunu garanti eder,
-modelin var olmaya devam ettiğini etmez (kalkan model `404` ile kalıcı olarak devre dışı
-kalır ve zincir bir sonrakine geçer).
+Uçtan uca canlı doğrulama yapıldı. `01M1BC0B0HFCBAET0EH7ZK9YMM` koşusu dokuz
+`preparation_provider_fallback` olayı yazdı; devretme `VALIDATE_PROTOCOL`, `DECOMPOSE`,
+`PLANNING_QUESTIONS`, `BUILD_QUERY_BRANCHES` ve `PLAN` aşamalarında ayrı ayrı gözlendi ve
+hepsinde `served_by: groq` oldu. Koşu planını üretti ve dışa aktarımla kapandı. Yani zincir,
+birincil sağlayıcının tam kaybı altında hazırlık evresini taşıdı; bu, tasarımın hedeflediği
+senaryonun ta kendisidir ve sentetik değil gerçek bir arızayla doğrulanmıştır.
+
+Ücretsiz model listeleri zamanla değişir: `:free` doğrulayıcısı kimliğin ücretsiz olduğunu
+garanti eder, modelin var olmaya devam ettiğini etmez. Aynı kırılganlık ücretli olmayan her
+katmanda vardır ve bu çalışmada Gemini'de somut olarak gerçekleşti — model kimlikleri
+zincirin en oynak parçasıdır ve `404`'ler olay kaydından düzenli olarak okunmalıdır.
