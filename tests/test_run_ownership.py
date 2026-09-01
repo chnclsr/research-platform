@@ -28,7 +28,7 @@ from research_platform.repository import (
     RunAccessDenied,
     TeamActivity,
 )
-from research_platform.schemas import ResearchProtocol, RunStatus
+from research_platform.schemas import ReportCitation, ResearchProtocol, RunStatus
 
 OWNER_ID = "01OWNER".ljust(26, "0")
 INTRUDER_ID = "01INTRUDER".ljust(26, "0")
@@ -416,6 +416,7 @@ async def test_purging_a_run_leaves_no_orphans():
         ClaimRow,
         EventRow,
         PassageRow,
+        ReportCitationRow,
         ResearchRunRow,
         SourceRow,
         SourceVersionRow,
@@ -452,16 +453,25 @@ async def test_purging_a_run_leaves_no_orphans():
         )
         assert version is not None
 
+        # Citation rows hang off the run by an indexed column, not a foreign key, so purge
+        # has to name them or they outlive everything they describe.
+        await repo.replace_report_citations(
+            row.id,
+            [ReportCitation(source_id=source.id, label="S01", number=1)],
+        )
+
         removed = await repo.purge_run(row.id)
         assert removed["run"] == 1
         assert removed["sources"] >= 1
         assert removed["events"] >= 1
+        assert removed["report_citations"] == 1
 
         for model, column in (
             (ResearchRunRow, ResearchRunRow.id),
             (SourceRow, SourceRow.run_id),
             (EventRow, EventRow.run_id),
             (ClaimRow, ClaimRow.run_id),
+            (ReportCitationRow, ReportCitationRow.run_id),
         ):
             assert list(await session.scalars(select(model).where(column == row.id))) == []
         # The children reached only through their parent are gone too.

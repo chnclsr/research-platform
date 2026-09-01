@@ -177,6 +177,22 @@ Relational claim-to-passage links establishing factual basis.
 - `direction` (`TEXT`): Empirical alignment (`supports`, `contradicts`, `neutral`).
 - `confidence_score` (`FLOAT`): Model certainty metric.
 
+#### `report_citations`
+Closes the provenance chain: where each source ended up in the rendered Word report. One row
+per source per run, including the sources the report dropped — a table holding only the cited
+ones would answer the easy half of the question. Written by `build_exports` immediately after
+the DOCX is rendered, and replaced wholesale when a run is exported again.
+- `id` (`TEXT`, PK): ULID.
+- `run_id` (`TEXT`), `source_id` (`TEXT`): Indexed parents; unique together.
+- `label` (`TEXT`), `number` (`INTEGER`): The `S03` handle the prose cites and the catalogue position.
+- `cited_sections` (`JSONB`): Sections whose prose actually cites the label, read from the rendered text.
+- `offered_sections` (`JSONB`): Sections whose evidence packet offered the source. The gap
+  between this and `cited_sections` is what distinguishes a passed-over source from an absent one.
+- `citation_count` (`INTEGER`): Total `[Sxx]` mentions across the document.
+- `claim_ids`, `evidence_ids` (`JSONB`): The audited records behind the citation.
+- `drop_reason` (`TEXT`, nullable): `NULL` means cited. Otherwise `no_evidence`,
+  `not_reportable`, `section_discarded`, or `offered_not_cited`.
+
 #### `reports`
 Stores synthesized deliverables and reproduction metadata.
 - `report_id` (`TEXT`, PK): ULID.

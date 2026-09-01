@@ -30,6 +30,107 @@ PIPELINE_STAGES = (
 TOOL_KIND_ORDER = ("connector", "method", "parser", "model", "embedding")
 MAX_TOOL_ROWS = 40
 
+# The seven links between a raw search hit and a reference in the .docx, in the order the
+# data travels. The panel draws one cell per step, so this tuple is also the column order.
+CHAIN_STEPS = (
+    ("discover", "Keşif"),
+    ("acquire", "Edinim"),
+    ("parse", "Ayrıştırma"),
+    ("retrieve", "Getirme"),
+    ("evidence", "Kanıt"),
+    ("claim", "İddia"),
+    ("report", "Rapor"),
+)
+
+# What a source's stopping point means, in the operator's words. Keys that match a
+# `CitationDrop` value are the reasons the export itself recorded; the rest are derived from
+# where the chain ran out.
+FATE_LABELS = {
+    "cited": "Rapora girdi",
+    "not_acquired": "Edinilemedi",
+    "not_parsed": "Ayrıştırılamadı",
+    "not_retrieved": "Getirmede elendi",
+    "no_evidence": "Kanıt çıkarılamadı",
+    "claim_below_threshold": "İddia denetimden geçmedi",
+    "not_reportable": "İddia rapor eşiğini geçmedi",
+    "section_discarded": "Bölüm taslağı elendi",
+    "offered_not_cited": "Kanıt var, atıf yok",
+    "no_export": "Rapor henüz üretilmedi",
+}
+
+# Claim statuses that count as the source having produced a usable claim. The finer
+# reportable threshold (`_is_reportable`: relevance and supporting-evidence floors) is not
+# applied here on purpose -- a claim that clears audit but not that floor stops at the
+# report step instead, where the export's own `not_reportable` reason explains it.
+CLAIM_OK_STATUSES = frozenset({"supported", "qualified"})
+
+
+def source_chain(
+    *,
+    acquired: bool,
+    passage_count: int,
+    best_retrieval: float,
+    evidence_count: int,
+    claim_status_ok: bool,
+    citation: dict[str, Any] | None,
+    exported: bool,
+) -> dict[str, Any]:
+    """How far one source travelled, and where it stopped.
+
+    Each cell is `on` (passed), `stop` (ran out here) or `off` (never reached). Exactly one
+    cell can be `stop`: the fate names a single point of failure, because a source that never
+    got acquired has not also "failed retrieval" -- reporting both would bury the one fact
+    that explains the rest.
+
+    `citation` is the export's own record for this source and is authoritative for the last
+    step; without it the run either predates the citation table or has not exported yet, and
+    `exported` is what separates those from a source the report genuinely dropped.
+    """
+    reached = {
+        "discover": True,
+        "acquire": acquired,
+        "parse": acquired and passage_count > 0,
+        "retrieve": acquired and passage_count > 0 and best_retrieval > 0,
+        "evidence": evidence_count > 0,
+        "claim": claim_status_ok,
+        "report": bool(citation) and citation.get("drop_reason") is None,
+    }
+    # A later step cannot stand without the ones before it: evidence implies its passage was
+    # retrieved. Clamping forwards keeps a gap in the middle from reading as two failures.
+    passed = True
+    chain: dict[str, str] = {}
+    stopped_at: str | None = None
+    for key, _ in CHAIN_STEPS:
+        if not passed:
+            chain[key] = "off"
+            continue
+        if reached[key]:
+            chain[key] = "on"
+            continue
+        chain[key] = "stop"
+        stopped_at = key
+        passed = False
+
+    if stopped_at is None:
+        code = "cited"
+    elif stopped_at == "report":
+        if citation:
+            code = str(citation.get("drop_reason") or "cited")
+        else:
+            code = "no_export" if not exported else "offered_not_cited"
+    else:
+        code = {
+            "acquire": "not_acquired",
+            "parse": "not_parsed",
+            "retrieve": "not_retrieved",
+            "evidence": "no_evidence",
+            "claim": "claim_below_threshold",
+        }[stopped_at]
+    return {
+        "chain": chain,
+        "fate": {"code": code, "label": FATE_LABELS.get(code, code)},
+    }
+
 
 def pipeline_progress(current_stage: str, status: str) -> int:
     if status in {"completed", "completed_incomplete"} or current_stage == "COMPLETE":

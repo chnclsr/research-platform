@@ -580,6 +580,44 @@ class Passage(BaseModel):
     matched_questions: list[str] = Field(default_factory=list)
 
 
+class CitationDrop(StrEnum):
+    """Why a source that reached the report stage is not cited in it.
+
+    Ordered by how early the source stopped, which is also the order the panel's chain strip
+    reads left to right. `CITED` is the absence of a drop and is stored as NULL.
+    """
+
+    CITED = "cited"
+    NO_EVIDENCE = "no_evidence"
+    NOT_REPORTABLE = "not_reportable"
+    SECTION_DISCARDED = "section_discarded"
+    OFFERED_NOT_CITED = "offered_not_cited"
+
+
+class ReportCitation(BaseModel):
+    """One source's fate in the rendered Word report.
+
+    Built while the document is written -- the only moment the label, the sections and the
+    evidence behind them are all in scope -- and persisted so the question "why is this
+    source not in the report" survives the export call.
+    """
+
+    source_id: str
+    label: str
+    number: int
+    cited_sections: list[str] = Field(default_factory=list)
+    offered_sections: list[str] = Field(default_factory=list)
+    claim_ids: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    citation_count: int = 0
+    in_bibliography: bool = True
+    drop_reason: CitationDrop = CitationDrop.CITED
+
+    @property
+    def cited(self) -> bool:
+        return self.drop_reason == CitationDrop.CITED
+
+
 class ArtifactView(BaseModel):
     name: str
     media_type: str

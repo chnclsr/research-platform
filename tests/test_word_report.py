@@ -14,6 +14,7 @@ from research_platform.report_synthesis import (
     StudyProfile,
     SynthesisPackage,
     SynthesisSection,
+    cited_labels,
 )
 from research_platform.word_report import _figure_matches_section, build_word_report
 
@@ -436,3 +437,58 @@ def test_report_has_no_links_pointing_at_missing_bookmarks() -> None:
 
     assert anchors - bookmarks == set(), f"dangling anchors: {anchors - bookmarks}"
     assert "src_S07" not in anchors, "a label with no catalog row must not become a link"
+
+
+def test_word_report_records_where_each_source_landed() -> None:
+    """The document and the citation record are built together, from the same prose."""
+    package = SynthesisPackage(
+        executive_summary="",
+        sections=[
+            SynthesisSection(
+                title="Measured outcome",
+                synthesis="The measured outcome improved [S01].",
+                # S02 sat in the packet and the model never cited it.
+                source_ids=["S01", "S02"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        study_profiles=[],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        generated_by_llm=True,
+    )
+    inputs = _minimal_report_inputs()
+    passed_over = SimpleNamespace(
+        id="source-2",
+        title="Offered but uncited",
+        family="academic",
+        url="https://example.org/second",
+    )
+    inputs["sources"] = [inputs["sources"][0], passed_over]
+    inputs["evidence_by_claim"]["claim-1"].append(
+        (SimpleNamespace(quote="A second reading."), passed_over)
+    )
+    report = build_word_report(**inputs, synthesis_package=package)
+
+    records = {citation.label: citation for citation in report.citations}
+    assert records["S01"].drop_reason == "cited"
+    assert records["S01"].cited_sections == ["Measured outcome"]
+    # The one the report leaves out is recorded with the reason, not simply omitted.
+    assert records["S02"].drop_reason == "offered_not_cited"
+    assert records["S02"].offered_sections == ["Measured outcome"]
+    assert records["S02"].cited_sections == []
+
+
+def test_theme_evidence_map_lights_only_the_studies_a_theme_cites() -> None:
+    # The figure used to colour cells from `source_ids`, which is what the evidence packet
+    # offered the model -- so it credited a study for a theme whose prose never cites it and
+    # claimed more coverage than the document delivers.
+    section = SynthesisSection(
+        title="Measured outcome",
+        synthesis="Only the first study is cited here [S01].",
+        source_ids=["S01", "S02"],
+        claim_ids=["claim-1"],
+    )
+    assert cited_labels(section) == {"S01"}
+    assert "S02" in section.source_ids

@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import inspect
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -27,6 +27,7 @@ from .db import (
     FigureObservationRow,
     FrontierRow,
     PassageRow,
+    ReportCitationRow,
     ResearchRunRow,
     SourceRelationRow,
     SourceRow,
@@ -42,6 +43,7 @@ from .schemas import (
     CoverageMetrics,
     ExtractedClaim,
     Passage,
+    ReportCitation,
     ResearchProtocol,
     RunStatus,
     RunView,
@@ -953,6 +955,50 @@ class Repository(metaclass=_OwnershipEnforced):
         )
         return found is not None
 
+    async def replace_report_citations(
+        self, run_id: str, citations: Sequence[ReportCitation]
+    ) -> int:
+        """Record where every source ended up in the report, replacing any earlier record.
+
+        Delete-then-insert rather than upsert because the set itself changes between exports:
+        a re-run with different claims renumbers the labels, and a source that dropped out of
+        the second pass would otherwise keep the row the first pass wrote for it. The unique
+        constraint on (run_id, source_id) is what makes a half-finished second pass visible
+        rather than silently doubled.
+        """
+        await self.session.execute(
+            delete(ReportCitationRow).where(ReportCitationRow.run_id == run_id)
+        )
+        for citation in citations:
+            self.session.add(
+                ReportCitationRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    source_id=citation.source_id,
+                    label=citation.label,
+                    number=citation.number,
+                    cited_sections=list(citation.cited_sections),
+                    offered_sections=list(citation.offered_sections),
+                    claim_ids=list(citation.claim_ids),
+                    evidence_ids=list(citation.evidence_ids),
+                    citation_count=citation.citation_count,
+                    in_bibliography=citation.in_bibliography,
+                    # NULL is the success case; the enum's `cited` member is not a reason.
+                    drop_reason=None if citation.cited else str(citation.drop_reason),
+                )
+            )
+        await self.session.commit()
+        return len(citations)
+
+    async def list_report_citations(self, run_id: str) -> list[ReportCitationRow]:
+        return list(
+            await self.session.scalars(
+                select(ReportCitationRow)
+                .where(ReportCitationRow.run_id == run_id)
+                .order_by(ReportCitationRow.number)
+            )
+        )
+
     @staticmethod
     def _passage_values(passage: Passage) -> dict[str, Any]:
         return {
@@ -1469,6 +1515,9 @@ class Repository(metaclass=_OwnershipEnforced):
                 FigureObservationRow.run_id == run_id
             )),
             ("frontier", delete(FrontierRow).where(FrontierRow.run_id == run_id)),
+            ("report_citations", delete(ReportCitationRow).where(
+                ReportCitationRow.run_id == run_id
+            )),
             ("artifacts", delete(ArtifactRow).where(ArtifactRow.run_id == run_id)),
             ("checkpoints", delete(CheckpointRow).where(CheckpointRow.run_id == run_id)),
             ("events", delete(EventRow).where(EventRow.run_id == run_id)),

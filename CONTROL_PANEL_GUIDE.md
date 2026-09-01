@@ -1,10 +1,10 @@
 # Research Platform Yerel Kontrol Paneli
 
-Belge sürümü: `3.3`
+Belge sürümü: `3.4`
 
-Platform sürümü: `v0.15.0`
+Platform sürümü: `v0.19.0`
 
-Tarih: `2026-08-28`
+Tarih: `2026-09-01`
 
 ## Amaç
 
@@ -124,6 +124,16 @@ yapılmalıdır — çerez ancak o zaman `Secure` bayrağını taşır.
 - Run detayında tamamlanan/aktif/bekleyen düğümleri, ziyaret sayılarını ve recovery geri dönüşünü
   gösteren yatay LangGraph flow chart.
 - Kaynak hunisi, `accept / reserve / reject` dağılımı ve her eleme aşamasındaki kayıp.
+- **Kaynak → Referans İzi:** her kaynağın ham dosyadan docx'teki referansa kadar zincirde
+  nereye gittiği. Satır başına yedi hücrelik şerit (keşif · edinim · ayrıştırma · getirme ·
+  kanıt · iddia · rapor), kaynağın nerede durduğunu söyleyen akıbet etiketi ve rapora
+  girdiyse atıf etiketi (`[S03]×4`). Şerit yalnız bir hücreyi "durdu" olarak işaretler.
+  Satır tıklanınca dikey iz açılır: alınan dosya ve parser'ı, pasajlar ve retrieval
+  skorları, alıntıların sayfa/bölüm bilgisi, dayandıkları iddia ve raporda geçtiği
+  bölümler. Filtre çipleri o koşuda gerçekten görülen akıbetlerden üretilir.
+  Bu kayıttan (v0.19.0) eski koşularda son halka "rapor henüz üretilmedi" görünür; geriye
+  dönük doldurma yapılmaz, çünkü yeniden export başka bir rapor üretirdi.
+- Kaynak toplayıp kanıt çıkaramayan koşuda izin üstünde bunu söyleyen bir uyarı.
 - Sentinel recall, estimated completeness, relative recall, citation novelty ve reserve false-negative ölçümleri.
 - Query branch başına connector, sonuç, başarı ve gecikme bilgisi.
 - Kaynakların connector, aile, admission, keşif yöntemi, relevance ve provenance bilgisi.

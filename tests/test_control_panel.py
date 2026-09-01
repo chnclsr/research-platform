@@ -10,10 +10,19 @@ from fastapi.testclient import TestClient
 from research_platform import control_panel
 from research_platform.auth import Principal
 from research_platform.control_panel_ui import CONTROL_PANEL_HTML
-from research_platform.db import SessionLocal, create_schema
+from research_platform.db import (
+    ClaimRow,
+    EvidenceRow,
+    PassageRow,
+    ReportCitationRow,
+    SessionLocal,
+    SourceRow,
+    SourceVersionRow,
+    create_schema,
+)
 from research_platform.identity import create_user, get_user_by_email
 from research_platform.repository import Repository
-from research_platform.schemas import ResearchProtocol
+from research_platform.schemas import ResearchProtocol, new_id
 from research_platform.version import VERSION
 
 PANEL_PASSWORD = "panel-test-password"
@@ -22,11 +31,29 @@ PANEL_PASSWORD = "panel-test-password"
 def test_run_drawer_uses_turkish_title_case_and_collapsible_sources():
     assert "Kalite ve Kapsam" in CONTROL_PANEL_HTML
     assert "Sorgu Dalları" in CONTROL_PANEL_HTML
-    assert "Kabul Edilen Kaynaklar" in CONTROL_PANEL_HTML
+    # The source list is now the trace: the same sources, plus how far each one travelled.
+    # A table that only listed what was admitted could not say what became of it.
+    assert "Kaynak → Referans İzi" in CONTROL_PANEL_HTML
+    assert "Kabul Edilen Kaynaklar" not in CONTROL_PANEL_HTML
     assert "Kalite ve coverage" not in CONTROL_PANEL_HTML
     assert "detailSection('Sorgu dalları')" not in CONTROL_PANEL_HTML
-    assert "collapsibleDetailSection(`Kabul Edilen Kaynaklar" in CONTROL_PANEL_HTML
+    assert "collapsibleDetailSection(`Kaynak → Referans İzi" in CONTROL_PANEL_HTML
     assert "h('details','drawer-section collapsible-section')" in CONTROL_PANEL_HTML
+
+
+def test_trace_row_draws_the_seven_chain_steps_and_opens_the_vertical_trace():
+    # Cell order is the order data travels, and it has to match the server's CHAIN_STEPS --
+    # a strip drawn in a different order would label the wrong failure.
+    assert (
+        "[['discover','Keşif'],['acquire','Edinim'],['parse','Ayrıştırma'],"
+        "['retrieve','Getirme'],['evidence','Kanıt'],['claim','İddia'],['report','Rapor']]"
+    ) in CONTROL_PANEL_HTML
+    assert "chain-cell ${state}" in CONTROL_PANEL_HTML
+    assert "/sources/${encodeURIComponent(s.id)}/trace" in CONTROL_PANEL_HTML
+    # Opening the paper and expanding the trace are different intents on the same row.
+    assert "link.onclick=e=>e.stopPropagation()" in CONTROL_PANEL_HTML
+    # The run-level reason is stated once rather than implied by dozens of red rows.
+    assert "if(data.empty_corpus)" in CONTROL_PANEL_HTML
 
 
 def test_flow_view_absorbs_the_timeline_and_can_go_fullscreen():
@@ -475,6 +502,176 @@ async def test_run_detail_exposes_timeline_funnel_and_quality():
     assert detail["funnel"]["steps"][0]["value"] == 3
     assert detail["quality"]["sentinel_recall"] == 0.5
     assert detail["query_branches"][0]["connectors"] == ["crossref"]
+
+
+async def seed_traceable_run(session, repo, *, cited: bool, drop_reason: str | None = None):
+    """A run carrying one source all the way down the chain, and one that stalls early."""
+    run = await repo.create_run(ResearchProtocol(
+        title="Panel trace",
+        primary_question="Where does each source end up in the report?",
+        budget={"max_wall_minutes": 30},
+    ))
+    from datetime import UTC, datetime
+
+    good, stalled = new_id(), new_id()
+    version_id = new_id()
+    claim_id, link_id = new_id(), new_id()
+    session.add_all([
+        SourceRow(
+            id=good, run_id=run.id, dedupe_key="k1", family="academic",
+            connector_id="crossref", title="Cited study", url="https://example.test/a",
+            metadata_json={"admission_tier": "accept", "relevance_score": 0.9},
+        ),
+        # Never acquired: the row exists, no version follows it.
+        SourceRow(
+            id=stalled, run_id=run.id, dedupe_key="k2", family="web",
+            connector_id="crawl4ai", title="Unreachable page", url="https://example.test/b",
+            metadata_json={"admission_tier": "reserve"},
+        ),
+        SourceVersionRow(
+            id=version_id, source_id=good, content_hash="h" * 12,
+            acquisition_method="pdf", access_status="open", content="body text",
+            raw_content="", provenance={"parser_id": "smart_pdf"},
+            retrieved_at=datetime.now(UTC),
+        ),
+        PassageRow(
+            id=new_id(), source_version_id=version_id, chunk_index=0,
+            section_path="Results", page_number=4, start_char=0, end_char=9,
+            text="body text", token_count=2, content_hash="p" * 12, embedding=[],
+            metadata_json={"retrieval_score": 0.81, "matched_questions": ["q1"]},
+        ),
+        ClaimRow(
+            id=claim_id, run_id=run.id, text="The outcome improves.", importance="major",
+            status="supported", confidence=0.8, audit={"question_relevance": 0.7},
+        ),
+        EvidenceRow(
+            id=link_id, claim_id=claim_id, source_version_id=version_id,
+            direction="supports", quote="the outcome improves",
+            location={"section_path": "Results", "page_number": 4, "passage_id": "p1"},
+            entailment_score=0.66,
+        ),
+        ReportCitationRow(
+            id=new_id(), run_id=run.id, source_id=good, label="S01", number=1,
+            cited_sections=["Tema A"] if cited else [],
+            offered_sections=["Tema A"], claim_ids=[claim_id], evidence_ids=[link_id],
+            citation_count=2 if cited else 0, in_bibliography=True,
+            drop_reason=drop_reason,
+        ),
+    ])
+    await session.commit()
+    return run, good, stalled
+
+
+@pytest.mark.asyncio
+async def test_run_detail_carries_the_chain_and_fate_for_every_source():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run, good, stalled = await seed_traceable_run(session, repo, cited=True)
+    detail = await control_panel._run_detail(run.id, acting_principal())
+    rows = {row["id"]: row for row in detail["sources"]}
+
+    reached = rows[good]
+    assert set(reached["chain"].values()) == {"on"}
+    assert reached["fate"]["code"] == "cited"
+    assert reached["citation"] == {"label": "S01", "number": 1, "count": 2}
+
+    # The source that was never acquired stops at exactly one step and says which.
+    dropped = rows[stalled]
+    assert dropped["chain"]["acquire"] == "stop"
+    assert dropped["chain"]["parse"] == "off"
+    assert dropped["fate"]["code"] == "not_acquired"
+    assert dropped["citation"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_detail_reports_a_source_the_model_was_offered_and_passed_over():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run, good, _ = await seed_traceable_run(
+            session, repo, cited=False, drop_reason="offered_not_cited"
+        )
+    detail = await control_panel._run_detail(run.id, acting_principal())
+    row = next(r for r in detail["sources"] if r["id"] == good)
+    # Everything up to the report worked; only the last cell is a stop.
+    assert row["chain"]["claim"] == "on"
+    assert row["chain"]["report"] == "stop"
+    assert row["fate"]["code"] == "offered_not_cited"
+
+
+@pytest.mark.asyncio
+async def test_a_run_predating_the_citation_table_is_not_shown_as_a_dropped_source():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run = await repo.create_run(ResearchProtocol(
+            title="Old run",
+            primary_question="What happens to runs recorded before citations existed?",
+            budget={"max_wall_minutes": 30},
+        ))
+        session.add(SourceRow(
+            id=new_id(), run_id=run.id, dedupe_key="k", family="academic",
+            connector_id="crossref", title="Legacy source", url="https://example.test/c",
+            metadata_json={},
+        ))
+        await session.commit()
+    detail = await control_panel._run_detail(run.id, acting_principal())
+    assert detail["sources"][0]["fate"]["code"] == "not_acquired"
+    assert detail["empty_corpus"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_detail_flags_a_run_that_gathered_sources_and_extracted_nothing():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run = await repo.create_run(ResearchProtocol(
+            title="Empty corpus",
+            primary_question="Does the panel say why every source is empty-handed?",
+            budget={"max_wall_minutes": 30},
+        ))
+        await repo.event(run.id, "empty_synthesis_with_corpus", {"sources": 61})
+    detail = await control_panel._run_detail(run.id, acting_principal())
+    assert detail["empty_corpus"] is True
+
+
+@pytest.mark.asyncio
+async def test_source_trace_returns_the_objects_behind_a_citation():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run, good, _ = await seed_traceable_run(session, repo, cited=True)
+    trace = await control_panel._source_trace(run.id, good, acting_principal())
+    assert trace["source"]["connector_id"] == "crossref"
+    assert trace["version"]["parser_id"] == "smart_pdf"
+    # The parsed text survived the checkpoint that emptied the raw copy; the panel must not
+    # present that as a lost download.
+    assert trace["version"]["raw_cleared"] is True
+    assert trace["passages"]["total"] == 1
+    assert trace["passages"]["retrieved"] == 1
+    assert trace["passages"]["rows"][0]["page_number"] == 4
+    assert trace["evidence"][0]["quote"] == "the outcome improves"
+    assert trace["evidence"][0]["claim"]["status"] == "supported"
+    assert trace["report"]["label"] == "S01"
+    assert trace["report"]["cited_sections"] == ["Tema A"]
+
+
+@pytest.mark.asyncio
+async def test_source_trace_hides_other_peoples_runs_and_unknown_sources():
+    await create_schema()
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run, good, _ = await seed_traceable_run(session, repo, cited=True)
+    stranger = Principal.user("01STRANGER".ljust(26, "0"), "user")
+    # A run belonging to someone else reads as missing, exactly as the stage endpoint does:
+    # a distinct 403 would confirm the id exists to a caller probing for it.
+    with pytest.raises(HTTPException) as missing_run:
+        await control_panel._source_trace(run.id, good, stranger)
+    assert missing_run.value.status_code == 404
+    with pytest.raises(HTTPException) as missing_source:
+        await control_panel._source_trace(run.id, new_id(), acting_principal())
+    assert missing_source.value.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -748,6 +748,23 @@ async def build_exports(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         word_report.document,
     )
+    # Written before the artifacts, so an export that fails while uploading leaves no
+    # citation record describing a document nobody received.
+    await repo.replace_report_citations(run_id, word_report.citations)
+    dropped = Counter(
+        str(citation.drop_reason)
+        for citation in word_report.citations
+        if not citation.cited
+    )
+    await repo.event(
+        run_id,
+        "report_citations",
+        {
+            "sources": len(word_report.citations),
+            "cited": sum(citation.cited for citation in word_report.citations),
+            "dropped": dict(dropped),
+        },
+    )
     for figure_name, figure_bytes in word_report.figures.items():
         files[figure_name] = ("image/png", figure_bytes)
     for research_figure in figure_result.generated_figures:

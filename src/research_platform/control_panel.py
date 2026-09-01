@@ -27,7 +27,7 @@ from fastapi.responses import (
     Response,
 )
 from redis.asyncio import Redis
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .auth import Principal, verify_secret
@@ -50,6 +50,7 @@ from .control_panel_auth import (
     throttled,
 )
 from .control_panel_metrics import (
+    CLAIM_OK_STATUSES,
     PIPELINE_STAGES,
     connector_operations,
     llm_summary,
@@ -57,6 +58,7 @@ from .control_panel_metrics import (
     pipeline_progress,
     query_branch_summary,
     serialize_event,
+    source_chain,
     source_funnel,
     stage_visit_details,
     stage_visits,
@@ -68,9 +70,12 @@ from .db import (
     ClaimRow,
     EventRow,
     EvidenceRow,
+    PassageRow,
+    ReportCitationRow,
     ResearchRunRow,
     SessionLocal,
     SourceRow,
+    SourceVersionRow,
     UserRow,
 )
 from .hardware_telemetry import SAMPLE_EVENT
@@ -531,6 +536,146 @@ async def build_status(principal: Principal) -> dict[str, Any]:
     }
 
 
+async def _source_chain_facts(session: Any, run_id: str) -> dict[str, dict[str, Any]]:
+    """Per source, the facts that decide how far down the chain it got.
+
+    Five run-scoped reads rather than one join: the chain spans four tables with different
+    grains -- a source has versions, a version has passages, a passage backs evidence -- and
+    a single query would multiply rows out and need distinct counts to put them back.
+
+    The passage step is aggregated in Python because `retrieval_score` lives inside the
+    passage's JSON metadata, and extracting it in SQL is written differently on SQLite and
+    PostgreSQL. Only two columns are read and neither is `text` or `embedding`, so even a
+    2000-passage run stays small; the drawer is refreshed by hand, not on the 4-second poll.
+    """
+    versions = (
+        await session.execute(
+            select(
+                SourceVersionRow.id,
+                SourceVersionRow.source_id,
+                SourceVersionRow.access_status,
+                SourceVersionRow.acquisition_method,
+                SourceVersionRow.content_hash,
+            )
+            .join(SourceRow, SourceRow.id == SourceVersionRow.source_id)
+            .where(SourceRow.run_id == run_id)
+            .order_by(SourceVersionRow.retrieved_at)
+        )
+    ).all()
+    # Last version wins: a re-acquired source is described by what the run ended up using.
+    version_source = {row.id: row.source_id for row in versions}
+    by_source: dict[str, dict[str, Any]] = {}
+    for row in versions:
+        by_source[row.source_id] = {
+            "version_id": row.id,
+            "access_status": row.access_status,
+            "acquisition_method": row.acquisition_method,
+            "content_hash": row.content_hash,
+            "passage_count": 0,
+            "best_retrieval": 0.0,
+            "evidence_count": 0,
+            "best_entailment": 0.0,
+            "claim_status_ok": False,
+        }
+
+    passages = (
+        await session.execute(
+            select(PassageRow.source_version_id, PassageRow.metadata_json).where(
+                PassageRow.source_version_id.in_(version_source.keys())
+            )
+        )
+    ).all()
+    for version_id, metadata in passages:
+        source_id = version_source.get(version_id)
+        if source_id is None:
+            continue
+        facts = by_source[source_id]
+        facts["passage_count"] += 1
+        facts["best_retrieval"] = max(
+            facts["best_retrieval"], _safe_float((metadata or {}).get("retrieval_score"))
+        )
+
+    evidence = (
+        await session.execute(
+            select(
+                EvidenceRow.source_version_id,
+                func.count(EvidenceRow.id),
+                func.max(EvidenceRow.entailment_score),
+            )
+            .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
+            .where(ClaimRow.run_id == run_id)
+            .group_by(EvidenceRow.source_version_id)
+        )
+    ).all()
+    for version_id, count, best in evidence:
+        source_id = version_source.get(version_id)
+        if source_id is None:
+            continue
+        by_source[source_id]["evidence_count"] = int(count or 0)
+        by_source[source_id]["best_entailment"] = _safe_float(best)
+
+    claim_rows = (
+        await session.execute(
+            select(EvidenceRow.source_version_id, ClaimRow.status)
+            .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
+            .where(ClaimRow.run_id == run_id, ClaimRow.status.in_(CLAIM_OK_STATUSES))
+            .distinct()
+        )
+    ).all()
+    for version_id, _status in claim_rows:
+        source_id = version_source.get(version_id)
+        if source_id is not None:
+            by_source[source_id]["claim_status_ok"] = True
+
+    citations = list(
+        await session.scalars(
+            select(ReportCitationRow).where(ReportCitationRow.run_id == run_id)
+        )
+    )
+    for citation in citations:
+        facts = by_source.setdefault(citation.source_id, {})
+        facts["citation"] = {
+            "label": citation.label,
+            "number": citation.number,
+            "count": citation.citation_count,
+            "cited_sections": citation.cited_sections or [],
+            "offered_sections": citation.offered_sections or [],
+            "in_bibliography": citation.in_bibliography,
+            "drop_reason": citation.drop_reason,
+        }
+    # Whether an export ran at all. Without it a run still in EXTRACT_EVIDENCE and a run
+    # whose report genuinely dropped every source would both show an empty last cell.
+    exported = bool(citations)
+    for facts in by_source.values():
+        facts["exported"] = exported
+    return by_source
+
+
+def _source_trace_summary(facts: dict[str, Any]) -> dict[str, Any]:
+    """The chain strip, the fate and the citation handle for one source row."""
+    citation = facts.get("citation")
+    summary = source_chain(
+        acquired=bool(facts.get("version_id"))
+        and facts.get("access_status") != "unavailable",
+        passage_count=int(facts.get("passage_count", 0)),
+        best_retrieval=_safe_float(facts.get("best_retrieval")),
+        evidence_count=int(facts.get("evidence_count", 0)),
+        claim_status_ok=bool(facts.get("claim_status_ok")),
+        citation=citation,
+        exported=bool(facts.get("exported")),
+    )
+    summary["citation"] = (
+        {
+            "label": citation["label"],
+            "number": citation["number"],
+            "count": citation["count"],
+        }
+        if citation
+        else None
+    )
+    return summary
+
+
 async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
     async with SessionLocal() as session:
         run = await session.get(ResearchRunRow, run_id)
@@ -587,6 +732,7 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
                 .order_by(CheckpointRow.created_at)
             )
         )
+        chain_facts = await _source_chain_facts(session, run_id)
     claim_statuses: dict[str, int] = {}
     for claim in claims:
         claim_statuses[claim.status] = claim_statuses.get(claim.status, 0) + 1
@@ -649,9 +795,15 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
                 ),
                 "query_branches": (source.metadata_json or {}).get("query_branches", []),
                 "published_at": (source.metadata_json or {}).get("published_at"),
+                **_source_trace_summary(chain_facts.get(source.id, {})),
             }
             for source in sources
         ],
+        # A run that gathered sources and extracted nothing says so once, at the top. Without
+        # it the trace table is dozens of identical red rows and no stated reason.
+        "empty_corpus": any(
+            event.event_type == "empty_synthesis_with_corpus" for event in events
+        ),
         "events": [serialize_event(event) for event in events[-150:]],
         "checkpoints": [
             {
@@ -758,6 +910,202 @@ async def _run_stage_detail(
             "has_more": max(0, offset) + len(page) < len(windows),
             "visits": page_rows,
         }
+
+
+# Ceilings for the vertical trace. A source with 400 passages is normal; showing them all
+# would bury the handful that actually reached the report.
+TRACE_PASSAGE_LIMIT = 40
+TRACE_EVIDENCE_LIMIT = 50
+TRACE_QUOTE_CHARS = 400
+
+
+async def _source_trace(run_id: str, source_id: str, principal: Principal) -> dict[str, Any]:
+    """One source, from the file that was fetched to the label the report cites.
+
+    Split from the run detail for the same reason the stage breakdown is: this reads passage
+    and quote text, which the run detail never does and could not afford for 500 sources.
+    """
+    async with SessionLocal() as session:
+        run = await session.get(ResearchRunRow, run_id)
+        if run is None or not _may_see(run, principal):
+            raise HTTPException(status_code=404, detail="Araştırma bulunamadı")
+        source = await session.get(SourceRow, source_id)
+        if source is None or source.run_id != run_id:
+            raise HTTPException(status_code=404, detail="Kaynak bulunamadı")
+        versions = list(
+            await session.scalars(
+                select(SourceVersionRow)
+                .where(SourceVersionRow.source_id == source_id)
+                .order_by(SourceVersionRow.retrieved_at)
+            )
+        )
+        version = versions[-1] if versions else None
+        passage_rows = (
+            (
+                await session.execute(
+                    select(
+                        PassageRow.id,
+                        PassageRow.chunk_index,
+                        PassageRow.section_path,
+                        PassageRow.page_number,
+                        PassageRow.token_count,
+                        PassageRow.metadata_json,
+                    ).where(PassageRow.source_version_id == version.id)
+                )
+            ).all()
+            if version is not None
+            else []
+        )
+        evidence_rows = (
+            (
+                await session.execute(
+                    select(EvidenceRow, ClaimRow)
+                    .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
+                    .where(
+                        ClaimRow.run_id == run_id,
+                        EvidenceRow.source_version_id == version.id,
+                    )
+                    .order_by(EvidenceRow.entailment_score.desc())
+                    .limit(TRACE_EVIDENCE_LIMIT)
+                )
+            ).all()
+            if version is not None
+            else []
+        )
+        citation = await session.scalar(
+            select(ReportCitationRow).where(
+                ReportCitationRow.run_id == run_id,
+                ReportCitationRow.source_id == source_id,
+            )
+        )
+        # Only the two events that explain a passage set arriving out of the round's order.
+        recovery_events = list(
+            await session.scalars(
+                select(EventRow)
+                .where(
+                    EventRow.run_id == run_id,
+                    EventRow.event_type.in_(("passage_retrieval", "chunk_index")),
+                )
+                .order_by(EventRow.id)
+            )
+        )
+
+    recovered = any(
+        (event.payload or {}).get("reason") == "recovered_run_corpus"
+        or int((event.payload or {}).get("recovered_versions", 0) or 0) > 0
+        for event in recovery_events
+    )
+    passages = sorted(
+        (
+            {
+                "id": row.id,
+                "chunk_index": row.chunk_index,
+                "section_path": row.section_path,
+                "page_number": row.page_number,
+                "token_count": row.token_count,
+                "retrieval_score": _safe_float((row.metadata_json or {}).get("retrieval_score")),
+                "matched_questions": (row.metadata_json or {}).get("matched_questions", []),
+            }
+            for row in passage_rows
+        ),
+        key=lambda row: row["retrieval_score"],
+        reverse=True,
+    )
+    metadata = source.metadata_json or {}
+    provenance = (version.provenance or {}) if version is not None else {}
+    parse = provenance.get("parse_provenance") or {}
+    return {
+        "source": {
+            "id": source.id,
+            "title": source.title,
+            "url": source.url,
+            "family": source.family,
+            "connector_id": source.connector_id,
+            "persistent_id": source.persistent_id,
+            "admission_tier": metadata.get("admission_tier", "accept"),
+            "discovery_method": metadata.get("discovery_method", "search"),
+            "relevance_score": max(
+                _safe_float(metadata.get("relevance_score")),
+                _safe_float(metadata.get("content_relevance_score")),
+            ),
+            "query_branches": metadata.get("query_branches", []),
+        },
+        "version": (
+            {
+                "id": version.id,
+                "acquisition_method": version.acquisition_method,
+                "access_status": version.access_status,
+                "content_hash": version.content_hash,
+                "retrieved_at": (
+                    version.retrieved_at.isoformat() if version.retrieved_at else None
+                ),
+                "parser_id": provenance.get("parser_id"),
+                "document_type": provenance.get("document_type"),
+                # Only the keys that decide the output, matching the reproducibility
+                # manifest. The parsed text itself never leaves the database here.
+                "parse_provenance": {
+                    key: parse[key]
+                    for key in (
+                        "parser_profile",
+                        "engine_counts",
+                        "engine_devices",
+                        "degraded",
+                        "router_version",
+                    )
+                    if parse.get(key) is not None
+                },
+                "content_chars": len(version.content or ""),
+                # A requeued run's checkpoint empties `raw_content` on purpose. Zero here
+                # means "cleared at the checkpoint", not "nothing was ever fetched" -- the
+                # panel says which, so nobody goes looking for a lost download.
+                "raw_chars": len(version.raw_content or ""),
+                "raw_cleared": not (version.raw_content or "") and bool(version.content),
+                "version_count": len(versions),
+            }
+            if version is not None
+            else None
+        ),
+        "passages": {
+            "total": len(passage_rows),
+            "retrieved": sum(1 for row in passages if row["retrieval_score"] > 0),
+            "recovered": recovered,
+            "rows": passages[:TRACE_PASSAGE_LIMIT],
+        },
+        "evidence": [
+            {
+                "id": link.id,
+                "direction": link.direction,
+                "quote": (link.quote or "")[:TRACE_QUOTE_CHARS],
+                "quote_truncated": len(link.quote or "") > TRACE_QUOTE_CHARS,
+                "entailment_score": _safe_float(link.entailment_score),
+                "location": link.location or {},
+                "claim": {
+                    "id": claim.id,
+                    "text": claim.text,
+                    "status": claim.status,
+                    "importance": claim.importance,
+                    "confidence": _safe_float(claim.confidence),
+                    "question_relevance": _safe_float(
+                        (claim.audit or {}).get("question_relevance")
+                    ),
+                },
+            }
+            for link, claim in evidence_rows
+        ],
+        "report": (
+            {
+                "label": citation.label,
+                "number": citation.number,
+                "citation_count": citation.citation_count,
+                "cited_sections": citation.cited_sections or [],
+                "offered_sections": citation.offered_sections or [],
+                "in_bibliography": citation.in_bibliography,
+                "drop_reason": citation.drop_reason,
+            }
+            if citation is not None
+            else None
+        ),
+    }
 
 
 async def _connector_snapshot() -> list[dict[str, Any]]:
@@ -1099,6 +1447,15 @@ async def status(principal: Principal = Depends(require_user)) -> dict[str, Any]
 @app.get("/api/runs/{run_id}/detail")
 async def run_detail(run_id: str, principal: Principal = Depends(require_user)) -> dict[str, Any]:
     return await _run_detail(run_id, principal)
+
+
+@app.get("/api/runs/{run_id}/sources/{source_id}/trace")
+async def run_source_trace(
+    run_id: str,
+    source_id: str,
+    principal: Principal = Depends(require_user),
+) -> dict[str, Any]:
+    return await _source_trace(run_id, source_id, principal)
 
 
 @app.get("/api/runs/{run_id}/stages/{stage}")

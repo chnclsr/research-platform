@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.16.1`
+Platform sürümü: `v0.19.0`
 
-Belge sürümü: `12.40`
+Belge sürümü: `12.41`
 
-Son güncelleme: `2026-08-31`
+Son güncelleme: `2026-09-01`
 
 ## Kapsam
 
@@ -71,6 +71,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 56 | Panelin koşu kararlarından çekilmesi | `c2916b6` |
 | 57 | Telegram hazırlık çağrılarının Gemini'ye ayrılması | `eb13579` |
 | 58 | Ardışık boş recovery turlarının kontrollü sonlandırılması | _çalışma ağacı_ |
+| 59 | Kaynak → referans izi (kendi raporu var) | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -3601,6 +3602,25 @@ ek başlıklarını değil.
 **Doğrulama.** Üç yeni test: tek sağlayıcı hatasının artık bütün koşuya mal olmaması, hata
 metninin kaydedilmesi ve promptun bulgu sayısıyla büyümemesi. Tam kapı **679 → 683 passed**.
 Hedefli Ruff: yeni dosyalar temiz, `pipeline.py` 21/21.
+
+## 64. Kaynak → referans izi
+
+Ham kaynaktan docx'teki referansa giden zincirin ilk altı halkası veritabanındaydı;
+yedincisi hiçbir yerde durmuyordu. `[S03]` etiketleri belge yazılırken üretiliyor, hangi
+bölümün hangi kaynağı andığı bellekte yaşıyor ve `build_exports` dönünce ikisi de
+kayboluyordu. Kanıtı olan bir kaynak rapordan dört ayrı sebeple düşebiliyor ve dışarıdan
+dördü de aynı görünüyordu.
+
+Yeni `report_citations` tablosu kaynak başına bir satır tutuyor — rapora giren de girmeyen
+de — ve girmediyse **nerede durduğunu** adlandırıyor. Panelde koşu çekmecesindeki kaynak
+tablosu, satır başına yedi hücrelik zincir şeridi ve tıklanınca ham dosyadan `[S03]`'e kadar
+açılan dikey iz taşıyan "Kaynak → Referans İzi" bölümüne dönüştü.
+
+Sunulan ve anılan kaynak ayrımının neden işin dayanağı olduğu, tema-kanıt haritasının neden
+fazla kapsam iddia ettiği, geriye dönük doldurmanın neden yapılmadığı ve kurulumda atlanan
+migration adımı
+[PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
+içindedir.
 
 ## Bilinen açık işler
 

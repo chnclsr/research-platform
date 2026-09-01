@@ -259,6 +259,48 @@ class ArtifactRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ReportCitationRow(Base):
+    """Where each source ended up in the Word report -- the chain's last link.
+
+    Everything before this is already relational: a source has versions, a version has
+    passages, a passage backs an evidence link, a link backs a claim. The step from a claim
+    to `[S03]` in the .docx was the one that lived only inside the export call. Source labels
+    are assigned by list position at render time and the synthesis sections that cite them are
+    in-memory dataclasses, so once `build_exports` returned, nothing could say why a source
+    with good evidence never appeared in the document.
+
+    That "why" is the column that matters. A source can hold quotes a reader would want and
+    still be absent from the report for four different reasons, and until this table existed
+    all four looked identical from the outside: a source in the catalogue and nowhere else.
+
+    One row per source per run, including the sources that were dropped -- a table of only
+    the cited ones would answer the easy half of the question.
+    """
+
+    __tablename__ = "report_citations"
+    __table_args__ = (
+        UniqueConstraint("run_id", "source_id", name="uq_report_citation_run_source"),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    source_id: Mapped[str] = mapped_column(String(26), index=True)
+    # "S03" and 3: the label the prose cites and the number the catalogue prints.
+    label: Mapped[str] = mapped_column(String(8))
+    number: Mapped[int] = mapped_column(Integer)
+    # Sections whose prose actually cites the label, and sections that were merely offered
+    # the source in their evidence packet. The gap between the two is `offered_not_cited`.
+    cited_sections: Mapped[list] = mapped_column(json_type(), default=list)
+    offered_sections: Mapped[list] = mapped_column(json_type(), default=list)
+    claim_ids: Mapped[list] = mapped_column(json_type(), default=list)
+    evidence_ids: Mapped[list] = mapped_column(json_type(), default=list)
+    citation_count: Mapped[int] = mapped_column(Integer, default=0)
+    in_bibliography: Mapped[bool] = mapped_column(Boolean, default=True)
+    # NULL means the source made it into the report. Anything else names where it stopped.
+    drop_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class UserRow(Base):
     """A person who can sign in to the panel and own research runs.
 

@@ -611,6 +611,16 @@ async def test_pipeline_resumes_to_auditable_export():
         with zipfile.ZipFile(io.BytesIO(word_report)) as archive:
             assert "word/document.xml" in archive.namelist()
             assert any(name.startswith("word/media/") for name in archive.namelist())
+        # The chain's last link is written with the document, not derived afterwards: the
+        # label and the sections citing it exist only while the report is being rendered.
+        citations = await repo.list_report_citations(row.id)
+        assert len(citations) == completed.sources_count
+        assert citations[0].label == "S01"
+        assert citations[0].number == 1
+        # Cited or not, the row says which -- that is the whole point of recording it.
+        assert citations[0].drop_reason is None or citations[0].drop_reason in {
+            "no_evidence", "not_reportable", "section_discarded", "offered_not_cited",
+        }
         inventory_artifact = next(
             a for a in artifacts if a.name == "15_literature_inventory.md"
         )

@@ -59,6 +59,19 @@ CONTROL_PANEL_HTML = r"""<!doctype html>
     /* --bg is theme-scoped, so the expanded panel follows light mode without its own rule. */
     .flow-fullscreen{position:fixed;inset:0;z-index:40;margin:0;overflow:auto;background:var(--bg);padding:18px 22px}.flow-fullscreen .flow-scroll{overflow:visible}.flow-fullscreen .flow-nodes{flex-wrap:wrap;gap:6px 0;min-width:0}
     .stage-rounds{margin-top:11px;border:1px solid var(--line);border-radius:11px;background:var(--surface);padding:13px}.round-row{cursor:pointer}.round-row:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}.round-row.selected>td{background:var(--surface2)}.round-detail>td{padding:0 0 10px}
+    /* Every colour below comes from a theme token, so the strip stays legible in light mode. */
+    .chain{display:inline-flex;gap:3px;align-items:center}.chain-cell{width:13px;height:13px;border-radius:4px;background:var(--surface3);border:1px solid var(--line)}.chain-cell.on{background:var(--blue);border-color:var(--blue)}.chain-cell.stop{background:var(--red);border-color:var(--red)}.chain-cell.off{opacity:.5}
+    .fate{display:inline-flex;align-items:center;gap:6px;font-size:12px}.fate.cited{color:var(--green)}.fate.dropped{color:var(--muted)}.cite-tag{font:11px ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;color:var(--blue)}
+    .chip{border:1px solid var(--line);background:var(--surface2);color:var(--muted);border-radius:99px;padding:5px 11px;font-size:12px;cursor:pointer}.chip.active{border-color:var(--blue);color:var(--text);background:var(--surface3)}.chip:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+    .trace-tools{display:flex;flex-direction:column;gap:9px;padding:13px 14px;border-bottom:1px solid var(--line)}.trace-summary{color:var(--muted);font-size:12px}
+    .trace-warn{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--amber);border-radius:9px;padding:10px 12px;color:var(--amber);font-size:12.5px;line-height:1.5}
+    .trace-row{cursor:pointer}.trace-row:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}.trace-row.selected>td{background:var(--surface2)}.trace-detail>td{padding:0 0 12px}
+    .trace{display:grid;gap:0;border:1px solid var(--line);border-radius:11px;background:var(--surface2);margin:0 12px;padding:4px 0}
+    .trace-step{display:grid;grid-template-columns:118px 1fr;gap:12px;padding:11px 14px;border-top:1px solid var(--line)}.trace-step:first-child{border-top:0}.trace-step.muted{opacity:.6}
+    .trace-step h4{margin:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .trace-facts{display:flex;flex-wrap:wrap;gap:5px 14px;font-size:12px;color:var(--muted)}.trace-facts b{color:var(--text);font-weight:650}
+    .trace-quote{border-left:2px solid var(--line);padding:2px 0 2px 10px;margin:7px 0 0;font-size:12.5px;line-height:1.5}.trace-quote .src{display:block;margin-top:4px;font-size:11px;color:var(--muted)}
+    .trace-claim{margin-top:5px;font-size:12px;color:var(--muted)}.trace-tag{display:inline-block;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:2px 7px;font-size:11px;margin:3px 5px 0 0}
     .hitl-card{border:1px solid #765f2e;background:linear-gradient(145deg,#292314,#17140d);border-radius:13px;padding:16px}.hitl-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.hitl-title strong{color:#ffdc8a}.hitl-data{background:#0d131a;border:1px solid var(--line);border-radius:9px;padding:12px;margin:10px 0;max-height:260px;overflow:auto}.hitl-question{display:grid;gap:6px;margin:10px 0}.hitl-question label,.domain-choice{font-size:12px;color:#cbd5df}.hitl-card input,.hitl-card textarea{width:100%;box-sizing:border-box;background:#0b1118;border:1px solid #354556;color:var(--text);border-radius:8px;padding:10px;font:inherit}.hitl-card textarea{min-height:85px;resize:vertical}.hitl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.domain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}.domain-choice{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;background:#121a23;border:1px solid var(--line);border-radius:8px;padding:9px}.domain-choice input{width:auto}
     .event-list{display:grid;gap:6px;max-height:440px;overflow:auto}.event{border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:9px 11px}.event summary{cursor:pointer;display:flex;justify-content:space-between;gap:10px}.event code{display:block;margin-top:8px;white-space:pre-wrap;color:#b9c9d8;font-size:11px;word-break:break-word}.artifact-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:8px}.artifact{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);padding:10px;border-radius:9px}.telemetry-preview{border:1px solid var(--line);border-radius:12px;background:#0d1117;padding:10px;overflow:auto}.telemetry-preview img{display:block;width:100%;min-width:720px;height:auto}.source-link{display:block;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .toast{position:fixed;right:22px;bottom:22px;z-index:60;max-width:440px;border:1px solid var(--line);border-radius:11px;background:#202c39;padding:12px 15px;box-shadow:0 15px 50px #0009;opacity:0;transform:translateY(12px);pointer-events:none;transition:.18s}.toast.show{opacity:1;transform:none}.toast.error{border-color:#723642;color:#ffabb4}
@@ -293,10 +306,82 @@ else if(interaction.type==='source_review'){const grid=h('div','domain-grid');fo
 card.append(h('div','note','Bu karar koşunun başlatıldığı kanaldan veriliyor (Telegram / MCP). Panel yalnız izler.'));
 section.append(card);return section}
 function renderTelemetryPreview(runId,artifact,body){const section=detailSection('Donanım Kullanımı'),box=h('div','telemetry-preview'),waiting=h('div','empty','Telemetri grafiği yükleniyor…'),img=document.createElement('img');box.append(waiting);section.append(box);body.append(section);img.alt='Koşu penceresindeki ortak Docker/WSL ve GPU kullanımı';img.onload=()=>box.replaceChildren(img);img.onerror=()=>{waiting.textContent='Telemetri grafiği yüklenemedi.'};img.src=`/api/runs/${runId}/artifacts/${encodeURIComponent(artifact.name)}`}
+// Same order and keys the server builds the chain with. Seven links between a search hit
+// and a reference in the .docx; the title is what a reader gets on hover.
+const CHAIN_STEPS=[['discover','Keşif'],['acquire','Edinim'],['parse','Ayrıştırma'],['retrieve','Getirme'],['evidence','Kanıt'],['claim','İddia'],['report','Rapor']];
+function chainStrip(chain){const wrap=h('span','chain');for(const [key,label] of CHAIN_STEPS){const state=(chain||{})[key]||'off';const cell=h('span',`chain-cell ${state}`);cell.title=`${label}: ${state==='on'?'geçti':state==='stop'?'burada durdu':'ulaşmadı'}`;wrap.append(cell)}return wrap}
+function traceFacts(pairs){const box=h('div','trace-facts');for(const [key,value] of pairs){if(value===undefined||value===null||value==='')continue;const span=h('span','',`${key}: `);span.append(h('b','',String(value)));box.append(span)}return box}
+function traceStep(title,muted=false){const step=h('div',`trace-step${muted?' muted':''}`);step.append(h('h4','',title));const content=h('div');step.append(content);return{step,content}}
+// The vertical trace: the same seven links, but showing the objects themselves rather than
+// a coloured cell -- the file that was fetched, the passages, the quotes, the label.
+function renderSourceTrace(t){const box=h('div','trace');
+const disc=traceStep('Keşif');disc.content.append(traceFacts([['Aile',t.source.family],['Connector',t.source.connector_id],['Admission',t.source.admission_tier],['Yöntem',t.source.discovery_method],['Alaka',`${Math.round((t.source.relevance_score||0)*100)}%`]]));
+for(const branch of t.source.query_branches||[])disc.content.append(h('span','trace-tag',branch));
+box.append(disc.step);
+const v=t.version;const acq=traceStep('Ham dosya',!v);
+if(v){acq.content.append(traceFacts([['Edinim',v.acquisition_method],['Erişim',v.access_status],['Alındı',fmt(v.retrieved_at)],['Parser',v.parser_id],['Metin',`${v.content_chars.toLocaleString('tr-TR')} karakter`],['Hash',(v.content_hash||'').slice(0,12)]]));
+// A requeued run's checkpoint clears raw_content deliberately. Saying so stops anyone
+// hunting for a download that was never lost.
+if(v.raw_cleared)acq.content.append(h('div','trace-claim','Ham kopya checkpoint sırasında boşaltıldı; ayrıştırılmış metin yerinde.'));
+const pp=v.parse_provenance||{};if(Object.keys(pp).length)acq.content.append(h('div','trace-claim',Object.entries(pp).map(([k,val])=>`${k}=${typeof val==='object'?JSON.stringify(val):val}`).join(' · ')))}
+else acq.content.append(h('div','trace-claim','Bu kaynak hiç edinilemedi.'));
+box.append(acq.step);
+const p=t.passages||{};const par=traceStep('Pasajlar',!p.total);
+par.content.append(traceFacts([['Toplam',p.total],['Getirilen',p.retrieved]]));
+if(p.recovered)par.content.append(h('div','trace-claim','Bu koşuda kurtarma turu çalıştı: pasajlar turun kendi belgelerinden değil, veritabanındaki korpustan geldi.'));
+for(const row of (p.rows||[]).slice(0,8))par.content.append(h('div','trace-claim',`#${row.chunk_index} · ${row.section_path}${row.page_number?` · s.${row.page_number}`:''} · skor ${Number(row.retrieval_score||0).toFixed(3)}`));
+box.append(par.step);
+const ev=t.evidence||[];const evi=traceStep('Kanıt',!ev.length);
+if(!ev.length)evi.content.append(h('div','trace-claim','Bu kaynaktan alıntı çıkarılamadı.'));
+for(const link of ev.slice(0,10)){const q=h('blockquote','trace-quote',`“${link.quote}${link.quote_truncated?'…':''}”`);const loc=link.location||{};
+q.append(h('span','src',`${loc.section_path||'Document'}${loc.page_number?` · s.${loc.page_number}`:''} · ${link.direction} · entailment ${Number(link.entailment_score||0).toFixed(2)}`));
+evi.content.append(q);evi.content.append(h('div','trace-claim',`İddia: ${link.claim.text} — ${labels[link.claim.status]||link.claim.status}, güven ${Number(link.claim.confidence||0).toFixed(2)}, soru alakası ${Number(link.claim.question_relevance||0).toFixed(2)}`))}
+if(ev.length>10)evi.content.append(h('div','trace-claim',`İlk 10 kanıt gösteriliyor; toplam ${ev.length}.`));
+box.append(evi.step);
+const r=t.report;const rep=traceStep('Rapor',!r||r.drop_reason);
+if(!r)rep.content.append(h('div','trace-claim','Bu koşu için atıf kaydı yok — rapor henüz üretilmedi ya da koşu bu kayıttan eskiye ait.'));
+else{rep.content.append(traceFacts([['Etiket',`[${r.label}]`],['Sıra',r.number],['Atıf sayısı',r.citation_count],['Kaynakçada',r.in_bibliography?'evet':'hayır']]));
+for(const title of r.cited_sections||[])rep.content.append(h('span','trace-tag',`atıf: ${title}`));
+for(const title of (r.offered_sections||[]).filter(x=>!(r.cited_sections||[]).includes(x)))rep.content.append(h('span','trace-tag',`sunuldu: ${title}`))}
+box.append(rep.step);return box}
+function renderSourceTraceSection(data,body){const sources=[...(data.sources||[])].sort((a,b)=>Number(b.relevance_score??0)-Number(a.relevance_score??0));
+const cited=sources.filter(s=>(s.fate||{}).code==='cited').length;
+const section=collapsibleDetailSection(`Kaynak → Referans İzi (${sources.length})`);
+const tools=h('div','trace-tools');
+// A run that gathered sources and extracted nothing says so once, here, instead of leaving
+// dozens of identically red rows to be interpreted.
+if(data.empty_corpus)tools.append(h('div','trace-warn','Bu koşuda kaynaklar toplandı ancak kanıt çıkarılamadı; zincir kanıt çıkarımında koptu. Toplanan korpus ve ham veriler teslim paketinde duruyor.'));
+tools.append(h('div','trace-summary',`${cited} rapora girdi · ${sources.length-cited} yolda düştü`));
+const counts=new Map();for(const s of sources){const f=s.fate||{};if(!f.code)continue;const item=counts.get(f.code)||{label:f.label,n:0};item.n++;counts.set(f.code,item)}
+const chips=h('div','chips');
+const wrap=h('div','table-wrap'),table=h('table');table.style.minWidth='980px';
+const sh=h('thead'),shr=h('tr');for(const x of ['Kaynak','Aile / Connector','Zincir','Akıbet','Alaka'])shr.append(h('th','',x));sh.append(shr);
+const sb=h('tbody');const rows=[];
+for(const s of sources){const tr=h('tr','trace-row');tr.tabIndex=0;tr.setAttribute('role','button');tr.setAttribute('aria-expanded','false');
+const title=h('td');const link=h('a','source-link',s.title);link.href=s.url;link.target='_blank';link.rel='noopener noreferrer';
+// Clicking the title means "open the paper", not "expand the trace".
+link.onclick=e=>e.stopPropagation();
+title.append(link,h('div','mono',s.persistent_id||s.id));
+const chainTd=h('td');chainTd.append(chainStrip(s.chain));if(s.citation)chainTd.append(h('span','cite-tag',` [${s.citation.label}]×${s.citation.count}`));
+const fateTd=h('td');const fate=s.fate||{};fateTd.append(h('span',`fate ${fate.code==='cited'?'cited':'dropped'}`,fate.label||'—'));
+tr.append(title,textCell(`${s.family} / ${s.connector_id}`),chainTd,fateTd,textCell(`${Math.round(s.relevance_score*100)}%`));
+const detail=h('tr','trace-detail');const cell=h('td');cell.colSpan=5;detail.append(cell);detail.hidden=true;let loaded=false;
+async function toggle(){const open=detail.hidden;detail.hidden=!open;tr.classList.toggle('selected',open);tr.setAttribute('aria-expanded',open?'true':'false');
+// Tracked with a flag rather than "does the cell have children": a failed fetch leaves its
+// error message in the cell, and testing for children would make that failure permanent.
+if(open&&!loaded){cell.replaceChildren(h('div','empty','İz yükleniyor…'));try{cell.replaceChildren(renderSourceTrace(await api(`/api/runs/${data.run.id}/sources/${encodeURIComponent(s.id)}/trace`)));loaded=true}catch(e){cell.replaceChildren(h('div','empty',e.message))}}}
+tr.onclick=toggle;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle()}};
+rows.push({code:fate.code,tr,detail});sb.append(tr,detail)}
+function applyFilter(code){for(const chip of chips.children)chip.classList.toggle('active',chip.dataset.code===code);
+for(const row of rows){const show=code==='all'||row.code===code;row.tr.hidden=!show;if(!show){row.detail.hidden=true;row.tr.classList.remove('selected');row.tr.setAttribute('aria-expanded','false')}}}
+// Chips come from the fates actually present, so the filter row never offers an empty group.
+for(const [code,label] of [['all',`Tümü (${sources.length})`],...[...counts.entries()].map(([c,i])=>[c,`${i.label} (${i.n})`])]){const chip=h('button','chip',label);chip.dataset.code=code;chip.onclick=()=>applyFilter(code);chips.append(chip)}
+tools.append(chips);section.content.append(tools);
+table.append(sh,sb);wrap.append(table);section.content.append(wrap);applyFilter('all');body.append(section.wrap)}
 function renderDetail(data){const run=data.run,protocol=run.protocol||{},coverage=run.coverage||{},quality=data.quality||{};el('drawer-title').textContent=protocol.original_question||protocol.primary_question||protocol.title||run.id;el('drawer-meta').textContent=`${run.id} · ${labels[run.status]||run.status} · ${run.current_stage} · ${duration(run.elapsed_seconds)}`;const body=el('drawer-body');body.replaceChildren();body.append(renderPipelineFlow(data));const hitl=renderHitl(data);if(hitl)body.append(hitl);const summary=detailSection('Kalite ve Kapsam');const grid=h('div','quality-grid');grid.append(qualityCard('Kaynak Ailesi',coverage.source_family_coverage,'Hedef aile dağılımı'),qualityCard('Sorgu Dalları',coverage.query_branch_coverage,'Cevap üreten branch'),qualityCard('Claim Audit',coverage.claim_audit_coverage,'Denetlenmiş major claim'),qualityCard('Sentinel Recall',quality.sentinel_recall,'Bilinen kritik kaynaklar'),qualityCard('Tahmini Tamlık',quality.estimated_completeness,'Incidence tahmini'),qualityCard('Relative Recall',quality.relative_recall,'Accept-only geri çağırım'),qualityCard('Citation Novelty',quality.citation_frontier_novelty,'Yeni citation katkısı',true),qualityCard('Reserve FN',quality.reserve_false_negative_rate,'Yanlış elenme sinyali',true));summary.append(grid);const reasons=h('div','reason-list');for(const reason of coverage.reasons||[])reasons.append(h('span','reason',reason));if(reasons.childNodes.length)summary.append(reasons);body.append(summary);
 const funnelSection=detailSection('Referans Haritası');const funnel=h('div','funnel'),steps=data.funnel.steps||[],max=Math.max(1,...steps.map(s=>s.value));for(const step of steps){const row=h('div','funnel-row');row.append(h('span','',step.label));const bar=h('div','metric-bar');const fill=h('span');fill.style.width=`${step.value/max*100}%`;bar.append(fill);row.append(bar,h('strong','',String(step.value)));funnel.append(row)}const admission=h('div','admission');for(const key of ['accept','reserve','reject'])admission.append(h('span','',`${key}: ${data.funnel.admission[key]||0}`));funnelSection.append(funnel,admission);body.append(funnelSection);
 const branches=data.query_branches||[];const branchSection=collapsibleDetailSection(`Sorgu Dalları (${branches.length})`);const branchWrap=h('div','table-wrap'),branchTable=h('table');const bh=h('thead'),bhr=h('tr');for(const x of ['Dal','Sorgu','Connector','Sonuç','Başarı','Toplam Gecikme'])bhr.append(h('th','',x));bh.append(bhr);const bb=h('tbody');for(const b of branches){const tr=h('tr');tr.append(textCell(b.branch_id),textCell(b.query),textCell(b.connectors.join(', ')),textCell(b.result_count),textCell(`${b.successful_calls}/${b.calls}`),textCell(`${b.latency_seconds.toFixed(1)} sn`));bb.append(tr)}branchTable.append(bh,bb);branchWrap.append(branchTable);branchSection.content.append(branchWrap);body.append(branchSection.wrap);
-const sortedSources=[...(data.sources||[])].sort((a,b)=>Number(b.relevance_score??0)-Number(a.relevance_score??0));const sourceSection=collapsibleDetailSection(`Kabul Edilen Kaynaklar (${sortedSources.length})`);const sourceWrap=h('div','table-wrap'),sourceTable=h('table');const sh=h('thead'),shr=h('tr');for(const x of ['Kaynak','Aile / Connector','Admission','Keşif','Alaka','Sorgu Dalı'])shr.append(h('th','',x));sh.append(shr);const sb=h('tbody');for(const s of sortedSources){const tr=h('tr');const title=h('td');const link=h('a','source-link',s.title);link.href=s.url;link.target='_blank';link.rel='noopener noreferrer';title.append(link,h('div','mono',s.persistent_id||s.id));const adm=h('td');adm.append(h('span',`badge ${s.admission_tier}`,s.admission_tier));tr.append(title,textCell(`${s.family} / ${s.connector_id}`),adm,textCell(s.discovery_method),textCell(`${Math.round(s.relevance_score*100)}%`),textCell((s.query_branches||[]).join(', ')));sb.append(tr)}sourceTable.append(sh,sb);sourceWrap.append(sourceTable);sourceSection.content.append(sourceWrap);body.append(sourceSection.wrap);
+renderSourceTraceSection(data,body);
 const telemetryGraphic=data.artifacts.find(a=>a.name==='20_hardware_utilization.svg');if(telemetryGraphic)renderTelemetryPreview(run.id,telemetryGraphic,body);
 if(data.artifacts.length){const artSection=detailSection('Çıktılar');const arts=h('div','artifact-grid');for(const a of data.artifacts){const item=h('div','artifact');const info=h('div');info.append(h('strong','',a.name),h('div','note',bytes(a.size_bytes)));const dl=h('button','btn small','İndir');dl.onclick=()=>downloadArtifact(run.id,a.name,dl);item.append(info,dl);arts.append(item)}artSection.append(arts);body.append(artSection)}
 const llmSection=detailSection('LLM ve Kanıt Özeti');const llmGrid=h('div','resource-grid');llmGrid.append(resource('LLM Çağrısı',String(data.llm.calls),0,(data.llm.models||[]).join(', ')),resource('Üretim Hızı',`${data.llm.tokens_per_second} tok/sn`,0,`${data.llm.completion_tokens} completion token`),resource('Claim',String(data.claim_summary.total),0,`${data.claim_summary.major} major`),resource('Evidence Link',String(data.claim_summary.evidence_links),0,Object.entries(data.claim_summary.statuses||{}).map(([k,v])=>`${k}: ${v}`).join(' · ')));llmSection.append(llmGrid);body.append(llmSection);

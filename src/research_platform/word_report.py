@@ -26,7 +26,8 @@ from docx.shared import Inches, Pt, RGBColor
 from PIL import Image, ImageDraw, ImageFont
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
-from .report_synthesis import SynthesisPackage
+from .report_synthesis import SynthesisPackage, citation_counts, cited_labels
+from .schemas import CitationDrop, ReportCitation
 
 INK = "0B132B"
 BLUE = "2563EB"
@@ -46,6 +47,10 @@ REPORT_PIPELINE_VERSION = "0.16.0"
 class WordReportResult:
     document: bytes
     figures: dict[str, bytes]
+    # One entry per source, cited or not. Assembled here because this is the only place the
+    # label, the sections and the evidence behind them are all in scope at once; the caller
+    # persists it so the panel can answer "why is this source not in the report".
+    citations: tuple[ReportCitation, ...] = ()
 
 
 def _text(value: Any, limit: int | None = None) -> str:
@@ -513,13 +518,144 @@ def _claim_sources(claim_id: str, evidence_by_claim: dict[str, list[tuple[Any, A
     return numbers
 
 
+def _evidence_by_source(
+    evidence_by_claim: dict[str, list[tuple[Any, Any]]],
+) -> dict[str, list[tuple[Any, Any]]]:
+    """Invert the claim->evidence map into source->(claim, link)."""
+    by_source: dict[str, list[tuple[Any, Any]]] = {}
+    for claim_id, links in evidence_by_claim.items():
+        for link, source in links:
+            by_source.setdefault(str(source.id), []).append((claim_id, link))
+    return by_source
+
+
+def _collect_citations(
+    *,
+    sources: list[Any],
+    source_numbers: dict[str, int],
+    evidence_by_claim: dict[str, list[tuple[Any, Any]]],
+    reportable_claims: list[Any],
+    package: SynthesisPackage | None,
+    turkish: bool,
+) -> tuple[ReportCitation, ...]:
+    """Record where every source ended up in this document.
+
+    Cited-ness is read from the prose, never from `section.source_ids` -- that field holds
+    what the evidence packet OFFERED the model, and the gap between offered and cited is
+    precisely the outcome this record exists to name.
+
+    The overview fields count as sections of their own. A source cited only in the executive
+    summary is cited, and treating the themed sections as the whole document would file it
+    under `offered_not_cited` and send someone looking for a bug that is not there.
+
+    `drop_reason` is decided by the earliest link that failed, so it names where the source
+    stopped rather than every stage it never reached.
+    """
+    by_source = _evidence_by_source(evidence_by_claim)
+    reportable_ids = {str(claim.id) for claim in reportable_claims}
+    sections = list(package.sections) if package is not None else []
+    section_labels = {section.title: cited_labels(section) for section in sections}
+    # A discarded draft still produces a section -- the deterministic fallback -- so a
+    # `fallback:` note alone does not mean the source lost its place. It only explains an
+    # absence when the source is not cited anywhere.
+    discarded = {
+        section.title
+        for section in sections
+        if str(section.generation_note or "").startswith("fallback:")
+    }
+    overview: list[tuple[str, str]] = []
+    if package is not None:
+        overview = [
+            ("Yönetici Özeti" if turkish else "Executive Summary", package.executive_summary),
+            (
+                "Çalışmalar Arası Değerlendirme" if turkish else "Cross-Study Assessment",
+                package.cross_study_assessment,
+            ),
+            ("Sonuç" if turkish else "Conclusion", package.conclusion),
+            ("Belirsizlik" if turkish else "Uncertainty", package.uncertainty),
+        ]
+    for title, text in overview:
+        section_labels[title] = set(citation_counts(text))
+
+    all_prose = [
+        field
+        for section in sections
+        for field in (
+            section.synthesis,
+            section.consensus,
+            section.disagreements,
+            section.implications,
+        )
+    ] + [text for _, text in overview]
+    total_counts = citation_counts(*all_prose)
+
+    citations: list[ReportCitation] = []
+    for source in sources:
+        source_id = str(source.id)
+        number = source_numbers.get(source.id)
+        if number is None:
+            continue
+        label = f"S{number:02d}"
+        links = by_source.get(source_id, [])
+        claim_ids = list(dict.fromkeys(claim_id for claim_id, _ in links))
+        # Read defensively, as everything else in this module reads its inputs: the evidence
+        # link is only ever typed `Any` here, and an id is not what the record turns on.
+        evidence_ids = list(
+            dict.fromkeys(
+                str(getattr(link, "id", "")) for _, link in links if getattr(link, "id", None)
+            )
+        )
+        cited_sections = [title for title, labels in section_labels.items() if label in labels]
+        offered_sections = [
+            section.title for section in sections if label in (section.source_ids or [])
+        ]
+        if cited_sections:
+            reason = CitationDrop.CITED
+        elif not links:
+            reason = CitationDrop.NO_EVIDENCE
+        elif not any(claim_id in reportable_ids for claim_id in claim_ids):
+            reason = CitationDrop.NOT_REPORTABLE
+        elif offered_sections and all(title in discarded for title in offered_sections):
+            reason = CitationDrop.SECTION_DISCARDED
+        elif offered_sections:
+            reason = CitationDrop.OFFERED_NOT_CITED
+        else:
+            # Reportable claims, yet no theme ever put it in a packet: the theme planner
+            # dropped its claims before the model ever saw them.
+            reason = CitationDrop.NOT_REPORTABLE
+        citations.append(
+            ReportCitation(
+                source_id=source_id,
+                label=label,
+                number=number,
+                cited_sections=cited_sections,
+                offered_sections=offered_sections,
+                claim_ids=claim_ids,
+                evidence_ids=evidence_ids,
+                citation_count=total_counts.get(label, 0),
+                # Every source in this list is printed in the source catalogue, cited or not.
+                in_bibliography=True,
+                drop_reason=reason,
+            )
+        )
+    return tuple(citations)
+
+
 def _theme_evidence_map(
     package: SynthesisPackage,
     *,
     turkish: bool,
 ) -> bytes:
+    """Which studies the report's themes actually stand on.
+
+    Cells are lit from the prose, not from `section.source_ids`. That field lists what each
+    theme's evidence packet offered the model, so colouring by it marked a study as
+    contributing to a theme that never cites it -- the figure claimed more coverage than the
+    document delivers.
+    """
     sections = package.sections[:5]
     profiles = package.study_profiles[:18]
+    cited_by_section = {section.title: cited_labels(section) for section in sections}
     width = 1400
     label_width = 245
     column_width = max(170, int((width - label_width - 70) / max(1, len(sections))))
@@ -559,7 +695,7 @@ def _theme_evidence_map(
         )
         for column, section in enumerate(sections):
             x = label_width + column * column_width
-            active = profile.source_label in section.source_ids
+            active = profile.source_label in cited_by_section.get(section.title, set())
             cell_fill = f"#{BLUE}" if active else "#E8EEF6"
             draw.rounded_rectangle(
                 (x + 12, y + 9, x + column_width - 16, y + 35),
@@ -752,6 +888,14 @@ def _build_synthesis_word_report(
     # Labels the source catalog will bookmark. Citations outside this set stay plain text
     # rather than becoming links that go nowhere.
     linkable_labels = {f"S{index:02d}" for index in source_numbers.values()}
+    citations = _collect_citations(
+        sources=sources,
+        source_numbers=source_numbers,
+        evidence_by_claim=evidence_by_claim,
+        reportable_claims=reportable_claims,
+        package=package,
+        turkish=turkish,
+    )
     evidence_counts, _ = _source_evidence_counts(sources, evidence_by_claim)
     contribution_counts = Counter(profile.contribution for profile in package.study_profiles)
     figures = {
@@ -1201,7 +1345,9 @@ def _build_synthesis_word_report(
 
     output = io.BytesIO()
     document.save(output)
-    return WordReportResult(document=output.getvalue(), figures=figures)
+    return WordReportResult(
+        document=output.getvalue(), figures=figures, citations=citations
+    )
 
 
 def build_word_report(
@@ -1284,6 +1430,17 @@ def build_word_report(
     _configure_document(document)
     _add_page_furniture(document, run_id, title)
     source_numbers = {source.id: index for index, source in enumerate(sources, 1)}
+    # No synthesis package on this path, so there are no sections to cite from: every record
+    # lands on `no_evidence` or `not_reportable`. Written anyway, because "this run produced
+    # no citation record" and "this run predates the table" must not look the same.
+    citations = _collect_citations(
+        sources=sources,
+        source_numbers=source_numbers,
+        evidence_by_claim=evidence_by_claim,
+        reportable_claims=reportable_claims,
+        package=None,
+        turkish=turkish,
+    )
     evidence_by_source: dict[str, list[tuple[Any, Any]]] = {}
     for claim in claims:
         for link, source in evidence_by_claim.get(claim.id, []):
@@ -1720,4 +1877,6 @@ def build_word_report(
 
     output = io.BytesIO()
     document.save(output)
-    return WordReportResult(document=output.getvalue(), figures=figures)
+    return WordReportResult(
+        document=output.getvalue(), figures=figures, citations=citations
+    )

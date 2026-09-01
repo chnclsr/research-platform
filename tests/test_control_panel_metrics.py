@@ -8,6 +8,7 @@ from research_platform.control_panel_metrics import (
     pipeline_flow,
     pipeline_progress,
     query_branch_summary,
+    source_chain,
     source_funnel,
     stage_timeline,
 )
@@ -201,3 +202,67 @@ def test_query_and_llm_summaries_are_run_auditable():
     summary = llm_summary(rows)
     assert summary["tokens_per_second"] == 10.0
     assert summary["models"] == ["qwen"]
+
+
+def chain_of(**overrides):
+    facts = {
+        "acquired": True,
+        "passage_count": 12,
+        "best_retrieval": 0.7,
+        "evidence_count": 3,
+        "claim_status_ok": True,
+        "citation": {"drop_reason": None},
+        "exported": True,
+    }
+    facts.update(overrides)
+    return source_chain(**facts)
+
+
+def test_a_source_that_reached_the_report_has_no_stop():
+    result = chain_of()
+    assert set(result["chain"].values()) == {"on"}
+    assert result["fate"]["code"] == "cited"
+    assert result["fate"]["label"] == "Rapora girdi"
+
+
+def test_the_fate_names_one_stopping_point_not_every_missing_step():
+    # A source that was never acquired has not also "failed retrieval". Reporting both would
+    # bury the single fact that explains the rest of the row.
+    result = chain_of(acquired=False, passage_count=0, best_retrieval=0.0, evidence_count=0,
+                      claim_status_ok=False, citation=None)
+    assert result["chain"] == {
+        "discover": "on", "acquire": "stop", "parse": "off", "retrieve": "off",
+        "evidence": "off", "claim": "off", "report": "off",
+    }
+    assert list(result["chain"].values()).count("stop") == 1
+    assert result["fate"]["code"] == "not_acquired"
+
+
+def test_a_passage_that_was_never_retrieved_stops_at_retrieval():
+    result = chain_of(best_retrieval=0.0, evidence_count=0, claim_status_ok=False, citation=None)
+    assert result["chain"]["parse"] == "on"
+    assert result["chain"]["retrieve"] == "stop"
+    assert result["fate"]["code"] == "not_retrieved"
+
+
+def test_the_export_record_supplies_the_reason_for_the_last_step():
+    # The four report-stage reasons are the export's own; the chain cannot derive them.
+    result = chain_of(citation={"drop_reason": "offered_not_cited"})
+    assert result["chain"]["report"] == "stop"
+    assert result["fate"]["code"] == "offered_not_cited"
+    assert result["fate"]["label"] == "Kanıt var, atıf yok"
+
+
+def test_a_run_without_an_export_is_not_reported_as_a_dropped_source():
+    # No citation row and no export is a run that has not got there yet. Calling that a
+    # dropped source would invent a failure.
+    result = chain_of(citation=None, exported=False)
+    assert result["fate"]["code"] == "no_export"
+    assert result["fate"]["label"] == "Rapor henüz üretilmedi"
+
+
+def test_evidence_without_an_audited_claim_stops_at_the_claim_step():
+    result = chain_of(claim_status_ok=False, citation=None)
+    assert result["chain"]["evidence"] == "on"
+    assert result["chain"]["claim"] == "stop"
+    assert result["fate"]["code"] == "claim_below_threshold"

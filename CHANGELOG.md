@@ -1,8 +1,8 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.18.2`
+Platform sürümü: `v0.19.0`
 
-Belge sürümü: `6.38`
+Belge sürümü: `6.39`
 
 Son güncelleme: `2026-09-01`
 
@@ -15,7 +15,44 @@ ve [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONF
 ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md)
 ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md)
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
+ve [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.19.0 — 2026-09-01
+
+- Bir kaynağın ham dosyadan docx'teki referansa kadar izlediği yol artık panelde
+  görünüyor. Zincirin ilk altı halkası (kaynak → sürüm → pasaj → kanıt → iddia) zaten
+  veritabanındaydı; eksik olan sonuncusuydu. `[S03]` etiketleri export sırasında liste
+  sırasından üretiliyor, sentez bölümleri bellekte yaşayan dataclass'lardı ve
+  `build_exports` dönünce ikisi de kayboluyordu. Yeni `report_citations` tablosu kaynak
+  başına bir satır tutuyor: etiket, sıra, atıf yapılan bölümler ve rapora girmediyse
+  **neden** girmediği.
+- Asıl kazanç o "neden". Kanıtı olan bir kaynak rapordan dört ayrı sebeple düşebiliyor —
+  hiç kanıt çıkmaması, iddianın rapor eşiğini geçmemesi, bölüm taslağının atıf denetiminde
+  elenmesi, ya da modelin kendisine sunulan kaynağı hiç anmaması — ve bugüne kadar dördü de
+  dışarıdan aynı görünüyordu: katalogda olan, başka hiçbir yerde olmayan bir kaynak.
+  Özellikle üçüncüsü sessizdi; tek bir izinsiz atıf yüzünden bölümün tamamı boş string'e
+  dönüyor ve kaynak kimseye söylenmeden rapordan çıkıyordu.
+- Koşu çekmecesindeki "Kabul Edilen Kaynaklar" tablosu "Kaynak → Referans İzi" oldu. Her
+  satırda yedi hücrelik bir zincir şeridi, kaynağın nerede durduğunu söyleyen bir akıbet
+  etiketi ve rapora girdiyse `[S03]×4` var. Şerit yalnız bir hücreyi "durdu" olarak
+  işaretliyor: edinilemeyen bir kaynak ayrıca "retrieval'da başarısız" değildir, ikisini
+  birden söylemek satırın geri kalanını açıklayan tek olguyu gömerdi. Filtre çipleri
+  koşuda gerçekten görülen akıbetlerden üretiliyor.
+- Satıra tıklandığında dikey iz açılıyor: alınan dosya ve parser'ı, pasajlar ve retrieval
+  skorları, alıntıların sayfa ve bölüm bilgisi, dayandıkları iddia, en sonda `[S03]` ve
+  geçtiği bölümler. Kesintiye uğramış koşuda ham kopyanın checkpoint tarafından bilerek
+  boşaltıldığı ayrıca yazıyor — yoksa sıfır karakter kayıp indirme gibi okunuyordu.
+- Kaynak toplayıp kanıt çıkaramayan koşu bunu tablonun üstünde bir kez söylüyor.
+  v0.18.2'de rapora düşen notun panel karşılığı; onsuz ekran, sebebi yazmayan altmış
+  kırmızı satır oluyordu.
+- Word raporundaki tema-kanıt haritası düzeltildi. Hücreleri kanıt paketinde *sunulan*
+  kaynaklara göre boyuyordu, prose'un *andığı* kaynaklara göre değil; bu yüzden bir
+  çalışmayı hiç atıf yapmayan bir temaya katkı yapmış gibi gösteriyor ve figür, belgenin
+  verdiğinden fazla kapsam iddia ediyordu.
+- Bu sürümden eski koşularda atıf kaydı yok ve geriye dönük doldurulmuyor: yeniden export
+  LLM sentezini baştan çalıştırır ve teslim edilenden başka bir rapor üretirdi. Panel o
+  koşularda son halkayı "rapor henüz üretilmedi" diye gösteriyor.
 
 ## v0.18.2 — 2026-09-01
 - İddia çevirisi artık tek bir zaman aşımına takılmıyor. Bütün iddialar tek istekte

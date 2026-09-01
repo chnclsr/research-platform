@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from collections import Counter
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 from .language_guard import foreign_sentences, language_matches
@@ -33,8 +34,15 @@ class SynthesisSection:
     consensus: str = ""
     disagreements: str = ""
     implications: str = ""
+    # The sources this section's evidence packet OFFERED the model. Not the ones it went on
+    # to cite -- see `cited_labels`, which reads the prose. Anything that reasons about
+    # what actually reached the reader has to use that one.
     source_ids: list[str] = field(default_factory=list)
     claim_ids: list[str] = field(default_factory=list)
+    # How this section was produced: the LLM draft, or the fallback and why. Carried on the
+    # section rather than looked up by position in `generation_diagnostics`, because the
+    # index alignment between the two lists is an invariant nothing enforced.
+    generation_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -83,6 +91,38 @@ _OVERVIEW_FIELD_LIMITS = {
     "conclusion": 2400,
     "uncertainty": 2400,
 }
+
+
+def citation_counts(*texts: str) -> Counter[str]:
+    """How many times each `Sxx` label is cited across the given prose.
+
+    The counting half of `cited_labels`, kept separate because the report needs both: which
+    sources a section stands on, and how heavily the document leans on each one.
+    """
+    counts: Counter[str] = Counter()
+    for text in texts:
+        for token in _TOKEN_RE.findall(text or ""):
+            counts[token.strip("[]")] += 1
+    return counts
+
+
+def cited_labels(section: SynthesisSection) -> set[str]:
+    """The `Sxx` labels this section's prose actually cites.
+
+    Distinct from `section.source_ids`, which is what the evidence packet offered the model.
+    The two are routinely different -- a packet carries every source behind a theme's claims
+    and the model cites the subset it found worth citing -- and conflating them overstates
+    what the report rests on. Every reader-facing field is scanned, because a source cited
+    only under "Ayrışmalar" is still cited.
+    """
+    return set(
+        citation_counts(
+            section.synthesis,
+            section.consensus,
+            section.disagreements,
+            section.implications,
+        )
+    )
 
 
 def _normalise_text_value(value: Any) -> str:
@@ -817,7 +857,11 @@ async def build_synthesis_package(
             language=language,
             fallback=fallback,
         )
-        sections.append(section)
+        # The diagnostic travels with the section as well as in the run-level map. Reading
+        # it back by `theme_{index}` means trusting that these two lists stay aligned, and
+        # the citation record needs it per section to tell a discarded draft apart from a
+        # source the model was offered and passed over.
+        sections.append(replace(section, generation_note=diagnostic))
         llm_successes += int(succeeded)
         generation_diagnostics[f"theme_{index}"] = diagnostic
 
