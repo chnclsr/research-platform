@@ -1,6 +1,6 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.18.1`
+Platform sürümü: `v0.18.2`
 
 Belge sürümü: `6.38`
 
@@ -16,6 +16,19 @@ ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMIN
 ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md)
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.18.2 — 2026-09-01
+
+- Yeniden kuyruğa alınan bir koşu artık topladığı kaynakları kullanıyor. Worker koşu
+  sürerken yeniden başlatıldığında koşu kuyruğa geri alınıyor; ikinci geçiş yeni kaynak
+  bulamadığı için pasaj üretilmiyor ve kanıt çıkarımı boş kalıyordu. Sonuç, kaynakları
+  toplanmış ama sıfır iddialı boş bir rapordu — ölçülen iki koşuda 61 ve 26 kaynak, sıfır
+  iddia. Veriler kaybolmuyordu, boru hattı görmüyordu.
+- Kaynak toplayıp hiç iddia üretemeyen koşu artık bunu söylüyor. Rapora rapor dilinde görünür
+  bir not düşüyor ve koşu kaydına zincirin nerede koptuğunu adlandıran bir olay yazılıyor.
+  Önceden rapor sessizce kısa geliyordu ve okuyucu sebebini göremiyordu.
+- Kurtarma yalnız bozuk durumda çalışıyor: sağlıklı çok turlu bir koşuda tetiklenmiyor,
+  dolayısıyla bir tur önceki turun pasajlarından tekrar kanıt çıkarmıyor.
 
 ## v0.18.1 — 2026-09-01
 

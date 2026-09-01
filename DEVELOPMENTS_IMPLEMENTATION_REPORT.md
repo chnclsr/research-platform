@@ -3455,6 +3455,87 @@ Yerelleştirme ve süpürme koşu başına ek LLM çağrısı demek. Zaten hedef
 gönderilmediği ve süpürme temiz raporda **sıfır çağrı** yaptığı için maliyet sınırlı, ama
 ölçülmedi. Eski raporlar geriye dönük düzelmiyor; düzeltme bundan sonraki koşular için.
 
+## 62. Yeniden kuyruğa alınan koşunun kendi korpusunu kullanması
+
+İki koşu kaynak topladı ve **sıfır iddia** üretti. Veriler kayıp değildi:
+`epic_sepsis_model_validation` 61 sürüm ve sürüm başına ~83 bin karakter içerik,
+`nasal_nodules_spring_allergy` 1673 pasaj — hepsi hâlâ veritabanında. Kaynaklar 0.70–0.90
+içerik-alaka skoruyla kabul edilmişti. İki rapor da boş çıktı, ikisi de
+`completed_incomplete` ile bitti ve `error` alanı **boştu**.
+
+Tetikleyici bir worker yeniden başlatmasıydı: v0.18.0 dağıtımında `--force-recreate`
+koşular havadayken çalıştırıldı. Ölçülen kanıt, sepsis koşusunun aşama zamanları — birinci
+geçişte `ACQUIRE` 08:13'te başlayıp `NORMALIZE` 08:24'te bitiyor (11 dakika), ikinci geçişte
+`ACQUIRE`, `NORMALIZE` ve `CHUNK_INDEX` **aynı dakikada**. İkinci geçiş saniyeler sürdü çünkü
+alınacak yeni kaynak yoktu.
+
+Restart tetikleyiciydi, kusur değil.
+
+### Kök neden — iki düğüm, aynı varsayım
+
+İkisi de "bu turda **yeni** ne geldi" üzerinden çalışıyordu ve devam eden bir koşuda yeni
+hiçbir şey gelmiyor.
+
+`chunk_index` yalnız `state["documents"]` içindekileri parçalıyordu; liste boş olunca hiç
+pasaj yazılmadı — sepsis koşusunda veritabanında hiç pasaj olmamasının sebebi bu.
+`retrieve_relevant_passages` sürüm kimliklerini yine oradan alıp boşsa erken dönüyordu. Olay
+kayıtları farkı net gösteriyor: çalışan koşu `candidate_count: 753, selected_count: 16`,
+düşen ikisi `reason: "no_new_source_versions"`. Zincirin gerisi buradan koptu —
+`EXTRACT_EVIDENCE` sıfır LLM çağrısı yaptı.
+
+### Kurtarma, yalnız bozuk durumda
+
+`chunk_index` artık `list_unchunked_versions()` soruyor ve pasajı olmayan sürümleri
+veritabanından parçalıyor. Koşul "bu koşuda pasajı olmayan sürüm var mı", "bu tur bir şey
+getirdi mi" **değil**: ilk taslak `documents` listesinin boş olmasını şart koşuyordu ve bu,
+en çok önem taşıyan durumu kaçırırdı — devam eden bir tur bir iki yeni kaynak bulduğunda
+kesintiden önce alınmış olanların tamamı parçalanmamış kalırdı ve çoğunluk onlar. O geçişte
+parçalanmakta olan sürümler hariç tutuluyor, yoksa tek geçişte iki kez parçalanırlardı. Gereken her şey satırda: metin `content` sütununda,
+`language` ve `document_type` `provenance` içinde — ikisi de doğrulandı. `save_passages` bir
+sürümün mevcut parçalarının üzerine yazdığı için yeniden parçalama idempotent.
+
+`retrieve_relevant_passages` erken dönüşü `has_evidence()`'a bağladı: kanıt yoksa koşu hâlâ
+ilk kanıt turunda demektir ve korpusun tamamına bakmak doğrudur. `list_passages(run_id, None)`
+zaten koşunun tamamını döndürüyordu, yeni sorgu gerekmedi. Kanıt varsa bugünkü erken dönüş
+korunuyor — üçüncü turdaki boş bir tur, ikinci turun pasajlarından tekrar kanıt çıkarmamalı.
+
+Ölçüldü, üç koşu üzerinde: sepsis 61 parçalanmamış sürümle chunk kurtarmasını tetikliyor,
+nodül koşusu her ikisini de, **sağlıklı koşu ise kanıtı olduğu için retrieval kurtarmasını
+tetiklemiyor.**
+
+### Sessiz boş raporun sonu
+
+`synthesize_export` artık kaynağı olup iddiası olmayan koşuda `empty_synthesis_with_corpus`
+olayı yazıyor: sayılarla birlikte, zincirin nerede koptuğunu adlandıran bir `reason`
+(`no_passages_indexed` ya da `no_evidence_extracted`). Rapora da rapor dilinde görünür bir not
+düşüyor. Koşu yine `completed_incomplete` ile bitiyor, `failed` yapılmıyor: toplanan korpus ve
+kısmi rapor gerçek iş, "başarısız" etiketi onları yanlış tarif ederdi.
+
+### Bilinen sınır
+
+Chunk kurtarması, sağlıklı bir koşunun **boş turunda** da tetiklenebilir — parçalanmamış bir
+sürüm kalmışsa. Bu doğru davranış (o sürüm gerçekten eksik) ve kendini sonlandırıyor:
+parçalandıktan sonra listeden düşüyor. Hiç parça üretmeyen bir içerik her boş turda yeniden
+denenir, ama bunun maliyeti bir sorgu ve yerel parçalamadan ibaret — pasaj çıkmadığı için
+embedding çağrısı da yapılmıyor.
+
+`raw_content` kurtarılmıyor ve kurtarılamaz; checkpoint onu bilerek boşaltıyor. Sonucu, devam
+eden koşuda figür analizinin çalışmaması — açık iş #4, bu işin kapsamı dışında.
+
+### Doğrulama
+
+On yeni test: kurtarmanın tetiklenmesi, zaten parçalanmış koşuda hiçbir şey yapmaması,
+sağlıklı turun veritabanına hiç uzanmaması, retrieval'ın kanıt yokken korpusa düşüp
+`recovered_run_corpus` yazması, kanıt varken erken dönüşü koruması, `has_evidence`'ın iki
+durumu ayırması ve görünürlük olayının doğru `reason` ile yazılıp iddiası olan koşuda hiç
+yazılmaması.
+
+Tam kapı: **669 passed** → **679 passed**. Hedefli Ruff: `repository.py` 3/3,
+`pipeline.py` 21/21, `exporter.py` 0/0, yeni test dosyası temiz.
+
+Düzeltme canlı veritabanında da doğrulandı — üretime yazmadan, yalnız kurtarma koşullarının
+gerçek koşularda nasıl değerlendiğini okuyarak.
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her

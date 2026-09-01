@@ -74,6 +74,12 @@ _REPORT_LABELS = {
             "Kaynak kataloğu, atomik claim kayıtları ve retrieval/coverage ölçümleri teslim "
             "paketinin denetim eklerinde ayrıca korunmuştur."
         ),
+        "empty_corpus_note": (
+            "**Bu koşuda kaynaklar toplandı ancak kanıt çıkarılamadı.** Aşağıdaki bölümler "
+            "bu nedenle boştur. Toplanan kaynaklar ve ham veriler teslim paketinde korunuyor; "
+            "koşu olay kaydındaki `empty_synthesis_with_corpus` girdisi zincirin nerede "
+            "koptuğunu söylüyor."
+        ),
     },
     "en": {
         "question": "Research question",
@@ -89,6 +95,12 @@ _REPORT_LABELS = {
         "summary_note": (
             "The source catalogue, atomic claim records and retrieval/coverage measurements "
             "are preserved separately in the bundle's audit appendices."
+        ),
+        "empty_corpus_note": (
+            "**This run collected sources but extracted no evidence.** The sections below are "
+            "empty for that reason. The sources and raw data are preserved in the bundle; the "
+            "`empty_synthesis_with_corpus` entry in the run's event log says where the chain "
+            "broke."
         ),
     },
 }
@@ -427,8 +439,13 @@ async def build_exports(
     )
     summary_heading = _summary_heading(protocol.report_language)
     labels = _report_labels(protocol.report_language)
+    # Sources but no claims is a contradiction, and the report used to present it as an
+    # ordinary short document. The reader is told instead of left to wonder.
+    empty_corpus = bool(sources) and not reportable
+    corpus_note = f"> {labels['empty_corpus_note']}\n\n" if empty_corpus else ""
     report_md = (
         f"# {protocol.title}\n\n"
+        f"{corpus_note}"
         f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
         f"## {summary_heading}\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"## {labels['thematic']}\n\n{_markdown(synthesis.get('report'))}\n\n"
@@ -441,6 +458,7 @@ async def build_exports(
     )
     executive_md = (
         f"# {summary_heading}\n\n"
+        f"{corpus_note}"
         f"{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{labels['summary_note']}\n"
     )

@@ -911,6 +911,48 @@ class Repository(metaclass=_OwnershipEnforced):
         )
         return list(rows.tuples())
 
+    async def list_unchunked_versions(
+        self, run_id: str
+    ) -> list[tuple[SourceRow, SourceVersionRow]]:
+        """Acquired versions this run never turned into passages.
+
+        Normally empty: CHUNK_INDEX chunks whatever the round just acquired. It fills up when
+        a run is requeued mid-flight -- the resumed pass acquires nothing new, so the node
+        that reads only the round's new documents chunks nothing, and a corpus that is
+        sitting in the database becomes invisible to the rest of the pipeline.
+
+        A membership test rather than an outer join with DISTINCT: `research_runs` is not in
+        this query, but the same rule earned its place the hard way (open item #26) and the
+        EXISTS form is the cheaper plan here anyway.
+        """
+        rows = await self.session.execute(
+            select(SourceRow, SourceVersionRow)
+            .join(SourceVersionRow, SourceVersionRow.source_id == SourceRow.id)
+            .where(
+                SourceRow.run_id == run_id,
+                SourceVersionRow.id.not_in(
+                    select(PassageRow.source_version_id).distinct()
+                ),
+            )
+            .order_by(SourceVersionRow.id)
+        )
+        return list(rows.tuples())
+
+    async def has_evidence(self, run_id: str) -> bool:
+        """Whether this run has extracted any evidence yet.
+
+        The signal that separates a run still working on its first evidence pass from one
+        whose later round simply found nothing new. Only the first may fall back to the whole
+        corpus; doing it in a later round would re-extract passages already mined.
+        """
+        found = await self.session.scalar(
+            select(EvidenceRow.id)
+            .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
+            .where(ClaimRow.run_id == run_id)
+            .limit(1)
+        )
+        return found is not None
+
     @staticmethod
     def _passage_values(passage: Passage) -> dict[str, Any]:
         return {

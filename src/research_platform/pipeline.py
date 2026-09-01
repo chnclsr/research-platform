@@ -2144,6 +2144,7 @@ class ResearchPipeline:
                 passage.language = document.language
                 passage.document_type = document.document_type
             all_passages.extend(document_passages)
+        recovered = await self._recover_unchunked_versions(state, all_passages)
         try:
             embedding_inputs = [
                 f"{passage.section_path}\n{passage.text}" for passage in all_passages
@@ -2172,27 +2173,88 @@ class ResearchPipeline:
                 "passage_count": len(all_passages),
                 "embedded_count": sum(bool(passage.embedding) for passage in all_passages),
                 "total_tokens": sum(passage.token_count for passage in all_passages),
+                "recovered_versions": recovered,
             },
         )
         return {"passages": []}
+
+    async def _recover_unchunked_versions(
+        self,
+        state: PipelineState,
+        all_passages: list[Passage],
+    ) -> int:
+        """Chunk what an interrupted run acquired but never indexed.
+
+        A requeued run re-runs ACQUIRE, finds every source already stored, and hands this node
+        an empty `documents` list -- so nothing is chunked and a corpus that exists in the
+        database never reaches evidence extraction. Measured on run
+        `01M1E06KQSW6HQHNDCGERTKRGW`: 61 versions, 83k characters each, zero passages, zero
+        claims, and no error anywhere.
+
+        The condition is "this run has a version with no passages", not "this round brought
+        nothing". An earlier draft required an empty `documents` list, which would have missed
+        the case that matters most: a resumed round that finds one or two new sources still
+        leaves everything acquired before the interruption unchunked, and those are the many.
+
+        A healthy run has nothing unchunked -- whatever it acquires is chunked in the same
+        pass -- so this costs one query and returns zero. Versions being chunked right now are
+        excluded because their passages are not written yet, and without that they would be
+        chunked twice in a single pass.
+
+        `raw_content` is not recovered and cannot be -- the checkpoint empties it on purpose.
+        The parsed `content` is what chunking needs, and that is still on the row.
+        """
+        in_flight = {
+            payload.get("source_version_id") for payload in state.get("documents", [])
+        }
+        versions = [
+            (source, version)
+            for source, version in await self.repo.list_unchunked_versions(state["run_id"])
+            if version.id not in in_flight
+        ]
+        for _, version in versions:
+            if not version.content:
+                continue
+            provenance = version.provenance or {}
+            version_passages = chunk_document(
+                version.content,
+                version.id,
+                target_tokens=self.settings.passage_target_tokens,
+                overlap_tokens=self.settings.passage_overlap_tokens,
+            )
+            for passage in version_passages:
+                passage.language = str(provenance.get("language") or "")
+                passage.document_type = str(provenance.get("document_type") or "text")
+            all_passages.extend(version_passages)
+        return len(versions)
 
     async def retrieve_relevant_passages(self, state: PipelineState) -> dict:
         await self._boundary(state, "RETRIEVE_PASSAGES")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         version_ids = [payload["source_version_id"] for payload in state.get("documents", [])]
+        recovered = False
         if not version_ids:
-            await self.repo.event(
-                state["run_id"],
-                "passage_retrieval",
-                {
-                    "question_count": 0,
-                    "candidate_count": 0,
-                    "selected_count": 0,
-                    "reason": "no_new_source_versions",
-                },
-            )
-            return {"passages": []}
-        passages = await self.repo.list_passages(state["run_id"], version_ids)
+            # A round with nothing new normally has nothing to retrieve -- unless the run has
+            # not extracted any evidence yet, which means it was interrupted before its first
+            # evidence pass and its whole corpus is still waiting. Later rounds keep the early
+            # return: re-reading passages already mined would only re-extract them.
+            recovered = not await self.repo.has_evidence(state["run_id"])
+            if not recovered:
+                await self.repo.event(
+                    state["run_id"],
+                    "passage_retrieval",
+                    {
+                        "question_count": 0,
+                        "candidate_count": 0,
+                        "selected_count": 0,
+                        "reason": "no_new_source_versions",
+                    },
+                )
+                return {"passages": []}
+        # `None` asks for the run's whole corpus, which is exactly the recovery case.
+        passages = await self.repo.list_passages(
+            state["run_id"], None if recovered else version_ids
+        )
         questions = list(
             dict.fromkeys(
                 [
@@ -2231,6 +2293,9 @@ class ResearchPipeline:
                 "question_count": len(questions),
                 "candidate_count": len(passages),
                 "selected_count": len(selected),
+                # Named so a recovered round is visible afterwards. A recovery that nobody can
+                # see is indistinguishable from the silence it was meant to end.
+                "reason": "recovered_run_corpus" if recovered else "new_source_versions",
                 "selected": [
                     {
                         "passage_id": passage.id,
@@ -3242,6 +3307,7 @@ class ResearchPipeline:
         await self._boundary(state, "SYNTHESIZE_EXPORT")
         protocol = ResearchProtocol.model_validate(state["protocol"])
         coverage = CoverageMetrics.model_validate(state.get("coverage", {}))
+        await self._warn_on_empty_synthesis(state)
         artifacts = await build_exports(
             state["run_id"],
             protocol,
@@ -3254,3 +3320,38 @@ class ResearchPipeline:
         await self._emit_llm_metrics(state["run_id"], "SYNTHESIZE_EXPORT")
         await self.repo.event(state["run_id"], "artifacts", {"names": artifacts})
         return {}
+
+    async def _warn_on_empty_synthesis(self, state: PipelineState) -> None:
+        """Say so when a run collected a corpus and still has nothing to report.
+
+        This combination is a contradiction, not an outcome: sources were found, fetched and
+        parsed, and no claim came out of them. It used to end as `completed_incomplete` with
+        an empty `error`, so the reader got a short report and no way to tell why.
+
+        Recorded rather than raised. The corpus and the partial report are real work, and
+        calling the run failed would misdescribe them -- but it must not be silent.
+        """
+        sources = await self.repo.list_sources(state["run_id"])
+        if not sources:
+            return
+        claims = await self.repo.list_claims(state["run_id"])
+        if claims:
+            return
+        versions = await self.repo.list_source_versions(state["run_id"])
+        passages = await self.repo.list_passages(state["run_id"])
+        await self.repo.event(
+            state["run_id"],
+            "empty_synthesis_with_corpus",
+            {
+                "sources": len(sources),
+                "versions": len(versions),
+                "passages": len(passages),
+                "claims": 0,
+                # Where the chain broke, so the reader is not left to infer it from counts.
+                "reason": (
+                    "no_passages_indexed"
+                    if not passages
+                    else "no_evidence_extracted"
+                ),
+            },
+        )
