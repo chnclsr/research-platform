@@ -279,3 +279,64 @@ def test_the_export_scaffolding_follows_the_report_language():
     assert english["appendix_a"].startswith("Appendix A")
     assert "Ek A" not in english["appendix_a"]
     assert set(turkish) == set(english)
+
+
+# ------------------------------------------------- provider failure, measured in the wild
+
+
+@pytest.mark.asyncio
+async def test_one_provider_error_no_longer_costs_the_whole_run_its_translations():
+    """The regression this closes, seen on run `01M1E06KQSW6HQHNDCGERTKRGW`.
+
+    Its diagnostics read `failed: 31, reasons: {provider_error: 1}, call_count: 1` -- one
+    timeout, and every claim in the report kept its English text. The second attempt was
+    budgeted for exactly this and was being skipped.
+    """
+    claims = [Claim("C1", ENGLISH)]
+    llm = TranslatorLLM(
+        TimeoutError("read timeout"),
+        {"items": [{"id": "C1", "text": TURKISH}]},
+    )
+    texts, diagnostics = await localize_claim_texts(llm, claims, "tr")
+    assert llm.calls == 2
+    assert texts["C1"] == TURKISH
+    assert diagnostics["translated"] == 1
+    assert diagnostics["failed"] == 0
+    # The message is kept, so the next reader does not have to guess which provider failed.
+    assert any("TimeoutError" in error for error in diagnostics["errors"])
+
+
+@pytest.mark.asyncio
+async def test_claims_are_translated_in_batches_so_one_slow_call_is_not_fatal():
+    """7 claims in one call succeeded in production; the same call with 31 timed out."""
+    claims = [Claim(f"C{n}", f"{ENGLISH} Item {n}.") for n in range(20)]
+
+    class BatchLLM:
+        def __init__(self):
+            self.calls = 0
+            self.sizes: list[int] = []
+
+        async def complete_json(self, system: str, user: str):
+            self.calls += 1
+            ids = [line.split(":")[0].strip("- ") for line in user.splitlines() if line.startswith("- C")]
+            self.sizes.append(len(ids))
+            # The first batch times out; the rest answer. Only that batch may be affected.
+            if self.calls == 1:
+                raise TimeoutError("read timeout")
+            return {
+                "items": [
+                    {"id": item_id, "text": f"{TURKISH} Öğe {item_id[1:]}."}
+                    for item_id in ids
+                ]
+            }
+
+        def drain_metrics(self):
+            return []
+
+    llm = BatchLLM()
+    texts, diagnostics = await localize_claim_texts(llm, claims, "tr")
+    assert max(llm.sizes) <= 8, "a prompt must not grow with the number of findings"
+    # Every claim still ends up translated: the timed-out batch is retried, not abandoned.
+    assert diagnostics["translated"] == 20
+    assert diagnostics["failed"] == 0
+    assert all(TURKISH in texts[f"C{n}"] for n in range(20))

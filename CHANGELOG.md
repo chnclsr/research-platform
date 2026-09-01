@@ -18,6 +18,10 @@ ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
 
 ## v0.18.2 — 2026-09-01
+- İddia çevirisi artık tek bir zaman aşımına takılmıyor. Bütün iddialar tek istekte
+  gönderiliyordu; ölçülen bir koşuda 31 iddialık istek düştü ve raporun tamamı İngilizce
+  kaldı. Çeviri sekizerli gruplara bölündü, sağlayıcı hatası yeniden deneniyor ve hatanın
+  kendisi kayda geçiyor.
 
 - Yeniden kuyruğa alınan bir koşu artık topladığı kaynakları kullanıyor. Worker koşu
   sürerken yeniden başlatıldığında koşu kuyruğa geri alınıyor; ikinci geçiş yeni kaynak

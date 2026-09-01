@@ -308,3 +308,45 @@ def test_the_empty_corpus_note_exists_in_both_report_languages():
 
     assert "kanıt çıkarılamadı" in _report_labels("tr")["empty_corpus_note"]
     assert "extracted no evidence" in _report_labels("en")["empty_corpus_note"]
+
+
+# ------------------------------------------------- evidence over recovered passages
+
+
+@pytest.mark.asyncio
+async def test_evidence_extraction_survives_passages_this_round_did_not_acquire():
+    """The regression the first recovery caused, found by running it against real data.
+
+    Retrieval started handing back the run's whole corpus, and evidence extraction looked up
+    a document payload per passage in `state["documents"]` -- which holds only this round's
+    acquisitions. The first recovered passage raised `KeyError` and took the run down:
+    `01M1E0HQ9CGJYJCPQZ2MXPS6MA` failed that way within seconds of being requeued.
+    """
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        run_id, version_ids = await _run_with_corpus(repo, chunked=True)
+        pipeline = await _pipeline(session, client)
+        passages = await repo.list_passages(run_id)
+        rebuilt = await pipeline._documents_for_recovered_passages(run_id, passages, {})
+    # Every passage can name the source it came from, with no round state at all.
+    assert set(rebuilt) == set(version_ids)
+    for version_id in version_ids:
+        payload = rebuilt[version_id]
+        assert payload["source_version_id"] == version_id
+        assert payload["candidate"]["title"].startswith("External validation")
+        assert payload["candidate"]["url"]
+
+
+@pytest.mark.asyncio
+async def test_documents_already_in_hand_are_not_rebuilt():
+    """A healthy round must not pay a query for records it is already holding."""
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        run_id, version_ids = await _run_with_corpus(repo, chunked=True)
+        pipeline = await _pipeline(session, client)
+        passages = await repo.list_passages(run_id)
+        known = {version_id: {"source_version_id": version_id} for version_id in version_ids}
+        rebuilt = await pipeline._documents_for_recovered_passages(run_id, passages, known)
+    assert rebuilt == {}

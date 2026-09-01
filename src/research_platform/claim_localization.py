@@ -36,6 +36,10 @@ _CLAIM_CHARS = 1000
 #: produce the right one.
 _ATTEMPTS = 2
 
+#: Claims per translation call. Small enough that one prompt stays inside the local model's
+#: latency budget, large enough that a normal run still costs a handful of calls.
+_BATCH_SIZE = 8
+
 _SYSTEM = (
     "You translate research findings for a report, preserving meaning exactly. "
     'Answer with JSON only: {"items": [{"id": "<id>", "text": "<translation>"}]}. '
@@ -74,6 +78,80 @@ def _prompt(pending: dict[str, str], language: str, failure: str = "") -> str:
     return body
 
 
+def _batched(items: dict[str, str], size: int) -> list[dict[str, str]]:
+    """Split the work so one slow prompt cannot cost every claim its translation.
+
+    Measured: a run asking for 7 claims in one call succeeded; the same call with 31 timed
+    out and all 31 kept their English text. The prompt grows with the claims, and the local
+    model's ceiling is not a function of how many findings a run happens to produce.
+    """
+    keys = list(items)
+    return [
+        {key: items[key] for key in keys[start : start + size]}
+        for start in range(0, len(keys), size)
+    ]
+
+
+async def _translate_batch(
+    llm: LLMProvider,
+    batch: dict[str, str],
+    language: str,
+    localized: dict[str, str],
+    diagnostics: dict[str, Any],
+) -> None:
+    """Two isolated attempts for one batch, validating every item that comes back."""
+    pending = dict(batch)
+    failure = ""
+    for _ in range(_ATTEMPTS):
+        if not pending:
+            return
+        try:
+            diagnostics["call_count"] += 1
+            answer = await llm.complete_json(_SYSTEM, _prompt(pending, language, failure))
+        except Exception as exc:  # noqa: BLE001 - the original text stands, the run does not stop
+            # Retried rather than abandoned. An earlier version broke out of the loop here,
+            # so one timeout cost a whole run its translations even though a second attempt
+            # was budgeted for exactly this. The message is recorded because "provider_error"
+            # alone left the next reader guessing which provider failed and how.
+            failure = f"{type(exc).__name__}: {exc}"[:200]
+            _record_failure(diagnostics, "provider_error")
+            diagnostics.setdefault("errors", []).append(failure)
+            continue
+        if isinstance(answer, str):
+            try:
+                answer = json.loads(answer)
+            except (TypeError, ValueError):
+                failure = "invalid_json"
+                _record_failure(diagnostics, "invalid_json")
+                continue
+        items = answer.get("items") if isinstance(answer, dict) else None
+        if not isinstance(items, list):
+            failure = "invalid_json"
+            _record_failure(diagnostics, "invalid_json")
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or "")
+            if item_id not in pending:
+                _record_failure(diagnostics, "unknown_id")
+                continue
+            translated = text_snippet(item.get("text"), _CLAIM_CHARS)
+            if not translated:
+                reason = "empty_text"
+            elif not language_matches(translated, language):
+                reason = "language_mismatch"
+            elif not numbers_match(pending[item_id], translated):
+                reason = "number_mismatch"
+            else:
+                localized[item_id] = translated
+                diagnostics["translated"] += 1
+                pending.pop(item_id, None)
+                continue
+            _record_failure(diagnostics, reason)
+            failure = reason
+
+
 async def localize_claim_texts(
     llm: LLMProvider,
     claims: list[Any],
@@ -99,53 +177,13 @@ async def localize_claim_texts(
             diagnostics["direct"] += 1
         else:
             pending[claim_id] = rendered
-    failure = ""
-    for _ in range(_ATTEMPTS):
-        if not pending:
-            break
-        try:
-            diagnostics["call_count"] += 1
-            answer = await llm.complete_json(_SYSTEM, _prompt(pending, language, failure))
-        except Exception:  # noqa: BLE001 - a translator outage leaves the original standing
-            failure = "provider_error"
-            _record_failure(diagnostics, "provider_error")
-            break
-        if isinstance(answer, str):
-            try:
-                answer = json.loads(answer)
-            except (TypeError, ValueError):
-                failure = "invalid_json"
-                _record_failure(diagnostics, "invalid_json")
-                continue
-        items = answer.get("items") if isinstance(answer, dict) else None
-        if not isinstance(items, list):
-            failure = "invalid_json"
-            _record_failure(diagnostics, "invalid_json")
-            continue
-        accepted: list[str] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            item_id = str(item.get("id") or "")
-            if item_id not in pending:
-                _record_failure(diagnostics, "unknown_id")
-                continue
-            translated = text_snippet(item.get("text"), _CLAIM_CHARS)
-            if not translated:
-                reason = "empty_text"
-            elif not language_matches(translated, language):
-                reason = "language_mismatch"
-            elif not numbers_match(pending[item_id], translated):
-                reason = "number_mismatch"
-            else:
-                localized[item_id] = translated
-                diagnostics["translated"] += 1
-                accepted.append(item_id)
-                continue
-            _record_failure(diagnostics, reason)
-            failure = reason
-        for item_id in accepted:
-            pending.pop(item_id, None)
+    for batch in _batched(pending, _BATCH_SIZE):
+        await _translate_batch(llm, batch, language, localized, diagnostics)
+    # Whatever no batch managed to translate. Batches fail independently, so a timeout on
+    # one no longer decides the language of the whole report.
+    pending = {
+        item_id: text for item_id, text in pending.items() if item_id not in localized
+    }
     for item_id, original in pending.items():
         # Kept rather than dropped: an English finding still carries its evidence, and a
         # missing one would silently shorten the report.

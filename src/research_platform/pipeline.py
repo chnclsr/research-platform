@@ -2335,6 +2335,61 @@ class ResearchPipeline:
             selected_payloads.append(payload)
         return {"passages": selected_payloads}
 
+    async def _documents_for_recovered_passages(
+        self,
+        run_id: str,
+        passages: list[Passage],
+        known: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Rebuild the document record for passages this round did not acquire.
+
+        Retrieval may now hand back passages from the run's whole corpus rather than only
+        this round's acquisitions, and evidence extraction reads a document payload per
+        passage for the source's title, id and metadata. Without this it raised `KeyError`
+        on the first recovered passage and took the run down with it -- which is exactly what
+        happened to `01M1E0HQ9CGJYJCPQZ2MXPS6MA` the first time the recovery ran.
+
+        Reconstructed from the stored source and version, not re-fetched. The content the
+        extractor works on is the passage text anyway; what is needed here is the identity of
+        the source the passage came from.
+        """
+        missing = {
+            passage.source_version_id
+            for passage in passages
+            if passage.source_version_id not in known
+        }
+        if not missing:
+            return {}
+        rebuilt: dict[str, Any] = {}
+        for source, version in await self.repo.list_source_versions(run_id):
+            if version.id not in missing:
+                continue
+            provenance = version.provenance or {}
+            document = AcquiredDocument(
+                candidate=ConnectorCandidate(
+                    id=source.id,
+                    connector_id=source.connector_id or "unknown",
+                    family=source.family,
+                    title=source.title or "",
+                    url=source.url,
+                    metadata=dict(source.metadata_json or {}),
+                    persistent_id=source.persistent_id,
+                ),
+                success=True,
+                access_status=version.access_status or "open",
+                content=version.content or "",
+                content_hash=version.content_hash,
+                document_type=str(provenance.get("document_type") or "text"),
+                language=str(provenance.get("language") or "und"),
+                acquisition_method=version.acquisition_method or "recovered",
+                provenance=provenance,
+            )
+            rebuilt[version.id] = {
+                **document.model_dump(mode="json"),
+                "source_version_id": version.id,
+            }
+        return rebuilt
+
     async def extract_evidence(self, state: PipelineState) -> dict:
         await self._boundary(state, "EXTRACT_EVIDENCE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
@@ -2359,6 +2414,11 @@ class ResearchPipeline:
             )
         )
         documents_by_version = {payload["source_version_id"]: payload for payload in documents}
+        documents_by_version.update(
+            await self._documents_for_recovered_passages(
+                state["run_id"], passages, documents_by_version
+            )
+        )
         semaphore = asyncio.Semaphore(self.settings.evidence_extraction_concurrency)
         extraction_errors: list[dict[str, str]] = []
 

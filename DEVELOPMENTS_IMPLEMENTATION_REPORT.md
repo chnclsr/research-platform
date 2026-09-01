@@ -3536,6 +3536,72 @@ Tam kapı: **669 passed** → **679 passed**. Hedefli Ruff: `repository.py` 3/3,
 Düzeltme canlı veritabanında da doğrulandı — üretime yazmadan, yalnız kurtarma koşullarının
 gerçek koşularda nasıl değerlendiğini okuyarak.
 
+## 63. Kurtarmanın canlı doğrulaması ve ortaya çıkardığı iki kusur
+
+62. bölümdeki kurtarma iki bozuk koşu yeniden kuyruğa alınarak doğrulandı. Sonuç:
+
+| Koşu | Pasaj | İddia |
+|---|---|---|
+| `epic_sepsis_model_validation` | **0 → 2316** | **0 → 47** |
+| `nasal_nodules_spring_allergy` | 1673 → 1673 | **0 → 42** |
+
+İlki chunk kurtarmasını (sıfırdan parçalama), ikincisi retrieval kurtarmasını (var olan
+korpusun kullanılması) kanıtladı. Nodül koşusunun olay kaydında `passage_retrieval` artık
+`reason: "recovered_run_corpus"` yazıyor.
+
+Doğrulama iki kusur ortaya çıkardı ve ikisi de bu turda yazılmış koddaydı.
+
+### Kusur 1 — kurtarma yalnız tamamen boş turda çalışıyordu
+
+İlk hâli `documents` listesinin **boş** olmasını şart koşuyordu. Devam eden bir tur bir iki
+yeni kaynak bulduğunda kurtarma atlanacak ve kesintiden önce alınmış olanların tamamı —
+yani çoğunluk — parçalanmamış kalacaktı. Koşul `list_unchunked_versions`'ın kendisine
+çevrildi; o geçişte parçalanmakta olan sürümler hariç tutuluyor, yoksa tek geçişte iki kez
+parçalanırlardı.
+
+### Kusur 2 — retrieval kurtarması kanıt çıkarımını düşürdü
+
+İlk denemede iki koşu da `KeyError` ile düştü. Sebep: retrieval artık korpusun tamamından
+pasaj döndürüyor, ama `extract_evidence` her pasajın kaynak kaydını `state["documents"]`
+içinde arıyordu ve orada olmayan ilk pasajda çöküyordu. Eksik kayıtlar artık saklanmış
+kaynak ve sürüm satırlarından yeniden kuruluyor — yeniden indirme yok; çıkarıcının üzerinde
+çalıştığı metin zaten pasajın kendisi, buradan gereken şey kaynağın kimliği.
+
+Bu, kurtarmanın downstream varsayımlarını izlememiş olmamın bedeliydi ve ancak gerçek veriyle
+görülebilirdi: birim testleri `documents` dolu senaryoyu kuruyordu.
+
+### Kusur 3 — tek zaman aşımı bütün raporu İngilizce bıraktı
+
+Sepsis koşusunun `claim_localization` kaydı: `failed: 31, reasons: {provider_error: 1},
+call_count: 1`. Tek bir sağlayıcı hatası 31 iddianın tamamını çevrilmemiş bıraktı, çünkü
+`except` dalı `break` ediyordu — "iki deneme" bütçesi tam bu durum için ayrılmışken
+kullanılmadan atılıyordu.
+
+Karşılaştırma sebebi de gösteriyor: nodül koşusu 7 iddiayı tek çağrıda çevirdi ve başardı,
+sepsis koşusu 31 iddiayı tek çağrıda istedi ve düştü. Prompt iddia sayısıyla büyüyor, yerel
+modelin tavanı ise bir koşunun kaç bulgu ürettiğinin fonksiyonu değil.
+
+Üç düzeltme: sağlayıcı hatası artık **yeniden deneniyor**, iddialar **sekizerli gruplar**
+hâlinde çevriliyor (bir grup düşerse yalnız o grup etkilenir), ve hata metni kaydediliyor —
+`provider_error` tek başına bir sonraki okuyucuyu hangi sağlayıcının nasıl düştüğünü tahmin
+etmeye bırakıyordu.
+
+### Rapor dili ölçümü
+
+Nodül koşusu, düzeltmenin ilk gerçek testi oldu: DOCX'te **38 paragrafın sıfırında** yabancı
+cümle, markdown'da **7 atomik bulgu başlığının sıfırı** İngilizce, tüm bölüm başlıkları
+Türkçe. `report_language_sweep` `foreign: 0, call_count: 0` yazdı — kök neden düzeltmeleri
+tuttuğu için ikinci katmana iş kalmamış.
+
+Sepsis koşusunda ise 31/31 başlık İngilizce kaldı; sebebi rapor dili düzeltmesi değil,
+yukarıdaki 3. kusurdu. Süpürme yine de çalıştı ve sentez düzyazısındaki bir yabancı cümleyi
+yakalayıp çevirdi (`foreign: 1, translated: 1`) — ama süpürme yalnız sentez metnini kapsıyor,
+ek başlıklarını değil.
+
+**Doğrulama.** Üç yeni test: tek sağlayıcı hatasının artık bütün koşuya mal olmaması, hata
+metninin kaydedilmesi ve promptun bulgu sayısıyla büyümemesi. Tam kapı **679 → 683 passed**.
+Hedefli Ruff: yeni dosyalar temiz, `pipeline.py` 21/21.
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her
