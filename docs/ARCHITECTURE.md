@@ -69,7 +69,7 @@ The research execution graph is implemented with LangGraph `StateGraph`, maintai
 
 | Step | Node Identifier | Operational Role |
 |---|---|---|
-| 01 | `VALIDATE_PROTOCOL` | Validates search parameters, quotas, and budget boundaries. Supports HITL plan approval. |
+| 01 | `VALIDATE_PROTOCOL` | Validates search parameters, quotas, and budget boundaries. Supports HITL plan approval. Behind `PROTOCOL_SOURCE_SYNTHESIS_ENABLED`, picks the source-family preset the question needs instead of always sweeping all four. |
 | 02 | `DECOMPOSE` | Deconstructs complex research queries into structured sub-hypotheses and analytical dimensions. |
 | 03 | `BUILD_QUERY_BRANCHES` | Generates targeted search queries tailored for academic, legal, standards, and general web connectors. |
 | 04 | `SEARCH` | Executes parallel connector scans across academic databases (PubMed, arXiv, Semantic Scholar, Crossref, etc.). |

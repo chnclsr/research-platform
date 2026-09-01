@@ -50,6 +50,7 @@ from .passages import (
     relevant_sentence_claims,
     retrieve_passages,
 )
+from .protocol_synthesis import synthesize_source_selection
 from .query_compiler import compile_provider_query
 from .recovery import (
     diagnose_gaps,
@@ -135,6 +136,9 @@ class PipelineState(TypedDict, total=False):
     source_count_before_round: int
     coverage: dict[str, Any]
     stop_reason: str
+    # VALIDATE_PROTOCOL is re-entered when a checkpoint sends the run back; this is what
+    # stops the source synthesis from being paid for twice.
+    synthesis_done: bool
     started_monotonic: float
     halted: bool
     discovery_stats: dict[str, Any]
@@ -629,7 +633,47 @@ class ResearchPipeline:
             state["run_id"], protocol
         )
         protocol = await self._name_run(state["run_id"], protocol, suggested_label)
-        return {"protocol": protocol.model_dump(mode="json")}
+        protocol, synthesized = await self._synthesize_sources(state, protocol)
+        output = {"protocol": protocol.model_dump(mode="json")}
+        if synthesized:
+            output["synthesis_done"] = True
+        return output
+
+    async def _synthesize_sources(
+        self,
+        state: PipelineState,
+        protocol: ResearchProtocol,
+    ) -> tuple[ResearchProtocol, bool]:
+        """Pick the source families this question needs, when nobody else has.
+
+        Four conditions, and each one closes a way of overwriting a decision that was
+        already made. The flag keeps it off by default. `selection_source` is the only
+        thing that separates an untouched default from an explicit answer, since the two
+        carry identical fields. `planning_questions` matters because the scoping gate runs
+        later, in DECOMPOSE, and its answer overwrites the family list -- synthesising
+        first would spend a call on a value about to be replaced. And VALIDATE_PROTOCOL is
+        re-entered when a checkpoint sends the run back, so the work is done once.
+        """
+        if not (
+            self.settings.protocol_source_synthesis_enabled
+            and protocol.connectors.selection_source == "default"
+            and protocol.hitl.planning_questions is False
+            and state.get("synthesis_done") is not True
+        ):
+            return protocol, False
+        updated, event = await synthesize_source_selection(
+            self._preparation_provider(), protocol
+        )
+        await self._emit_llm_metrics(
+            state["run_id"], "VALIDATE_PROTOCOL", provider=self._preparation_provider()
+        )
+        if event is None:
+            return protocol, False
+        await self.repo.update_run(
+            state["run_id"], protocol=updated.model_dump(mode="json")
+        )
+        await self.repo.event(state["run_id"], "protocol_synthesis", event)
+        return updated, True
 
     async def _name_run(
         self,

@@ -1,10 +1,10 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.17.0`
+Platform sürümü: `v0.18.0`
 
-Belge sürümü: `6.37`
+Belge sürümü: `6.38`
 
-Son güncelleme: `2026-08-31`
+Son güncelleme: `2026-09-01`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -14,7 +14,19 @@ ve [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.1
 ve [ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md](ENV_MANAGED_CONFIGURATION_V0.15.0_IMPLEMENTATION_REPORT.md)
 ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md)
 ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md)
+ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.18.0 — 2026-09-01
+
+- Koşu artık her soruda dört kaynak ailesini birden taramak zorunda değil. Açıldığında
+  (`PROTOCOL_SOURCE_SYNTHESIS_ENABLED`, **varsayılan kapalı**) soruya bakıp kapalı bir
+  preset kataloğundan seçim yapıyor: akademik, resmî, kod/veri ya da geniş tarama. Model
+  serbest aile listesi üretmiyor, yalnız katalogdan bir anahtar seçiyor; anahtar tanınmazsa
+  ya da sonuç doğrulanmazsa bugünkü varsayılan aynen kalıyor.
+- Seçimi kimin yaptığı artık protokolde kayıtlı (`selection_source`). Kullanıcının kapsam
+  sorusunda açıkça "geniş tarama" demesi ile hiç seçim yapılmamış olması eskiden bit
+  düzeyinde aynıydı; sentez bu yüzden verilmiş bir kararın üzerine yazabilirdi.
 
 ## v0.17.0 — 2026-08-31
 

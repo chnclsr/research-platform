@@ -3353,6 +3353,17 @@ bu oturumda yapılamadı; çalışan süreç yeniden başlatılana kadar sağlı
 örneğiyle çakışma riski nedeniyle devir kanıtı olmadan yeniden başlatılmadı; recovery
 döngüsünü çalıştıran worker günceldir.
 
+## 59. Adaptif harness katmanı — kaynak seçimi sentezi
+
+Her koşu `CORE_FAMILIES` varsayılanıyla başlıyordu; soru ne olursa olsun aynı dört aile
+taranıyordu. `VALIDATE_PROTOCOL` artık — varsayılan kapalı bir flag'in arkasında — kapalı
+bir preset kataloğundan soruya uygun olanı seçiyor.
+
+Ayrıntılar, `selection_source` provenance alanının neden gerektiği, çağıran tespitinin neden
+`model_fields_set` ile yapılamadığı ve planın onarım gerekçesinin neden yanlış çıktığı
+[JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
+içindedir.
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her

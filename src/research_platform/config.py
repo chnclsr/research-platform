@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     openai_compatible_url: str | None = None
     openai_compatible_api_key: str | None = None
     telegram_preparation_llm_enabled: bool = False
+    # Both default off. The adaptive layer changes what a run searches and how it recovers,
+    # so it is measured behind a flag before it is anyone's default -- an unmeasured
+    # improvement is not one.
+    protocol_source_synthesis_enabled: bool = False
+    probe_strategy_selection_enabled: bool = False
     # Preparation providers tried in order. A quota or outage on one moves the call to the
     # next; every name listed here must be configured, because a listed-but-unusable
     # provider is a misconfiguration, not a silent skip.

@@ -51,6 +51,28 @@ _FAMILY_PRESETS: dict[str, list[SourceFamily]] = {
     "core": list(CORE_FAMILIES),
 }
 
+# What each preset is for, in the language the model is prompted in. Kept beside the
+# presets themselves so a new preset cannot be added without saying when it applies -- the
+# catalogue is the model's entire output space, and an unexplained key is an unusable one.
+FAMILY_PRESET_GUIDE: dict[str, str] = {
+    "academic": (
+        "peer-reviewed literature and preprints; for questions about what research has "
+        "found, methods, or evidence"
+    ),
+    "official": (
+        "regulation, standards, government and institutional documents, plus academic and "
+        "web support; for questions about rules, obligations or official positions"
+    ),
+    "code_data": (
+        "repositories, datasets and their documentation, plus the web; for questions about "
+        "implementations, libraries, or how something is built"
+    ),
+    "core": (
+        "the broad sweep across all four families; for questions that span several kinds "
+        "of source, or when it is not clear which single family would answer"
+    ),
+}
+
 SCOPING_TEXT = {
     "tr": {
         "date_scope": "Hangi tarih aralığına bakalım?",
@@ -196,7 +218,20 @@ def _apply_date_scope(payload: dict, value: str, text: dict[str, str]) -> str | 
     return f"{start.date().isoformat()} → {end.date().isoformat()}"
 
 
-def _apply_families(payload: dict, value: str, text: dict[str, str]) -> str | None:
+def apply_families(
+    payload: dict,
+    value: str,
+    text: dict[str, str],
+    *,
+    source: str = "scoping",
+) -> str | None:
+    """Write a family preset into a protocol payload, and record who chose it.
+
+    Public because protocol synthesis applies the same presets from the same catalogue and
+    must land on exactly the same fields; a second implementation would be a second place
+    for the family_targets reset below to be forgotten. `source` is what tells the two
+    apart afterwards -- the values they write are otherwise identical.
+    """
     preset = _FAMILY_PRESETS.get(value)
     if preset is None:
         return None
@@ -205,6 +240,9 @@ def _apply_families(payload: dict, value: str, text: dict[str, str]) -> str | No
     # "core" is the profile's own default, so leaving the profile alone there keeps the
     # protocol describing itself honestly; anything else is a deliberate custom selection.
     connectors["profile"] = "core" if value == "core" else "custom"
+    # Without this an explicit "core" answer is bit-identical to an untouched default and
+    # synthesis would later overwrite a choice the user actually made.
+    connectors["selection_source"] = source
     # Cleared rather than filtered: the validator only ever narrows an existing map, so a
     # widened family list would otherwise keep targets for families that are gone and none
     # for the ones just added.
@@ -212,7 +250,7 @@ def _apply_families(payload: dict, value: str, text: dict[str, str]) -> str | No
     return ", ".join(family.value for family in preset)
 
 
-_APPLIERS = {"date_scope": _apply_date_scope, "source_families": _apply_families}
+_APPLIERS = {"date_scope": _apply_date_scope, "source_families": apply_families}
 
 # Typed plan feedback, matched against the same closed vocabulary the buttons write. Kept
 # deterministic on purpose: the gate already waits on a person, and a model asked to read

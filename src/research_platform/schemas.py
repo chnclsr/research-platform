@@ -123,6 +123,11 @@ class ParserSelection(BaseModel):
 
 
 class ConnectorSelection(BaseModel):
+    # Who chose this selection. Needed because an explicit "core" answer and an untouched
+    # default are bit-identical -- both carry profile="core" and CORE_FAMILIES -- so
+    # comparing the fields cannot tell a decision from an absence of one, and synthesis
+    # must not overwrite a choice somebody actually made.
+    selection_source: Literal["default", "caller", "scoping", "synthesis"] = "default"
     profile: Literal["core", "all", "custom"] = "core"
     included_families: list[SourceFamily] = Field(default_factory=lambda: CORE_FAMILIES.copy())
     excluded_connectors: list[str] = Field(default_factory=list)
@@ -141,6 +146,16 @@ class ConnectorSelection(BaseModel):
     def apply_profile(self) -> "ConnectorSelection":
         if self.profile == "all" and self.included_families == CORE_FAMILIES:
             self.included_families = list(SourceFamily)
+        # A selection that differs from the default could not have arrived by accident, so
+        # it is attributed even when the caller did not say so. Inferred from the values
+        # rather than from `model_fields_set`, which reports every field as set after the
+        # dump/validate round trip the protocol makes on every stage that persists it.
+        # An explicit selection equal to the default stays indistinguishable, and that is
+        # the one case synthesis may still overwrite.
+        if self.selection_source == "default" and (
+            self.profile != "core" or self.included_families != CORE_FAMILIES
+        ):
+            self.selection_source = "caller"
         return self
 
 
