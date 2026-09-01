@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-08-28`
+Son güncelleme: `2026-09-01`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -38,6 +38,9 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 24 | Kanalsız koşu plan kapısında asılı kalabilir | API/Langflow koşusu tamamlanamaz | Orta |
 | 25 | Panelde çağıranı olmayan `POST /api/runs` route'u | Yanıtlanamayan koşu üretebilir | Düşük |
 | 26 | `research_runs` sütunları `json`, model `JSONB` türetiyor | Sorgular sessizce üretimde kırılır | Orta |
+| 27 | v0.18.0 iki flag'i ölçülmedi | Kapalı kaldıkça kazanç da yok | Orta |
+| 28 | Altı sabit probe stratejisi hâlâ duruyor | İki kod yolu birlikte bakılıyor | Düşük |
+| 29 | Blueprint arşivi yok | Probe deneyimi koşular arasında birikmiyor | Bekliyor |
 
 ---
 
@@ -493,6 +496,50 @@ ve ayrı bir karar; tek tek sorgular kaçınarak yazılabiliyor.
 kilit süresi ölçülmeli. O zamana kadar: bu tabloyu okuyan sorgularda `DISTINCT`/`GROUP BY`
 kullanmamak, üyelik testi (`id.in_(...)`) tercih etmek — ve **yeni sorguları canlı veritabanında
 doğrulamak**, çünkü test paketi bu sınıf hatayı göremiyor.
+
+## 27. v0.18.0'in iki flag'i henüz ölçülmedi
+
+**Durum:** `PROTOCOL_SOURCE_SYNTHESIS_ENABLED` ve `PROBE_STRATEGY_SELECTION_ENABLED` ikisi de
+varsayılan kapalı ve kapalı oldukları sürece hiçbir kazanç sağlamıyorlar. Kod, testler ve
+olay sözleşmesi hazır; eksik olan yalnız ölçüm.
+
+**Yapılacak.** Bölüm B için: etiketlenmiş bir soru kümesinde preset doğruluğu · HITL
+kullanıcı override oranı · connector çağrısı ve ilgili kaynak oranı. Bölüm A için: probe turu
+başına yeni **ve kabul edilmiş** `SourceVersion` · sıfır-yield tur oranı · yeni kaynak başına
+connector çağrısı · tur gecikmesi.
+
+Tek bir önce/sonra koşusu yeterli değil — sağlayıcı cevapları turdan tura değişiyor.
+Kaydedilmiş cevaplarla replay ya da aynı koşullarda birkaç tekrar gerekir; bunun için
+`tests/conftest.py`'ye bir `RecordingLLM`/`ReplayLLM` çifti yazılmalı. Kazanç çıkmazsa
+flag'ler kapalı kalır.
+
+## 28. Altı sabit probe stratejisi hâlâ duruyor
+
+**Durum:** `recovery.literature_scan_probe_missions` kaldırılmadı; `PROBE_STRATEGY_SELECTION_ENABLED`
+kapalıyken çalışan yol o. Plan kaldırılmasını istiyordu ama planın kendi "flag kapalıyken
+davranış birebir aynı" şartıyla çelişiyordu: kaldırılsaydı varsayılan kurulumda recall probe'u
+hiç kalmazdı.
+
+**Etki:** Aynı işin iki kod yolu birlikte bakılıyor. Zarar sınırlı — flag'li ayrım net ve iki
+yol test edilmiş durumda — ama kalıcı olmamalı.
+
+**Yapılacak:** 27. madde kazanç gösterirse flag varsayılan açılır ve altılı ile
+`probe_strategies_exhausted`'in eski dalı birlikte kaldırılır. Kazanç çıkmazsa probe factory
+kaldırılır; ikisinin birden kalması istenen son durum değil.
+
+## 29. Blueprint arşivi
+
+**Durum:** Başarılı probe blueprint'leri koşular arasında saklanmıyor. Her koşu sıfırdan
+öneri üretiyor.
+
+**Neden bekliyor:** Arşivin işe yaraması için önce A'nın olay verisinin birikmesi gerekiyor —
+`probe_candidate_selected` ve `probe_candidate_outcome` hangi taktiğin hangi gap dimension +
+family + research mode kombinasyonunda yield verdiğini zaten yazıyor. Veri birikmeden kurulan
+bir arşiv, altı elle yazılmış stratejinin daha karmaşık bir kopyası olurdu.
+
+**Yapılacak:** Yeterli koşu biriktiğinde, yüksek yield vermiş blueprint'leri benzer
+kombinasyonda modele referans olarak göstermek. JIT-Agent'ın HarnessFactory'sinin karşılığı
+budur ve bu işin ikinci aşamasıdır.
 
 ## Kapsam dışı bırakılanlar
 
