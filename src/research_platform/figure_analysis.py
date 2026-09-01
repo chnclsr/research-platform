@@ -23,6 +23,21 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .acquisition import validate_public_url
 from .config import Settings
+from .language_guard import (
+    FIGURE_LABEL_RE as _FIGURE_LABEL_RE,
+)
+from .language_guard import (
+    language_matches as _language_matches,
+)
+from .language_guard import (
+    numbers_match as _numbers_match,
+)
+from .language_guard import (
+    report_language as _report_language,
+)
+from .language_guard import (
+    target_language_name as _target_language_name,
+)
 from .repository import Repository
 from .storage import ObjectStore
 
@@ -549,159 +564,8 @@ _REPORT_TEXT_FIELDS = (
     "flow_steps",
     "selection_reason",
 )
-_ENGLISH_LANGUAGE_MARKERS = {
-    "the",
-    "and",
-    "with",
-    "from",
-    "this",
-    "figure",
-    "fig",
-    "shows",
-    "show",
-    "analysis",
-    "data",
-    "stage",
-    "outcome",
-    "model",
-    "performance",
-    "study",
-    "results",
-    "result",
-    "accuracy",
-    "diagnostic",
-    "radiologist",
-    "radiologists",
-    "curve",
-    "across",
-    "compared",
-    "comparison",
-    "available",
-    "values",
-    "value",
-    "only",
-}
-_TURKISH_LANGUAGE_MARKERS = {
-    "ve",
-    "ile",
-    "bu",
-    "bir",
-    "şekil",
-    "gösterir",
-    "gösteren",
-    "analiz",
-    "veri",
-    "aşama",
-    "sonuç",
-    "sonuçlar",
-    "modelin",
-    "performans",
-    "çalışma",
-    "doğruluk",
-    "tanısal",
-    "radyolog",
-    "radyologlar",
-    "eğri",
-    "karşılaştırma",
-    "karşılaştırıldığında",
-    "değerler",
-    "değer",
-    "yalnızca",
-    "olarak",
-    "için",
-}
-_FIGURE_LABEL_RE = re.compile(
-    r"^\s*(?P<label>fig(?:ure)?\.?|şekil)\s*(?P<number>\d+[A-Za-z]?)\b",
-    flags=re.IGNORECASE,
-)
-_NUMBER_RE = re.compile(r"(?<![\w])\d+(?:[.,]\d+)*(?:\s*%)?")
-
-
-def _report_language(language: str) -> str:
-    return "tr" if language.lower().startswith("tr") else "en"
-
-
-def _target_language_name(language: str) -> str:
-    return "Turkish" if _report_language(language) == "tr" else "English"
-
-
-def _language_matches(text: str, language: str) -> bool:
-    """Conservatively accept report prose only when it matches the target language.
-
-    Technical acronyms and numeric-only labels are language-neutral. Short figure labels are
-    not: ``Fig 2`` belongs to English and ``Şekil 2`` belongs to Turkish, which closes the
-    hole where the previous word-count heuristic treated ``Fig 2`` as Turkish.
-    """
-
-    rendered = _text(text, 12000)
-    if not rendered:
-        return False
-    target = _report_language(language)
-    label_match = _FIGURE_LABEL_RE.match(rendered)
-    if label_match:
-        label_language = (
-            "tr" if label_match.group("label").casefold().startswith("şekil") else "en"
-        )
-        if label_language != target:
-            return False
-    words = re.findall(r"[^\W\d_]+", rendered.casefold(), flags=re.UNICODE)
-    english = sum(word in _ENGLISH_LANGUAGE_MARKERS for word in words)
-    turkish = sum(word in _TURKISH_LANGUAGE_MARKERS for word in words)
-    if re.search(r"[çğıöşü]", rendered.casefold()):
-        turkish += 2
-    if target == "tr":
-        if english > turkish:
-            return False
-        if turkish:
-            return True
-    else:
-        if turkish > english:
-            return False
-        if english:
-            return True
-    # Acronyms, identifiers, and proper names are intentionally language-neutral. Longer
-    # prose without any target-language signal is sent to the translator instead of being
-    # assumed safe.
-    return bool(words) and all(
-        len(word) <= 4 or any(character.isupper() for character in token)
-        for word, token in zip(words, re.findall(r"[^\W\d_]+", rendered, flags=re.UNICODE))
-    )
-
-
 def _caption_language_matches(text: str, language: str) -> bool:
     return _language_matches(text, language)
-
-
-def _normalise_number_token(token: str, text: str, start: int) -> tuple[str, bool]:
-    compact = token.replace(" ", "")
-    percent = compact.endswith("%") or bool(
-        re.search(
-            r"(?:%|percent|yüzde)\s*$",
-            text[max(0, start - 10) : start],
-            flags=re.IGNORECASE,
-        )
-    )
-    compact = compact.rstrip("%")
-    parts = re.split(r"[.,]", compact)
-    if len(parts) == 1:
-        normalized = parts[0]
-    elif all(len(part) == 3 for part in parts[1:]):
-        normalized = "".join(parts)
-    else:
-        normalized = f"{''.join(parts[:-1])}.{parts[-1]}"
-    normalized = normalized.lstrip("0") or "0"
-    return normalized, percent
-
-
-def _number_signature(text: str) -> list[tuple[str, bool]]:
-    return [
-        _normalise_number_token(match.group(0), text, match.start())
-        for match in _NUMBER_RE.finditer(text)
-    ]
-
-
-def _numbers_match(original: str, translated: str) -> bool:
-    return _number_signature(original) == _number_signature(translated)
 
 
 def _localized_figure_label(text: str, language: str) -> str:
@@ -1631,10 +1495,13 @@ def _source_excerpt_figures(
                 source_labels=[observation.source_label],
                 observation_hash=observation.image_hash,
                 origin="source_excerpt",
+                # Labelled, not translated. The title is how the reader finds the paper
+                # again, so translating it would break the citation -- but printed bare it
+                # was a line of English in the middle of Turkish prose with nothing to say
+                # it was an attribution. The label is what makes it read as one.
                 attribution=(
-                    f"{observation.source_title} — {candidate.source_url}"
-                    if candidate.source_url
-                    else observation.source_title
+                    f"{'Kaynak' if turkish else 'Source'}: {observation.source_title}"
+                    + (f" — {candidate.source_url}" if candidate.source_url else "")
                 ),
                 rights_statement=rights_notice,
             )

@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from .claim_localization import localize_claim_texts, sweep_foreign_prose
 from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
 from .llm import LLMProvider
@@ -52,6 +53,49 @@ def _markdown(value: Any, level: int = 0) -> str:
 
 def _summary_heading(language: str) -> str:
     return "Özet" if language.lower().startswith("tr") else "Summary"
+
+
+# The report's own furniture, which used to be Turkish whatever `report_language` said -- so
+# an English report arrived with Turkish headings while a Turkish one leaked English claims.
+# Both directions are the same bug seen from opposite ends.
+_REPORT_LABELS = {
+    "tr": {
+        "question": "Araştırma sorusu",
+        "thematic": "Tematik kanıt sentezi",
+        "uncertainty": "Belirsizlikler ve araştırma boşlukları",
+        "appendix_a": "Ek A — Bağımsız kaynaklarla desteklenen atomik bulgular",
+        "appendix_b": "Ek B — Tek kaynaklı / doğrulama gerektiren atomik bulgular",
+        "appendix_c": "Ek C — Kaynak bazlı literatür dökümü",
+        "appendix_c_body": (
+            "Araştırmada korunan **{count}** kaynağın tamamı, her kaynağın rolü ve "
+            "çıkarılan bulgularıyla `15_literature_inventory.md` dosyasında listelenmiştir."
+        ),
+        "summary_note": (
+            "Kaynak kataloğu, atomik claim kayıtları ve retrieval/coverage ölçümleri teslim "
+            "paketinin denetim eklerinde ayrıca korunmuştur."
+        ),
+    },
+    "en": {
+        "question": "Research question",
+        "thematic": "Thematic evidence synthesis",
+        "uncertainty": "Uncertainties and research gaps",
+        "appendix_a": "Appendix A — Atomic findings supported by independent sources",
+        "appendix_b": "Appendix B — Single-source / verification-pending atomic findings",
+        "appendix_c": "Appendix C — Source-by-source literature inventory",
+        "appendix_c_body": (
+            "All **{count}** sources retained in this research, with each source's role and "
+            "the findings extracted from it, are listed in `15_literature_inventory.md`."
+        ),
+        "summary_note": (
+            "The source catalogue, atomic claim records and retrieval/coverage measurements "
+            "are preserved separately in the bundle's audit appendices."
+        ),
+    },
+}
+
+
+def _report_labels(language: str) -> dict[str, str]:
+    return _REPORT_LABELS["tr" if language.lower().startswith("tr") else "en"]
 
 
 def structured_extract_rows(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
@@ -192,6 +236,25 @@ async def build_exports(
         reverse=True,
     )
     language_is_turkish = protocol.report_language.lower().startswith("tr")
+    # Once per run, for every surface. The claims are English whatever language the run was
+    # asked in, and three separate renderers used to reach for `claim.text` directly -- the
+    # synthesis fallback, the atomic-findings appendices and the executive summary -- which
+    # is how English sentences reached a Turkish report from three different directions.
+    claim_texts, claim_language_diagnostics = await localize_claim_texts(
+        llm, ordered_reportable, protocol.report_language
+    )
+    await repo.event(
+        run_id, "claim_localization", claim_language_diagnostics
+    )
+    def claim_display(claim: Any) -> str:
+        """The statement as the reader should see it.
+
+        Only for prose a person reads. Evidence matching and the audit records keep
+        `claim.text`: the quote was matched against the English statement, and a ledger that
+        stored a translation could not be checked against the source it came from.
+        """
+        return claim_texts.get(str(claim.id), str(getattr(claim, "text", "")))
+
     synthesis_package = await build_synthesis_package(
         llm=llm,
         # The model reasons over English claims, so it gets the English question; the
@@ -203,6 +266,7 @@ async def build_exports(
         evidence_by_claim=evidence_by_claim,
         # Sub-questions become section headings in the report, so these are printed text.
         sub_questions=protocol.sub_questions_for_report(),
+        claim_texts=claim_texts,
     )
     await repo.event(
         run_id,
@@ -248,6 +312,13 @@ async def build_exports(
             "report": synthesis_package.narrative,
             "uncertainty": synthesis_package.uncertainty,
         }
+        # Swept here rather than after the documents are built, because these three strings
+        # are what both the Word report and the markdown are rendered from -- fixing them
+        # once fixes every surface, and there is no .docx to take apart afterwards.
+        synthesis, sweep_diagnostics = await sweep_foreign_prose(
+            llm, synthesis, protocol.report_language
+        )
+        await repo.event(run_id, "report_language_sweep", sweep_diagnostics)
 
     def render_findings(selected_claims: list[Any]) -> str:
         findings = []
@@ -273,7 +344,7 @@ async def build_exports(
                 or "- Kaynak pasajı bulunamadı."
             )
             findings.append(
-                f"### {index}. {claim.text}\n\n"
+                f"### {index}. {claim_display(claim)}\n\n"
                 f"Durum: `{claim.status}` · Soru ilgisi: "
                 f"`{claim.audit.get('question_relevance', 0):.2f}`\n\n{citations}"
             )
@@ -320,7 +391,7 @@ async def build_exports(
                 continue
             seen_claims.add(claim.id)
             unique_findings.append(
-                f"- `{claim.status}` — {claim.text}  \n"
+                f"- `{claim.status}` — {claim_display(claim)}  \n"
                 f"  Kanıt: “{link.quote[:350]}”"
             )
         finding_text = "\n".join(unique_findings)
@@ -355,24 +426,23 @@ async def build_exports(
         + "\n"
     )
     summary_heading = _summary_heading(protocol.report_language)
+    labels = _report_labels(protocol.report_language)
     report_md = (
         f"# {protocol.title}\n\n"
-        f"## Araştırma sorusu\n\n{protocol.question_for_report()}\n\n"
+        f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
         f"## {summary_heading}\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
-        f"## Tematik kanıt sentezi\n\n{_markdown(synthesis.get('report'))}\n\n"
-        f"## Belirsizlikler ve araştırma boşlukları\n\n"
+        f"## {labels['thematic']}\n\n{_markdown(synthesis.get('report'))}\n\n"
+        f"## {labels['uncertainty']}\n\n"
         f"{_markdown(synthesis.get('uncertainty'))}\n\n"
-        f"## Ek A — Bağımsız kaynaklarla desteklenen atomik bulgular\n\n{findings_md}\n\n"
-        f"## Ek B — Tek kaynaklı / doğrulama gerektiren atomik bulgular\n\n{qualified_md}\n\n"
-        f"## Ek C — Kaynak bazlı literatür dökümü\n\n"
-        f"Araştırmada korunan **{len(sources)}** kaynağın tamamı, her kaynağın rolü ve "
-        "çıkarılan bulgularıyla `15_literature_inventory.md` dosyasında listelenmiştir.\n"
+        f"## {labels['appendix_a']}\n\n{findings_md}\n\n"
+        f"## {labels['appendix_b']}\n\n{qualified_md}\n\n"
+        f"## {labels['appendix_c']}\n\n"
+        f"{labels['appendix_c_body'].format(count=len(sources))}\n"
     )
     executive_md = (
         f"# {summary_heading}\n\n"
         f"{_markdown(synthesis.get('executive_summary'))}\n\n"
-        "Kaynak kataloğu, atomik claim kayıtları ve retrieval/coverage ölçümleri teslim "
-        "paketinin denetim eklerinde ayrıca korunmuştur.\n"
+        f"{labels['summary_note']}\n"
     )
 
     files: dict[str, tuple[str, bytes]] = {}
@@ -559,7 +629,7 @@ async def build_exports(
         or "- Dışlanan iddia yok."
     )
     qualified_uncertainty = (
-        "\n".join(f"- {claim.text}" for claim in qualified) or "- Tek kaynaklı iddia yok."
+        "\n".join(f"- {claim_display(claim)}" for claim in qualified) or "- Tek kaynaklı iddia yok."
     )
     uncertainty_md = (
         "# Belirsizlik Raporu\n\n"

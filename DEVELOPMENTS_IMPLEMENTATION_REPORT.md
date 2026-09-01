@@ -3376,6 +3376,85 @@ ve v0.16.1 sonlandırma semantiğinin nasıl korunduğu
 [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 içindedir.
 
+## 61. Rapor dilinin garanti altına alınması
+
+Rapor dili `tr` olan koşuların Word çıktısında araya İngilizce paragraflar giriyordu.
+Ölçüldü: tamamlanmış dört Türkçe koşunun DOCX'inde **167 paragrafın 5'i** yabancı cümle
+taşıyordu, hepsi gövde metni. Aynı pakette giden `02_full_research_report.md` daha kötüydü —
+Ek A ve Ek B'deki **22 atomik bulgu başlığının tamamı** ham İngilizceydi.
+
+Üç ayrı kusur çıktı.
+
+**Fallback yolu dil kapısı taşımıyordu.** `_fallback_section`, modelin kendi düzyazısı
+reddedildiğinde devreye giriyor ve gövdeyi doğrudan `claim.text`'ten kuruyordu. İddialar
+İngilizce — koşu içeride İngilizce çalışıyor — ve bu yolda hiçbir kontrol yoktu; yalnız
+"anlatı üretilemedi" mesajı yerelleştirilmişti. Sızan paragrafların biçimi bunu doğruladı:
+`<iddia metni> [S17] <iddia metni>`, tam olarak o fonksiyonun çıktısı.
+
+**Dil kapısı zayıftı ve iki kopya hâlindeydi.** `report_synthesis` içindeki
+`turkish >= 2 or english <= 2` blok bazlıydı: Türkçe metnin sonuna eklenen İngilizce kuyruk
+kapıdan geçiyordu. Oysa `figure_analysis` içinde, 50. bölümde yazılmış çok daha dikkatli bir
+uygulama vardı — figür etiketlerinin dilini tanıyan, işaret kelime kümesi ve aksan kontrolü
+kullanan. Rapor düzyazısına hiç uygulanmamıştı.
+
+**Dışa aktarım iskeleti dile bakmıyordu.** Bölüm başlıkları `report_language` ne olursa olsun
+Türkçe sabitlenmişti; İngilizce raporlar Türkçe iskeletle çıkıyordu. Aynı hatanın ters yönü.
+
+### Çözüm
+
+İyi kapı `language_guard.py`'a taşındı ve iki modül de oradan alıyor; zayıf kopya silindi.
+Yanına `foreign_sentences()` eklendi: blok geçse bile cümle bazında yabancı olanları
+döndürüyor — 1. kusurun belirtisi tam olarak buydu.
+
+İddia metni `build_exports` içinde **koşu başına bir kez** yerelleştiriliyor ve üç yüzeye
+birden veriliyor (Word, tam rapor, yönetici özeti); üçü artık ayrışamıyor ve maliyet bir kez
+ödeniyor. Desen 50. bölümün `_localize_text_items`'ından alındı, yeniden yazılmadı: hedef
+dilde olanı atla, kalanı iki ayrı denemede çevir, her çeviriyi dil **ve** sayı kontrolünden
+geçir. Veritabanındaki `claim.text` değişmiyor — bu bir gösterim izdüşümü; kanıt eşleştirmesi
+ve denetim kaydı İngilizce metne bağlı kalıyor.
+
+Son katman olarak `sweep_foreign_prose`, belgeler kurulmadan hemen önce sentez düzyazısını
+tarıyor. Word ve markdown aynı üç dizeden üretildiği için burada düzeltmek her yüzeyi birden
+düzeltiyor; sonradan bir `.docx` sökmeye gerek kalmıyor. Yalnız **kusurlu cümleler** çevriliyor,
+çevresindeki doğru metin değil.
+
+### Çevrilmeyen şeyler
+
+Kaynak başlıkları ve bire bir alıntılar özgün kalıyor. Çevrilmiş bir başlık atıf olarak
+yanlıştır ve kaynağa geri izlenemez. Kusur çeviri değil çerçevelemeydi: figür atıf satırı
+`<başlık> — <URL>` biçiminde çıplak basılıyordu, artık `Kaynak:` / `Source:` etiketiyle
+başlıyor ve atıf gibi okunuyor. `is_attribution()` bu satırları hem kapıdan hem süpürmeden
+muaf tutuyor.
+
+### Bilinçli katılık
+
+`numbers_match` sayıları **sırayla** karşılaştırıyor, çoklu küme olarak değil. Türkçe çeviri
+sayıları farklı sırada yazdığında doğru bir çeviri de reddedilebiliyor. Gevşetilmedi: sıra
+duyarsız bir karşılaştırma "10'dan 20'ye" ile "20'den 10'a" arasındaki farkı kaçırırdı.
+Reddedilen çeviri İngilizce bir cümle bırakır — okuyucu bunun çevrilmediğini görür; kabul
+edilen yanlış çeviri ise olgu gibi okunan bir Türkçe cümle bırakır.
+
+### Doğrulama
+
+On sekiz yeni test. Ayrıca **gerçek raporlar üzerinde**: yeni dedektör dört Türkçe DOCX'te
+167 paragrafın 5'inde yabancı cümle buluyor ve 7 atıf satırını doğru şekilde atlıyor. İlk elle
+sayımdaki 6'nın biri kaynak başlığıydı, yani sızıntı değil atıf — sınıflandırma bunu ayırıyor.
+
+Bir test paylaşılan kapıda gerçek bir kusur ortaya çıkardı: "Replication is needed before
+generalisation" düz İngilizce olduğu hâlde reddediliyordu, çünkü işaret kelime listesinden
+hiçbirini içermiyor ve Türkçe'nin aksan bonusunun İngilizce karşılığı yoktu. Türkçe kendini
+aksanla belli eder; İngilizce'nin kanıtı onların yokluğudur — bu simetri eklendi.
+
+Tam kapı: **651 passed** → **669 passed**. Hedefli Ruff: yeni dosyalar temiz;
+`figure_analysis.py` 5/5, `exporter.py` 0/0, `report_synthesis.py` 10 → **7** (zayıf kapı
+silindiği için düştü).
+
+### Bilinen sınır
+
+Yerelleştirme ve süpürme koşu başına ek LLM çağrısı demek. Zaten hedef dilde olan metin hiç
+gönderilmediği ve süpürme temiz raporda **sıfır çağrı** yaptığı için maliyet sınırlı, ama
+ölçülmedi. Eski raporlar geriye dönük düzelmiyor; düzeltme bundan sonraki koşular için.
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her

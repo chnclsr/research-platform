@@ -13,6 +13,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
 
 
@@ -409,26 +410,6 @@ def _clean_cited_text(value: Any, allowed_sources: set[str]) -> str:
     return text
 
 
-def _language_matches(text: str, language: str) -> bool:
-    if not language.lower().startswith("tr"):
-        return True
-    english = len(
-        re.findall(
-            r"\b(?:the|and|with|from|this|study|evidence|however|while|findings)\b",
-            text,
-            flags=re.I,
-        )
-    )
-    turkish = len(
-        re.findall(
-            r"\b(?:ve|ile|bu|bir|çalışma|kanıt|ancak|bulgu|olarak|için|göre)\b",
-            text,
-            flags=re.I,
-        )
-    )
-    return turkish >= 2 or english <= 2
-
-
 def _section_from_data(
     data: Any,
     *,
@@ -441,7 +422,13 @@ def _section_from_data(
     if not isinstance(data, dict):
         return None
     synthesis = _clean_cited_text(data.get("synthesis"), allowed)
-    if not synthesis or not _language_matches(synthesis, language):
+    # Two checks, because they catch different failures. The whole-text one rejects a section
+    # written in the wrong language outright; the sentence one rejects a section that is
+    # mostly right but carries source text pasted onto the end, which is what readers were
+    # finding in the Word reports and what the old block-level heuristic waved through.
+    if not synthesis or not language_matches(synthesis, language):
+        return None
+    if foreign_sentences(synthesis, language):
         return None
     return SynthesisSection(
         title=title,
@@ -461,7 +448,15 @@ def _fallback_section(
     source_labels: dict[str, str],
     *,
     turkish: bool,
+    claim_texts: dict[str, str] | None = None,
 ) -> SynthesisSection:
+    """The section used when the model's own prose is unusable.
+
+    `claim_texts` is what stops this being an English paragraph in a Turkish report. The
+    statements are English whatever language the run was asked in, and this path had no
+    language check at all -- only the "no narrative" message was ever localized -- so every
+    rejected section arrived in the reader's report in the wrong language.
+    """
     statements: list[str] = []
     sources: list[str] = []
     claim_ids: list[str] = []
@@ -474,7 +469,10 @@ def _fallback_section(
             if label and label not in sources:
                 sources.append(label)
         if refs:
-            statements.append(f"{str(getattr(claim, 'text', ''))} {' '.join(f'[{ref}]' for ref in refs[:3])}")
+            text = (claim_texts or {}).get(
+                str(claim.id), str(getattr(claim, "text", ""))
+            )
+            statements.append(f"{text} {' '.join(f'[{ref}]' for ref in refs[:3])}")
             claim_ids.append(str(claim.id))
     synthesis = " ".join(statements)
     if not synthesis:
@@ -512,7 +510,7 @@ def _force_ground_text(value: Any, source_ids: list[str], language: str) -> str:
         text,
         flags=re.I,
     )
-    if not text or re.search(r"https?://", text) or not _language_matches(text, language):
+    if not text or re.search(r"https?://", text) or not language_matches(text, language):
         return ""
     citations = " ".join(f"[{source_id}]" for source_id in source_ids[:6])
     return f"{text} {citations}".strip()
@@ -683,7 +681,7 @@ async def _draft_overview(
                 )
                 if not value:
                     errors.append(f"{key}:no_complete_sentence_within_limit")
-            if value and not _language_matches(value, language):
+            if value and not language_matches(value, language):
                 errors.append(f"{key}:language_mismatch")
                 value = ""
             cleaned[key] = value or fallback_value
@@ -776,6 +774,7 @@ async def build_synthesis_package(
     reportable_claims: list[Any],
     evidence_by_claim: dict[str, list[tuple[Any, Any]]],
     sub_questions: list[str] | None = None,
+    claim_texts: dict[str, str] | None = None,
 ) -> SynthesisPackage:
     """Create a bounded, citation-validated synthesis package."""
     turkish = language.lower().startswith("tr")
@@ -806,6 +805,7 @@ async def build_synthesis_package(
             evidence_by_claim,
             source_labels,
             turkish=turkish,
+            claim_texts=claim_texts,
         )
         section, succeeded, diagnostic = await _draft_section(
             llm,

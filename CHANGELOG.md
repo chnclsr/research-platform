@@ -1,6 +1,6 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.18.0`
+Platform sürümü: `v0.18.1`
 
 Belge sürümü: `6.38`
 
@@ -16,6 +16,22 @@ ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMIN
 ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md)
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.18.1 — 2026-09-01
+
+- Türkçe raporlarda araya giren İngilizce paragraflar kaldırıldı. Üç ayrı yol vardı: model
+  sentezi reddedildiğinde devreye giren yedek metin iddiaları İngilizce basıyordu, dil
+  kontrolü "biraz Türkçe varsa geçer" mantığında olduğu için Türkçe paragrafın sonuna eklenen
+  İngilizce kuyruğu görmüyordu, ve `02_full_research_report.md` içindeki atomik bulgu
+  başlıklarının tamamı çevrilmemiş kalıyordu. Ölçülen durum: dört Türkçe raporda 167
+  paragrafın 5'i.
+- İngilizce raporlar da artık İngilizce iskeletle çıkıyor; bölüm başlıkları rapor diline
+  bakmadan Türkçe sabitlenmişti.
+- Kaynak başlıkları ve bire bir alıntılar **çevrilmiyor** — çevrilmiş bir başlık kaynağa geri
+  izlenemez. Bunun yerine `Kaynak:` / `Source:` etiketiyle işaretleniyorlar, böylece atıf
+  satırı gibi okunuyor.
+- Çeviri sayıyı ya da yüzdeyi değiştirirse reddediliyor ve özgün metin korunuyor. Okuyucu
+  çevrilmemiş bir cümlenin çevrilmediğini görebilir; yanlış çevrilmiş bir sayıyı göremez.
 
 ## v0.18.0 — 2026-09-01
 
