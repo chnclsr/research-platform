@@ -144,3 +144,115 @@ girmezdi; canlıda flag açılınca `NameError` verirdi. `self.settings`'e çevr
 Flag açılmadan önce ölçülecekler: etiketlenmiş soru kümesinde preset doğruluğu · HITL
 kullanıcı override oranı (kullanıcı kapsam sorusunda sentezin seçtiğinden farklısını seçiyor
 mu) · connector çağrısı ve ilgili kaynak oranı. Kazanç çıkmazsa flag kapalı kalır.
+
+---
+
+## Bölüm A — Just-in-Time Probe Factory
+
+### Sorun
+
+Sıradan gap mission'ları tükendiğinde `literature_scan_probe_missions` altı elle yazılmış
+strateji son ekini `(tur − 1) % 6` ile döndürüyordu. Rotasyon hangi gap'lerin açık olduğunu,
+nelerin denendiğini ve hangi connector'ların hâlâ cevap verdiğini bilmiyordu.
+
+Ölçülen arıza: `01M14A8RP5ZD36NEX889AXRKSP` koşusu 28 turda 215 connector çağrısı yapıp
+**sıfır** sonuç aldı. Aynı altı son eki döndürmek o koşuyu kurtarmazdı.
+
+### Modelin karar verdiği şey ne kadar küçük
+
+`ProbeCandidate` bilinçli olarak ince: taktik, odak ifadesi, hedef gap ve connector kısa
+listesi. `extra="forbid"`. Domain, URL, bütçe, kaynak ailesi, `result_limit` ve tarih
+kapsamı blueprint'te **yok** — bunları adlandırabilen bir model, koşuyu protokolün izin
+vermediği bir yere de gönderebilirdi.
+
+Taktikler sekiz sabit primitiften oluşuyor (`ProbeTactic`) ve model bunları birleştiriyor,
+mission üretmiyor. Tek çağrıda en fazla üç aday: ek çağrı harcamayan bir best-of-N.
+
+### Derleyici — her operasyonel değer burada
+
+`compile_probe_candidate` modelin connector listesini protokolün izin verdikleriyle **ve**
+hâlâ cevap verenlerle kesiştiriyor; güvenmiyor. Limitler bütçeden, sorgu gerçek soruya
+demirlenip `constrain_text_to_scope` ile tarih kapsamına sokuluyor. İmzası zaten denenmiş
+bir mission **reddediliyor** — koşunun sorduğu soruyu yeniden sormasını durduran şey bu.
+
+Bir ayrıntı testten çıktı: model hiçbir gap adlandırmazsa aday hedefsiz kalıyordu. Derleyici
+artık en yüksek öncelikli gap'e bağlıyor. Gap'siz bir probe'un var olma sebebi yok ve hangi
+gap'e hizmet ettiği tahmine bırakılamaz.
+
+### Skorlayıcı ve carryover
+
+Sıralama deterministik: hedeflenen gap'in önceliği · aile hedefi olup olmadığı · taktiğin
+daha önce harcanıp harcanmadığı · connector'ın önceki turda sıfır aday verip vermediği.
+Modelin kendi sırası `suggested_rank` olarak, seçici ile aynı olayda ayrı kaydediliyor —
+`disagreed_with_model` ile birlikte. Kimsenin itiraz edemeyeceği bir seçicinin işe yaradığı
+gösterilemez.
+
+Kalan adaylar `probe_candidates_pending` içinde bekliyor; sonuçsuz bir tur **yeni LLM çağrısı
+yapmadan** sıradakini kullanıyor. Yeniden üretim en fazla bir kez.
+
+### Fail-open — rotasyona dönüş yok
+
+Üretim başarısız olursa tek deterministik fallback: en yüksek öncelikli gap + gap topic +
+ana soru + gap'in kendi `preferred_connectors` listesi. O da denenmişse **boş liste** döner
+ve v0.16.1'in `completed_incomplete` yolu çalışır. Sonsuz ya da anlamsız rotasyon olmaz.
+
+### Veri sınırı
+
+Probe üreteci **yalnız `self.llm`** (yerel model) kullanır, `_preparation_provider()`
+kullanmaz: prompt gap topic'leri ve deneme özetleri taşıyor, bunlar korpustan geliyor ve
+kurulumun mevcut veri paylaşım sınırı genişletilmiyor. Ham trajectory hiç gönderilmiyor,
+yalnız sayı özetleri. Bu bir testle sabitlendi.
+
+### Planın "altılıyı kaldır" maddesi uygulanmadı — gerekçe
+
+Plan hem `literature_scan_probe_missions`'ın kaldırılmasını hem de "her iki flag kapalıyken
+davranış bugünküyle birebir aynı olmalı" şartını istiyordu. **İkisi aynı anda sağlanamaz:**
+fonksiyon kaldırılırsa, flag varsayılan kapalı olduğu için varsayılan kurulumda recall
+probe'u hiç kalmaz ve bugünkü davranış korunmaz — varsayılan yapılandırma bugünkünden
+kötüleşir.
+
+Flag değişmezi korundu: flag kapalıyken eski rotasyon aynen çalışıyor, flag açıkken probe
+factory devreye giriyor ve rotasyona **hiç** dönülmüyor. Altılının kaldırılması, flag
+ölçümle kanıtlandıktan sonraki adımdır; planın kendi ölçüm bölümü zaten bu sırayı ima ediyor.
+
+### v0.16.1 semantiği
+
+`probe_strategies_exhausted` flag açıkken anlamını yitirdi: tükenecek bir liste yok, bunun
+yerine son denemenin bildirdiği neden okunuyor (`probe_candidates_exhausted` ·
+`no_valid_novel_probe` · `probe_generation_failed`). Terminal davranış **değişmedi**:
+`stop_reason=recovery_exhausted_no_progress` → `completed_incomplete`. Korunan güvenlik
+değişmezleri: `max_consecutive_empty_recovery_rounds` · aynı mission imzası tekrar
+çalışmaz · bütçe sınırları · model arızası koşuyu düşürmez.
+
+### Doğrulama
+
+On beş yeni test. Derleyici: connector kesişimi · protokolde olmayan ailenin reddi · denenmiş
+imzanın reddi · `result_limit`'in modelden alınmaması · sorgunun tarih kapsamına sokulması.
+Üretim: üç adayın tek çağrıya mal olması · bozuk/erişilemez modelin bundle üretmemesi.
+Skorlayıcı: harcanmamış taktiğin tercihi · sonuçsuz connector'ın düşürülmesi.
+Pipeline: bir adayın çalışıp kalanın saklanması · carryover turunun **sıfır çağrı** harcaması ·
+üretim hatasında tek deterministik fallback ve rotasyona dönülmemesi · fallback de
+denenmişse boş liste ve `completed_incomplete` yolu · flag kapalıyken eski rotasyonun aynen
+çalışması · probe bağlamının `_preparation_provider()`'a **gitmemesi**.
+
+Tam kapı: **636 passed** → **651 passed**. Hedefli Ruff: `probe_factory.py` ve
+`tests/test_probe_factory.py` temiz, `pipeline.py` 21/21.
+
+`ruff --fix` bu arada `pipeline.py`'de ilgisiz altı `timezone.utc` → `UTC` düzeltmesi
+yapmıştı; commit'i konusuna sadık tutmak için geri alındılar. Tam-depo lint borcu açık iş
+#21'in konusudur.
+
+### Dosyalar
+
+`config.py` · `schemas.py` (`ProbeTactic`, `ProbeCandidate`, `ProbeBundle`) ·
+`probe_factory.py` (yeni) · `pipeline.py` (`_probe_missions`, `_healthy_connectors`,
+`_fallback_probe_mission`, `_probe_attempt_summaries`, `plan_recovery`, `check_coverage`,
+üç `PipelineState` alanı) · `tests/test_probe_factory.py` (yeni) · `docs/ARCHITECTURE.md`
+
+### Ölçüm — henüz yapılmadı
+
+Probe turu başına yeni **ve kabul edilmiş** `SourceVersion` · sıfır-yield tur oranı · yeni
+kaynak başına connector çağrısı · tur gecikmesi. Tek bir önce/sonra koşusu yeterli değil;
+kaydedilmiş sağlayıcı cevaplarıyla replay ya da aynı koşullarda birkaç tekrar gerekir.
+Kazanç çıkmazsa flag kapalı kalır ve altılı yerinde durmaya devam eder.
+

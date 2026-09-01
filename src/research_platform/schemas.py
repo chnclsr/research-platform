@@ -619,6 +619,50 @@ class CoverageGap(BaseModel):
     failure_reasons: list[str] = Field(default_factory=list)
 
 
+class ProbeTactic(StrEnum):
+    """Ways of asking again when the ordinary gap missions have run out.
+
+    Primitives rather than missions: the model combines these with a gap and a focus, and a
+    deterministic compiler turns the result into a SearchMission. Six hand-written strategy
+    strings used to be rotated by round number regardless of what the run had already
+    tried -- these are what replaced them.
+    """
+
+    TERMINOLOGY_SHIFT = "terminology_shift"
+    METHODOLOGY_FOCUS = "methodology_focus"
+    COUNTEREVIDENCE = "counterevidence"
+    AUTHORITY_FOCUS = "authority_focus"
+    EXACT_IDENTIFIER = "exact_identifier"
+    CITATION_NEIGHBORHOOD = "citation_neighborhood"
+    TEMPORAL_UPDATE = "temporal_update"
+    POPULATION_CONTEXT = "population_context"
+
+
+class ProbeCandidate(BaseModel):
+    """One proposed way to probe, before anything operational is decided.
+
+    Deliberately thin. There is no domain, URL, budget, source family or result limit here,
+    because those are the compiler's to set from the protocol -- a model that could name
+    them could also send the run somewhere the protocol never allowed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str = Field(default_factory=new_id)
+    target_gap_ids: list[str] = Field(default_factory=list, max_length=8)
+    tactic: ProbeTactic
+    query_focus: str = Field(min_length=2, max_length=300)
+    connector_ids: list[str] = Field(default_factory=list, max_length=12)
+    reason: str = Field("", max_length=500)
+
+
+class ProbeBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Three at most, produced in one call: best-of-N without paying for N calls.
+    candidates: list[ProbeCandidate] = Field(default_factory=list, max_length=3)
+
+
 class SearchMission(BaseModel):
     id: str = Field(default_factory=new_id)
     gap_id: str | None = None

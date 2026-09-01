@@ -81,7 +81,7 @@ The research execution graph is implemented with LangGraph `StateGraph`, maintai
 | 10 | `ANALYZE_CLAIMS` | Reconciles claims across sources, builds the contradiction map, and aggregates empirical evidence. |
 | 11 | `AUDIT` | Verifies source coverage, validates quote precision, and computes citation completeness. |
 | 12 | `CHECK_COVERAGE` | **Decision Gate:** Evaluates whether evidence coverage satisfies protocol requirements. Routes to `expand` (triggering `PLAN_RECOVERY`), `finish` (proceeding to `ADVERSARIAL_REVIEW`), or `halt` (terminating the graph). |
-| 13 | `PLAN_RECOVERY` | If coverage is incomplete, formulates gap-targeted search queries and loops back to `SEARCH`. |
+| 13 | `PLAN_RECOVERY` | If coverage is incomplete, formulates gap-targeted search queries and loops back to `SEARCH`. When those are spent, behind `PROBE_STRATEGY_SELECTION_ENABLED`, builds recall probes for the open gaps from a fixed tactic vocabulary; a deterministic compiler sets every operational value. |
 | 14 | `ADVERSARIAL_REVIEW` | Subject syntheses to counter-argument verification and stress-testing. |
 | 15 | `SYNTHESIZE_EXPORT` | Generates the comprehensive research dossier, executive summaries, Markdown reports, and formatted Word (`.docx`) deliverables. |
 

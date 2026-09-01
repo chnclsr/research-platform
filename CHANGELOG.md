@@ -24,6 +24,13 @@ içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports
   preset kataloğundan seçim yapıyor: akademik, resmî, kod/veri ya da geniş tarama. Model
   serbest aile listesi üretmiyor, yalnız katalogdan bir anahtar seçiyor; anahtar tanınmazsa
   ya da sonuç doğrulanmazsa bugünkü varsayılan aynen kalıyor.
+- Recall probe'ları artık koşuya bakılarak kuruluyor. Açıldığında
+  (`PROBE_STRATEGY_SELECTION_ENABLED`, **varsayılan kapalı**) model açık gap'lere, daha önce
+  denenenlere ve hâlâ cevap veren connector'lara bakıp en fazla üç aday öneriyor; hangi
+  connector'ın, hangi limitin ve hangi tarih aralığının kullanılacağına kod karar veriyor.
+  Sonuçsuz bir tur yeni bir model çağrısı yapmadan sıradaki adayı deniyor. Model
+  erişilemezse tek bir deterministik probe'a düşülüyor, eski altılı rotasyona dönülmüyor.
+  Flag kapalıyken mevcut rotasyon aynen çalışmaya devam ediyor.
 - Seçimi kimin yaptığı artık protokolde kayıtlı (`selection_source`). Kullanıcının kapsam
   sorusunda açıkça "geniş tarama" demesi ile hiç seçim yapılmamış olması eskiden bit
   düzeyinde aynıydı; sentez bu yüzden verilmiş bir kararın üzerine yazabilirdi.

@@ -3364,6 +3364,18 @@ Ayrıntılar, `selection_source` provenance alanının neden gerektiği, çağı
 [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 içindedir.
 
+## 60. Adaptif harness katmanı — just-in-time probe factory
+
+Sıradan gap mission'ları tükendiğinde altı elle yazılmış strateji son eki tur numarasına göre
+döndürülüyordu; rotasyon hangi gap'in açık olduğunu, nelerin denendiğini ve hangi
+connector'ın hâlâ cevap verdiğini bilmiyordu. Yerine, modelin yalnız taktik ve odak önerdiği,
+her operasyonel değeri deterministik bir derleyicinin protokolden yazdığı bir katman geldi.
+
+Planın "altı stratejiyi kaldır" maddesinin neden uygulanmadığı — flag değişmeziyle çelişiyor —
+ve v0.16.1 sonlandırma semantiğinin nasıl korunduğu
+[JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
+içindedir.
+
 ## Bilinen açık işler
 
 Tek liste hâlinde [OPEN_ITEMS.md](OPEN_ITEMS.md) dosyasında tutuluyor: öncelik tablosu, her

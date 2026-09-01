@@ -50,6 +50,11 @@ from .passages import (
     relevant_sentence_claims,
     retrieve_passages,
 )
+from .probe_factory import (
+    compile_probe_candidate,
+    generate_probe_bundle,
+    score_probe_candidate,
+)
 from .protocol_synthesis import synthesize_source_selection
 from .query_compiler import compile_provider_query
 from .recovery import (
@@ -80,6 +85,7 @@ from .schemas import (
     CoverageMetrics,
     ExtractedClaim,
     Passage,
+    ProbeCandidate,
     ResearchProtocol,
     RunStatus,
     SearchMission,
@@ -147,6 +153,15 @@ class PipelineState(TypedDict, total=False):
     connector_success_rates: dict[str, float]
     round_new_source_versions: int
     consecutive_empty_recovery_rounds: int
+    # Probe candidates produced but not yet run. A round that returns nothing takes the
+    # next one from here instead of paying for another bundle.
+    probe_candidates_pending: list[dict[str, Any]]
+    # How often a fresh bundle has been asked for. Capped so an unproductive run cannot
+    # spend its budget regenerating probes.
+    probe_regenerations: int
+    # What the last probe attempt ran into, for the stop reason that replaces
+    # `probe_strategies_exhausted`.
+    probe_exhausted_reason: str
     budget_started_at: str
     planning_answers: list[str]
     applied_settings: list[dict[str, Any]]
@@ -2651,16 +2666,28 @@ class ResearchPipeline:
             consecutive_empty_recovery_rounds
             >= protocol.stopping_criteria.max_consecutive_empty_recovery_rounds
         )
-        probe_strategies_exhausted = (
-            literature_budget_mode
-            and round_new_source_versions == 0
-            and exhausted
-            and not literature_scan_probe_missions(
-                protocol,
-                round_number + 1,
-                attempted_missions,
+        if self.settings.probe_strategy_selection_enabled:
+            # `probe_strategies_exhausted` used to mean "the six-strategy rotation has
+            # nothing left". With probes built per round there is no list to run out of,
+            # so exhaustion is what the last attempt reported instead. Terminal behaviour
+            # is unchanged: this still resolves to recovery_exhausted_no_progress.
+            probe_strategies_exhausted = (
+                literature_budget_mode
+                and round_new_source_versions == 0
+                and exhausted
+                and state.get("probe_exhausted_reason") == "probe_candidates_exhausted"
             )
-        )
+        else:
+            probe_strategies_exhausted = (
+                literature_budget_mode
+                and round_new_source_versions == 0
+                and exhausted
+                and not literature_scan_probe_missions(
+                    protocol,
+                    round_number + 1,
+                    attempted_missions,
+                )
+            )
         if literature_budget_mode:
             # In inventory mode coverage is a diagnostic, not an early-stop trigger.
             # Continue trying diversified probes while collection time remains.
@@ -2684,6 +2711,46 @@ class ResearchPipeline:
             if "recovery_no_progress" not in coverage.reasons:
                 coverage.reasons.append("recovery_no_progress")
         discovery_stats = dict(state.get("discovery_stats", {}))
+        probe_missions = [
+            mission
+            for mission in state.get("missions", []) or []
+            if str(mission.get("branch_id", "")).startswith("probe:")
+        ]
+        for mission in probe_missions:
+            # Emitted here because this is where the round's discovery counters are already
+            # read; the probe and what it returned belong in the same place, or the two
+            # have to be joined by hand later.
+            outcome = {
+                "round": round_number,
+                "candidate_id": "",
+                "tactic": str(mission.get("branch_id", "")).split(":")[1:2][0]
+                if ":" in str(mission.get("branch_id", ""))
+                else "",
+                "connector": ",".join(mission.get("connector_ids", []) or []),
+                "provider_candidates": int(discovery_stats.get("round_provider_candidates", 0)),
+                "novel_candidates": int(discovery_stats.get("round_novel_candidates", 0)),
+                "admitted_candidates": int(discovery_stats.get("round_selected_candidates", 0)),
+                "acquisition_successful": int(
+                    discovery_stats.get("round_acquisition_successful", 0)
+                ),
+                "new_source_versions": round_new_source_versions,
+                "zero_yield_reason": "",
+            }
+            if round_new_source_versions == 0:
+                outcome["zero_yield_reason"] = (
+                    "no_provider_candidates"
+                    if outcome["provider_candidates"] == 0
+                    else "no_novel_candidates"
+                    if outcome["novel_candidates"] == 0
+                    else "no_admitted_candidates"
+                    if outcome["admitted_candidates"] == 0
+                    else "no_new_source_versions"
+                )
+            discovery_stats["probe_outcomes"] = [
+                *(discovery_stats.get("probe_outcomes") or []),
+                outcome,
+            ][-12:]
+            await self.repo.event(state["run_id"], "probe_candidate_outcome", outcome)
         if round_number > 1 and round_new_source_versions == 0:
             if int(discovery_stats.get("round_provider_candidates", 0)) == 0:
                 no_progress_reason = "no_provider_candidates"
@@ -2766,6 +2833,194 @@ class ResearchPipeline:
             return "halt"
         return "expand" if state.get("stop_reason") == "expand" else "finish"
 
+    def _healthy_connectors(self, state: PipelineState) -> list[str]:
+        """Connectors that are both reachable and actually answering.
+
+        The same rule SEARCH applies, read from the same state, so a probe cannot be sent
+        to a connector the round just watched fail.
+        """
+        rates = state.get("connector_success_rates", {}) or {}
+        return [
+            connector_id
+            for connector_id in state.get("available_connectors", []) or []
+            if float(rates.get(connector_id, 1.0)) >= 0.5
+        ]
+
+    def _probe_attempt_summaries(self, state: PipelineState) -> list[dict[str, Any]]:
+        """What earlier probes returned, as counts rather than as corpus text.
+
+        The raw trajectory carries unresolved claim wording; only the shape of the outcome
+        is needed to decide what to try next, and only that leaves this method.
+        """
+        stats = state.get("discovery_stats", {}) or {}
+        return [
+            {
+                "tactic": str(item.get("tactic") or ""),
+                "connector": str(item.get("connector") or ""),
+                "provider_candidates": int(item.get("provider_candidates") or 0),
+                "new_source_versions": int(item.get("new_source_versions") or 0),
+            }
+            for item in (stats.get("probe_outcomes") or [])
+        ]
+
+    def _fallback_probe_mission(
+        self,
+        protocol: ResearchProtocol,
+        gaps: list[CoverageGap],
+        healthy: list[str],
+        attempted: set[str],
+        round_number: int,
+    ) -> SearchMission | None:
+        """One deterministic probe, built from the gap that matters most.
+
+        Not a rotation: rotating fixed strategies is what this work removed. When even this
+        has been tried, the caller gets nothing and the run takes the ordinary
+        `completed_incomplete` path rather than circling.
+        """
+        if not gaps or not healthy:
+            return None
+        gap = max(gaps, key=lambda item: item.priority)
+        connector_ids = [
+            connector_id for connector_id in gap.preferred_connectors if connector_id in healthy
+        ] or healthy
+        query = constrain_text_to_scope(
+            f"{protocol.primary_question} {gap.topic}".strip()[:240],
+            protocol.scope.start_date,
+            protocol.scope.end_date,
+        )
+        mission = SearchMission(
+            gap_id=gap.id,
+            branch_id=f"probe:fallback:{round_number}",
+            query=query,
+            connector_ids=connector_ids[:8],
+            required_family=gap.missing_family,
+            result_limit=protocol.budget.results_per_connector,
+            acquisition_slots=min(10, protocol.budget.results_per_connector),
+            novelty_required=True,
+        )
+        return None if mission_signature(mission) in attempted else mission
+
+    async def _probe_missions(
+        self,
+        state: PipelineState,
+        protocol: ResearchProtocol,
+        gaps: list[CoverageGap],
+        attempted: set[str],
+        round_number: int,
+    ) -> tuple[list[SearchMission], dict[str, Any]]:
+        """The probe for this round, and the state that carries the rest forward."""
+        healthy = self._healthy_connectors(state)
+        pending = [
+            ProbeCandidate.model_validate(item)
+            for item in state.get("probe_candidates_pending", []) or []
+        ]
+        regenerations = int(state.get("probe_regenerations", 0))
+        source = "carryover"
+        rejected: list[dict[str, str]] = []
+        if not pending:
+            # One bundle per exhaustion cycle, and one regeneration after that. A run that
+            # keeps returning nothing must not keep buying new ways to return nothing.
+            if regenerations > 1:
+                return [], {
+                    "probe_candidates_pending": [],
+                    "probe_regenerations": regenerations,
+                    "probe_exhausted_reason": "probe_candidates_exhausted",
+                }
+            started = time.monotonic()
+            bundle = await generate_probe_bundle(
+                self.llm,
+                protocol,
+                gaps,
+                healthy,
+                self._probe_attempt_summaries(state),
+            )
+            await self._emit_llm_metrics(state["run_id"], "PLAN_RECOVERY")
+            pending = list(bundle.candidates) if bundle else []
+            regenerations += 1
+            source = "scorer"
+            await self.repo.event(
+                state["run_id"],
+                "probe_bundle_generated",
+                {
+                    "round": round_number,
+                    "gap_ids": [gap.id for gap in gaps][:8],
+                    "tactics": [candidate.tactic.value for candidate in pending],
+                    "candidate_count": len(pending),
+                    "generated_by": "model" if bundle else "fallback",
+                    "latency_ms": int((time.monotonic() - started) * 1000),
+                    "rejected": rejected,
+                },
+            )
+        compiled: list[tuple[float, int, ProbeCandidate, SearchMission]] = []
+        for rank, candidate in enumerate(pending, start=1):
+            mission = compile_probe_candidate(
+                candidate, protocol, gaps, healthy, attempted, round_number
+            )
+            if mission is None:
+                rejected.append({"candidate_id": candidate.candidate_id, "reason": "not_compilable"})
+                continue
+            compiled.append(
+                (score_probe_candidate(candidate, mission, gaps, self._probe_attempt_summaries(state)),
+                 rank, candidate, mission)
+            )
+        if not compiled:
+            mission = self._fallback_probe_mission(
+                protocol, gaps, healthy, attempted, round_number
+            )
+            reason = "no_valid_novel_probe" if pending else "probe_generation_failed"
+            if mission is None:
+                return [], {
+                    "probe_candidates_pending": [],
+                    "probe_regenerations": regenerations,
+                    "probe_exhausted_reason": "probe_candidates_exhausted",
+                }
+            await self.repo.event(
+                state["run_id"],
+                "probe_candidate_selected",
+                {
+                    "round": round_number,
+                    "candidate_id": "",
+                    "tactic": "",
+                    "suggested_rank": 0,
+                    "selected_by": "fallback",
+                    "score": 0.0,
+                    "connector_ids": mission.connector_ids,
+                    "mission_signature": mission_signature(mission),
+                    "disagreed_with_model": False,
+                },
+            )
+            return [mission], {
+                "probe_candidates_pending": [],
+                "probe_regenerations": regenerations,
+                "probe_exhausted_reason": reason,
+            }
+        compiled.sort(key=lambda item: (-item[0], item[1]))
+        score, rank, candidate, mission = compiled[0]
+        await self.repo.event(
+            state["run_id"],
+            "probe_candidate_selected",
+            {
+                "round": round_number,
+                "candidate_id": candidate.candidate_id,
+                "tactic": candidate.tactic.value,
+                "suggested_rank": rank,
+                "selected_by": source,
+                "score": score,
+                "connector_ids": mission.connector_ids,
+                "mission_signature": mission_signature(mission),
+                # Recorded rather than inferred later: whether the deterministic scorer
+                # earns its place is exactly the question the measurement has to answer.
+                "disagreed_with_model": rank != 1,
+            },
+        )
+        return [mission], {
+            "probe_candidates_pending": [
+                item[2].model_dump(mode="json") for item in compiled[1:]
+            ],
+            "probe_regenerations": regenerations,
+            "probe_exhausted_reason": "",
+        }
+
     async def plan_recovery(self, state: PipelineState) -> dict:
         await self._boundary(state, "PLAN_RECOVERY")
         protocol = ResearchProtocol.model_validate(state["protocol"])
@@ -2773,12 +3028,20 @@ class ResearchPipeline:
         attempted = set(state.get("attempted_missions", []))
         gaps = [CoverageGap.model_validate(item) for item in state.get("gaps", [])]
         missions = recovery_missions(protocol, gaps, attempted)
+        probe_state: dict[str, Any] = {}
         if (
             protocol.research_mode == "literature_scan"
             and protocol.budget.exhaustive_until_budget
             and not missions
         ):
-            missions = literature_scan_probe_missions(protocol, round_number, attempted)
+            if self.settings.probe_strategy_selection_enabled:
+                missions, probe_state = await self._probe_missions(
+                    state, protocol, gaps, attempted, round_number
+                )
+            else:
+                missions = literature_scan_probe_missions(
+                    protocol, round_number, attempted
+                )
         await self.repo.event(
             state["run_id"],
             "recovery_plan",
@@ -2797,6 +3060,7 @@ class ResearchPipeline:
             "required_branch_ids": state.get("required_branch_ids", []),
             "branch_queries": branch_queries,
             "round_number": round_number,
+            **probe_state,
         }
 
     async def audit(self, state: PipelineState) -> dict:
