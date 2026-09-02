@@ -12,10 +12,18 @@ import json
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any
+from typing import Any, Literal
 
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
+from .text_similarity import (
+    claim_guard_compatible,
+    ngram_jaccard,
+    normalise_text,
+    prose_overlaps,
+    sequence_ratio,
+    word_cosine,
+)
 
 
 @dataclass(frozen=True)
@@ -55,12 +63,20 @@ class SynthesisPackage:
     study_profiles: list[StudyProfile]
     generated_by_llm: bool
     generation_diagnostics: dict[str, str] = field(default_factory=dict)
+    report_mode: str = "standard"
+    quality_diagnostics: dict[str, Any] = field(default_factory=dict)
+    answerability_status: Literal["answerable", "insufficient"] = "answerable"
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @property
     def narrative(self) -> str:
+        # Compact reports render their integrated answer once in the summary surface. The
+        # internal section is retained for provenance and figures, but repeating it here
+        # would recreate the exact defect this mode is designed to avoid.
+        if self.report_mode == "compact":
+            return ""
         parts: list[str] = []
         for section in self.sections:
             parts.append(f"## {section.title}\n\n{section.synthesis}")
@@ -91,6 +107,58 @@ _OVERVIEW_FIELD_LIMITS = {
     "conclusion": 2400,
     "uncertainty": 2400,
 }
+_DIRECT_ANSWER_RELEVANCE_THRESHOLD = 0.35
+
+
+def _question_relevance(claim: Any) -> float:
+    """Read an audited relevance score defensively for report-level decisions."""
+    try:
+        return max(
+            0.0,
+            min(
+                1.0,
+                float(
+                    (getattr(claim, "audit", {}) or {}).get(
+                        "question_relevance", 0.0
+                    )
+                    or 0.0
+                ),
+            ),
+        )
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _insufficient_answerability_overview(*, turkish: bool) -> dict[str, str]:
+    if turkish:
+        return {
+            "executive_summary": (
+                "Mevcut kaynaklandırılmış kanıt, araştırma sorusuna güvenilir bir yanıt "
+                "vermek için yeterli değildir. Düşük soru ilgisine sahip komşu konu "
+                "bulguları ana yanıta dahil edilmemiştir."
+            ),
+            "cross_study_assessment": "",
+            "conclusion": "",
+            "uncertainty": (
+                "Doğrudan ilgili en az bir kaynaklandırılmış bulgu elde edilmeden güvenilir "
+                "bir öneri veya sonuç sunulamaz. Düşük ilgili iddialar yalnız denetim "
+                "eklerinde korunmuştur."
+            ),
+        }
+    return {
+        "executive_summary": (
+            "The available sourced evidence is insufficient to answer the research question "
+            "reliably. Findings about neighbouring topics with low question relevance were "
+            "not included in the main answer."
+        ),
+        "cross_study_assessment": "",
+        "conclusion": "",
+        "uncertainty": (
+            "No reliable recommendation or conclusion can be provided until at least one "
+            "directly relevant sourced finding is available. Low-relevance claims are retained "
+            "only in the audit appendices."
+        ),
+    }
 
 
 def citation_counts(*texts: str) -> Counter[str]:
@@ -322,6 +390,123 @@ def _words(text: str) -> set[str]:
     return {match.group(0).lower() for match in _WORD_RE.finditer(text) if match.group(0).lower() not in stop}
 
 
+def _scope_anchors(question: str) -> list[str]:
+    """Extract run-specific wording without a domain or season lookup table."""
+    quoted = [
+        next(value for value in match.groups() if value)
+        for match in re.finditer(r'"([^"\n]+)"|“([^”\n]+)”|\'([^\'\n]+)\'', question or "")
+    ]
+    acronyms = re.findall(r"\b[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9-]{1,}\b", question or "")
+    content = sorted(word for word in _words(question) if len(word) >= 4)
+    return list(dict.fromkeys([*quoted, *acronyms, *content]))[:24]
+
+
+def _anchor_present(anchor: str, text: str) -> bool:
+    anchor_words = normalise_text(anchor).split()
+    text_words = normalise_text(text).split()
+    if not anchor_words:
+        return True
+    if len(anchor_words) > 1:
+        return normalise_text(anchor) in normalise_text(text)
+    stem = anchor_words[0][:5]
+    return any(word.startswith(stem) for word in text_words)
+
+
+def _theme_scope_anchors(
+    anchors: list[str], claims: list[Any], claim_texts: dict[str, str] | None
+) -> list[str]:
+    claim_prose = " ".join(
+        (claim_texts or {}).get(str(claim.id), str(getattr(claim, "text", "")))
+        for claim in claims
+    )
+    return [anchor for anchor in anchors if _anchor_present(anchor, claim_prose)]
+
+
+def _deduplicate_report_claims(
+    claims: list[Any],
+    evidence_by_claim: dict[str, list[tuple[Any, Any]]],
+) -> tuple[list[Any], dict[str, list[tuple[Any, Any]]], dict[str, str]]:
+    """Conservatively collapse historical paraphrases before theme assignment."""
+    representatives: list[Any] = []
+    merged_evidence: dict[str, list[tuple[Any, Any]]] = {}
+    merged_ids: dict[str, str] = {}
+    for claim in claims:
+        claim_id = str(claim.id)
+        text = str(getattr(claim, "text", ""))
+        source_ids = {
+            str(source.id) for _, source in evidence_by_claim.get(claim_id, [])
+        }
+        representative = None
+        for other in representatives:
+            other_id = str(other.id)
+            other_text = str(getattr(other, "text", ""))
+            other_sources = {
+                str(source.id) for _, source in merged_evidence.get(other_id, [])
+            }
+            if not claim_guard_compatible(text, other_text):
+                continue
+            if sequence_ratio(text, other_text) >= 0.92 or (
+                bool(source_ids & other_sources) and word_cosine(text, other_text) >= 0.68
+            ):
+                representative = other
+                break
+        target_id = str(representative.id) if representative is not None else claim_id
+        if representative is None:
+            representatives.append(claim)
+            merged_evidence[target_id] = []
+        else:
+            merged_ids[claim_id] = target_id
+        known = {
+            (str(source.id), str(getattr(link, "quote", "")))
+            for link, source in merged_evidence[target_id]
+        }
+        for link, source in evidence_by_claim.get(claim_id, []):
+            key = (str(source.id), str(getattr(link, "quote", "")))
+            if key not in known:
+                merged_evidence[target_id].append((link, source))
+                known.add(key)
+    return representatives, merged_evidence, merged_ids
+
+
+def _contributing_sources(
+    claims: list[Any], evidence_by_claim: dict[str, list[tuple[Any, Any]]]
+) -> set[str]:
+    return {
+        str(source.id)
+        for claim in claims
+        for _, source in evidence_by_claim.get(str(claim.id), [])
+    }
+
+
+# Reasons that mean the corpus itself cannot support a thematic report. All of them are
+# settled before the themes are drafted, which is what makes a compact report an actually
+# integrated answer rather than a hidden set of themes.
+_CAPACITY_MODE_REASONS = frozenset(
+    {
+        "fewer_than_8_unique_claims",
+        "fewer_than_4_contributing_sources",
+        "estimated_completeness_below_0_5",
+        "fewer_than_2_viable_themes",
+    }
+)
+
+
+def _report_mode(
+    claims: list[Any],
+    evidence_by_claim: dict[str, list[tuple[Any, Any]]],
+    coverage: dict[str, Any] | None,
+) -> tuple[str, list[str]]:
+    reasons: list[str] = []
+    if len(claims) < 8:
+        reasons.append("fewer_than_8_unique_claims")
+    if len(_contributing_sources(claims, evidence_by_claim)) < 4:
+        reasons.append("fewer_than_4_contributing_sources")
+    completeness = float((coverage or {}).get("estimated_completeness", 1.0) or 0.0)
+    if completeness < 0.5:
+        reasons.append("estimated_completeness_below_0_5")
+    return ("compact" if reasons else "standard"), reasons
+
+
 def _generic_theme(claim_text: str, turkish: bool) -> str:
     text = claim_text.lower()
     rows = (
@@ -340,10 +525,15 @@ def _generic_theme(claim_text: str, turkish: bool) -> str:
 def _plan_themes(
     claims: list[Any],
     sub_questions: list[str],
+    evidence_by_claim: dict[str, list[tuple[Any, Any]]],
     *,
     turkish: bool,
+    report_mode: str,
     maximum: int = 5,
 ) -> list[tuple[str, list[Any]]]:
+    if report_mode == "compact":
+        title = "Kanıt özeti" if turkish else "Evidence summary"
+        return [(title, list(claims))] if claims else []
     usable_sub_questions = [str(item).strip() for item in sub_questions if str(item).strip()][:maximum]
     buckets: dict[str, list[Any]] = {title: [] for title in usable_sub_questions}
     generic: dict[str, list[Any]] = {}
@@ -369,7 +559,19 @@ def _plan_themes(
     leftovers = [claim for claim in claims if str(claim.id) not in assigned]
     if leftovers and rows:
         rows[0][1].extend(leftovers)
-    return rows
+    viable: list[tuple[str, list[Any]]] = []
+    sparse: list[Any] = []
+    for title, values in rows:
+        if len(values) >= 2 and len(_contributing_sources(values, evidence_by_claim)) >= 2:
+            viable.append((title, values))
+        else:
+            sparse.extend(values)
+    if sparse:
+        if viable:
+            viable[0][1].extend(sparse)
+        else:
+            viable = [("Temel bulgular" if turkish else "Core findings", sparse)]
+    return viable
 
 
 def _evidence_packet(
@@ -470,7 +672,7 @@ def _section_from_data(
         return None
     if foreign_sentences(synthesis, language):
         return None
-    return SynthesisSection(
+    section = SynthesisSection(
         title=title,
         synthesis=synthesis,
         consensus=_clean_cited_text(data.get("consensus"), allowed),
@@ -479,6 +681,171 @@ def _section_from_data(
         source_ids=source_ids,
         claim_ids=claim_ids,
     )
+    values = {
+        "consensus": section.consensus,
+        "disagreements": section.disagreements,
+        "implications": section.implications,
+    }
+    kept: list[str] = [section.synthesis]
+    for key, value in values.items():
+        if value and any(prose_overlaps(value, previous) for previous in kept):
+            values[key] = ""
+        elif value:
+            kept.append(value)
+    return replace(section, **values)
+
+
+def _collapse_overlapping_sections(
+    sections: list[SynthesisSection],
+) -> tuple[list[SynthesisSection], list[dict[str, Any]]]:
+    kept: list[SynthesisSection] = []
+    diagnostics: list[dict[str, Any]] = []
+    for section in sections:
+        duplicate_index = next(
+            (
+                index
+                for index, other in enumerate(kept)
+                if prose_overlaps(section.synthesis, other.synthesis)
+            ),
+            None,
+        )
+        if duplicate_index is None:
+            kept.append(section)
+            continue
+        other = kept[duplicate_index]
+        diagnostics.append(
+            {
+                "kept": other.title,
+                "removed": section.title,
+                "word_cosine": round(word_cosine(other.synthesis, section.synthesis), 3),
+                "trigram_jaccard": round(
+                    ngram_jaccard(other.synthesis, section.synthesis), 3
+                ),
+            }
+        )
+        kept[duplicate_index] = replace(
+            other,
+            source_ids=list(dict.fromkeys([*other.source_ids, *section.source_ids])),
+            claim_ids=list(dict.fromkeys([*other.claim_ids, *section.claim_ids])),
+            generation_note=f"{other.generation_note};merged_overlap",
+        )
+    return kept, diagnostics
+
+
+def _overview_overlap_rows(
+    overview: dict[str, str], sections: list[SynthesisSection]
+) -> list[dict[str, Any]]:
+    fields = [
+        ("executive_summary", overview.get("executive_summary", "")),
+        *[(f"theme:{section.title}", section.synthesis) for section in sections],
+        ("cross_study_assessment", overview.get("cross_study_assessment", "")),
+        ("conclusion", overview.get("conclusion", "")),
+    ]
+    overlaps: list[dict[str, Any]] = []
+    for index, (left_name, left) in enumerate(fields):
+        if not left:
+            continue
+        for right_name, right in fields[index + 1:]:
+            if not right or not prose_overlaps(left, right):
+                continue
+            overlaps.append(
+                {
+                    "left": left_name,
+                    "right": right_name,
+                    "word_cosine": round(word_cosine(left, right), 3),
+                    "trigram_jaccard": round(ngram_jaccard(left, right), 3),
+                }
+            )
+    return overlaps
+
+
+def _summary_overlaps_a_theme(summary: str, sections: list[SynthesisSection]) -> bool:
+    return bool(summary) and any(
+        prose_overlaps(summary, section.synthesis) for section in sections
+    )
+
+
+def _deduplicated_executive_summary(
+    summary: str, sections: list[SynthesisSection], *, turkish: bool
+) -> tuple[str, str]:
+    """Repair a summary that repeats a theme, rather than hiding the themes.
+
+    An overview that echoes a theme is a defect of the overview, not evidence that the
+    report lacks the capacity for themes. Returns the summary to render and a diagnostic
+    naming which rung produced it.
+    """
+    if not _summary_overlaps_a_theme(summary, sections):
+        return summary, "llm"
+    leads = [
+        lead
+        for section in sections
+        for lead in _sentences(section.synthesis)[:1]
+    ]
+    rebuilt = _bounded_grounded_join(leads, _OVERVIEW_FIELD_LIMITS["executive_summary"])
+    if rebuilt and not _summary_overlaps_a_theme(rebuilt, sections):
+        return rebuilt, "rebuilt_from_theme_leads"
+    pointer = (
+        "Kanıt tek bir genel hükümle özetlenemeyecek kadar tema bağımlıdır; "
+        "kaynaklandırılmış bulgular aşağıdaki tematik bölümlerde sunulmuştur."
+        if turkish
+        else "The evidence is too theme-dependent for a single overall statement; the "
+        "sourced findings are presented in the thematic sections below."
+    )
+    return pointer, "fallback:scoped_pointer"
+
+
+def _merge_sections_into_compact_answer(
+    sections: list[SynthesisSection], *, turkish: bool
+) -> list[SynthesisSection]:
+    """Fold every theme into one integrated answer before a compact report hides them.
+
+    Compact rendering drops `sections` from the reader-visible surface, so a mode change
+    that leaves several drafted themes behind deletes them from the report. Merging first
+    keeps every theme's prose and provenance in the one section that still gets rendered.
+    """
+    if len(sections) <= 1:
+        return sections
+    body = " ".join(
+        value
+        for section in sections
+        for value in (
+            section.synthesis,
+            section.consensus,
+            section.disagreements,
+            section.implications,
+        )
+        if value
+    ).strip()
+    return [
+        SynthesisSection(
+            title="Kanıt özeti" if turkish else "Evidence summary",
+            synthesis=body,
+            source_ids=list(
+                dict.fromkeys(
+                    source_id
+                    for section in sections
+                    for source_id in section.source_ids
+                )
+            ),
+            claim_ids=list(
+                dict.fromkeys(
+                    claim_id for section in sections for claim_id in section.claim_ids
+                )
+            ),
+            generation_note=";".join(
+                dict.fromkeys(
+                    [
+                        *(
+                            section.generation_note
+                            for section in sections
+                            if section.generation_note
+                        ),
+                        "merged_for_compact",
+                    ]
+                )
+            ),
+        )
+    ]
 
 
 def _fallback_section(
@@ -566,6 +933,7 @@ async def _draft_section(
     claim_ids: list[str],
     language: str,
     fallback: SynthesisSection,
+    scope_context: str = "",
 ) -> tuple[SynthesisSection, bool, str]:
     if not packet:
         return fallback, False, "fallback:no_evidence_packet"
@@ -580,8 +948,12 @@ async def _draft_section(
             "factual sentence. Never invent a source, number, method, population, result, or URL. "
             "Do not describe platform metrics, source counts, retrieval, claims, prompts, or auditing. "
             "Do not mention an evidence packet; write directly about the studies and their evidence. "
+            "Treat the supplied original wording and scope anchors as literal boundaries: do not "
+            "replace a time, condition, population, intervention, or outcome with a neighbouring "
+            "concept unless the evidence packet explicitly states that relationship. "
             f"Write in report language '{language}'.",
             f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
+            f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
             f"ALLOWED_SOURCE_IDS: {', '.join(source_ids)}\n\nEVIDENCE_PACKET:\n{packet}",
         )
         section = _section_from_data(
@@ -615,11 +987,19 @@ async def _draft_section(
         if repaired is not None:
             return repaired, True, "repair_passed"
         if isinstance(repair, dict):
-            forced_synthesis = _force_ground_text(
-                repair.get("synthesis"),
-                source_ids,
-                language,
+            repair_text = " ".join(
+                _normalise_text_value(value) for value in repair.values()
             )
+            repair_citations = set(_TOKEN_RE.findall(repair_text))
+            # Forced grounding may restore citations a translation dropped, but it must
+            # never launder an invented [Sxx] into an allowed one.
+            forced_synthesis = ""
+            if not (repair_citations - allowed):
+                forced_synthesis = _force_ground_text(
+                    repair.get("synthesis"),
+                    source_ids,
+                    language,
+                )
             if forced_synthesis:
                 return (
                     SynthesisSection(
@@ -652,6 +1032,7 @@ async def _draft_overview(
     sections: list[SynthesisSection],
     language: str,
     turkish: bool,
+    scope_context: str = "",
 ) -> tuple[dict[str, str], bool, str]:
     allowed = {
         f"[{source_id}]"
@@ -725,6 +1106,14 @@ async def _draft_overview(
                 errors.append(f"{key}:language_mismatch")
                 value = ""
             cleaned[key] = value or fallback_value
+        for overlap in _overview_overlap_rows(cleaned, sections):
+            if overlap["left"].startswith("theme:") and overlap["right"].startswith(
+                "theme:"
+            ):
+                continue
+            errors.append(
+                f"{overlap['left']}:overlap_with_{overlap['right']}"
+            )
         required_errors = [
             error
             for error in errors
@@ -743,9 +1132,13 @@ async def _draft_overview(
             "attach citations to factual statements. Use only the section drafts below. Never add "
             "new facts, numbers, sources, URLs, or platform/retrieval metrics. Make uncertainty "
             "specific to comparability, study design, validation, and evidence gaps. "
+            "Each field has a distinct role and must not reuse sentences or close paraphrases from "
+            "the theme cards or another field. Preserve the original scope boundaries; never replace "
+            "a time, condition, population, intervention, or outcome with a neighbouring concept. "
             f"Write in report language '{language}'.",
             f"RESEARCH_QUESTION:\n{question}\n\nALLOWED_SOURCE_IDS: "
-            f"{', '.join(sorted(allowed))}\n\nSECTION_DRAFTS:\n{section_digest}",
+            f"{', '.join(sorted(allowed))}\n\nSCOPE_BOUNDARIES:\n{scope_context}\n\n"
+            f"SECTION_DRAFTS:\n{section_digest}",
         )
         initial_candidate, initial_errors = candidate(initial_data)
         if initial_candidate is not None and not initial_errors:
@@ -775,9 +1168,10 @@ async def _draft_overview(
             "prose. Write entirely in the requested language. Keep only the allowed [Sxx] "
             "citations. Do not add facts, numbers, sources, URLs, or conclusions absent from the "
             "supplied draft or theme cards. Every factual field must retain at least one allowed "
-            "citation.",
+            "citation. Remove sentence reuse and close paraphrases between fields while preserving "
+            "their distinct roles and the supplied scope boundaries.",
             f"LANGUAGE: {language}\nALLOWED_SOURCE_IDS: {', '.join(sorted(allowed))}\n"
-            f"{repair_source}",
+            f"SCOPE_BOUNDARIES:\n{scope_context}\n{repair_source}",
         )
         repaired_candidate, repair_errors = candidate(repaired_data)
         if repaired_candidate is not None and not repair_errors:
@@ -815,20 +1209,34 @@ async def build_synthesis_package(
     evidence_by_claim: dict[str, list[tuple[Any, Any]]],
     sub_questions: list[str] | None = None,
     claim_texts: dict[str, str] | None = None,
+    display_question: str = "",
+    coverage: dict[str, Any] | None = None,
 ) -> SynthesisPackage:
     """Create a bounded, citation-validated synthesis package."""
     turkish = language.lower().startswith("tr")
+    unique_claims, synthesis_evidence, merged_claim_ids = _deduplicate_report_claims(
+        reportable_claims, evidence_by_claim
+    )
+    report_mode, mode_reasons = _report_mode(unique_claims, synthesis_evidence, coverage)
+    visible_question = display_question.strip() or question
+    anchors = _scope_anchors(visible_question)
+    scope_context = (
+        f"ORIGINAL_READER_QUESTION: {visible_question}\n"
+        f"LITERAL_SCOPE_ANCHORS: {', '.join(anchors) if anchors else '(none)'}"
+    )
     source_labels = {str(source.id): f"S{index:02d}" for index, source in enumerate(sources, 1)}
     profiles = build_study_profiles(
         sources,
-        reportable_claims,
-        evidence_by_claim,
+        unique_claims,
+        synthesis_evidence,
         turkish=turkish,
     )
     theme_plan = _plan_themes(
-        reportable_claims,
+        unique_claims,
         sub_questions or [],
+        synthesis_evidence,
         turkish=turkish,
+        report_mode=report_mode,
     )
     sections: list[SynthesisSection] = []
     llm_successes = 0
@@ -836,13 +1244,13 @@ async def build_synthesis_package(
     for index, (title, theme_claims) in enumerate(theme_plan, 1):
         packet, source_ids, claim_ids = _evidence_packet(
             theme_claims,
-            evidence_by_claim,
+            synthesis_evidence,
             source_labels,
         )
         fallback = _fallback_section(
             title,
             theme_claims,
-            evidence_by_claim,
+            synthesis_evidence,
             source_labels,
             turkish=turkish,
             claim_texts=claim_texts,
@@ -856,7 +1264,24 @@ async def build_synthesis_package(
             claim_ids=claim_ids,
             language=language,
             fallback=fallback,
+            scope_context=scope_context,
         )
+        required_anchors = _theme_scope_anchors(
+            anchors, theme_claims, claim_texts
+        )
+        visible_section_text = (
+            f"{section.synthesis} {section.consensus} "
+            f"{section.disagreements} {section.implications}"
+        )
+        missing_anchors = [
+            anchor
+            for anchor in required_anchors
+            if not _anchor_present(anchor, visible_section_text)
+        ]
+        if missing_anchors:
+            section = fallback
+            succeeded = False
+            diagnostic = "fallback:scope_anchor_drift"
         # The diagnostic travels with the section as well as in the run-level map. Reading
         # it back by `theme_{index}` means trusting that these two lists stay aligned, and
         # the citation record needs it per section to tell a discarded draft apart from a
@@ -864,15 +1289,81 @@ async def build_synthesis_package(
         sections.append(replace(section, generation_note=diagnostic))
         llm_successes += int(succeeded)
         generation_diagnostics[f"theme_{index}"] = diagnostic
+    sections, collapsed_sections = _collapse_overlapping_sections(sections)
+    if report_mode == "standard" and len(sections) < 2:
+        report_mode = "compact"
+        mode_reasons.append("fewer_than_2_viable_themes")
+        sections = _merge_sections_into_compact_answer(sections, turkish=turkish)
 
-    overview, overview_succeeded, overview_diagnostic = await _draft_overview(
-        llm,
-        question=question,
-        sections=sections,
-        language=language,
-        turkish=turkish,
+    if report_mode == "compact":
+        overview = {
+            "executive_summary": sections[0].synthesis if sections else "",
+            "cross_study_assessment": "",
+            "conclusion": "",
+            "uncertainty": (
+                "Kanıt hacmi ayrıntılı ve birbirinden bağımsız temalar kurmak için sınırlıdır; "
+                "sonuçlar yalnız kaynaklandırılan çalışma bağlamlarında yorumlanmalıdır."
+                if turkish
+                else "The evidence volume is too limited for multiple independent themes; "
+                "findings should be interpreted only in the cited study contexts."
+            ),
+        }
+        overview_succeeded = True
+        overview_diagnostic = "compact_not_run"
+    else:
+        overview, overview_succeeded, overview_diagnostic = await _draft_overview(
+            llm,
+            question=question,
+            sections=sections,
+            language=language,
+            turkish=turkish,
+            scope_context=scope_context,
+        )
+    overlap_rows = (
+        [] if report_mode == "compact" else _overview_overlap_rows(overview, sections)
     )
+    if report_mode == "standard":
+        # An overview that repeats a theme is repaired in the overview. It must not switch
+        # the report to compact: the themes are already drafted as separate sections by
+        # this point, and compact rendering would drop every one of them from the report
+        # instead of removing the one field that duplicates.
+        summary, summary_diagnostic = _deduplicated_executive_summary(
+            overview["executive_summary"], sections, turkish=turkish
+        )
+        overview["executive_summary"] = summary
+        generation_diagnostics["executive_summary"] = summary_diagnostic
+        if any("cross_study_assessment" in (row["left"], row["right"]) for row in overlap_rows):
+            overview["cross_study_assessment"] = ""
+        if any("conclusion" in (row["left"], row["right"]) for row in overlap_rows):
+            overview["conclusion"] = ""
+    relevance_scores = [_question_relevance(claim) for claim in unique_claims]
+    maximum_question_relevance = max(relevance_scores, default=0.0)
+    answerability_status: Literal["answerable", "insufficient"] = "answerable"
+    answerability_reasons: list[str] = []
+    # This gate replaces the whole report with a sufficiency notice, so it is tied to the
+    # evidence-capacity reasons that are decided before any theme is drafted. A compact
+    # report reached some other way has not been shown to lack the evidence to answer.
+    if (
+        report_mode == "compact"
+        and any(reason in _CAPACITY_MODE_REASONS for reason in mode_reasons)
+        and bool(unique_claims)
+        and maximum_question_relevance < _DIRECT_ANSWER_RELEVANCE_THRESHOLD
+    ):
+        answerability_status = "insufficient"
+        answerability_reasons.append("compact_low_question_relevance")
+        overview = _insufficient_answerability_overview(turkish=turkish)
+    invalid_repair_layers = [
+        layer
+        for layer, diagnostic in generation_diagnostics.items()
+        if diagnostic == "fallback:invalid_repair"
+    ]
     generation_diagnostics["overview"] = overview_diagnostic
+    generation_diagnostics["report_mode"] = report_mode
+    # Compact rendering shows only `sections[0]`, so more than one section here would be
+    # silently deleted from the report. Every path to compact must merge first.
+    assert not (report_mode == "compact" and len(sections) > 1), (
+        "compact reports must carry a single integrated section"
+    )
     return SynthesisPackage(
         executive_summary=overview["executive_summary"],
         sections=sections,
@@ -882,6 +1373,27 @@ async def build_synthesis_package(
         study_profiles=profiles,
         generated_by_llm=bool(sections) and llm_successes == len(sections) and overview_succeeded,
         generation_diagnostics=generation_diagnostics,
+        report_mode=report_mode,
+        answerability_status=answerability_status,
+        quality_diagnostics={
+            "mode_reasons": list(dict.fromkeys(mode_reasons)),
+            "input_claim_count": len(reportable_claims),
+            "unique_claim_count": len(unique_claims),
+            "contributing_source_count": len(
+                _contributing_sources(unique_claims, synthesis_evidence)
+            ),
+            "merged_claim_ids": merged_claim_ids,
+            "collapsed_sections": collapsed_sections,
+            "field_overlaps": overlap_rows,
+            "scope_anchors": anchors,
+            "answerability": {
+                "status": answerability_status,
+                "threshold": _DIRECT_ANSWER_RELEVANCE_THRESHOLD,
+                "maximum_question_relevance": round(maximum_question_relevance, 4),
+                "reason_codes": answerability_reasons,
+                "invalid_repair_layers": invalid_repair_layers,
+            },
+        },
     )
 
 

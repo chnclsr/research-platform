@@ -40,7 +40,7 @@ RISK = "B91C1C"
 PALE_BLUE = "EAF2FF"
 PALE_GREEN = "E8F5EE"
 PALE_GOLD = "FFF5DD"
-REPORT_PIPELINE_VERSION = "0.16.0"
+REPORT_PIPELINE_VERSION = "0.20.1"
 
 
 @dataclass(frozen=True)
@@ -553,7 +553,11 @@ def _collect_citations(
     """
     by_source = _evidence_by_source(evidence_by_claim)
     reportable_ids = {str(claim.id) for claim in reportable_claims}
-    sections = list(package.sections) if package is not None else []
+    sections = (
+        list(package.sections)
+        if package is not None and package.report_mode != "compact"
+        else []
+    )
     section_labels = {section.title: cited_labels(section) for section in sections}
     # A discarded draft still produces a section -- the deterministic fallback -- so a
     # `fallback:` note alone does not mean the source lost its place. It only explains an
@@ -615,6 +619,8 @@ def _collect_citations(
             reason = CitationDrop.NO_EVIDENCE
         elif not any(claim_id in reportable_ids for claim_id in claim_ids):
             reason = CitationDrop.NOT_REPORTABLE
+        elif package is not None and package.answerability_status == "insufficient":
+            reason = CitationDrop.ANSWERABILITY_GATE
         elif offered_sections and all(title in discarded for title in offered_sections):
             reason = CitationDrop.SECTION_DISCARDED
         elif offered_sections:
@@ -929,9 +935,21 @@ def _build_synthesis_word_report(
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
     subtitle.paragraph_format.space_after = Pt(36)
     subtitle_run = subtitle.add_run(
-        "Çalışmalar arası ortak sonuçlar, ayrışmalar ve araştırma boşlukları"
+        (
+            "Kanıt yeterliliği değerlendirmesi ve araştırma boşlukları"
+            if package.answerability_status == "insufficient"
+            else "Kısa yanıt, kaynaklandırılmış kanıt özeti ve araştırma boşlukları"
+            if package.report_mode == "compact"
+            else "Çalışmalar arası ortak sonuçlar, ayrışmalar ve araştırma boşlukları"
+        )
         if turkish
-        else "Cross-study findings, disagreements, and research gaps"
+        else (
+            "Evidence sufficiency assessment and research gaps"
+            if package.answerability_status == "insufficient"
+            else "Concise answer, sourced evidence summary, and research gaps"
+            if package.report_mode == "compact"
+            else "Cross-study findings, disagreements, and research gaps"
+        )
     )
     _set_run_font(subtitle_run, size=13, color=MUTED)
     cover_meta = document.add_table(rows=3, cols=2)
@@ -966,9 +984,6 @@ def _build_synthesis_word_report(
     lead.rows[0].cells[0].text = _text(package.executive_summary, 6000)
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
     _style_table(lead, [6.5], header_fill=PALE_BLUE, font_size=10.5)
-    document.add_heading("Sonuç cümlesi" if turkish else "Bottom line", level=2)
-    _add_cited_paragraph(document, package.conclusion, linkable_labels)
-
     document.add_heading(
         "2. Araştırma çerçevesi" if turkish else "2. Research frame",
         level=1,
@@ -1008,17 +1023,19 @@ def _build_synthesis_word_report(
         _set_cell_shading(cells[0], HEADER_FILL)
     _style_table(frame, [1.65, 4.85])
 
-    document.add_heading(
-        "3. Tematik kanıt sentezi" if turkish else "3. Thematic evidence synthesis",
-        level=1,
-    )
-    if not package.sections:
+    if package.report_mode != "compact":
+        document.add_heading(
+            "3. Tematik kanıt sentezi" if turkish else "3. Thematic evidence synthesis",
+            level=1,
+        )
+    if not package.sections and package.report_mode != "compact":
         document.add_paragraph(
             "Sentez için yeterli kaynaklandırılmış bulgu bulunamadı."
             if turkish
             else "No sufficiently sourced findings were available for synthesis."
         )
-    for index, section in enumerate(package.sections, 1):
+    visible_sections = package.sections if package.report_mode != "compact" else []
+    for index, section in enumerate(visible_sections, 1):
         document.add_heading(f"3.{index} {_text(section.title, 240)}", level=2)
         _add_cited_paragraph(document, section.synthesis, linkable_labels)
         comparison_rows = [
@@ -1114,20 +1131,33 @@ def _build_synthesis_word_report(
                 linkable=linkable_labels,
             )
 
+    if package.report_mode != "compact":
+        document.add_heading(
+            "4. Çalışmalar arası değerlendirme ve sonuç"
+            if turkish
+            else "4. Cross-study assessment and conclusion",
+            level=1,
+        )
+        if package.cross_study_assessment:
+            _add_cited_paragraph(
+                document, package.cross_study_assessment, linkable_labels
+            )
+        if package.conclusion:
+            document.add_heading("Sonuç" if turkish else "Conclusion", level=2)
+            _add_cited_paragraph(document, package.conclusion, linkable_labels)
     document.add_heading(
-        "4. Çalışmalar arası değerlendirme ve sonuç"
+        (
+            "3. Belirsizlikler ve araştırma boşlukları"
+            if package.report_mode == "compact"
+            else "Belirsizlikler ve araştırma boşlukları"
+        )
         if turkish
-        else "4. Cross-study assessment and conclusion",
-        level=1,
-    )
-    _add_cited_paragraph(document, package.cross_study_assessment, linkable_labels)
-    document.add_heading("Sonuç" if turkish else "Conclusion", level=2)
-    _add_cited_paragraph(document, package.conclusion, linkable_labels)
-    document.add_heading(
-        "Belirsizlikler ve araştırma boşlukları"
-        if turkish
-        else "Uncertainties and research gaps",
-        level=2,
+        else (
+            "3. Uncertainties and research gaps"
+            if package.report_mode == "compact"
+            else "Uncertainties and research gaps"
+        ),
+        level=1 if package.report_mode == "compact" else 2,
     )
     uncertainty_box = document.add_table(rows=1, cols=1)
     uncertainty_box.rows[0].cells[0].text = _text(package.uncertainty, 6000)
@@ -1206,6 +1236,41 @@ def _build_synthesis_word_report(
             f"Connector scope: {', '.join(connector_ids or []) or 'protocol defaults'}."
         )
     )
+    mode_reasons = package.quality_diagnostics.get("mode_reasons", [])
+    document.add_paragraph(
+        (
+            f"Rapor biçimi: {package.report_mode}. Gerekçe: "
+            f"{', '.join(mode_reasons) if mode_reasons else 'standart kanıt kapasitesi karşılandı'}."
+        )
+        if turkish
+        else (
+            f"Report mode: {package.report_mode}. Reason: "
+            f"{', '.join(mode_reasons) if mode_reasons else 'standard evidence capacity met'}."
+        )
+    )
+    answerability = package.quality_diagnostics.get("answerability", {})
+    if answerability:
+        document.add_paragraph(
+            (
+                f"Yanıtlanabilirlik: {answerability.get('status', package.answerability_status)}. "
+                f"Eşik: {float(answerability.get('threshold', 0.35)):.2f}; gözlenen en yüksek "
+                f"soru ilgisi: "
+                f"{float(answerability.get('maximum_question_relevance', 0.0)):.2f}. "
+                f"Gerekçeler: {', '.join(answerability.get('reason_codes', [])) or 'yok'}. "
+                f"Geçersiz onarım katmanları: "
+                f"{', '.join(answerability.get('invalid_repair_layers', [])) or 'yok'}."
+            )
+            if turkish
+            else (
+                f"Answerability: {answerability.get('status', package.answerability_status)}. "
+                f"Threshold: {float(answerability.get('threshold', 0.35)):.2f}; highest observed "
+                f"question relevance: "
+                f"{float(answerability.get('maximum_question_relevance', 0.0)):.2f}. "
+                f"Reasons: {', '.join(answerability.get('reason_codes', [])) or 'none'}. "
+                f"Invalid repair layers: "
+                f"{', '.join(answerability.get('invalid_repair_layers', [])) or 'none'}."
+            )
+        )
 
     _add_literature_topic_map_appendix(
         document,
@@ -1251,11 +1316,19 @@ def _build_synthesis_word_report(
         else "Appendix D. Audited claim register",
         level=1,
     )
-    claim_table = document.add_table(rows=1, cols=5)
+    if package.answerability_status == "insufficient":
+        document.add_paragraph(
+            "Aşağıdaki iddialar izlenebilirlik için korunmuştur; düşük soru ilgileri "
+            "nedeniyle ana yanıta dahil edilmemiştir."
+            if turkish
+            else "The claims below are retained for traceability; their low question "
+            "relevance kept them out of the main answer."
+        )
+    claim_table = document.add_table(rows=1, cols=6)
     claim_headers = (
-        ("#", "İddia", "Durum", "Güven", "Kaynaklar")
+        ("#", "İddia", "Durum", "Güven", "Soru ilgisi", "Kaynaklar")
         if turkish
-        else ("#", "Claim", "Status", "Confidence", "Sources")
+        else ("#", "Claim", "Status", "Confidence", "Question relevance", "Sources")
     )
     for cell, label in zip(claim_table.rows[0].cells, claim_headers):
         cell.text = label
@@ -1265,9 +1338,11 @@ def _build_synthesis_word_report(
         row[1].text = _text(claim.text, 280)
         row[2].text = _text(claim.status, 20)
         row[3].text = f"{float(getattr(claim, 'confidence', 0.0) or 0.0):.2f}"
+        audit = getattr(claim, "audit", {}) or {}
+        row[4].text = f"{float(audit.get('question_relevance', 0.0) or 0.0):.2f}"
         numbers = _claim_sources(str(claim.id), evidence_by_claim, source_numbers)
-        row[4].text = ", ".join(f"S{number:02d}" for number in numbers) or "—"
-    _style_table(claim_table, [0.45, 3.65, 0.8, 0.65, 0.95], font_size=8)
+        row[5].text = ", ".join(f"S{number:02d}" for number in numbers) or "—"
+    _style_table(claim_table, [0.4, 3.15, 0.7, 0.55, 0.85, 0.85], font_size=8)
 
     if figure_observations:
         document.add_section(WD_SECTION.NEW_PAGE)

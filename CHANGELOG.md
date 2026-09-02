@@ -1,10 +1,10 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.19.0`
+Platform sürümü: `v0.20.1`
 
-Belge sürümü: `6.39`
+Belge sürümü: `6.41`
 
-Son güncelleme: `2026-09-01`
+Son güncelleme: `2026-09-02`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -17,6 +17,47 @@ ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 ve [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.20.1 — 2026-09-02
+
+- Kompakt raporda hiçbir raporlanabilir iddia `0.35` soru ilgisine ulaşmıyorsa komşu konu
+  bulguları artık ana yanıt gibi sıralanmıyor. Rapor, mevcut kaynaklandırılmış kanıtın soruyu
+  güvenilir biçimde yanıtlamaya yetmediğini açıkça bildiriyor.
+- Yanıtlanabilirlik kararı LLM onarım sonucundan bağımsızdır. `invalid_repair` katmanları
+  teşhis kaydında korunurken düşük ilgili iddialar yalnız denetim eklerinde, soru ilgisi ve
+  kaynak izleriyle gösteriliyor.
+- Kapı kararı koşu olayına, yeniden üretilebilirlik manifestine ve Word yöntem ekine yazılıyor;
+  bastırılan kaynaklar panelde “Yanıtlanabilirlik kapısında elendi” akıbetiyle ayrıştırılıyor.
+- Özet ile bir temanın örtüşmesi artık rapor biçimini değiştirmiyor. Bu örtüşme overview
+  katmanının kusurudur; yeterli kanıt kapasitesine sahip bir rapor bu yüzden kompakt biçime
+  düşerek bütün temalarını kaybediyordu. Yinelenen özet yerinde onarılıyor — önce tema başına
+  bir öncü cümleden yeniden kuruluyor, o da ayrışmazsa temalara yönlendiren kısa bir çerçeve
+  cümlesine düşüyor — temalar görünür kalıyor.
+- Kompakt biçime geçen her yol, temaları gizlemeden önce tek bir entegre yanıta birleştiriyor.
+  Kompakt bir paketin birden çok bölüm taşıması artık paket üretilirken engelleniyor.
+- Yanıtlanabilirlik kapısı yalnız kanıt kapasitesi nedeniyle kompakt olan raporlarda
+  çalışıyor; biçim değişikliğinden doğan bir kompaktlık raporu “yetersiz” ilan edemiyor.
+
+## v0.20.0 — 2026-09-02
+
+- Word raporundaki aynı sonuç paragrafını hem “Sonuç cümlesi” hem “Sonuç” altında basan
+  şablon kusuru kaldırıldı. Sonuç metni görünür belgede artık tek yerde bulunuyor.
+- Claim tekilleştirme yalnız karakter sırasına bakmıyor; normalize metin, sözcük kosinüsü,
+  embedding, aynı passage ve quote sinyallerini birlikte kullanıyor. Sayı veya olumsuzluk
+  değişiyorsa semantik yakınlık tek başına birleştirme yapamıyor. Birleşen claim'in farklı
+  kaynaklardaki evidence bağlantıları korunuyor; aynı kaynak sürümündeki en güçlü iz tutuluyor.
+- Sekizden az benzersiz claim, dörtten az katkı sağlayan kaynak, `%50` altı tahmini tamlık
+  veya ikiden az uygulanabilir tema bulunan koşular otomatik olarak kompakt rapora geçiyor.
+  Kompakt rapor aynı dar kanıtı özet, tema, değerlendirme ve sonuç alanlarında çoğaltmıyor.
+- Okuyucuya gösterilen alanlar sözcük kosinüsü, üçlü ifade örtüşmesi ve dize benzerliğiyle
+  karşılaştırılıyor. Yakın tekrar overview katmanında bir kez onarılıyor; onarım da ayrışma
+  sağlayamazsa yinelenen isteğe bağlı alan gizleniyor.
+- Kullanıcının özgün soru terimleri koşuya özel kapsam çıpaları olarak senteze taşınıyor.
+  Mevsim veya hastalık adı hardcode edilmiyor: soru ile yerelleştirilmiş claim'de ortak olan
+  terim taslakta kaybolursa doğrulanmış claim fallback'i kullanılıyor.
+- Rapor modu, seçim gerekçeleri, claim birleşimleri, tema birleşimleri ve alanlar arası
+  benzerlik ölçümleri koşu olayına, yeniden üretilebilirlik manifestine ve Word yöntem ekine
+  yazılıyor.
 
 ## v0.19.0 — 2026-09-01
 

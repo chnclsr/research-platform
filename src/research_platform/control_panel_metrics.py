@@ -53,6 +53,7 @@ FATE_LABELS = {
     "no_evidence": "Kanıt çıkarılamadı",
     "claim_below_threshold": "İddia denetimden geçmedi",
     "not_reportable": "İddia rapor eşiğini geçmedi",
+    "answerability_gate": "Yanıtlanabilirlik kapısında elendi",
     "section_discarded": "Bölüm taslağı elendi",
     "offered_not_cited": "Kanıt var, atıf yok",
     "no_export": "Rapor henüz üretilmedi",

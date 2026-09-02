@@ -279,6 +279,8 @@ async def build_exports(
         # Sub-questions become section headings in the report, so these are printed text.
         sub_questions=protocol.sub_questions_for_report(),
         claim_texts=claim_texts,
+        display_question=protocol.question_for_report(),
+        coverage=coverage.model_dump(),
     )
     await repo.event(
         run_id,
@@ -286,6 +288,9 @@ async def build_exports(
         {
             "generated_by_llm": synthesis_package.generated_by_llm,
             "layers": synthesis_package.generation_diagnostics,
+            "report_mode": synthesis_package.report_mode,
+            "answerability_status": synthesis_package.answerability_status,
+            "quality": synthesis_package.quality_diagnostics,
         },
     )
     figure_result = FigurePipelineResult()
@@ -443,16 +448,32 @@ async def build_exports(
     # ordinary short document. The reader is told instead of left to wonder.
     empty_corpus = bool(sources) and not reportable
     corpus_note = f"> {labels['empty_corpus_note']}\n\n" if empty_corpus else ""
+    answerability_appendix_note = (
+        (
+            "> Bu iddialar izlenebilirlik için korunmuştur; düşük soru ilgileri nedeniyle "
+            "ana yanıta dahil edilmemiştir.\n\n"
+            if language_is_turkish
+            else "> These claims are retained for traceability; their low question relevance "
+            "kept them out of the main answer.\n\n"
+        )
+        if synthesis_package.answerability_status == "insufficient"
+        else ""
+    )
+    thematic_block = (
+        f"## {labels['thematic']}\n\n{_markdown(synthesis.get('report'))}\n\n"
+        if synthesis.get("report")
+        else ""
+    )
     report_md = (
         f"# {protocol.title}\n\n"
         f"{corpus_note}"
         f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
         f"## {summary_heading}\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
-        f"## {labels['thematic']}\n\n{_markdown(synthesis.get('report'))}\n\n"
+        f"{thematic_block}"
         f"## {labels['uncertainty']}\n\n"
         f"{_markdown(synthesis.get('uncertainty'))}\n\n"
-        f"## {labels['appendix_a']}\n\n{findings_md}\n\n"
-        f"## {labels['appendix_b']}\n\n{qualified_md}\n\n"
+        f"## {labels['appendix_a']}\n\n{answerability_appendix_note}{findings_md}\n\n"
+        f"## {labels['appendix_b']}\n\n{answerability_appendix_note}{qualified_md}\n\n"
         f"## {labels['appendix_c']}\n\n"
         f"{labels['appendix_c_body'].format(count=len(sources))}\n"
     )
@@ -621,6 +642,9 @@ async def build_exports(
         "synthesis": {
             "generated_by_llm": synthesis_package.generated_by_llm,
             "layers": synthesis_package.generation_diagnostics,
+            "report_mode": synthesis_package.report_mode,
+            "answerability_status": synthesis_package.answerability_status,
+            "quality": synthesis_package.quality_diagnostics,
         },
     }
     files["10_reproducibility_manifest.json"] = (

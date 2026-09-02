@@ -1331,15 +1331,16 @@ class Repository(metaclass=_OwnershipEnforced):
         existing_ids = set(
             await self.session.scalars(select(ClaimRow.id).where(ClaimRow.run_id == run_id))
         )
-        existing_pairs = set(
-            (
-                await self.session.execute(
-                    select(EvidenceRow.claim_id, EvidenceRow.source_version_id)
-                    .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
-                    .where(ClaimRow.run_id == run_id)
-                )
-            ).tuples()
+        existing_evidence = list(
+            await self.session.scalars(
+                select(EvidenceRow)
+                .join(ClaimRow, ClaimRow.id == EvidenceRow.claim_id)
+                .where(ClaimRow.run_id == run_id)
+            )
         )
+        existing_pairs = {
+            (row.claim_id, row.source_version_id): row for row in existing_evidence
+        }
         for claim, version_id in claims:
             if claim.id not in existing_ids:
                 self.session.add(
@@ -1355,34 +1356,54 @@ class Repository(metaclass=_OwnershipEnforced):
                 )
                 existing_ids.add(claim.id)
             pair = (claim.id, version_id)
+            entailment = evidence_entailment(
+                claim.text,
+                claim.quote,
+                claim.confidence,
+            )
             if pair not in existing_pairs:
-                self.session.add(
-                    EvidenceRow(
-                        id=new_id(),
-                        claim_id=claim.id,
-                        source_version_id=version_id,
-                        direction=claim.direction,
-                        quote=claim.quote,
-                        location={
-                            "start_char": claim.original_start_char
-                            if claim.original_start_char is not None
-                            else claim.start_char,
-                            "end_char": claim.original_end_char
-                            if claim.original_end_char is not None
-                            else claim.end_char,
-                            "passage_id": claim.passage_id,
-                            "section_path": claim.section_path,
-                            "page_number": claim.page_number,
-                            "retrieval_score": claim.retrieval_score,
-                        },
-                        entailment_score=evidence_entailment(
-                            claim.text,
-                            claim.quote,
-                            claim.confidence,
-                        ),
-                    )
+                row = EvidenceRow(
+                    id=new_id(),
+                    claim_id=claim.id,
+                    source_version_id=version_id,
+                    direction=claim.direction,
+                    quote=claim.quote,
+                    location={
+                        "start_char": claim.original_start_char
+                        if claim.original_start_char is not None
+                        else claim.start_char,
+                        "end_char": claim.original_end_char
+                        if claim.original_end_char is not None
+                        else claim.end_char,
+                        "passage_id": claim.passage_id,
+                        "section_path": claim.section_path,
+                        "page_number": claim.page_number,
+                        "retrieval_score": claim.retrieval_score,
+                    },
+                    entailment_score=entailment,
                 )
-                existing_pairs.add(pair)
+                self.session.add(row)
+                existing_pairs[pair] = row
+            elif entailment > existing_pairs[pair].entailment_score:
+                # Semantic claim merging can bring two quotes from the same source version
+                # under one claim. The schema intentionally keeps one row per pair, so retain
+                # the stronger trace instead of silently keeping whichever arrived first.
+                row = existing_pairs[pair]
+                row.direction = claim.direction
+                row.quote = claim.quote
+                row.location = {
+                    "start_char": claim.original_start_char
+                    if claim.original_start_char is not None
+                    else claim.start_char,
+                    "end_char": claim.original_end_char
+                    if claim.original_end_char is not None
+                    else claim.end_char,
+                    "passage_id": claim.passage_id,
+                    "section_path": claim.section_path,
+                    "page_number": claim.page_number,
+                    "retrieval_score": claim.retrieval_score,
+                }
+                row.entailment_score = entailment
         await self.session.commit()
 
     async def list_claims(self, run_id: str) -> list[ClaimRow]:

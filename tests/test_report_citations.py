@@ -7,6 +7,7 @@ four distinct reasons a source with real evidence can still be absent from the d
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 from research_platform.report_synthesis import (
@@ -169,6 +170,19 @@ def test_a_fallback_section_that_still_cites_the_source_is_not_a_drop():
         ]
     )
     assert collect([s1], claims, [claim("c1")], pkg)["S01"].drop_reason == CitationDrop.CITED
+
+
+def test_answerability_gate_names_why_a_reportable_source_is_suppressed():
+    s1 = source("src-1")
+    claims = {"c1": [(link("e1", s1), s1)]}
+    pkg = package(
+        [section("Kanıt özeti", "Komşu konu bulgusu [S01].", offered=["S01"])]
+    )
+    pkg = replace(pkg, report_mode="compact", answerability_status="insufficient")
+
+    record = collect([s1], claims, [claim("c1")], pkg)["S01"]
+
+    assert record.drop_reason == CitationDrop.ANSWERABILITY_GATE
 
 
 def test_without_a_synthesis_package_every_source_still_gets_a_row():

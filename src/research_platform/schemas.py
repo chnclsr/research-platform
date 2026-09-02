@@ -590,6 +590,7 @@ class CitationDrop(StrEnum):
     CITED = "cited"
     NO_EVIDENCE = "no_evidence"
     NOT_REPORTABLE = "not_reportable"
+    ANSWERABILITY_GATE = "answerability_gate"
     SECTION_DISCARDED = "section_discarded"
     OFFERED_NOT_CITED = "offered_not_cited"
 

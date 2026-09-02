@@ -253,6 +253,16 @@ def test_the_export_record_supplies_the_reason_for_the_last_step():
     assert result["fate"]["label"] == "Kanıt var, atıf yok"
 
 
+def test_answerability_gate_has_an_operator_facing_fate_label():
+    result = chain_of(citation={"drop_reason": "answerability_gate"})
+
+    assert result["chain"]["report"] == "stop"
+    assert result["fate"] == {
+        "code": "answerability_gate",
+        "label": "Yanıtlanabilirlik kapısında elendi",
+    }
+
+
 def test_a_run_without_an_export_is_not_reported_as_a_dropped_source():
     # No citation row and no export is a run that has not got there yet. Calling that a
     # dropped source would invent a failure.

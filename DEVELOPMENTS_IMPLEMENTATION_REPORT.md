@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.19.0`
+Platform sürümü: `v0.20.0`
 
-Belge sürümü: `12.41`
+Belge sürümü: `12.42`
 
-Son güncelleme: `2026-09-01`
+Son güncelleme: `2026-09-02`
 
 ## Kapsam
 
@@ -3621,6 +3621,175 @@ fazla kapsam iddia ettiği, geriye dönük doldurmanın neden yapılmadığı ve
 migration adımı
 [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
 içindedir.
+
+## 65. Rapor tekrar kapısı ve kanıt yoğunluğuna göre biçim
+
+Bir üretim koşusunun DOCX incelemesi iki farklı tekrar sınıfını gösterdi. İlki tamamen
+deterministikti: `package.conclusion`, özet altındaki “Sonuç cümlesi” ve 4. bölümdeki
+“Sonuç” altında iki kez basılıyordu. İkincisi sentez kaynaklıydı: yedi raporlanabilir claim
+yalnız üç kaynağa dayanmasına rağmen özet, üç tema, ortak yön, ayrışma, klinik anlam,
+çalışmalar arası değerlendirme ve sonuç alanlarının tamamı dolduruluyordu. Ölçülen
+Özet–Temel bulgular sözcük kosinüsü `0,917`, üçlü ifade örtüşmesi `0,422` idi.
+
+Tarihsel `COVERAGE_RECOVERY_REDESIGN_REPORT.md` claim dedup için normalize metin, embedding,
+aynı passage/quote ve özne-yüklem-nesne benzerliğini birlikte istemişti; çalışan kod yalnız
+`SequenceMatcher > 0.92` kısmını taşıyordu. Bu bölüm o kararı geçersiz kılmıyor, eksik kalan
+çoklu sinyal kapısını tamamlıyor. Aynı biçimde 41. bölümdeki bağlam güvenli overview ve tek
+repair kararı korunuyor; repair kabulüne alan rolü ve örtüşme şartı ekleniyor.
+
+### Claim tekilleştirme kararı
+
+Yeni ortak benzerlik modülü karakter dizisi, sözcük kosinüsü, üçlü ifade Jaccard'ı ve vektör
+kosinüsünü deterministik biçimde hesaplıyor. Claim'ler şu yollardan biriyle birleşiyor:
+
+- normalize dize oranı `>= 0.92`,
+- aynı passage ve quote sözcük kosinüsü `>= 0.65`,
+- embedding kosinüsü `>= 0.90` ve claim sözcük kosinüsü `>= 0.55`,
+- yalnız sözcük kosinüsü `>= 0.82`.
+
+Sayı dizisi veya olumsuzluk imzası farklıysa bu yolların hiçbiri birleşme yapmıyor. Embedding
+servisi düşerse koşu düşmüyor; provenance ve lexical yollarla daha tutucu devam ediyor.
+Birleşen claim yeni satır açmıyor, yeni kaynak sürümünün evidence bağlantısı mevcut claim'e
+ekleniyor. Aynı claim–source-version çifti ikinci kez gelirse şema gereği tek evidence satırı
+kalıyor ve entailment puanı daha yüksek olan quote/konum korunuyor. Kararlar
+`claim_deduplication` olayında sinyal sayılarıyla kaydediliyor.
+
+Eski koşular yeniden export edildiğinde pipeline dedup'tan geçmiş olmayabilir. Bu nedenle
+tema planından hemen önce ikinci, muhafazakâr bir kapı var: aynı kaynağa dayanan ve sözcük
+kosinüsü `>= 0.68` olan, sayı/olumsuzluk korumalarını geçen paraphrase'ler tek temsilciye
+indiriliyor; evidence listeleri birleşiyor. Bu eşik kaynak ortaklığı olmadan uygulanmıyor.
+
+### Tema ve rapor biçimi kararı
+
+Aynı semantik claim kümesi yalnız bir temaya girebiliyor. Standart raporda bağımsız tema
+olabilmek için en az iki benzersiz claim ve iki katkı sağlayan kaynak gerekiyor; daha küçük
+kovalar en büyük uygulanabilir temaya katılıyor. Aşağıdaki koşullardan biri raporu kompakt
+biçime geçiriyor:
+
+- sekizden az benzersiz raporlanabilir claim,
+- dörtten az katkı sağlayan kaynak,
+- tahmini tamlık `< 0.50`,
+- planlama sonunda ikiden az uygulanabilir tema.
+
+Kompakt biçim tek bir kaynaklandırılmış kısa yanıt ve ayrı bir belirsizlik alanı gösteriyor.
+İç sentez bölümü provenance ve figür eşlemesi için korunuyor fakat Word ve Markdown'da ikinci
+kez basılmıyor. Standart biçimdeki “Sonuç cümlesi” kaldırıldı; sonuç varsa yalnız 4. bölümde.
+Boş sonuç veya çalışmalar arası değerlendirme başlığı da basılmıyor.
+
+### Alanlar arası yenilik ve kapsam sadakati
+
+Okuyucu alanlarından ikisi hem sözcük kosinüsünde `>= 0.82` hem üçlü ifade Jaccard'ında
+`>= 0.28` ise veya normalize dize oranı `>= 0.90` ise yakın tekrar sayılıyor. Tema içindeki
+yinelenen ortak yön/ayrışma/anlam alanı deterministik olarak gizleniyor; yinelenen temalar
+tek temada birleşiyor. Overview ilk taslağı bu kapıdan geçmezse 41. bölümdeki tek repair
+hakkını kullanıyor ve repair istemi alan rollerini açıkça ayırıyor. Repair sonrası özet hâlâ
+tema metninin yakın kopyasıysa **rapor biçimi değişmiyor**: özet yerinde onarılıyor. Önce her
+temanın öncü cümlesinden yeni bir özet kuruluyor; birden çok tema varken bu birleşim tek bir
+temanın kopyası olmuyor. O da ayrışmazsa özet, temalara yönlendiren kısa ve kaynaksız bir
+çerçeve cümlesine düşüyor — özet hiçbir koşulda boş bırakılmıyor, çünkü Word raporundaki
+“1. Özet” kutusu koşulsuz basılıyor. Yinelenen isteğe bağlı değerlendirme veya sonuç alanı
+eskisi gibi boş bırakılıyor. Hangi basamağın özeti ürettiği
+`generation_diagnostics["executive_summary"]` altında kaydediliyor.
+
+**Neden biçim değişmiyor.** Bu karar noktasında temalar zaten ayrı ayrı planlanmış ve
+yazılmış durumda; kompakt render ise `sections`'ı okuyucudan tamamen gizliyor. Biçimi burada
+çevirmek, tek bir alanın yinelenmesi yüzünden bütün tematik sentezi, çalışmalar arası
+değerlendirmeyi ve sonucu rapordan siliyordu. Üstelik tetikleyici nadir değildi: overview
+deterministik fallback'i özeti tema metinlerini birleştirerek kurduğu için, overview
+sağlayıcısının her başarısızlığı bu yolu açıyordu. Örtüşme bir overview kusurudur ve
+overview alanında onarılır.
+
+Kompakt biçime geçen her yol — bugün yalnız yukarıdaki dört kapasite koşulu — temaları
+gizlemeden önce hepsini tek bir entegre “Kanıt özeti” bölümüne birleştiriyor; kaynak ve
+claim kimlikleri korunuyor. Paket üretiminin sonunda kompakt bir raporun tek bölüm taşıdığı
+doğrulanıyor, böylece ileride eklenecek bir geç geçiş birleştirmeyi sessizce atlayamıyor.
+Aynı gerekçeyle yanıtlanabilirlik kapısı da yalnız kapasite kaynaklı kompaktlıkta çalışıyor.
+
+Kapsam koruması koşuya özel hardcode kullanmıyor. Kullanıcının raporda göreceği özgün sorudan
+tırnaklı ifadeler, kısaltmalar ve içerik sözcükleri dinamik çıkarılıyor. Bir çıpa aynı zamanda
+o temanın yerelleştirilmiş claim metninde bulunuyorsa, tema taslağında da korunmak zorunda.
+Eksilirse veya komşu kavramla değiştirilirse doğrulanmış, yerelleştirilmiş claim fallback'i
+kullanılıyor. Bu tasarım “bahar → yaz” kusurunu yakalıyor fakat kodda mevsim, hastalık veya
+klinik eşanlamlı listesi taşımıyor.
+
+Rapor modu, gerekçeleri, girdi/benzersiz claim ve katkı sağlayan kaynak sayıları, claim ve
+tema birleşimleri, alan benzerlikleri ve kapsam çıpaları `synthesis_generation` olayına,
+yeniden üretilebilirlik manifestine ve Word yöntem ekine yazılıyor. Böylece eşikler yalnız
+kod içi karar olarak kalmıyor; koşu çıktısından denetlenebiliyor.
+
+### Doğrulama
+
+Regresyon paketi; C02/C03 biçimindeki sözcük sırası değişmiş paraphrase'i, sayı ve olumsuzluk
+korumalarını, embedding fallback'ini, eski koşu claim birleşimini, seyrek kanıtta kompakt
+raporu, overview overlap repair'ini, dinamik kapsam çıpasını ve DOCX'te sonuç metninin bir kez
+basılmasını kapsıyor. Rapor pipeline sürümü `v0.20.0` oldu. Son kod değişikliğinden sonraki
+zorunlu tam kapı **718 passed, 1 warning**; odaklı regresyon paketi **35 passed**. Yeni
+`text_similarity.py` ile iki yeni test dosyası hedefli Ruff'ta temiz. Değişen tarihsel
+dosyaların Ruff tabanı artmadı: `report_synthesis.py` 7/7, `pipeline.py` 21/21,
+`repository.py` 3/3, `exporter.py` 0/0 ve `word_report.py` 1/1.
+
+`docker compose up -d --build` ve profil arkasındaki bot için ayrı
+`docker compose --profile telegram up -d --build telegram-bot` tamamlandı. Worker ve bot
+içinden paket sürümü `0.20.0`, worker içinden rapor pipeline sürümü `0.20.0` doğrulandı;
+PostgreSQL, Redis, MinIO, AgentSearch ve Docling (`cuda`) sağlıklı. Host Ollama bu dağıtımdan
+önce, `2026-09-01 17:01`'de başarılı biçimde durdurulmuş ve inactive bırakılmış; compose
+bunu yönetmediği için yeniden başlatılmadı. API sağlık kaydı bu nedenle `ollama: unavailable`
+gösteriyor ve yeni araştırma koşusu başlatılmadan önce ayrı operasyon kararı gerektiriyor.
+
+## 66. Kompakt rapor yanıtlanabilirlik kapısı
+
+v0.20.0'ın kompakt biçimi dar kanıtı farklı rapor rollerinde çoğaltmayı durdurdu; ancak
+`nasal_nodules_spring_allergy` koşusu ikinci bir sınırı görünür kıldı. Yedi raporlanabilir
+iddianın tamamı kabul eşiği olan `0.20` seviyesindeydi. Tek tema
+`fallback:invalid_repair` ile deterministik claim anlatımına döndüğü için rapor kısa olsa da
+CRSwNP, alt konka hipertrofisi ve vidian nörektomi gibi komşu klinik bağlamları ana cevap
+olarak sıralıyordu.
+
+Bu yama, 65. bölümdeki kompakt rapor kararını değiştirmiyor; ona ayrı bir
+**yanıtlanabilirlik** boyutu ekliyor. Rapor modu sunum kapasitesini, yanıtlanabilirlik ise
+kanıtın soruya doğrudan cevap verip veremediğini ifade ediyor. Kompakt raporda en az bir
+raporlanabilir claim bulunmasına rağmen bunların en yüksek `question_relevance` değeri
+`< 0.35` ise ana anlatı kaynak iddialarıyla doldurulmuyor. `0.35` sınırı geçerli kabul
+ediliyor. Eksik veya biçimsiz skor güvenli biçimde `0.0` sayılıyor.
+
+Karar `invalid_repair` sonucuna bağlı değil. Düşük ilgili bir tema LLM doğrulamasını geçse
+de ana cevapta gösterilmiyor; doğrudan ilgili bir tema onarımdan düşse de mevcut
+kaynaklandırılmış fallback davranışını koruyor. Onarım hataları yalnız teşhis bağlamı olarak
+`generation_diagnostics` ve yanıtlanabilirlik kaydında kalıyor.
+
+Kapı tetiklendiğinde Türkçe veya İngilizce sabit bir kanıt yetersizliği mesajı gösteriliyor;
+hastalık, mevsim ya da koşu adına özgü eşleştirme yapılmıyor. İç tema nesneleri, claim'ler,
+kanıtlar ve kaynaklar silinmiyor. Ana Word/Markdown anlatısından çıkarılan iddialar soru
+ilgisi sütunuyla denetim eklerinde, CSV/JSON ve ham teslim artefaktlarında korunuyor.
+Kaynak→referans izi bu durum için `answerability_gate` akıbetini kullanıyor; böylece
+raporlanabilir bir iddia yanlış biçimde `not_reportable` sayılmıyor.
+
+Karar durumu, `0.35` eşiği, gözlenen en yüksek ilgi, gerekçe kodu ve geçersiz onarım
+katmanları `synthesis_generation` olayına, yeniden üretilebilirlik manifestine ve Word yöntem
+ekine yazılıyor. Coverage, koşunun `completed`/`completed_incomplete` durumunun sahibi olmaya
+devam ediyor; bu yama terminal durum semantiğini değiştirmiyor.
+
+Doğrulama; düşük ilgili başarılı ve başarısız tema üretimini, `0.35` sınırını, standart ve
+boş-korpus raporlarını, Türkçe/İngilizce mesajları, ana gövde–denetim eki ayrımını ve yeni
+kaynak akıbetini kapsıyor. Odaklı paket **58 passed**, zorunlu tam kapı **725 passed, 1
+warning** sonucunu verdi. Değişen dosyalardaki hedefli Ruff tabanı artmadı:
+`report_synthesis.py` 7/7, `word_report.py` 1/1, `schemas.py` 3/3,
+`control_panel_metrics.py` 2/2 ve `exporter.py` 0/0. Rapor pipeline ve paket sürümü
+`v0.20.1` oldu.
+
+Ana uygulama yığını ve profil arkasındaki Telegram bot yeniden build edildi; API, worker ve
+bot içinde paket sürümü, worker içinde rapor pipeline sürümü `0.20.1` doğrulandı. Gerçek
+`nasal_nodules_spring_allergy` koşusunun yeniden export'unda karar `compact/insufficient`,
+eşik `0.35`, en yüksek soru ilgisi `0.20` ve geçersiz onarım katmanı `theme_1` olarak
+kaydedildi. Word ve Markdown ana gövdelerinde CRSwNP, alt turbinat, vidian ve biyolojik
+tedavi anlatıları bulunmazken iddialar denetim ekinde kaldı; 3 kaynak
+`answerability_gate`, 19 kaynak `no_evidence`, 4 kaynak `not_reportable` akıbeti aldı.
+
+Host `.venv` paketi `0.20.1` olarak yeniden kuruldu. `research-control-panel.service`
+yeniden başlatma işlemi sudo parolası gerektirdiği için ajan oturumundan tamamlanamadı;
+çalışan panel sağlıklı fakat süreç yeniden başlatılana kadar `/health` sürümü `0.17.0`
+gösteriyor. Operatörün bir kez `sudo systemctl restart research-control-panel` çalıştırması
+gerekiyor.
 
 ## Bilinen açık işler
 

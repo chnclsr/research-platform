@@ -170,6 +170,8 @@ def test_word_report_is_a_sourced_docx_with_embedded_figures() -> None:
     assert "Word exporter acceptance" in text
     assert "Thematic evidence synthesis" in text
     assert "platform-performance charts" in text
+    assert "Bottom line" not in text
+    assert text.count("The result is promising but not yet independently replicated [S01].") == 1
     assert level_one_headings == [
         "Contents",
         "1. Summary",
@@ -492,3 +494,171 @@ def test_theme_evidence_map_lights_only_the_studies_a_theme_cites() -> None:
     )
     assert cited_labels(section) == {"S01"}
     assert "S02" in section.source_ids
+
+
+def test_compact_word_report_renders_integrated_answer_only_once() -> None:
+    package = SynthesisPackage(
+        executive_summary="Seyrek kanıt yalnız sınırlı bir sonuç destekler [S01].",
+        sections=[
+            SynthesisSection(
+                title="Kanıt özeti",
+                synthesis="Seyrek kanıt yalnız sınırlı bir sonuç destekler [S01].",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="Kanıt hacmi sınırlıdır.",
+        study_profiles=[],
+        generated_by_llm=True,
+        report_mode="compact",
+        quality_diagnostics={"mode_reasons": ["fewer_than_8_unique_claims"]},
+    )
+    inputs = _minimal_report_inputs()
+    inputs.update(
+        {
+            "language": "tr",
+            "question": "Seyrek kanıt neyi destekliyor?",
+            "title": "Kompakt rapor",
+        }
+    )
+    report = build_word_report(**inputs, synthesis_package=package)
+    document = Document(io.BytesIO(report.document))
+    body = _body_text_in_order(document)
+
+    assert body.count("Seyrek kanıt yalnız sınırlı bir sonuç destekler [S01].") == 1
+    assert "Tematik kanıt sentezi" not in body
+    assert "Sonuç cümlesi" not in body
+    assert "3. Belirsizlikler ve araştırma boşlukları" in body
+    assert "Kısa yanıt, kaynaklandırılmış kanıt özeti" in body
+
+
+def test_standard_report_with_a_repaired_summary_still_renders_every_theme() -> None:
+    """A summary repaired for duplication must not cost the reader the themes.
+
+    This is the render half of the compact-collapse regression: the package below is what
+    synthesis now produces when the overview echoed a theme -- a deduplicated summary and
+    every theme intact -- and all of it has to reach the document.
+    """
+    package = SynthesisPackage(
+        executive_summary="Kanıt iki temada ayrışır ve tek bir hükümle özetlenemez [S01].",
+        sections=[
+            SynthesisSection(
+                title="Alfa protokolü",
+                synthesis="Alfa protokolü çalışma tasarımını ilgilendirir [S01].",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+            ),
+            SynthesisSection(
+                title="Beta sonlanımı",
+                synthesis="Beta sonlanımı ölçülen başarımı ilgilendirir [S02].",
+                source_ids=["S02"],
+                claim_ids=["claim-2"],
+            ),
+        ],
+        cross_study_assessment="Tasarımlar ayrı yorumlanmalıdır [S01].",
+        conclusion="",
+        uncertainty="Karşılaştırılabilirlik sınırlıdır.",
+        study_profiles=[],
+        generated_by_llm=True,
+        report_mode="standard",
+        generation_diagnostics={"executive_summary": "rebuilt_from_theme_leads"},
+        quality_diagnostics={
+            "mode_reasons": [],
+            "field_overlaps": [
+                {"left": "executive_summary", "right": "theme:Alfa protokolü"}
+            ],
+        },
+    )
+    inputs = _minimal_report_inputs()
+    inputs.update(
+        {
+            "language": "tr",
+            "question": "Alfa protokolü ile beta sonlanımı nasıl ayrışır?",
+            "title": "Standart rapor",
+        }
+    )
+    report = build_word_report(**inputs, synthesis_package=package)
+    document = Document(io.BytesIO(report.document))
+    body = _body_text_in_order(document)
+
+    assert "3. Tematik kanıt sentezi" in body
+    assert "3.1 Alfa protokolü" in body
+    assert "3.2 Beta sonlanımı" in body
+    # Citations are emitted as their own runs, so the prose is asserted without them.
+    assert "Alfa protokolü çalışma tasarımını ilgilendirir" in body
+    assert "Beta sonlanımı ölçülen başarımı ilgilendirir" in body
+    assert "[S01]" in body and "[S02]" in body
+    assert "4. Çalışmalar arası değerlendirme ve sonuç" in body
+    assert body.count("Kanıt iki temada ayrışır") == 1
+
+
+def test_insufficient_compact_report_suppresses_claims_but_keeps_the_audit_trail() -> None:
+    insufficient_message = (
+        "Mevcut kaynaklandırılmış kanıt, araştırma sorusuna güvenilir bir yanıt vermek "
+        "için yeterli değildir."
+    )
+    adjacent_claim = "CRSwNP için komşu hastalık tedavisi bildirilmiştir."
+    package = SynthesisPackage(
+        executive_summary=(
+            f"{insufficient_message} Düşük soru ilgisine sahip komşu konu bulguları ana "
+            "yanıta dahil edilmemiştir."
+        ),
+        sections=[
+            SynthesisSection(
+                title="Kanıt özeti",
+                synthesis=f"{adjacent_claim} [S01]",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+                generation_note="fallback:invalid_repair",
+            )
+        ],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="Düşük ilgili iddialar yalnız denetim eklerinde korunmuştur.",
+        study_profiles=[],
+        generated_by_llm=False,
+        report_mode="compact",
+        answerability_status="insufficient",
+        generation_diagnostics={
+            "theme_1": "fallback:invalid_repair",
+            "overview": "compact_not_run",
+            "report_mode": "compact",
+        },
+        quality_diagnostics={
+            "mode_reasons": ["fewer_than_8_unique_claims"],
+            "answerability": {
+                "status": "insufficient",
+                "threshold": 0.35,
+                "maximum_question_relevance": 0.2,
+                "reason_codes": ["compact_low_question_relevance"],
+                "invalid_repair_layers": ["theme_1"],
+            },
+        },
+    )
+    inputs = _minimal_report_inputs()
+    inputs.update(
+        {
+            "language": "tr",
+            "question": "Burundaki nodüller için en mantıklı tedavi nedir?",
+            "title": "Kanıt yeterliliği",
+        }
+    )
+    claim = inputs["reportable_claims"][0]
+    claim.text = adjacent_claim
+    claim.audit = {"question_relevance": 0.20}
+
+    report = build_word_report(**inputs, synthesis_package=package)
+    document = Document(io.BytesIO(report.document))
+    body = _body_text_in_order(document)
+    main_body = body.split("Ek A. Yöntem, kapsam ve yeniden üretilebilirlik", 1)[0]
+
+    assert insufficient_message in main_body
+    assert adjacent_claim not in main_body
+    assert "Kanıt yeterliliği değerlendirmesi ve araştırma boşlukları" in body
+    assert "ana yanıta dahil edilmemiştir" in body
+    assert "Soru ilgisi" in body
+    assert "0.20" in body
+    assert adjacent_claim in body
+    assert report.citations[0].drop_reason == "answerability_gate"

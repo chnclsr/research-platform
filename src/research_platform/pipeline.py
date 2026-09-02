@@ -7,9 +7,8 @@ import json
 import math
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
-from difflib import SequenceMatcher
 from typing import Any, TypedDict
 from urllib.parse import urlparse
 
@@ -103,6 +102,10 @@ from .scoping import (
 )
 from .storage import ObjectStore
 from .temporal import constrain_text_to_scope, enrich_publication_date
+from .text_similarity import (
+    claim_duplicate_reason,
+    word_cosine,
+)
 
 # Used when the model cannot produce usable scoping options. The checkpoint worked with
 # plain questions before options existed, so losing the tailored wording is not a reason to
@@ -2483,17 +2486,23 @@ class ResearchPipeline:
         raw = state.get("claims", [])
         accepted: list[tuple[ExtractedClaim, str]] = []
         existing = await self.repo.list_claims(state["run_id"])
+        existing_evidence = await self.repo.list_evidence(state["run_id"])
         document_titles = {
             payload["source_version_id"]: AcquiredDocument.model_validate(payload).candidate.title
             for payload in state.get("documents", [])
             if payload.get("source_version_id")
         }
-        seen: list[tuple[str, str]] = [
-            (re.sub(r"\W+", " ", claim.text.lower()).strip(), claim.id) for claim in existing
-        ]
+        provenance_by_claim: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        for claim, link, _ in existing_evidence:
+            location = link.location or {}
+            provenance_by_claim[str(claim.id)].append(
+                (str(location.get("passage_id") or ""), str(link.quote or ""))
+            )
+        candidates: list[tuple[ExtractedClaim, str]] = []
         for payload in raw:
-            version_id = payload.pop("source_version_id")
-            claim = ExtractedClaim.model_validate(payload)
+            claim_payload = dict(payload)
+            version_id = claim_payload.pop("source_version_id")
+            claim = ExtractedClaim.model_validate(claim_payload)
             relevance = claim_relevance(
                 claim.text,
                 " ".join(
@@ -2519,20 +2528,90 @@ class ResearchPipeline:
             )
             if relevance < 0.25 or promotional or not evidence_valid:
                 continue
-            normalized = re.sub(r"\W+", " ", claim.text.lower()).strip()
-            match = next(
-                (
-                    (other, claim_id)
-                    for other, claim_id in seen
-                    if SequenceMatcher(None, normalized, other).ratio() > 0.92
-                ),
-                None,
+            candidates.append((claim, version_id))
+
+        embedding_texts = [str(claim.text) for claim in existing] + [
+            claim.text for claim, _ in candidates
+        ]
+        try:
+            vectors = await self.embeddings.embed(embedding_texts)
+        except Exception as exc:  # noqa: BLE001 - lexical/provenance dedup remains safe
+            vectors = [[] for _ in embedding_texts]
+            await self.repo.event(
+                state["run_id"],
+                "embedding_fallback",
+                {"stage": "claim_deduplication", "error": type(exc).__name__},
             )
-            if match:
-                claim.id = match[1]
+        for metrics in self.embeddings.drain_metrics():
+            await self.repo.event(state["run_id"], "embedding_metrics", metrics)
+
+        seen: list[dict[str, Any]] = []
+        for index, claim in enumerate(existing):
+            provenance = provenance_by_claim.get(str(claim.id), [])
+            seen.append(
+                {
+                    "id": str(claim.id),
+                    "text": str(claim.text),
+                    "vector": vectors[index] if index < len(vectors) else [],
+                    "passages": {passage for passage, _ in provenance if passage},
+                    "quotes": [quote for _, quote in provenance if quote],
+                }
+            )
+
+        reasons: Counter[str] = Counter()
+        vector_offset = len(existing)
+        for index, (claim, version_id) in enumerate(candidates):
+            vector_index = vector_offset + index
+            vector = vectors[vector_index] if vector_index < len(vectors) else []
+            best: tuple[float, str, str] | None = None
+            for other in seen:
+                same_passage = bool(
+                    claim.passage_id and claim.passage_id in other["passages"]
+                )
+                quote_similarity = max(
+                    (word_cosine(claim.quote, quote) for quote in other["quotes"]),
+                    default=0.0,
+                )
+                reason, score = claim_duplicate_reason(
+                    claim.text,
+                    other["text"],
+                    left_vector=vector,
+                    right_vector=other["vector"],
+                    same_passage=same_passage,
+                    quote_similarity=quote_similarity,
+                )
+                if reason and (best is None or score > best[0]):
+                    best = (score, reason, other["id"])
+            if best is not None:
+                claim.id = best[2]
+                reasons[best[1]] += 1
+                target = next(item for item in seen if item["id"] == claim.id)
+                if claim.passage_id:
+                    target["passages"].add(claim.passage_id)
+                if claim.quote:
+                    target["quotes"].append(claim.quote)
             else:
-                seen.append((normalized, claim.id))
+                seen.append(
+                    {
+                        "id": str(claim.id),
+                        "text": claim.text,
+                        "vector": vector,
+                        "passages": {claim.passage_id} if claim.passage_id else set(),
+                        "quotes": [claim.quote] if claim.quote else [],
+                    }
+                )
             accepted.append((claim, version_id))
+        await self.repo.event(
+            state["run_id"],
+            "claim_deduplication",
+            {
+                "candidate_count": len(candidates),
+                "merged_count": sum(reasons.values()),
+                "new_count": len(candidates) - sum(reasons.values()),
+                "signals": dict(reasons),
+                "embedding_available": any(bool(vector) for vector in vectors),
+            },
+        )
         await self.repo.save_claims(state["run_id"], accepted)
         total_claims = await self.repo.list_claims(state["run_id"])
         await self.repo.update_run(state["run_id"], claims_count=len(total_claims))
