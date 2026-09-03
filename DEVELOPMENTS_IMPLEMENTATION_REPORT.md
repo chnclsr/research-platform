@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.20.0`
+Platform sürümü: `v0.21.0`
 
-Belge sürümü: `12.42`
+Belge sürümü: `12.43`
 
-Son güncelleme: `2026-09-02`
+Son güncelleme: `2026-09-03`
 
 ## Kapsam
 
@@ -3790,6 +3790,101 @@ yeniden başlatma işlemi sudo parolası gerektirdiği için ajan oturumundan ta
 çalışan panel sağlıklı fakat süreç yeniden başlatılana kadar `/health` sürümü `0.17.0`
 gösteriyor. Operatörün bir kez `sudo systemctl restart research-control-panel` çalıştırması
 gerekiyor.
+
+## 67. Kelime denetimini bırakma ve kanıtın tamamını modele gösterme
+
+`ai_radiology_report_ct` koşusu (`01M1HBNT96N969SGF1KK0254EJ`) 86 kaynak ve 115 iddia
+topladıktan sonra tek paragraflık bir docx üretti. Üç kusur üst üste binmişti.
+
+Birincisi rapor biçimiydi. `_report_mode`, `estimated_completeness < 0.5` olduğunda kompakt
+biçime düşüyordu. Bu değer Chao1 insidans tahmincisidir ve görülmeyen terimi
+`q1 ** 2 / (2 * q2)`'dir. Koşunun 86 kaynağından 84'ü tek sağlayıcı, 2'si iki sağlayıcı
+tarafından bulunmuştu; `q2 = 1` olunca tahmin `74 / (74 + 2665) = 0.027`'ye çöktü. Son altı
+tamamlanmış koşuda değer `0.03`, `0.83`, `0.31`, `0.95`, `0.03`, `0.83` şeklinde savruluyor.
+Metrik konnektörlerin birbirinin kaynağını yeniden bulup bulmadığını ölçüyor; iddiaların tema
+taşıyıp taşımadığını değil. Fonksiyonun kendi docstring'i de onu "mutlak recall garantisi
+değil, tanı göstergesi" diye tanımlıyordu. Kapı hem `_report_mode`'dan hem
+`_CAPACITY_MODE_REASONS`'tan kaldırıldı; yalnız frozenset'ten çıkarmak yanıtlanabilirlik
+kapısını etkiler, biçim kararını değiştirmezdi.
+
+İkincisi scope-anchor muhafızıydı. Muhafız, LLM'in yazdığı bölüm sorunun kelimelerini birebir
+içermiyorsa bölümü atıp yerine yapıştırılmış iddia cümleleri koyuyordu. Canlı koşularda
+incelenen her `fallback:scope_anchor_drift` vakası kapsam sapması değil eşanlamlı tercihi
+çıktı: bir bölüm "yapay zeka" yerine "AI" yazdığı için `yapay` ve `zeka` anchor'larının ikisini
+birden kaybetti; bir diğeri "büyük dil modelleri" yazdığı için `yapay`'ı; bir üçüncüsü
+"medikal görüntüleme" yazdığı için `radyoloji`'yi. Üretimde gerçek bir sapma yakaladığına dair
+örnek görülmedi. Sayıya dayalı bir tolerans bu ayrımı yapamaz: `bahar` yerine `yaz` yazan bir
+taslak da altı anchor'dan tam olarak birini kaçırır. Bu yüzden eleme tamamen kaldırıldı.
+Anchor'ların prompt tarafı — `_scope_anchors`, `scope_context`, `SCOPE_BOUNDARIES` ve
+`quality_diagnostics["scope_anchors"]` — korundu; model kapsamı öğrenmeye devam ediyor,
+yalnızca çıktısı kelime denetimiyle atılmıyor. `bahar`→`yaz` korumasının kaybı bilinçli bir
+ödündür ve `test_scope_anchors_guide_the_prompt_and_no_longer_discard_a_draft` bu kararı
+kayıtta tutuyor.
+
+Üçüncüsü kanıt paketiydi. `_evidence_packet` tema başına `max_claims=12` uyguluyordu.
+`01M1K0KBNMYV3RF8TB20JZ333P` koşusunda temalar 34, 23, 17, 8 ve 4 iddia taşıyordu; modele
+48'i gösteriliyor, **38'i (%44) hiç gösterilmiyordu**. Bunu yapan yer darlığı değildi: aynı
+koşunun 671 LLM çağrısının tamamı `done_reason: stop` ile bitti, en büyük prompt 8192 token
+context'te 4968, en büyük çıktı 2048 tavanında 1640'tı ve hiçbir çağrı tavanın 150 token
+yakınına gelmedi. Paketlerin en büyüğü 6428 karakterle kendi `max_chars=14000` sınırının
+yarısındaydı. Kanıt boş alana atılıyordu.
+
+`_evidence_packet` yerine `_evidence_packets` geldi: `max_claims` yok, bloklar bütçe dolana
+kadar eklenir, dolunca yeni paket açılır — atılmaz. Bütçe, repodaki tek context-farkında
+yardımcı olan `_overview_digest_budget`'ten genelleştirilen `_prompt_char_budget` ve tema
+başına `_section_packet_budget` ile hesaplanıyor. Ölçülen 2.9 karakter/token yerine evin 2.0
+değeri korundu; bu yönde yanılmak biraz context israfı, ters yönde yanılmak kesilmiş bölüm
+demek. Blok başına mevcut kırpmalar (900 karakter iddia, 650 karakter alıntı, dört kanıt
+satırı) korundu: bunlar iddiayı kısaltır, atmaz. En büyük tek blok ~3.6k karakterle en düşük
+bütçenin (2000) üstünde kalabildiği için bütçeden büyük tek bir blok da kendi paketini alır;
+böylece kapsam garantisi boyut garantisine feda edilmiyor.
+
+Bütçeye sığmayan tema birden çok geçişte çizilip tek bölümde birleşiyor. Konsolidasyon,
+`_overview_digest` + `_draft_overview` kalıbının aynısı: geçişler `_prompt_excerpt` ile
+sıkıştırılıp tek bir çağrıya veriliyor. Deterministik birleştirme reduce'un başarısız olduğu
+durumda devrede; `_merge_sections_into_compact_answer` başlık ve not parametresi alacak
+şekilde genelleştirildi. Böylece hiçbir geçişin metni kaybolmuyor. Downstream değişmezleri
+korundu: kompakt paketin tek bölüm taşıması assert'i, `llm_successes == len(sections)`
+eşitliği (sayaç tema başına bir artıyor, geçiş başına değil) ve `theme_{index}` teşhis anahtar
+şeması. Tema sayısı 5'te bırakıldı, çünkü `word_report._theme_evidence_map` `sections[:5]`
+varsayıyor; bölme tema içinde yapılıyor.
+
+Aynı yığında dördüncü bir kusur ortaya çıktı. `build_word_report`, `synthesis_package`
+verildiğinde kendisine geçirilen süpürülmüş `executive_summary`/`narrative`/`uncertainty`
+metinlerini atıp `package` alanlarını render ediyordu; `exporter`'ın "bir kez düzelt, her
+yüzey düzelsin" yorumu Word yolunda geçersizdi. Sorunlu koşuda dil süpürmesi 8 segment
+çevirmişti ve hiçbiri docx'e girmemişti. Süpürme artık türetilmiş üç string'e değil paketin
+kendisine uygulanıyor (`sweep_synthesis_package`), böylece standart modda render edilen bölüm
+metinleri de kapsanıyor: taranan alan sayısı 3'ten 24'e çıktı. İlk uygulamada süpürme
+anahtarları kolon içeriyordu; `sweep_foreign_prose` madde kimliklerini `{key}:{index}` olarak
+kurup modele `- {id}: {text}` diye verdiği için model kırpılmış id döndürdü ve çeviriler
+`unknown_id` ile atıldı (`translated: 0`, `unknown_id: 4`). Anahtarlar `section_0_synthesis`
+biçimine çevrildi; teste prompt'a giden id'lerin tam olarak bir kolon içerdiğini doğrulayan
+bir invariant eklendi.
+
+Doğrulama, `01M1K0KBNMYV3RF8TB20JZ333P` koşusunun kayıtlı korpusu üzerinde sentezin yeniden
+çalıştırılmasıyla yapıldı; yeni bir keşif turu gerekmedi. Sonuç: `claims_shown 86/86`,
+`unbacked 0`, üç tema iki geçişe bölündü, hiçbir paket bütçeyi aşmadı (en büyüğü 8138/8178),
+`report_mode: standard`, beş bölümün beşi de model tarafından yazıldı ve
+`scope_anchor_drift` hiç görülmedi. Önceki hâlde aynı korpus tek paragraf üretiyordu.
+Anlatıda daha önce 12-iddia tavanının arkasında kalan çalışmalar adlarıyla göründü: BTReport,
+CT2Rep (CT-RATE, 25.692 gövde CT hacmi), MedImageInsight, XrayGPT. Maliyet, ölçülen koşuda
++6 LLM çağrısı (3 ek taslak, 3 konsolidasyon) ≈ +150 saniyedir; `model_max_concurrent_calls`
+1 olduğu için çağrılar GPU'da seridir.
+
+Tam kapı **746 passed, 1 warning** verdi. `report_synthesis.py` Ruff tabanı 7/7'de kaldı,
+`exporter.py` 0/0. Yeni testlerin bir kısmı yeni fonksiyonları çağırdığı için eski kodda
+ImportError verir; koruma değeri taşıyanlar genel API üzerinden çalışan ikisidir ve eski koda
+karşı davranışsal olarak düştükleri ayrıca doğrulandı — muhafız testi drift fallback üretiyor,
+çok geçiş testi 24 iddia için tek çağrı yapıyor.
+
+İki sınır açık kaldı. Birincisi, bir geçişin taslağı gerekçelendirmeden geçemezse o taslak
+atılıyor; iddiaları prompt'a girdiği için `claims_shown` altında sayılmaya devam ediyor ama
+okuyucunun bölümüne yansımıyor. Fark `theme_coverage.passes_used` ile denetlenebilir kılındı.
+İkincisi, `generated_by_llm` hâlâ `False` dönebiliyor; ölçülen replay'de bunun sebebi temalar
+değil overview katmanıydı (`fallback:executive_summary:invalid_or_ungrounded`, özet
+`rebuilt_from_theme_leads` ile kuruldu). Bu katman aynı korpusta koşudan koşuya değişiyor ve
+bu yamanın kapsamı dışındadır; `qwen3:4b-instruct-2507-q4_K_M` profiline uymaktadır.
 
 ## Bilinen açık işler
 

@@ -1,10 +1,10 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.20.1`
+Platform sürümü: `v0.21.0`
 
-Belge sürümü: `6.41`
+Belge sürümü: `6.42`
 
-Son güncelleme: `2026-09-02`
+Son güncelleme: `2026-09-03`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -17,6 +17,34 @@ ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 ve [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.21.0 — 2026-09-03
+
+- Bir bölümü sorunun kelimelerini birebir içermediği için atan scope-anchor muhafızı
+  kaldırıldı. Canlı koşularda incelenen her eleme kapsam sapması değil eşanlamlı tercihiydi:
+  "yapay zeka" yerine "AI", "radyoloji" yerine "medikal görüntüleme". Anchor'lar modele
+  `SCOPE_BOUNDARIES` olarak verilmeye devam ediyor; yalnız çıktı denetimi bırakıldı.
+- Rapor biçimi artık `estimated_completeness` ile belirlenmiyor. Bu değer sağlayıcıların
+  birbirinin kaynağını yeniden bulup bulmadığını ölçen bir Chao1 tahmincisidir; örtüşme
+  düşükken sıfıra çöküyor ve 86 kaynaklı bir koşuyu tek paragraflık kompakt rapora
+  düşürüyordu.
+- Kanıt paketindeki `max_claims=12` tavanı kaldırıldı. Tema kanıtı context bütçesine göre
+  paketlere bölünüyor, bütçeye sığmayan tema birden çok geçişte çizilip tek konsolidasyon
+  çağrısıyla tek bölümde birleşiyor; konsolidasyon düşerse geçişler deterministik olarak
+  birleştiriliyor ve hiçbiri kaybolmuyor. Ölçülen koşuda modele gösterilen iddia 48/86'dan
+  86/86'ya çıktı.
+- Rapor dili süpürmesi artık türetilmiş üç metne değil sentez paketinin kendisine
+  uygulanıyor. Word raporu paketin bölümlerini render ettiği için süpürülmüş metin daha önce
+  yalnız markdown'a giriyordu; taranan alan sayısı 3'ten 24'e çıktı.
+- Süpürme madde kimlikleri kolon içermiyor. `{key}:{index}` biçimindeki id'ler modele
+  `- {id}: {text}` diye verildiği için kolonlu bir anahtar id'nin nerede bittiğini
+  belirsizleştiriyor ve bütün çeviriler `unknown_id` ile düşüyordu.
+- Kanıt kapsamı denetlenebilir: `theme_coverage` tema başına iddia sayısı, modele gösterilen
+  iddia, geçiş sayısı ve kullanılan geçiş sayısını; koşu düzeyi ise
+  `evidence_claims_shown` ile `claims_without_evidence` değerlerini kaydediyor.
+- `scripts/probe_trace.py`: bir koşunun kurtarma ve probe geçmişini okuyan salt-okunur araç.
+  Hangi turda hangi taktiğin önerildiği, skorlayıcının hangisini seçtiği ve probe'un ne
+  döndürdüğü kontrol panelinde görünmüyordu.
 
 ## v0.20.1 — 2026-09-02
 
