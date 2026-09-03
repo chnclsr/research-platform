@@ -7,6 +7,7 @@ import json
 import re
 import zipfile
 from collections import Counter
+from dataclasses import replace
 from typing import Any
 
 import yaml
@@ -15,7 +16,7 @@ from .claim_localization import localize_claim_texts, sweep_foreign_prose
 from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
 from .llm import LLMProvider
-from .report_synthesis import build_synthesis_package
+from .report_synthesis import SynthesisPackage, build_synthesis_package
 from .repository import Repository
 from .schemas import CoverageMetrics, ResearchProtocol
 from .scoping import LABEL_MAX_LENGTH, slugify
@@ -217,6 +218,54 @@ def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
     return records
 
 
+_SWEPT_SECTION_FIELDS = ("synthesis", "consensus", "disagreements", "implications")
+
+
+async def sweep_synthesis_package(
+    llm: LLMProvider, package: SynthesisPackage, language: str
+) -> tuple[SynthesisPackage, dict[str, Any]]:
+    """Put every reader-facing string in the package through the language sweep.
+
+    The package rather than the strings derived from it: `build_word_report` renders
+    `package.sections` directly, so sweeping only `executive_summary` / `narrative` /
+    `uncertainty` corrected the markdown and left the .docx showing the pre-sweep prose.
+    """
+    prose = {
+        "executive_summary": package.executive_summary,
+        "cross_study_assessment": package.cross_study_assessment,
+        "conclusion": package.conclusion,
+        "uncertainty": package.uncertainty,
+    }
+    # No colons in these keys. `sweep_foreign_prose` builds its item ids as `{key}:{index}`
+    # and lists them to the model as "- {id}: {text}", so a key carrying its own colons
+    # leaves the model no way to tell where the id stops -- it answers with a truncated id
+    # and every translation is discarded as `unknown_id`.
+    for index, section in enumerate(package.sections):
+        for name in _SWEPT_SECTION_FIELDS:
+            prose[f"section_{index}_{name}"] = getattr(section, name)
+    swept, diagnostics = await sweep_foreign_prose(llm, prose, language)
+    return (
+        replace(
+            package,
+            executive_summary=swept["executive_summary"],
+            cross_study_assessment=swept["cross_study_assessment"],
+            conclusion=swept["conclusion"],
+            uncertainty=swept["uncertainty"],
+            sections=[
+                replace(
+                    section,
+                    **{
+                        name: swept[f"section_{index}_{name}"]
+                        for name in _SWEPT_SECTION_FIELDS
+                    },
+                )
+                for index, section in enumerate(package.sections)
+            ],
+        ),
+        diagnostics,
+    )
+
+
 async def build_exports(
     run_id: str,
     protocol: ResearchProtocol,
@@ -324,18 +373,21 @@ async def build_exports(
             ),
         }
     else:
+        # Swept before the documents are built, because there is no .docx to take apart
+        # afterwards. The sweep covers the package itself rather than the three strings
+        # rendered from it: `build_word_report` renders `synthesis_package.sections`
+        # directly, so sweeping only the derived strings corrected the markdown and left
+        # the Word report showing the pre-sweep prose.
+        synthesis_package, sweep_diagnostics = await sweep_synthesis_package(
+            llm, synthesis_package, protocol.report_language
+        )
+        await repo.event(run_id, "report_language_sweep", sweep_diagnostics)
+        # Derived after the sweep so the markdown and the .docx render the same prose.
         synthesis = {
             "executive_summary": synthesis_package.executive_summary,
             "report": synthesis_package.narrative,
             "uncertainty": synthesis_package.uncertainty,
         }
-        # Swept here rather than after the documents are built, because these three strings
-        # are what both the Word report and the markdown are rendered from -- fixing them
-        # once fixes every surface, and there is no .docx to take apart afterwards.
-        synthesis, sweep_diagnostics = await sweep_foreign_prose(
-            llm, synthesis, protocol.report_language
-        )
-        await repo.event(run_id, "report_language_sweep", sweep_diagnostics)
 
     def render_findings(selected_claims: list[Any]) -> str:
         findings = []

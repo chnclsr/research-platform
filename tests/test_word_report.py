@@ -662,3 +662,46 @@ def test_insufficient_compact_report_suppresses_claims_but_keeps_the_audit_trail
     assert "0.20" in body
     assert adjacent_claim in body
     assert report.citations[0].drop_reason == "answerability_gate"
+
+
+def test_the_docx_body_comes_from_the_package_sections_not_a_derived_string() -> None:
+    """Why the language sweep had to be applied to the package itself.
+
+    `build_word_report` is handed `executive_summary` / `narrative` / `uncertainty` as well
+    as the package, and discards all three when a package is present. Sweeping only those
+    derived strings therefore corrected the markdown bundle and left the .docx rendering the
+    section objects exactly as the synthesis produced them.
+    """
+    package = SynthesisPackage(
+        executive_summary="Paketten gelen özet [S01].",
+        sections=[
+            SynthesisSection(
+                title="Ölçülen sonuç",
+                synthesis="Paketten gelen bölüm metni [S01].",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        study_profiles=[],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="Paketten gelen belirsizlik [S01].",
+        generated_by_llm=True,
+    )
+    inputs = _minimal_report_inputs()
+    inputs["language"] = "tr"
+    inputs["executive_summary"] = "Argümandan gelen özet [S01]."
+    inputs["narrative"] = "Argümandan gelen anlatı [S01]."
+    inputs["uncertainty"] = "Argümandan gelen belirsizlik [S01]."
+
+    report = build_word_report(**inputs, synthesis_package=package)
+    document = Document(io.BytesIO(report.document))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    text += "\n".join(
+        cell.text for table in document.tables for row in table.rows for cell in row.cells
+    )
+
+    assert "Paketten gelen özet" in text
+    assert "Paketten gelen bölüm metni" in text
+    assert "Paketten gelen belirsizlik" in text
+    assert "Argümandan gelen" not in text

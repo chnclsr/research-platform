@@ -15,15 +15,22 @@ be looked up, so those stay in their own language and are labelled instead.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from research_platform.claim_localization import localize_claim_texts, sweep_foreign_prose
+from research_platform.exporter import sweep_synthesis_package
 from research_platform.language_guard import (
     foreign_sentences,
     is_attribution,
     language_matches,
 )
-from research_platform.report_synthesis import _fallback_section
+from research_platform.report_synthesis import (
+    SynthesisPackage,
+    SynthesisSection,
+    _fallback_section,
+)
 
 TURKISH = "Bu çalışma bir kanıt sunuyor ve bulgular olumlu görünüyor."
 ENGLISH = "The study reports an improved measured outcome for this population."
@@ -340,3 +347,43 @@ async def test_claims_are_translated_in_batches_so_one_slow_call_is_not_fatal():
     assert diagnostics["translated"] == 20
     assert diagnostics["failed"] == 0
     assert all(TURKISH in texts[f"C{n}"] for n in range(20))
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_reaches_the_prose_the_word_report_renders():
+    """The .docx renders `package.sections`, not the strings derived from the package.
+
+    Sweeping only `executive_summary` / `narrative` / `uncertainty` corrected the markdown
+    and left the Word report showing the pre-sweep English, because `build_word_report`
+    reads the section objects directly.
+    """
+    package = SynthesisPackage(
+        executive_summary=TURKISH,
+        sections=[SynthesisSection(title="Bulgular", synthesis=ENGLISH)],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty=TURKISH,
+        study_profiles=[],
+        generated_by_llm=True,
+    )
+    llm = TranslatorLLM(
+        {"items": [{"id": "section_0_synthesis:0", "text": "Çalışma ölçülen sonucu iyileştiriyor."}]}
+    )
+
+    swept, diagnostics = await sweep_synthesis_package(llm, package, "tr")
+
+    assert diagnostics["foreign"] == 1
+    assert diagnostics["translated"] == 1
+    assert ENGLISH not in swept.sections[0].synthesis
+    assert ENGLISH not in swept.narrative
+    assert swept.sections[0].title == "Bulgular"
+    assert swept.executive_summary == TURKISH
+
+    # The item ids reach the model as "- {key}:{index}: {text}". A key carrying its own
+    # colon leaves nothing to say where the id stops, the model answers with a truncated
+    # one, and every translation is dropped as `unknown_id` -- a whole run's sweep
+    # translating nothing while reporting the foreign sentences it found.
+    listed = re.findall(r"^- (\S+): ", llm.prompts[0], flags=re.MULTILINE)
+    assert listed
+    for item_id in listed:
+        assert item_id.count(":") == 1, item_id
