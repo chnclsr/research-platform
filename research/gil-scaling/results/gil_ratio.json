@@ -1,0 +1,121 @@
+{
+  "schema": "gil-scaling/gil-ratio/2",
+  "kaynak": "speedscope profillerinden okundu",
+  "satirlar": [
+    {
+      "workload": "control_gil_bound",
+      "normal_samples": 17848,
+      "gil_samples": 12463,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.6983
+    },
+    {
+      "workload": "control_gil_releasing",
+      "normal_samples": 5070,
+      "gil_samples": 444,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.0876
+    },
+    {
+      "workload": "control_io_like",
+      "normal_samples": 380,
+      "gil_samples": 385,
+      "profiles_in_normal": 5,
+      "gil_ratio": 1.0132
+    },
+    {
+      "workload": "critic.evaluate_pages",
+      "normal_samples": 20656,
+      "gil_samples": 16184,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.7835
+    },
+    {
+      "workload": "gate.bayrakla",
+      "normal_samples": 20441,
+      "gil_samples": 15094,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.7384
+    },
+    {
+      "workload": "gate.sayfa_secici",
+      "normal_samples": 17491,
+      "gil_samples": 14193,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.8114
+    },
+    {
+      "workload": "inspector.extract_pages",
+      "normal_samples": 8662,
+      "gil_samples": 5633,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.6503
+    },
+    {
+      "workload": "merge.birlestir",
+      "normal_samples": 15529,
+      "gil_samples": 12962,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.8347
+    },
+    {
+      "workload": "passages.chunk_document",
+      "normal_samples": 22602,
+      "gil_samples": 17676,
+      "profiles_in_normal": 5,
+      "gil_ratio": 0.7821
+    }
+  ],
+  "native_frames": {
+    "inspector.extract_pages": [
+      [
+        "malloc",
+        1373
+      ],
+      [
+        "free",
+        739
+      ],
+      [
+        "_RNvNtNtCs1nkOiWAhd5v_11miniz_oxide7inflate4core15decompress_fast",
+        433
+      ],
+      [
+        "0x762aebdae89e",
+        401
+      ],
+      [
+        "_RINvXsf_NtCsgrwVwL40jQO_3nom8internalNvNtCsb4tPdF1Or6V_5lopdf6parser7operandINtB6_6ParserRShE7processINtB6_7OutputMNtB6_4EmitNtB6_5CheckNtB6_9StreamingEEBD_",
+        353
+      ],
+      [
+        "_RNvNtCsb4tPdF1Or6V_5lopdf6parser4real",
+        313
+      ],
+      [
+        "_RNvNtCs1GXwSmKII3r_13pdf_inspector8detector31scan_content_for_text_operators",
+        259
+      ],
+      [
+        "_RNvNtNtCs1GXwSmKII3r_13pdf_inspector9extractor14content_stream23extract_page_text_items",
+        257
+      ],
+      [
+        "_RNvCs9wFQrvczXsK_7___rustc12___rust_alloc",
+        257
+      ],
+      [
+        "_RNvXs4_NtCscdodAO9FK5_5alloc6stringNtB5_6StringNtNtCs4NRVxsYgnAr_4core5clone5Clone5clone",
+        244
+      ],
+      [
+        "_RNvNtNtCs1GXwSmKII3r_13pdf_inspector9extractor5fonts25extract_text_from_operand",
+        215
+      ],
+      [
+        "_RNvXNtCsgrwVwL40jQO_3nom6traitsRShNtB2_5Input9take_from",
+        214
+      ]
+    ]
+  }
+}

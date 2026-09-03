@@ -1,0 +1,337 @@
+{
+  "schema": "gil-scaling/free-threaded-stress/1",
+  "python": "3.14.7 free-threading build (main, Aug 14 2026, 15:35:36) [Clang 22.1.3 ]",
+  "free_threaded_build": true,
+  "expected_gil_enabled": false,
+  "reps_per_thread": 10000,
+  "timeout_s": 900.0,
+  "cases": [
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 10000,
+        "operations": 10000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 43.6986,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 10000,
+        "operations": 20000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 43.5922,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 10000,
+        "operations": 40000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 43.7388,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 10000,
+        "operations": 80000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 44.4278,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 8
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 10000,
+        "operations": 10000,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.4094,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 10000,
+        "operations": 20000,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.4299,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 10000,
+        "operations": 40000,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.4416,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 10000,
+        "operations": 80000,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.4887,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 8
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 10000,
+        "operations": 10000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 17.229,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 10000,
+        "operations": 20000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 17.1833,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 10000,
+        "operations": 40000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 17.2805,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 10000,
+        "operations": 80000,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 18.0689,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 8
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 10000,
+        "operations": 10000,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 1.8898,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 10000,
+        "operations": 20000,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 2.0157,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 10000,
+        "operations": 40000,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 2.117,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 10000,
+        "operations": 80000,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 2.9066,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": false,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 8
+    }
+  ],
+  "passed": true,
+  "reference_comparison": {
+    "reference_python": "3.14.7 (main, Aug 14 2026, 15:35:28) [Clang 22.1.3 ]",
+    "case_count": 16,
+    "digest_mismatches": [],
+    "passed": true
+  }
+}

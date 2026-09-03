@@ -1,0 +1,97 @@
+{
+  "schema": "gil-scaling/free-threaded-docling-stress/1",
+  "python": "3.10.12 (main, Jun 22 2026, 18:55:27) [GCC 11.4.0]",
+  "free_threaded_build": false,
+  "expected_gil_enabled": true,
+  "input_name": "turkce_makale.pdf",
+  "input_sha256": "d77d8ac2adb3338c7a3820e8201716a273475d175a15dc2b97f4839c3c0e1321",
+  "reps_per_thread": 1,
+  "timeout_s": 900.0,
+  "cases": [
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "mode": "shared",
+        "threads": 1,
+        "reps_per_thread": 1,
+        "operations": 1,
+        "wall_s": 60.9987,
+        "digest_count": 1,
+        "digest": "sha256:0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+        "digest_divergence": false,
+        "gil_enabled_at_end": null,
+        "ok": true,
+        "docling_version": "2.120.1",
+        "gil_status_api_available": false
+      },
+      "stderr_tail": "thon3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[INFO] 2026-09-03 14:07:36,374 [RapidOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[transformers] `torch_dtype` is deprecated! Use `dtype` instead!\n\nLoading weights:   0%|          | 0/770 [00:00<?, ?it/s]\nLoading weights:  24%|██▍       | 187/770 [00:00<00:00, 1863.77it/s]\nLoading weights:  49%|████▊     | 374/770 [00:00<00:00, 1744.06it/s]\nLoading weights:  71%|███████▏  | 549/770 [00:00<00:00, 1697.52it/s]\nLoading weights: 100%|██████████| 770/770 [00:00<00:00, 2230.56it/s]\n/home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/torch/nn/modules/conv.py:549: UserWarning: Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created (Triggered internally at /pytorch/aten/src/ATen/native/Convolution.cpp:1036.)\n  return F.conv2d(\n",
+      "mode": "shared",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "mode": "shared",
+        "threads": 2,
+        "reps_per_thread": 1,
+        "operations": 2,
+        "wall_s": 70.1896,
+        "digest_count": 1,
+        "digest": "sha256:0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+        "digest_divergence": false,
+        "gil_enabled_at_end": null,
+        "ok": true,
+        "docling_version": "2.120.1",
+        "gil_status_api_available": false
+      },
+      "stderr_tail": " /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[INFO] 2026-09-03 14:09:50,728 [RapidOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[transformers] `torch_dtype` is deprecated! Use `dtype` instead!\n\nLoading weights:   0%|          | 0/770 [00:00<?, ?it/s]\nLoading weights:  28%|██▊       | 217/770 [00:00<00:00, 2167.46it/s]\nLoading weights:  62%|██████▏   | 477/770 [00:00<00:00, 2407.18it/s]\nLoading weights: 100%|██████████| 770/770 [00:00<00:00, 2631.60it/s]\n/home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/torch/nn/modules/conv.py:549: UserWarning: Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created (Triggered internally at /pytorch/aten/src/ATen/native/Convolution.cpp:1036.)\n  return F.conv2d(\n",
+      "mode": "shared",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "mode": "per_thread",
+        "threads": 1,
+        "reps_per_thread": 1,
+        "operations": 1,
+        "wall_s": 64.4863,
+        "digest_count": 1,
+        "digest": "sha256:0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+        "digest_divergence": false,
+        "gil_enabled_at_end": null,
+        "ok": true,
+        "docling_version": "2.120.1",
+        "gil_status_api_available": false
+      },
+      "stderr_tail": "dOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/ch_ptocr_mobile_v2.0_cls_mobile.pth\n[INFO] 2026-09-03 14:13:22,366 [RapidOCR] base.py:23: Using engine_name: torch\n[INFO] 2026-09-03 14:13:22,367 [RapidOCR] device_config.py:57: Using CPU device\n[INFO] 2026-09-03 14:13:22,409 [RapidOCR] download_file.py:60: File exists and is valid: /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[INFO] 2026-09-03 14:13:22,409 [RapidOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n\nLoading weights:   0%|          | 0/770 [00:00<?, ?it/s]\nLoading weights:  41%|████      | 313/770 [00:00<00:00, 3124.88it/s]\nLoading weights:  81%|████████▏ | 626/770 [00:00<00:00, 2308.45it/s]\nLoading weights: 100%|██████████| 770/770 [00:00<00:00, 2800.03it/s]\n",
+      "mode": "per_thread",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "mode": "per_thread",
+        "threads": 2,
+        "reps_per_thread": 1,
+        "operations": 2,
+        "wall_s": 76.4655,
+        "digest_count": 1,
+        "digest": "sha256:0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+        "digest_divergence": false,
+        "gil_enabled_at_end": null,
+        "ok": true,
+        "docling_version": "2.120.1",
+        "gil_status_api_available": false
+      },
+      "stderr_tail": "dOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/ch_ptocr_mobile_v2.0_cls_mobile.pth\n[INFO] 2026-09-03 14:15:45,808 [RapidOCR] base.py:23: Using engine_name: torch\n[INFO] 2026-09-03 14:15:45,808 [RapidOCR] device_config.py:57: Using CPU device\n[INFO] 2026-09-03 14:15:45,850 [RapidOCR] download_file.py:60: File exists and is valid: /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[INFO] 2026-09-03 14:15:45,851 [RapidOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n\nLoading weights:   0%|          | 0/770 [00:00<?, ?it/s]\nLoading weights:  31%|███       | 235/770 [00:00<00:00, 2345.09it/s]\nLoading weights:  61%|██████    | 470/770 [00:00<00:00, 1592.40it/s]\nLoading weights: 100%|██████████| 770/770 [00:00<00:00, 2158.52it/s]\n",
+      "mode": "per_thread",
+      "threads": 2
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,211 @@
+{
+  "schema": "gil-scaling/run-breakdown/2",
+  "ozet": {
+    "kosu_sayisi": 12,
+    "llm_pay_medyan": 0.1033,
+    "llm_pay_min": 0.004,
+    "llm_pay_max": 0.6666,
+    "tavan_medyan": 0.8967
+  },
+  "kosular": [
+    {
+      "run_id": "01M13N7YM7ZMNBF58CQZTE3MEJ",
+      "status": "cancelled",
+      "span_s": 12740.1,
+      "stage_events": 14,
+      "llm_s": 50.7,
+      "llm_pay": 0.004,
+      "gil_tavani_ust_sinir": 0.996
+    },
+    {
+      "run_id": "01M13P400S71P0V4FZK1R91ZG2",
+      "status": "completed_incomplete",
+      "span_s": 9156.7,
+      "stage_events": 83,
+      "llm_s": 5565.5,
+      "llm_pay": 0.6078,
+      "gil_tavani_ust_sinir": 0.3922
+    },
+    {
+      "run_id": "01M13Y6SZ1BEW7Y496D9NEXYCV",
+      "status": "cancelled",
+      "span_s": 3340.7,
+      "stage_events": 14,
+      "llm_s": 210.9,
+      "llm_pay": 0.0631,
+      "gil_tavani_ust_sinir": 0.9369
+    },
+    {
+      "run_id": "01M13JV19NP0JRQ94P47GHCVMQ",
+      "status": "completed_incomplete",
+      "span_s": 2038.8,
+      "stage_events": 39,
+      "llm_s": 1359.0,
+      "llm_pay": 0.6666,
+      "gil_tavani_ust_sinir": 0.3334
+    },
+    {
+      "run_id": "01M1409MRDT7SEQM1RBGY83GE3",
+      "status": "completed_incomplete",
+      "span_s": 1472.3,
+      "stage_events": 28,
+      "llm_s": 32.7,
+      "llm_pay": 0.0222,
+      "gil_tavani_ust_sinir": 0.9778
+    },
+    {
+      "run_id": "01M14A8RP5ZD36NEX889AXRKSP",
+      "status": "failed",
+      "span_s": 869.8,
+      "stage_events": 288,
+      "llm_s": 336.7,
+      "llm_pay": 0.3871,
+      "gil_tavani_ust_sinir": 0.6129
+    },
+    {
+      "run_id": "01M144V1QP50ZN3THXF6M2PKG1",
+      "status": "cancelled",
+      "span_s": 412.6,
+      "stage_events": 14,
+      "llm_s": 45.0,
+      "llm_pay": 0.1091,
+      "gil_tavani_ust_sinir": 0.8909
+    },
+    {
+      "run_id": "01M149EGBFR7DD8GY4XVF2YCY0",
+      "status": "cancelled",
+      "span_s": 362.1,
+      "stage_events": 2,
+      "llm_s": 138.1,
+      "llm_pay": 0.3813,
+      "gil_tavani_ust_sinir": 0.6187
+    },
+    {
+      "run_id": "01M11STV8YQXCFY16AQ8GSJKM3",
+      "status": "completed_incomplete",
+      "span_s": 329.1,
+      "stage_events": 17,
+      "llm_s": 85.6,
+      "llm_pay": 0.26,
+      "gil_tavani_ust_sinir": 0.74
+    },
+    {
+      "run_id": "01M145GDFYMBT33GHRQXT9DC3V",
+      "status": "cancelled",
+      "span_s": 233.6,
+      "stage_events": 10,
+      "llm_s": 22.8,
+      "llm_pay": 0.0974,
+      "gil_tavani_ust_sinir": 0.9026
+    },
+    {
+      "run_id": "01M1459Y8Z93QP9MJ3B58Q2PVZ",
+      "status": "cancelled",
+      "span_s": 155.6,
+      "stage_events": 2,
+      "llm_s": 6.4,
+      "llm_pay": 0.041,
+      "gil_tavani_ust_sinir": 0.959
+    },
+    {
+      "run_id": "01M145ZGW94XV9RKG1VSFNVETA",
+      "status": "cancelled",
+      "span_s": 140.6,
+      "stage_events": 2,
+      "llm_s": 5.9,
+      "llm_pay": 0.0422,
+      "gil_tavani_ust_sinir": 0.9578
+    }
+  ],
+  "worker_cpu": {
+    "birim": "worker_cpu_percent -- %100 = bir tam cekirdek",
+    "toplam": {
+      "n": 314,
+      "ort": 6.3,
+      "p95": 39.1,
+      "maks": 66.4
+    },
+    "stage_bazinda": {
+      "NORMALIZE": {
+        "n": 83,
+        "ort": 1.9,
+        "p95": 8.7,
+        "maks": 14.4
+      },
+      "ACQUIRE": {
+        "n": 62,
+        "ort": 17.9,
+        "p95": 50.6,
+        "maks": 61.0
+      },
+      "SYNTHESIZE_EXPORT": {
+        "n": 48,
+        "ort": 5.6,
+        "p95": 40.0,
+        "maks": 44.5
+      },
+      "EXTRACT_EVIDENCE": {
+        "n": 44,
+        "ort": 1.9,
+        "p95": 5.5,
+        "maks": 18.1
+      },
+      "BUILD_QUERY_BRANCHES": {
+        "n": 25,
+        "ort": 4.1,
+        "p95": 29.6,
+        "maks": 44.5
+      },
+      "DECOMPOSE": {
+        "n": 18,
+        "ort": 0.7,
+        "p95": 1.4,
+        "maks": 1.4
+      },
+      "CHUNK_INDEX": {
+        "n": 16,
+        "ort": 0.8,
+        "p95": 3.4,
+        "maks": 3.4
+      },
+      "VALIDATE_PROTOCOL": {
+        "n": 9,
+        "ort": 0.6,
+        "p95": 0.8,
+        "maks": 0.8
+      },
+      "SEARCH": {
+        "n": 7,
+        "ort": 24.6,
+        "p95": 66.4,
+        "maks": 66.4
+      },
+      "RETRIEVE_PASSAGES": {
+        "n": 1,
+        "ort": 1.4,
+        "p95": 1.4,
+        "maks": 1.4
+      },
+      "ANALYZE_CLAIMS": {
+        "n": 1,
+        "ort": 58.8,
+        "p95": 58.8,
+        "maks": 58.8
+      }
+    },
+    "eszamanli_kosu_bazinda": {
+      "1": {
+        "n": 296,
+        "ort": 6.2,
+        "p95": 36.2,
+        "maks": 66.4
+      },
+      "2": {
+        "n": 18,
+        "ort": 8.7,
+        "p95": 44.5,
+        "maks": 44.5
+      }
+    }
+  }
+}

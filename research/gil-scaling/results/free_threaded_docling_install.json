@@ -1,0 +1,118 @@
+{
+  "schema": "gil-scaling/free-threaded-docling-install/1",
+  "date": "2026-09-03",
+  "python": "3.14.7 free-threading build",
+  "free_threaded_build": true,
+  "production_requirements": "docker/docling-requirements.txt",
+  "requested_versions": {
+    "docling": "2.121.0",
+    "docling-core": "2.92.0",
+    "tree-sitter-typescript": "0.23.2"
+  },
+  "toolchain": {
+    "c_compiler": "clang 21.1.0 via temporary Zig 0.16.0",
+    "administrator_access_required": false
+  },
+  "status": "packaging_incompatible",
+  "failed_dependency": "tree-sitter-typescript==0.23.2",
+  "failure_stage": "C extension compilation",
+  "failure_class": "unsupported_limited_api_on_free_threaded_cpython",
+  "evidence": {
+    "build_macro": "Py_LIMITED_API=0x03090000",
+    "python_header_error": "The limited API is not currently supported in the free-threaded build"
+  },
+  "docling_installed": false,
+  "runtime_stress_executed": false,
+  "experimental_workaround": {
+    "source": "tree-sitter/tree-sitter-typescript v0.23.2 (f975a621f4e7f532fe322e13c4f79495e0a7b2e7)",
+    "changes": [
+      "disable limited API on Py_GIL_DISABLED builds",
+      "declare Py_MOD_GIL_NOT_USED with multi-phase module initialization"
+    ],
+    "wheel_built": true,
+    "native_import_ok": true,
+    "typescript_capsule_ok": true,
+    "tsx_capsule_ok": true,
+    "gil_enabled_after_import": false
+  },
+  "experimental_grammar_wheels": {
+    "tree-sitter-python": {
+      "version": "0.25.0",
+      "source_commit": "293fdc02038ee2bf0e2e206711b69c90ac0d413f",
+      "native_import_ok": true
+    },
+    "tree-sitter-javascript": {
+      "version": "0.25.0",
+      "source_commit": "44c892e0be055ac465d5eeddae6d3e194424e7de",
+      "native_import_ok": true
+    },
+    "gil_enabled_after_all_grammar_imports": false
+  },
+  "docling_parse_followup": {
+    "version": "7.15.0",
+    "stock_pypi_install_ok": false,
+    "build_system": "CMake + Ninja through setuptools local_build.py",
+    "system_deps_attempt": {
+      "attempted": true,
+      "isolated_deb_extract_root": "/tmp/research-platform-system-deps",
+      "result": "failed_early",
+      "blocking_dependency": "cxxopts",
+      "notes": "USE_SYSTEM_DEPS=ON switches the broader native dependency chain to pkg-config/system packages, not only qpdf."
+    },
+    "temporary_sdist_patches": [
+      "qpdf: declare libqpdf.a as an ExternalProject BUILD_BYPRODUCT and force the Linux sub-build to static output",
+      "jpeg/openjpeg/lcms2/freetype: declare imported static libraries as ExternalProject BUILD_BYPRODUCTS",
+      "lcms2: pass --disable-dependency-tracking to the autotools configure step",
+      "qpdf: pass the vendored externals directory as CMAKE_PREFIX_PATH"
+    ],
+    "result_after_patches": "advanced_to_real_native_dependency_build",
+    "current_blocker": "qpdf sub-build cannot find zlib/libjpeg through pkg-config during its own configure step",
+    "handoff": {
+      "temporary_source": "/tmp/research-platform-uv-cache/sdists-v9/pypi/docling-parse/7.15.0/rckXKffs2-I0-P86/src",
+      "free_threaded_venv": "/tmp/research-platform-venv314t",
+      "classic_venv": "/tmp/research-platform-venv314",
+      "temporary_toolchain": "/tmp/research-platform-toolchain",
+      "temporary_rust_home": "/tmp/research-platform-rust",
+      "temporary_zlib_dev": "/tmp/research-platform-zlib-dev",
+      "built_external_artifacts_seen": [
+        "externals/lib/libjpeg.a",
+        "externals/lib/libopenjp2.a",
+        "externals/lib/libfreetype.a",
+        "externals/lib/libz.a"
+      ],
+      "missing_artifact": "externals/lib/libqpdf.a",
+      "thermal_note": "Build attempts were stopped when CPU package temperature exceeded 90C; do not resume the patched source build unless the free-threaded Docling question is explicitly reopened."
+    },
+    "docling_installed_after_followup": false,
+    "runtime_stress_executed": false
+  },
+  "classic_docling_limited_stress": {
+    "python": "3.10.12",
+    "environment": ".venv-docling",
+    "docling_version": "2.120.1",
+    "torch_version": "2.6.0+cu124",
+    "torch_cuda_available": false,
+    "input": "research/pdf-parser/corpus/kendi/turkce_makale.pdf",
+    "result_file": "research/gil-scaling/results/classic_docling_stress_cpu_limited.json",
+    "modes": [
+      "shared",
+      "per_thread"
+    ],
+    "threads": [
+      1,
+      2
+    ],
+    "reps_per_thread": 1,
+    "cases_passed": 4,
+    "cases_failed": 0,
+    "digest": "sha256:0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+    "meaning": "Real Docling works with the runner in a classic interpreter for a low-risk CPU thread matrix; this is not free-threaded Docling compatibility evidence."
+  },
+  "closure": {
+    "status": "blocked_with_evidence",
+    "reason": "Docling production pins cannot currently be installed in the free-threaded cp314t environment without upstream/native packaging work.",
+    "production_assessment": "Docling is intentionally isolated out of the Python worker thread path as a killable process/service, so moving it into a free-threaded worker would remove an operational safety property rather than improve current capacity.",
+    "open_item": "OPEN_ITEMS.md#35"
+  },
+  "passed": false
+}

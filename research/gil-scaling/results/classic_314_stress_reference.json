@@ -1,0 +1,331 @@
+{
+  "schema": "gil-scaling/free-threaded-stress/1",
+  "python": "3.14.7 (main, Aug 14 2026, 15:35:28) [Clang 22.1.3 ]",
+  "free_threaded_build": false,
+  "expected_gil_enabled": true,
+  "reps_per_thread": 20,
+  "timeout_s": 120.0,
+  "cases": [
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 20,
+        "operations": 20,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.1061,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 20,
+        "operations": 40,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.1068,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 20,
+        "operations": 80,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.1095,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 20,
+        "operations": 160,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.1135,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy",
+      "threads": 8
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 20,
+        "operations": 20,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.003,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 20,
+        "operations": 40,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.0058,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 20,
+        "operations": 80,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.0114,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 20,
+        "operations": 160,
+        "reference_digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "wall_s": 0.0181,
+        "digest_count": 1,
+        "digest": "sha256:e9413cb0977c1e149e345b3489ac8393d08d50a7f884ab27d39e4a8feb1fd1b5",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "numpy_linalg",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "numpy_linalg",
+      "threads": 8
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 20,
+        "operations": 20,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.052,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 20,
+        "operations": 40,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.0527,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 20,
+        "operations": 80,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.0674,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 20,
+        "operations": 160,
+        "reference_digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "wall_s": 0.0782,
+        "digest_count": 1,
+        "digest": "sha256:7f166f80358464e3af5ef04985f7eabd6640fc53d37a88b3bc4074a89e1bd1ad",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch",
+      "threads": 8
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 1,
+        "reps_per_thread": 20,
+        "operations": 20,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 0.0127,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 1
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 2,
+        "reps_per_thread": 20,
+        "operations": 40,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 0.0154,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 2
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 4,
+        "reps_per_thread": 20,
+        "operations": 80,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 0.0246,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 4
+    },
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "threads": 8,
+        "reps_per_thread": 20,
+        "operations": 160,
+        "reference_digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "wall_s": 0.054,
+        "digest_count": 1,
+        "digest": "sha256:4099f69a97c21a5db8e3da262eb35249ac7754737f1c765969b69babb1314ddc",
+        "digest_divergence": false,
+        "gil_enabled_at_end": true,
+        "workload": "torch_inference",
+        "ok": true
+      },
+      "stderr_tail": "",
+      "workload": "torch_inference",
+      "threads": 8
+    }
+  ],
+  "passed": true
+}

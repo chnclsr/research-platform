@@ -1,0 +1,34 @@
+{
+  "schema": "gil-scaling/free-threaded-docling-stress/1",
+  "python": "3.10.12 (main, Jun 22 2026, 18:55:27) [GCC 11.4.0]",
+  "free_threaded_build": false,
+  "expected_gil_enabled": true,
+  "input_name": "turkce_makale.pdf",
+  "input_sha256": "d77d8ac2adb3338c7a3820e8201716a273475d175a15dc2b97f4839c3c0e1321",
+  "reps_per_thread": 1,
+  "timeout_s": 600.0,
+  "cases": [
+    {
+      "status": "passed",
+      "returncode": 0,
+      "result": {
+        "mode": "per_thread",
+        "threads": 1,
+        "reps_per_thread": 1,
+        "operations": 1,
+        "wall_s": 64.4063,
+        "digest_count": 1,
+        "digest": "sha256:0f51d4ac4b1441fc740b96524827d1c350f81fe794efd99bf8d8561ec3c0d66d",
+        "digest_divergence": false,
+        "gil_enabled_at_end": null,
+        "ok": true,
+        "docling_version": "2.120.1",
+        "gil_status_api_available": false
+      },
+      "stderr_tail": "dOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/ch_ptocr_mobile_v2.0_cls_mobile.pth\n[INFO] 2026-09-03 14:05:33,167 [RapidOCR] base.py:23: Using engine_name: torch\n[INFO] 2026-09-03 14:05:33,168 [RapidOCR] device_config.py:57: Using CPU device\n[INFO] 2026-09-03 14:05:33,209 [RapidOCR] download_file.py:60: File exists and is valid: /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n[INFO] 2026-09-03 14:05:33,210 [RapidOCR] main.py:50: Using /home/cezeri/Desktop/projeler/research-platform/.venv-docling/lib/python3.10/site-packages/rapidocr/models/PP-OCRv6_rec_small.pth\n\nLoading weights:   0%|          | 0/770 [00:00<?, ?it/s]\nLoading weights:  35%|███▌      | 273/770 [00:00<00:00, 2725.40it/s]\nLoading weights:  71%|███████   | 546/770 [00:00<00:00, 1879.88it/s]\nLoading weights: 100%|██████████| 770/770 [00:00<00:00, 2549.64it/s]\n",
+      "mode": "per_thread",
+      "threads": 1
+    }
+  ],
+  "passed": true
+}

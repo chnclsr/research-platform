@@ -1,0 +1,47 @@
+{
+  "schema": "gil-scaling/free-threaded-compat-probe/1",
+  "python": "3.14.7",
+  "implementation": "CPython",
+  "free_threaded_build": true,
+  "gil_enabled_at_start": false,
+  "packages": [
+    {
+      "module": "numpy",
+      "distribution": "numpy",
+      "import_ok": true,
+      "version": "2.5.2",
+      "error": "",
+      "warnings": [],
+      "gil_enabled_after_import": false
+    },
+    {
+      "module": "torch",
+      "distribution": "torch",
+      "import_ok": true,
+      "version": "2.13.0+cpu",
+      "error": "",
+      "warnings": [],
+      "gil_enabled_after_import": false
+    },
+    {
+      "module": "docling",
+      "distribution": "docling",
+      "import_ok": false,
+      "version": "",
+      "error": "ModuleNotFoundError: No module named 'docling'",
+      "warnings": [],
+      "gil_enabled_after_import": false
+    }
+  ],
+  "gil_enabled_at_end": false,
+  "loaded_native_modules": [
+    "numpy._core._multiarray_umath",
+    "numpy.linalg._umath_linalg",
+    "torch._C",
+    "torch._C._autograd",
+    "torch._C._distributed_autograd",
+    "torch._C._distributed_c10d",
+    "torch._C._distributed_rpc"
+  ],
+  "passed": false
+}

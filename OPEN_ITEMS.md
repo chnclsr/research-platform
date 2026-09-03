@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-09-02`
+Son güncelleme: `2026-09-03`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -46,6 +46,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 32 | Bozuk kaynak etiketi (`S1-3`) atıf temizleyicisinden kaçıyor | Okuyucu hiçbir yere gitmeyen atıf görüyor | **Yüksek** |
 | 33 | Sentez metnine iç defter dili sızıyor | Rapor kanıt yerine kendi girdisini anlatıyor | Orta |
 | 34 | Anahtar kelime satırı `qualified` iddia olarak kabul edilmiş | Rapor gövdesinde kaynak diye alıntılanıyor | Orta |
+| 35 | Free-threaded Docling production pinleri `cp314t` zincirinde engelli | Kabul kriteri passed değil, upstream wheel bekliyor | Belgelendi |
 
 ---
 
@@ -545,6 +546,23 @@ bir arşiv, altı elle yazılmış stratejinin daha karmaşık bir kopyası olur
 **Yapılacak:** Yeterli koşu biriktiğinde, yüksek yield vermiş blueprint'leri benzer
 kombinasyonda modele referans olarak göstermek. JIT-Agent'ın HarnessFactory'sinin karşılığı
 budur ve bu işin ikinci aşamasıdır.
+## 30. Kapasite ve model kotaları process-local
+
+**Durum:** `capacity.py` içindeki `GATE = CapacityGate()` ve `_MODEL_LEASE =
+asyncio.Semaphore(...)` modül seviyesinde, dolayısıyla yalnız bulundukları worker
+process'ini koordine ediyor. Tek worker kullanılan mevcut kurulumda davranış doğru;
+birden fazla worker veya host açılırsa her replika aynı toplam kotaya tek başına sahip
+olduğunu sanır ve Ollama/GPU aşırı abone edilebilir.
+
+**Nereden çıktı:** GIL ve thread ölçeklenmesi incelemesi. Ölçüm, bu makinedeki kapasite
+sınırının Python worker değil LLM/GPU tarafında olduğunu gösterdi. Bu nedenle yalnız
+worker sayısını artırmak bugün hız kazandırmaz; ancak ikinci makine/GPU ile yatay büyüme
+gündeme geldiğinde koordinasyon eksikliği gerçek bir engel olur.
+
+**Yapılacak:** Yatay büyümeden önce admission kotasını ve model lease'ini Redis gibi tüm
+replikaların paylaştığı bir mekanizmaya taşımak; lease süresi, worker ölümü ve yeniden
+teslim davranışını entegrasyon testleriyle doğrulamak. Tek worker yolunun basitliği ve
+mevcut sınırları korunmalı.
 
 ## 30. İddia çevirisinde sayı sırası
 
@@ -675,6 +693,32 @@ yükseliyor.** Yani mevcut denetim bu kusuru yakalayamaz, tam tersine ödüllend
 `Index Terms:`, `Highlights:` ve başlık/DOI satırları) iddia adayı olmaktan çıkar. Denetim
 tarafında da fiil içermeyen, yüklemsiz aday bir iddia sayılmamalı. 31. maddeyle birlikte
 bakılmalı: soru ilgisi tek başına kalite ölçüsü değil.
+
+## 35. Free-threaded Docling production pinleri `cp314t` zincirinde engelli
+
+**Durum:** GIL uyumluluk çalışmasında NumPy 2.5.2 ve PyTorch 2.13.0+cpu CPython 3.14.7
+free-threaded ortamında import ve CPU stres kapılarını geçti. Docling production pin
+seti ise aynı ortamda kurulamadı: `docling-parse`, `tokenizers`, `safetensors`,
+`opencv-python` ve `pyclipper` zincirinde `cp314t` wheel boşlukları ve native packaging
+engelleri doğrulandı.
+
+**Neden passed değil:** Bu, testin atlanması değildir; paketleme sınırına kadar götürülen
+deneyin sonucudur. Yamalı bir `docling-parse` zinciriyle alınacak sonuç production
+uyumluluk kanıtı sayılmaz. Üstelik production mimaride Docling zaten worker thread'i
+içinde değil, öldürülebilir ayrı process/service yolunda çalışır; free-threaded worker'a
+taşımak güvenli timeout kararını geri alır.
+
+**Ek koşulan kapı:** `.venv-docling` içinde gerçek Docling 2.120.1 ile klasik
+Python CPU limited matrix koşuldu. `shared` ve `per_thread` modları 1/2 thread'de geçti;
+çökme, timeout veya markdown digest ayrışması görülmedi. Bu sonuç free-threaded Docling
+kanıtı değildir; runner'ın gerçek Docling ile çalıştığını ve wheel'ler yayımlanırsa
+karşılaştırma kapısının hazır olduğunu gösterir.
+
+**Yapılacak:** Upstream `cp314t` wheel'ler yayımlanana veya production pin seti resmi
+free-threaded destekli sürümlere taşınana kadar kabul kriteri **engelli — upstream wheel
+bekliyor** durumunda kalmalı. Yeniden açıldığında önce binary wheel kapısı, sonra
+free-threaded import/GIL kontrolü, ardından klasik/free-threaded digest karşılaştırması
+çalıştırılmalı.
 
 ## Kapsam dışı bırakılanlar
 
