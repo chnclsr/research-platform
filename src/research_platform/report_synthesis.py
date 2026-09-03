@@ -267,14 +267,33 @@ def _prompt_excerpt(value: str, max_chars: int) -> str:
     return cleaned[: boundary if boundary > 0 else max_chars].rstrip()
 
 
-def _overview_digest_budget(llm: LLMProvider) -> int:
-    """Reserve output and fixed-prompt room before constructing the overview digest."""
+def _prompt_char_budget(llm: LLMProvider) -> int:
+    """Reserve output and fixed-prompt room before filling a prompt with evidence.
+
+    Measured on a live run, this content runs about 2.9 characters per token; the two used
+    here is deliberately below that, because being wrong in this direction only wastes a
+    little context and being wrong in the other truncates a section.
+    """
     settings = getattr(llm, "settings", None)
     context_tokens = int(getattr(settings, "llm_context_tokens", 8192))
     output_tokens = int(getattr(settings, "llm_max_output_tokens", 2048))
     available_tokens = max(2048, context_tokens - output_tokens - 1536)
-    # Two characters per token is conservative for mixed Turkish/English medical prose.
     return max(6000, min(24000, available_tokens * 2))
+
+
+def _section_packet_budget(
+    llm: LLMProvider, *, question: str, title: str, scope_context: str
+) -> int:
+    """The room a theme's evidence may occupy once the rest of the prompt is paid for.
+
+    The system prompt sits inside the fixed reserve `_prompt_char_budget` already holds
+    back; what is subtracted here is the part that varies per run and per theme, plus room
+    for the `[Sxx]` allow-list.
+    """
+    return max(
+        2000,
+        _prompt_char_budget(llm) - len(question) - len(title) - len(scope_context) - 600,
+    )
 
 
 def _overview_digest(sections: list[SynthesisSection], max_chars: int) -> str:
@@ -391,35 +410,38 @@ def _words(text: str) -> set[str]:
 
 
 def _scope_anchors(question: str) -> list[str]:
-    """Extract run-specific wording without a domain or season lookup table."""
+    """Extract run-specific wording without a domain or season lookup table.
+
+    These reach the model as `SCOPE_BOUNDARIES` guidance and nothing else. A section is
+    never discarded for failing to echo them: measured across live runs, every draft that
+    the old literal-match guard rejected had stayed on the run's subject and merely reached
+    for a synonym -- "AI" for "yapay zeka", "medikal görüntüleme" for "radyoloji" -- and the
+    stitched claim sentences that replaced it read far worse than the draft it threw away.
+    """
     quoted = [
         next(value for value in match.groups() if value)
         for match in re.finditer(r'"([^"\n]+)"|“([^”\n]+)”|\'([^\'\n]+)\'', question or "")
     ]
     acronyms = re.findall(r"\b[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ0-9-]{1,}\b", question or "")
     content = sorted(word for word in _words(question) if len(word) >= 4)
-    return list(dict.fromkeys([*quoted, *acronyms, *content]))[:24]
-
-
-def _anchor_present(anchor: str, text: str) -> bool:
-    anchor_words = normalise_text(anchor).split()
-    text_words = normalise_text(text).split()
-    if not anchor_words:
-        return True
-    if len(anchor_words) > 1:
-        return normalise_text(anchor) in normalise_text(text)
-    stem = anchor_words[0][:5]
-    return any(word.startswith(stem) for word in text_words)
-
-
-def _theme_scope_anchors(
-    anchors: list[str], claims: list[Any], claim_texts: dict[str, str] | None
-) -> list[str]:
-    claim_prose = " ".join(
-        (claim_texts or {}).get(str(claim.id), str(getattr(claim, "text", "")))
-        for claim in claims
-    )
-    return [anchor for anchor in anchors if _anchor_present(anchor, claim_prose)]
+    anchors: list[str] = []
+    seen_stems: set[str] = set()
+    for anchor in dict.fromkeys([*quoted, *acronyms, *content]):
+        words = normalise_text(anchor).split()
+        if len(words) > 1:
+            anchors.append(anchor)
+            continue
+        if not words:
+            continue
+        # Inflections of one word are one boundary. Turkish reaches this constantly:
+        # "çalışmaları" and "çalışmalarını" say the same thing, and listing both spends
+        # prompt room repeating a boundary the model has already been given.
+        stem = words[0][:5]
+        if stem in seen_stems:
+            continue
+        seen_stems.add(stem)
+        anchors.append(anchor)
+    return anchors[:24]
 
 
 def _deduplicate_report_claims(
@@ -485,7 +507,6 @@ _CAPACITY_MODE_REASONS = frozenset(
     {
         "fewer_than_8_unique_claims",
         "fewer_than_4_contributing_sources",
-        "estimated_completeness_below_0_5",
         "fewer_than_2_viable_themes",
     }
 )
@@ -496,14 +517,22 @@ def _report_mode(
     evidence_by_claim: dict[str, list[tuple[Any, Any]]],
     coverage: dict[str, Any] | None,
 ) -> tuple[str, list[str]]:
+    """Decide the report shape from what the audited corpus actually holds.
+
+    `estimated_completeness` deliberately does not appear here. It is a Chao1 incidence
+    estimator over provider overlap, and its unseen term is `q1 ** 2 / (2 * q2)`: a corpus
+    whose connectors happen not to rediscover each other's sources lands one or two
+    doubletons, the estimate collapses towards zero, and a run with dozens of audited
+    claims from dozens of sources would be rendered as a single stitched paragraph. It
+    measures discovery overlap, not whether these claims can carry themes, and it is a
+    diagnostic rather than a recall guarantee -- so it stays in the coverage report and
+    out of the report shape.
+    """
     reasons: list[str] = []
     if len(claims) < 8:
         reasons.append("fewer_than_8_unique_claims")
     if len(_contributing_sources(claims, evidence_by_claim)) < 4:
         reasons.append("fewer_than_4_contributing_sources")
-    completeness = float((coverage or {}).get("estimated_completeness", 1.0) or 0.0)
-    if completeness < 0.5:
-        reasons.append("estimated_completeness_below_0_5")
     return ("compact" if reasons else "standard"), reasons
 
 
@@ -574,40 +603,111 @@ def _plan_themes(
     return viable
 
 
-def _evidence_packet(
+@dataclass(frozen=True)
+class EvidencePacket:
+    """One prompt's worth of a theme's evidence."""
+
+    text: str
+    source_ids: list[str]
+    claim_ids: list[str]
+
+
+# "C01 | " today, "C100 | " once a theme passes a hundred claims. Budgeted at the wider
+# value because over-reserving costs a little prompt room and under-reserving costs the
+# context guarantee this whole path exists to keep.
+_BLOCK_LABEL_CHARS = 7
+
+
+def _claim_evidence_block(
+    claim: Any,
+    evidence_by_claim: dict[str, list[tuple[Any, Any]]],
+    source_labels: dict[str, str],
+) -> tuple[str, list[str]]:
+    """One claim's block body and the sources it is allowed to be cited from.
+
+    Empty body when nothing citable backs the claim. The per-claim caps here -- 900
+    characters of statement, 650 per quote, four quotes -- bound how much of a packet a
+    single claim can occupy. They shorten a claim; they never drop one.
+    """
+    lines: list[str] = []
+    sources: list[str] = []
+    for link, source in evidence_by_claim.get(str(claim.id), []):
+        source_label = source_labels.get(str(source.id))
+        quote = " ".join(str(getattr(link, "quote", "")).split())[:650]
+        if not source_label or not quote:
+            continue
+        direction = str(getattr(link, "direction", "supports"))
+        lines.append(f"{source_label} {direction}: {quote}")
+        if source_label not in sources:
+            sources.append(source_label)
+    if not lines:
+        return "", []
+    body = (
+        f"status={getattr(claim, 'status', 'qualified')} | "
+        f"claim={str(getattr(claim, 'text', ''))[:900]}\n" + "\n".join(lines[:4])
+    )
+    return body, sources
+
+
+def _evidence_packets(
     claims: list[Any],
     evidence_by_claim: dict[str, list[tuple[Any, Any]]],
     source_labels: dict[str, str],
     *,
-    max_claims: int = 12,
-    max_chars: int = 14000,
-) -> tuple[str, list[str], list[str]]:
-    blocks: list[str] = []
-    used_sources: list[str] = []
-    used_claims: list[str] = []
-    for index, claim in enumerate(claims[:max_claims], 1):
-        claim_id = str(claim.id)
-        lines: list[str] = []
-        for link, source in evidence_by_claim.get(claim_id, []):
-            source_label = source_labels.get(str(source.id))
-            quote = " ".join(str(getattr(link, "quote", "")).split())[:650]
-            if not source_label or not quote:
-                continue
-            direction = str(getattr(link, "direction", "supports"))
-            lines.append(f"{source_label} {direction}: {quote}")
-            if source_label not in used_sources:
-                used_sources.append(source_label)
-        if not lines:
+    char_budget: int,
+) -> tuple[list[EvidencePacket], list[str]]:
+    """Split a theme's evidence into packets that each fit the prompt, dropping nothing.
+
+    This replaced a flat `max_claims=12` cap. Measured on run 01M1K0KBNMYV3RF8TB20JZ333P,
+    that cap hid 38 of 86 audited claims from the model -- 44% of the evidence -- while the
+    largest prompt the run ever sent was 2695 of 8192 context tokens and not one of its 671
+    calls stopped on `length`. The evidence was being discarded into free space.
+
+    Every claim with a citable quote lands in exactly one packet. A claim whose block alone
+    exceeds the budget still gets a packet of its own rather than being skipped: the caps in
+    `_claim_evidence_block` keep a single block near 3.6k characters against a budget that
+    does not go below 2000, so this stays a guarantee rather than a hope.
+
+    Returns the packets and the ids of claims nothing citable backed -- counted rather than
+    silently passed over, because "the model saw all of it" is only honest with that number
+    beside it.
+    """
+    prepared: list[tuple[str, str, list[str]]] = []
+    unbacked: list[str] = []
+    for claim in claims:
+        body, sources = _claim_evidence_block(claim, evidence_by_claim, source_labels)
+        if not body:
+            unbacked.append(str(claim.id))
             continue
-        block = (
-            f"C{index:02d} | status={getattr(claim, 'status', 'qualified')} | "
-            f"claim={str(getattr(claim, 'text', ''))[:900]}\n" + "\n".join(lines[:4])
+        prepared.append((str(claim.id), body, sources))
+
+    def pack(rows: list[tuple[str, str, list[str]]]) -> EvidencePacket:
+        # Numbering restarts per packet because each packet is its own prompt, and a first
+        # block labelled C13 would be describing a C01..C12 the model was never shown.
+        text = "\n\n".join(
+            f"C{number:02d} | {body}" for number, (_, body, _) in enumerate(rows, 1)
         )
-        if len("\n\n".join([*blocks, block])) > max_chars:
-            break
-        blocks.append(block)
-        used_claims.append(claim_id)
-    return "\n\n".join(blocks), used_sources, used_claims
+        source_ids: list[str] = []
+        for _, _, sources in rows:
+            for label in sources:
+                if label not in source_ids:
+                    source_ids.append(label)
+        return EvidencePacket(text, source_ids, [claim_id for claim_id, _, _ in rows])
+
+    packets: list[EvidencePacket] = []
+    current: list[tuple[str, str, list[str]]] = []
+    length = 0
+    for row in prepared:
+        cost = len(row[1]) + _BLOCK_LABEL_CHARS + (2 if current else 0)
+        if current and length + cost > char_budget:
+            packets.append(pack(current))
+            current, length = [], 0
+            cost = len(row[1]) + _BLOCK_LABEL_CHARS
+        current.append(row)
+        length += cost
+    if current:
+        packets.append(pack(current))
+    return packets, unbacked
 
 
 def _clean_cited_text(value: Any, allowed_sources: set[str]) -> str:
@@ -795,13 +895,22 @@ def _deduplicated_executive_summary(
 
 
 def _merge_sections_into_compact_answer(
-    sections: list[SynthesisSection], *, turkish: bool
+    sections: list[SynthesisSection],
+    *,
+    turkish: bool,
+    title: str = "",
+    note: str = "merged_for_compact",
 ) -> list[SynthesisSection]:
-    """Fold every theme into one integrated answer before a compact report hides them.
+    """Fold several drafted sections into one, keeping every word and every id.
 
     Compact rendering drops `sections` from the reader-visible surface, so a mode change
     that leaves several drafted themes behind deletes them from the report. Merging first
     keeps every theme's prose and provenance in the one section that still gets rendered.
+
+    `title` and `note` also make this the safe landing for a theme drafted over several
+    evidence packets whose consolidation call failed: concatenating the passes reads worse
+    than one integrated section, but it loses nothing, which is the property that matters
+    when the alternative is discarding drafted prose.
     """
     if len(sections) <= 1:
         return sections
@@ -818,7 +927,7 @@ def _merge_sections_into_compact_answer(
     ).strip()
     return [
         SynthesisSection(
-            title="Kanıt özeti" if turkish else "Evidence summary",
+            title=title or ("Kanıt özeti" if turkish else "Evidence summary"),
             synthesis=body,
             source_ids=list(
                 dict.fromkeys(
@@ -840,7 +949,7 @@ def _merge_sections_into_compact_answer(
                             for section in sections
                             if section.generation_note
                         ),
-                        "merged_for_compact",
+                        note,
                     ]
                 )
             ),
@@ -1025,6 +1134,89 @@ async def _draft_section(
         return fallback, False, f"fallback:{type(exc).__name__}"
 
 
+async def _consolidate_passes(
+    llm: LLMProvider,
+    *,
+    question: str,
+    title: str,
+    passes: list[SynthesisSection],
+    language: str,
+    turkish: bool,
+    scope_context: str = "",
+) -> tuple[SynthesisSection, bool, str]:
+    """Integrate a theme drafted over several evidence packets into one section.
+
+    A theme too large for one prompt is drafted in passes, and concatenating those passes
+    would produce exactly the study-by-study listing the section prompt forbids. This is the
+    reduce half, built the same way `_draft_overview` reduces themes: compress each pass
+    with `_prompt_excerpt`, then ask for one integrated section over the compressed cards.
+
+    Falls back to the deterministic merge rather than to a stitched-claims section: the
+    passes are real drafted prose, and losing them to a failed reduce would be a worse
+    outcome than a section that reads like two halves.
+    """
+    deterministic = _merge_sections_into_compact_answer(
+        passes, turkish=turkish, title=title, note="merged_passes"
+    )[0]
+    allowed_ids = list(
+        dict.fromkeys(source_id for section in passes for source_id in section.source_ids)
+    )
+    claim_ids = list(
+        dict.fromkeys(claim_id for section in passes for claim_id in section.claim_ids)
+    )
+    budget = max(
+        1500,
+        _prompt_char_budget(llm)
+        - len(question)
+        - len(title)
+        - len(scope_context)
+        - (len(allowed_ids) * 8)
+        - 500,
+    )
+    per_pass = max(600, budget // max(1, len(passes)))
+    cards = "\n\n".join(
+        "\n".join(
+            [
+                f"PASS {number}",
+                f"SYNTHESIS: {_prompt_excerpt(section.synthesis, int(per_pass * 0.55))}",
+                f"CONSENSUS: {_prompt_excerpt(section.consensus, int(per_pass * 0.15))}",
+                f"DISAGREEMENTS: {_prompt_excerpt(section.disagreements, int(per_pass * 0.15))}",
+                f"IMPLICATIONS: {_prompt_excerpt(section.implications, int(per_pass * 0.15))}",
+            ]
+        )
+        for number, section in enumerate(passes, 1)
+    )
+    try:
+        data = await llm.complete_json(
+            "You are merging several partial drafts of ONE thematic section of a research "
+            "report into a single integrated section. Return one JSON object with keys "
+            "synthesis, consensus, disagreements, implications. The passes cover different "
+            "studies from the same theme: combine them into one argument rather than "
+            "reporting them in sequence, and say where the passes agree and where they "
+            "diverge. Use only facts present in the passes. Never invent a source, number, "
+            "method, population, result, or URL, and never add a citation that is not "
+            "already in the passes. Keep at least one supplied [Sxx] citation on every "
+            "factual sentence. Do not mention passes, drafts, prompts, or an evidence "
+            f"packet. Write in report language '{language}'.",
+            f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
+            f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
+            f"ALLOWED_SOURCE_IDS: {', '.join(allowed_ids)}\n\nPASSES:\n{cards}",
+        )
+        section = _section_from_data(
+            data,
+            title=title,
+            source_ids=allowed_ids,
+            claim_ids=claim_ids,
+            allowed={f"[{source_id}]" for source_id in allowed_ids},
+            language=language,
+        )
+        if section is not None:
+            return section, True, "consolidated"
+    except Exception as exc:  # noqa: BLE001 - a failed reduce must not cost the passes
+        return deterministic, False, f"consolidate_failed:{type(exc).__name__}"
+    return deterministic, False, "consolidate_failed:invalid_section"
+
+
 async def _draft_overview(
     llm: LLMProvider,
     *,
@@ -1075,7 +1267,7 @@ async def _draft_overview(
     }
     digest_budget = max(
         3000,
-        _overview_digest_budget(llm) - len(question) - (len(allowed) * 8) - 500,
+        _prompt_char_budget(llm) - len(question) - (len(allowed) * 8) - 500,
     )
     section_digest = _overview_digest(sections, digest_budget)
     if not section_digest or not allowed:
@@ -1149,7 +1341,7 @@ async def _draft_overview(
     try:
         repair_budget = max(
             3000,
-            _overview_digest_budget(llm) - (len(allowed) * 8) - 500,
+            _prompt_char_budget(llm) - (len(allowed) * 8) - 500,
         )
         serialised_draft = json.dumps(initial_data, ensure_ascii=False)
         draft_boundary = serialised_draft.rfind(" ", 0, repair_budget)
@@ -1241,12 +1433,18 @@ async def build_synthesis_package(
     sections: list[SynthesisSection] = []
     llm_successes = 0
     generation_diagnostics: dict[str, str] = {}
+    theme_coverage: list[dict[str, Any]] = []
+    claims_without_evidence: list[str] = []
     for index, (title, theme_claims) in enumerate(theme_plan, 1):
-        packet, source_ids, claim_ids = _evidence_packet(
+        packets, unbacked = _evidence_packets(
             theme_claims,
             synthesis_evidence,
             source_labels,
+            char_budget=_section_packet_budget(
+                llm, question=question, title=title, scope_context=scope_context
+            ),
         )
+        claims_without_evidence.extend(unbacked)
         fallback = _fallback_section(
             title,
             theme_claims,
@@ -1255,33 +1453,60 @@ async def build_synthesis_package(
             turkish=turkish,
             claim_texts=claim_texts,
         )
-        section, succeeded, diagnostic = await _draft_section(
-            llm,
-            question=question,
-            title=title,
-            packet=packet,
-            source_ids=source_ids,
-            claim_ids=claim_ids,
-            language=language,
-            fallback=fallback,
-            scope_context=scope_context,
+        drafts: list[SynthesisSection] = []
+        pass_notes: list[str] = []
+        for packet in packets or [EvidencePacket("", [], [])]:
+            drafted, drafted_ok, note = await _draft_section(
+                llm,
+                question=question,
+                title=title,
+                packet=packet.text,
+                source_ids=packet.source_ids,
+                claim_ids=packet.claim_ids,
+                language=language,
+                fallback=fallback,
+                scope_context=scope_context,
+            )
+            pass_notes.append(note)
+            if drafted_ok:
+                drafts.append(drafted)
+        if not drafts:
+            section, succeeded, diagnostic = fallback, False, pass_notes[0]
+        elif len(drafts) == 1:
+            # One usable pass needs no reduce, whether the theme fit in one packet or the
+            # other passes failed. Consolidating a single draft would spend a call to
+            # rewrite prose that already passed.
+            section, succeeded, diagnostic = drafts[0], True, pass_notes[0]
+        else:
+            section, _consolidated, note = await _consolidate_passes(
+                llm,
+                question=question,
+                title=title,
+                passes=drafts,
+                language=language,
+                turkish=turkish,
+                scope_context=scope_context,
+            )
+            # A failed reduce still yields every pass's prose through the deterministic
+            # merge, so the theme counts as model-written either way. `llm_successes` is
+            # compared against `len(sections)`, so it must move once per theme and never
+            # once per pass.
+            succeeded = True
+            diagnostic = f"{note}({'+'.join(pass_notes)})"
+        theme_coverage.append(
+            {
+                "theme": title,
+                "claims_total": len(theme_claims),
+                # Claims that reached a prompt. Not the same as claims the reader's section
+                # ends up reflecting: `passes_used` below is what says whether a pass was
+                # drafted and then discarded for being ungrounded, which leaves its claims
+                # shown to the model but absent from the prose.
+                "claims_shown": sum(len(packet.claim_ids) for packet in packets),
+                "claims_without_evidence": len(unbacked),
+                "passes": len(packets),
+                "passes_used": len(drafts),
+            }
         )
-        required_anchors = _theme_scope_anchors(
-            anchors, theme_claims, claim_texts
-        )
-        visible_section_text = (
-            f"{section.synthesis} {section.consensus} "
-            f"{section.disagreements} {section.implications}"
-        )
-        missing_anchors = [
-            anchor
-            for anchor in required_anchors
-            if not _anchor_present(anchor, visible_section_text)
-        ]
-        if missing_anchors:
-            section = fallback
-            succeeded = False
-            diagnostic = "fallback:scope_anchor_drift"
         # The diagnostic travels with the section as well as in the run-level map. Reading
         # it back by `theme_{index}` means trusting that these two lists stay aligned, and
         # the citation record needs it per section to tell a discarded draft apart from a
@@ -1386,6 +1611,15 @@ async def build_synthesis_package(
             "collapsed_sections": collapsed_sections,
             "field_overlaps": overlap_rows,
             "scope_anchors": anchors,
+            # What the model was actually shown. "Every claim reached the prompt" is a
+            # claim about the run, so the run has to carry the numbers that settle it:
+            # `evidence_claims_shown` must equal `unique_claim_count` minus the claims
+            # nothing citable backed.
+            "theme_coverage": theme_coverage,
+            "evidence_claims_shown": sum(
+                int(row["claims_shown"]) for row in theme_coverage
+            ),
+            "claims_without_evidence": len(claims_without_evidence),
             "answerability": {
                 "status": answerability_status,
                 "threshold": _DIRECT_ANSWER_RELEVANCE_THRESHOLD,

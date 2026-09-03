@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from typing import Any
 
@@ -9,7 +10,11 @@ from research_platform.report_synthesis import (
     _clean_cited_text,
     _deduplicated_executive_summary,
     _draft_overview,
+    _evidence_packets,
     _merge_sections_into_compact_answer,
+    _report_mode,
+    _scope_anchors,
+    _section_packet_budget,
     build_synthesis_package,
 )
 from research_platform.text_similarity import prose_overlaps
@@ -26,6 +31,18 @@ class SynthesisLLM(LLMProvider):
             }
         return {
             "synthesis": "The study reports an improved measured outcome [S01].",
+            "consensus": "The reported direction is favourable [S01].",
+            "disagreements": "",
+            "implications": "Independent validation remains necessary [S01].",
+        }
+
+
+class ScopedCompactLLM(LLMProvider):
+    """Drafts a section that stays on the run's subject without echoing every question word."""
+
+    async def complete_json(self, system: str, user: str):
+        return {
+            "synthesis": "Open weight models produced radiology reports from chest images [S01].",
             "consensus": "The reported direction is favourable [S01].",
             "disagreements": "",
             "implications": "Independent validation remains necessary [S01].",
@@ -179,6 +196,7 @@ async def test_unknown_source_citations_trigger_grounded_fallback() -> None:
     assert package.report_mode == "compact"
     assert "[S99]" not in package.executive_summary
     assert "[S01]" in package.executive_summary
+    assert package.generation_diagnostics["theme_1"] == "fallback:invalid_repair"
 
 
 def test_flat_string_lists_become_prose_without_python_serialisation() -> None:
@@ -293,7 +311,17 @@ class ScopeDriftLLM(LLMProvider):
         }
 
 
-async def test_scope_anchor_drift_uses_grounded_fallback_without_term_hardcoding() -> None:
+async def test_scope_anchors_guide_the_prompt_and_no_longer_discard_a_draft() -> None:
+    """The accepted cost of trusting the model, pinned so it stays a decision.
+
+    A literal-match guard used to replace this draft with stitched claim sentences for
+    answering about "Yaz" where the question said "Bahar". Measured across live runs it
+    never once caught a real drift: every rejection was a section that had stayed on
+    subject and reached for a synonym -- "AI" for "yapay zeka", "medikal görüntüleme" for
+    "radyoloji" -- and the stitched replacement read far worse than what it discarded. So
+    the anchors now only reach the model as `SCOPE_BOUNDARIES` guidance, and a draft that
+    ignores them reaches the reader.
+    """
     source = SimpleNamespace(id="source-1", title="Seasonal finding", metadata_json={})
     claim = SimpleNamespace(
         id="claim-1",
@@ -314,9 +342,9 @@ async def test_scope_anchor_drift_uses_grounded_fallback_without_term_hardcoding
         claim_texts={claim.id: "Bahar dönemindeki nazal nodüller tedavi gerektirir."},
     )
 
-    assert package.generation_diagnostics["theme_1"] == "fallback:scope_anchor_drift"
-    assert "Bahar" in package.executive_summary
-    assert "Yaz" not in package.executive_summary
+    assert "scope_anchor_drift" not in package.generation_diagnostics["theme_1"]
+    assert "Yaz" in package.executive_summary
+    # The prompt half stays: the model is still told the run's literal wording.
     assert "bahar" in package.quality_diagnostics["scope_anchors"]
 
 
@@ -377,7 +405,12 @@ async def test_sparse_semantic_claims_choose_one_compact_evidence_summary() -> N
     assert package.quality_diagnostics["unique_claim_count"] == 6
     assert len(package.sections) == 1
     assert package.narrative == ""
-    assert "estimated_completeness_below_0_5" in package.quality_diagnostics["mode_reasons"]
+    # The compact mode here is earned by the claim and source counts. The low completeness
+    # estimate passed in above is a discovery diagnostic and no longer shapes the report.
+    assert package.quality_diagnostics["mode_reasons"] == [
+        "fewer_than_8_unique_claims",
+        "fewer_than_4_contributing_sources",
+    ]
 
 
 async def test_invalid_repair_is_recorded_but_does_not_define_answerability() -> None:
@@ -678,3 +711,361 @@ def test_compact_transition_merges_themes_instead_of_hiding_them() -> None:
     assert merged[0].source_ids == ["S01", "S02"]
     assert merged[0].claim_ids == ["claim-1", "claim-2"]
     assert "merged_for_compact" in merged[0].generation_note
+
+
+def test_collapsed_completeness_estimate_no_longer_forces_a_compact_report() -> None:
+    claims = [SimpleNamespace(id=f"claim-{index}", text=f"Finding {index}.") for index in range(10)]
+    sources = [SimpleNamespace(id=f"source-{index}") for index in range(5)]
+    evidence = {
+        claim.id: [(SimpleNamespace(quote=claim.text, direction="supports"), sources[index % 5])]
+        for index, claim in enumerate(claims)
+    }
+
+    # Chao1 collapses towards zero whenever the connectors barely rediscover each other's
+    # sources. That is a property of the discovery pool, not of whether ten audited claims
+    # from five sources can carry themes.
+    assert _report_mode(claims, evidence, {"estimated_completeness": 0.027}) == ("standard", [])
+
+
+async def test_compact_section_survives_a_question_with_many_scope_anchors() -> None:
+    sources = [
+        SimpleNamespace(id=f"source-{index}", title=f"Source {index}", metadata_json={})
+        for index in range(7)
+    ]
+    texts = [
+        "Open weight models produced radiology reports with high accuracy.",
+        "Radiology reports generated from chest images were reviewed by clinicians.",
+        "Open weight models were deployed inside the hospital for radiology reports.",
+        "Computed tomography images were the input for the reports.",
+        "The models were compared against closed weight baselines on radiology images.",
+        "Open source checkpoints were released for the reports.",
+        "Radiology images from multiple modalities were included in the models evaluation.",
+    ]
+    claims = [
+        SimpleNamespace(
+            id=f"claim-{index}",
+            text=text,
+            status="qualified",
+            audit={"question_relevance": 0.80},
+        )
+        for index, text in enumerate(texts)
+    ]
+    evidence = {
+        claim.id: [(SimpleNamespace(quote=claim.text, direction="supports"), sources[index])]
+        for index, claim in enumerate(claims)
+    }
+
+    package = await build_synthesis_package(
+        llm=ScopedCompactLLM(),
+        question=(
+            "Which open weight models generate radiology reports "
+            "from computed tomography images?"
+        ),
+        language="en",
+        sources=sources,
+        reportable_claims=claims,
+        evidence_by_claim=evidence,
+        coverage={"estimated_completeness": 0.027},
+    )
+
+    assert package.report_mode == "compact"
+    assert package.quality_diagnostics["mode_reasons"] == ["fewer_than_8_unique_claims"]
+    assert "Open weight models produced radiology reports" in package.executive_summary
+    # Compact holds every claim in one theme, and all seven reach the prompt.
+    assert package.quality_diagnostics["evidence_claims_shown"] == 7
+    assert package.quality_diagnostics["claims_without_evidence"] == 0
+
+
+def test_scope_anchors_count_one_word_once_however_it_is_inflected() -> None:
+    # `_anchor_present` matches a single word by its five-character stem, so the two
+    # Turkish inflections below are one requirement. Listing both used to make a section
+    # owe the same word twice.
+    anchors = _scope_anchors(
+        "BT görüntülerinden radyoloji raporu yazan çalışmaları ve çalışmalarını bul."
+    )
+
+    assert "çalışmaları" in anchors
+    assert "çalışmalarını" not in anchors
+    assert len(anchors) == len(set(anchors))
+
+
+async def test_a_rejected_draft_reports_why_it_was_rejected() -> None:
+    """The diagnostic has to name the reason, because it is what a run is debugged from.
+
+    A section rejected over its citations must say `invalid_repair`. A live run reported
+    `scope_anchor_drift` for exactly this case, and the wrong label sent an investigation
+    after the wrong mechanism.
+    """
+    texts = [
+        "The method improved the measured outcome in cohort A.",
+        "Recovery time fell when the method was applied.",
+        "The measured outcome favoured the treated group.",
+        "Adverse events did not increase under the method.",
+        "Clinicians reported improved workflow after adoption.",
+        "Cost per patient dropped in the second year.",
+        "Independent trials have not replicated the result.",
+    ]
+    sources = [
+        SimpleNamespace(id=f"source-{index}", title=f"Source {index}", metadata_json={})
+        for index in range(len(texts))
+    ]
+    claims = [
+        SimpleNamespace(
+            id=f"claim-{index}",
+            text=text,
+            status="qualified",
+            audit={"question_relevance": 0.80},
+        )
+        for index, text in enumerate(texts)
+    ]
+    evidence = {
+        claim.id: [(SimpleNamespace(quote=claim.text, direction="supports"), sources[index])]
+        for index, claim in enumerate(claims)
+    }
+
+    package = await build_synthesis_package(
+        llm=InventingLLM(),
+        question="Does the method improve the measured outcome in trials?",
+        language="en",
+        sources=sources,
+        reportable_claims=claims,
+        evidence_by_claim=evidence,
+    )
+
+    assert package.generation_diagnostics["theme_1"] == "fallback:invalid_repair"
+
+
+def _packet_fixture(count: int, *, quote_chars: int = 600):
+    """A theme big enough to need several packets, with one distinct source per claim."""
+    sources = [
+        SimpleNamespace(id=f"source-{index}", title=f"Source {index}", metadata_json={})
+        for index in range(count)
+    ]
+    claims = [
+        SimpleNamespace(
+            id=f"claim-{index}",
+            text=f"Finding {index}: the measured outcome moved under condition {index}.",
+            status="qualified",
+            audit={"question_relevance": 0.80},
+        )
+        for index in range(count)
+    ]
+    evidence = {
+        claim.id: [
+            (
+                SimpleNamespace(
+                    quote=f"Evidence {index} " + ("detail " * (quote_chars // 8)),
+                    direction="supports",
+                ),
+                sources[index],
+            )
+        ]
+        for index, claim in enumerate(claims)
+    }
+    labels = {str(source.id): f"S{index:02d}" for index, source in enumerate(sources, 1)}
+    return sources, claims, evidence, labels
+
+
+def test_every_backed_claim_reaches_exactly_one_packet() -> None:
+    """The property the 12-claim cap broke: a live run hid 44% of its evidence."""
+    _sources, claims, evidence, labels = _packet_fixture(40)
+    budget = 4000
+
+    packets, unbacked = _evidence_packets(claims, evidence, labels, char_budget=budget)
+
+    assert len(packets) > 1, "fixture must be large enough to split"
+    assert unbacked == []
+    placed = [claim_id for packet in packets for claim_id in packet.claim_ids]
+    assert placed == [str(claim.id) for claim in claims]
+    assert len(placed) == len(set(placed))
+
+
+def test_no_packet_exceeds_the_budget_it_was_given() -> None:
+    _sources, claims, evidence, labels = _packet_fixture(40)
+    budget = 4000
+
+    packets, _unbacked = _evidence_packets(claims, evidence, labels, char_budget=budget)
+
+    assert all(len(packet.text) <= budget for packet in packets)
+
+
+def test_a_claim_larger_than_the_budget_still_gets_a_packet() -> None:
+    """Dropping it would trade the coverage guarantee for a size guarantee."""
+    _sources, claims, evidence, labels = _packet_fixture(3)
+
+    packets, unbacked = _evidence_packets(claims, evidence, labels, char_budget=200)
+
+    assert unbacked == []
+    assert [claim_id for packet in packets for claim_id in packet.claim_ids] == [
+        "claim-0",
+        "claim-1",
+        "claim-2",
+    ]
+
+
+def test_a_claim_with_no_citable_quote_is_counted_not_silently_skipped() -> None:
+    source = SimpleNamespace(id="source-1", title="S", metadata_json={})
+    backed = SimpleNamespace(id="claim-1", text="Backed.", status="qualified")
+    bare = SimpleNamespace(id="claim-2", text="Unbacked.", status="qualified")
+    evidence = {
+        backed.id: [(SimpleNamespace(quote="A real quote.", direction="supports"), source)],
+        bare.id: [(SimpleNamespace(quote="   ", direction="supports"), source)],
+    }
+
+    packets, unbacked = _evidence_packets(
+        [backed, bare], evidence, {"source-1": "S01"}, char_budget=8000
+    )
+
+    assert [claim_id for packet in packets for claim_id in packet.claim_ids] == ["claim-1"]
+    assert unbacked == ["claim-2"]
+
+
+def test_packet_budget_leaves_room_for_the_rest_of_the_prompt() -> None:
+    llm = SynthesisLLM()
+    llm.settings = SimpleNamespace(llm_context_tokens=8192, llm_max_output_tokens=2048)
+
+    budget = _section_packet_budget(
+        llm, question="Q" * 100, title="T" * 40, scope_context="S" * 300
+    )
+
+    # (8192 - 2048 - 1536) * 2 = 9216, minus the variable prompt parts and the allow-list.
+    assert budget == 9216 - 100 - 40 - 300 - 600
+
+
+class MultiPassLLM(LLMProvider):
+    """Drafts each pass, then integrates them when asked to consolidate.
+
+    Cites whatever the packet actually offered: each pass carries its own slice of the
+    theme's sources, so a fake that always cited `[S01]` would be ungrounded from the
+    second pass onward and would exercise the repair ladder instead of consolidation.
+    """
+
+    def __init__(self, *, consolidation_valid: bool = True) -> None:
+        self.consolidation_valid = consolidation_valid
+        self.drafts = 0
+        self.consolidations = 0
+
+    async def complete_json(self, system: str, user: str):
+        if "integrative layer" in system:
+            return {
+                "executive_summary": "The evidence indicates improvement in context [S01].",
+                "cross_study_assessment": "The available design is limited [S01].",
+                "conclusion": "Replication is needed before generalisation [S01].",
+                "uncertainty": "External validation was not demonstrated [S01].",
+            }
+        offered = re.search(r"ALLOWED_SOURCE_IDS: ([^\n]*)", user)
+        label = offered.group(1).split(",")[0].strip() if offered else "S01"
+        if "merging several partial drafts" in system:
+            self.consolidations += 1
+            if not self.consolidation_valid:
+                return {"synthesis": "An invented source integrates the passes [S99]."}
+            return {
+                "synthesis": f"Integrated across every pass of this theme [{label}].",
+                "consensus": f"The passes agree on direction [{label}].",
+                "disagreements": "",
+                "implications": f"Validation remains necessary [{label}].",
+            }
+        self.drafts += 1
+        marker = "alpha" if "claim=Finding 0:" in user else "beta"
+        return {
+            "synthesis": f"Pass {marker} reports a measured outcome [{label}].",
+            "consensus": f"Pass {marker} direction is favourable [{label}].",
+            "disagreements": "",
+            "implications": f"Pass {marker} needs validation [{label}].",
+        }
+
+
+async def _multi_pass_package(llm: LLMProvider):
+    sources, claims, evidence, _labels = _packet_fixture(24)
+    return await build_synthesis_package(
+        llm=llm,
+        question="Does the method improve the measured outcome?",
+        language="en",
+        sources=sources,
+        reportable_claims=claims,
+        evidence_by_claim=evidence,
+    )
+
+
+async def test_a_theme_needing_several_packets_still_yields_one_section() -> None:
+    """Downstream counts on it.
+
+    Compact rendering asserts a single section, and `generated_by_llm` compares
+    `llm_successes` against `len(sections)` -- so passes must stay passes and never become
+    sections of their own.
+    """
+    llm = MultiPassLLM()
+
+    package = await _multi_pass_package(llm)
+
+    assert llm.drafts > 1, "fixture must be large enough to split"
+    assert llm.consolidations == 1
+    assert len(package.sections) == 1
+    assert "theme_2" not in package.generation_diagnostics
+    assert package.generation_diagnostics["theme_1"].startswith("consolidated")
+    assert "Integrated across every pass" in package.sections[0].synthesis
+
+
+async def test_every_claim_reaches_the_prompt_across_the_passes() -> None:
+    llm = MultiPassLLM()
+
+    package = await _multi_pass_package(llm)
+
+    quality = package.quality_diagnostics
+    assert quality["claims_without_evidence"] == 0
+    assert quality["evidence_claims_shown"] == quality["unique_claim_count"]
+    assert sum(row["passes"] for row in quality["theme_coverage"]) == llm.drafts
+
+
+async def test_a_failed_consolidation_keeps_every_pass_rather_than_dropping_them() -> None:
+    llm = MultiPassLLM(consolidation_valid=False)
+
+    package = await _multi_pass_package(llm)
+
+    assert llm.consolidations == 1
+    assert len(package.sections) == 1
+    assert package.generation_diagnostics["theme_1"].startswith("consolidate_failed")
+    body = package.sections[0].synthesis
+    assert "Pass alpha reports" in body
+    assert "Pass beta reports" in body
+    assert "[S99]" not in body
+
+
+class OnePassFailsLLM(LLMProvider):
+    """Drafts the first pass cleanly and returns an ungrounded second pass."""
+
+    def __init__(self) -> None:
+        self.drafts = 0
+
+    async def complete_json(self, system: str, user: str):
+        if "integrative layer" in system or "merging several partial drafts" in system:
+            return {"synthesis": "Unused [S99]."}
+        if "Repair the supplied draft" in system:
+            return {"synthesis": "Still ungrounded [S99]."}
+        self.drafts += 1
+        if "claim=Finding 0:" in user:
+            offered = re.search(r"ALLOWED_SOURCE_IDS: ([^\n]*)", user)
+            label = offered.group(1).split(",")[0].strip() if offered else "S01"
+            return {
+                "synthesis": f"The first pass reports a measured outcome [{label}].",
+                "consensus": "",
+                "disagreements": "",
+                "implications": "",
+            }
+        return {"synthesis": "An invented source proves the result [S99]."}
+
+
+async def test_a_discarded_pass_is_visible_rather_than_counted_as_covered() -> None:
+    """`claims_shown` counts what reached a prompt, which is not what the reader gets.
+
+    A pass whose draft fails grounding is dropped, so its claims were shown to the model
+    and are still absent from the section. `passes_used` is what makes that difference
+    auditable instead of hiding behind a full `claims_shown`.
+    """
+    llm = OnePassFailsLLM()
+
+    package = await _multi_pass_package(llm)
+
+    row = package.quality_diagnostics["theme_coverage"][0]
+    assert row["claims_shown"] == row["claims_total"]
+    assert row["passes"] > row["passes_used"]
