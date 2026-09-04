@@ -374,6 +374,19 @@ def _classify_design(text: str, turkish: bool) -> str:
     return "Tasarım belirtilmemiş" if turkish else "Design not reported"
 
 
+def source_design_labels(sources: list[Any], *, turkish: bool = True) -> dict[str, str]:
+    """The `_classify_design` label per source id, without building full StudyProfiles.
+
+    Same table the report prints in its study-profile block, so a tier decision made from
+    these labels and the design column a reader sees can never disagree. Exposed rather
+    than copied because the alternative -- a second regex table elsewhere -- drifts.
+    """
+    return {
+        str(source.id): _classify_design(_source_text(source, []), turkish)
+        for source in sources
+    }
+
+
 def build_study_profiles(
     sources: list[Any],
     reportable_claims: list[Any],
@@ -642,8 +655,14 @@ def _claim_evidence_block(
             sources.append(source_label)
     if not lines:
         return "", []
+    # The evidence grade rides in here rather than into a sort key: the drafting model can
+    # write "three small series against one multicentre trial", which a reader can check,
+    # where a reordering would have moved claims around with nothing on the page saying so.
+    appraisal = (getattr(claim, "audit", None) or {}).get("appraisal") or {}
+    grade = str(appraisal.get("grade") or "")[:28]
+    grade_field = f"evidence={grade} | " if grade else ""
     body = (
-        f"status={getattr(claim, 'status', 'qualified')} | "
+        f"status={getattr(claim, 'status', 'qualified')} | {grade_field}"
         f"claim={str(getattr(claim, 'text', ''))[:900]}\n" + "\n".join(lines[:4])
     )
     return body, sources

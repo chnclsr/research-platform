@@ -1336,9 +1336,12 @@ def _build_synthesis_word_report(
         row = claim_table.add_row().cells
         row[0].text = f"C{index:02d}"
         row[1].text = _text(claim.text, 280)
-        row[2].text = _text(claim.status, 20)
-        row[3].text = f"{float(getattr(claim, 'confidence', 0.0) or 0.0):.2f}"
         audit = getattr(claim, "audit", {}) or {}
+        # The evidence grade shares the status cell rather than taking a seventh column:
+        # the table is already at six across the page width set below.
+        grade = str((audit.get("appraisal") or {}).get("grade") or "")
+        row[2].text = _text(claim.status, 20) + (f"\n{grade}" if grade else "")
+        row[3].text = f"{float(getattr(claim, 'confidence', 0.0) or 0.0):.2f}"
         row[4].text = f"{float(audit.get('question_relevance', 0.0) or 0.0):.2f}"
         numbers = _claim_sources(str(claim.id), evidence_by_claim, source_numbers)
         row[5].text = ", ".join(f"S{number:02d}" for number in numbers) or "—"

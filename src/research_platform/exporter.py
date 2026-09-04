@@ -174,9 +174,21 @@ def word_report_name(label: str | None) -> str:
 
 
 def _is_reportable(claim: Any) -> bool:
+    """The single reportability gate.
+
+    ADVERSARIAL_REVIEW's evidence grade is deliberately NOT consulted here. A grade that
+    silently removed claims would be invisible when it misfired: a report that dropped a
+    claim reads exactly like one that never had it. The grade steers the prose instead.
+    """
     relevance = float((claim.audit or {}).get("question_relevance", 0.0))
     supporting = int((claim.audit or {}).get("supporting_evidence", 0))
     return claim.status in {"supported", "qualified"} and relevance >= 0.20 and supporting > 0
+
+
+def appraisal_grade(claim: Any) -> str:
+    """The evidence grade, or `değerlendirilmedi` for a run made before appraisal existed."""
+    appraisal = (getattr(claim, "audit", None) or {}).get("appraisal") or {}
+    return str(appraisal.get("grade") or "değerlendirilmedi")
 
 
 def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
@@ -273,8 +285,6 @@ async def build_exports(
     repo: Repository,
     store: ObjectStore,
     llm: LLMProvider,
-    *,
-    outline_guidance: str = "",
 ) -> list[str]:
     sources = await repo.list_sources(run_id)
     claims = await repo.list_claims(run_id)
@@ -414,7 +424,8 @@ async def build_exports(
             )
             findings.append(
                 f"### {index}. {claim_display(claim)}\n\n"
-                f"Durum: `{claim.status}` · Soru ilgisi: "
+                f"Durum: `{claim.status}` · Kanıt notu: `{appraisal_grade(claim)}` · "
+                f"Soru ilgisi: "
                 f"`{claim.audit.get('question_relevance', 0):.2f}`\n\n{citations}"
             )
         return "\n\n".join(findings) or "Bu kategoride iddia bulunamadı."
@@ -705,6 +716,28 @@ async def build_exports(
     )
     unaudited = [claim for claim in claims if not claim.audit]
     irrelevant = [claim for claim in claims if claim.status == "irrelevant"]
+    appraisals = [
+        (claim.audit or {}).get("appraisal") for claim in claims if (claim.audit or {}).get("appraisal")
+    ]
+    grade_counts = Counter(str(item.get("grade", "")) for item in appraisals)
+    tiers = {str(item.get("tier", "")) for item in appraisals} - {""}
+    reason_counts = Counter(
+        reason for item in appraisals for reason in (item.get("reasons") or [])
+    )
+    appraisal_md = ""
+    if appraisals:
+        grades = "".join(
+            f"- {grade}: {count}\n"
+            for grade, count in sorted(grade_counts.items(), key=lambda row: -row[1])
+        )
+        reasons = "".join(
+            f"- {reason}: {count}\n" for reason, count in reason_counts.most_common(10)
+        ) or "- Not düşüren gerekçe yok.\n"
+        appraisal_md = (
+            "\n## Kanıt değerlendirmesi\n\n"
+            f"Katman: `{', '.join(sorted(tiers)) or 'bilinmiyor'}`\n\n"
+            f"{grades}\n### Not düşüren gerekçeler\n\n{reasons}"
+        )
     audit_md = (
         "# Denetim Raporu\n\n"
         f"- Toplam iddia: {len(claims)}\n"
@@ -713,6 +746,7 @@ async def build_exports(
         f"- Sentezden dışlanan: {len(excluded)}\n"
         f"- İlgisiz: {len(irrelevant)}\n"
         f"- Denetlenmemiş: {len(unaudited)}\n"
+        f"{appraisal_md}"
     )
     files["11_audit_report.md"] = ("text/markdown", audit_md.encode("utf-8"))
     excluded_md = (

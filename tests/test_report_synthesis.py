@@ -1069,3 +1069,35 @@ async def test_a_discarded_pass_is_visible_rather_than_counted_as_covered() -> N
     row = package.quality_diagnostics["theme_coverage"][0]
     assert row["claims_shown"] == row["claims_total"]
     assert row["passes"] > row["passes_used"]
+
+
+def test_claim_block_carries_the_appraisal_to_the_model():
+    """The grade steers the drafted prose; it is not applied as a hidden sort key."""
+    from research_platform.report_synthesis import _claim_evidence_block
+
+    source, claim, link = _fixture()
+    claim.audit = {**claim.audit, "appraisal": {"grade": "limited", "tier": "clinical"}}
+    body, sources = _claim_evidence_block(
+        claim, {"claim-1": [(link, source)]}, {"source-1": "S01"},
+    )
+    assert "evidence=limited" in body
+    assert "status=qualified" in body
+    assert sources == ["S01"]
+
+
+def test_claim_block_omits_the_field_for_an_unappraised_claim():
+    """Runs made before appraisal existed must not grow an empty field."""
+    from research_platform.report_synthesis import _claim_evidence_block
+
+    source, claim, link = _fixture()
+    body, _ = _claim_evidence_block(
+        claim, {"claim-1": [(link, source)]}, {"source-1": "S01"},
+    )
+    assert "evidence=" not in body
+
+
+def test_source_design_labels_reuse_the_report_classifier():
+    source, _, _ = _fixture()
+    from research_platform.report_synthesis import source_design_labels
+
+    assert source_design_labels([source]) == {"source-1": "Dış doğrulama"}

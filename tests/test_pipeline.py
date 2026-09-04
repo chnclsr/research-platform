@@ -11,14 +11,16 @@ import pytest
 
 from conftest import acting_principal
 from research_platform.config import get_settings
-from research_platform.db import SessionLocal, create_schema
+from research_platform.db import (
+    ClaimRow, EvidenceRow, SessionLocal, SourceRow, SourceVersionRow, create_schema,
+)
 from research_platform.pipeline import PipelineHalted, PipelineStageTimeout, ResearchPipeline
 from research_platform.repository import (
     CheckpointTooLarge, Repository, checkpoint_payload,
 )
 from research_platform.schemas import (
     AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SearchMission,
-    SourceFamily,
+    SourceFamily, new_id,
 )
 from research_platform.storage import ObjectStore
 
@@ -736,3 +738,100 @@ async def test_frontier_skips_hostless_links_instead_of_failing_the_run():
         if rows is not None:
             hosts = {r.canonical_url for r in rows}
             assert not any(h.startswith(("mailto:", "javascript:")) for h in hosts)
+
+
+async def _appraisal_run():
+    """A committed run with two claims and their evidence, ready for ADVERSARIAL_REVIEW."""
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Appraisal",
+        primary_question="Does the therapy reduce mortality in a randomized trial?",
+        budget={"max_wall_minutes": 5},
+        hitl={"plan_review": False},
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        source = SourceRow(
+            id=new_id(), run_id=row.id, url="https://example.org/trial",
+            title="A randomized controlled trial", dedupe_key="trial",
+            family="academic", connector_id="europe_pmc", persistent_id="10.1/a",
+            metadata_json={},
+        )
+        session.add(source)
+        await session.flush()
+        version = SourceVersionRow(
+            id=new_id(), source_id=source.id, content_hash="h1", content="text",
+            acquisition_method="fixture", access_status="open",
+            retrieved_at=datetime.now(UTC),
+        )
+        session.add(version)
+        await session.flush()
+        strong = ClaimRow(
+            id=new_id(), run_id=row.id, text="The therapy reduces mortality.", importance="major",
+            status="supported", confidence=0.8,
+            audit={
+                "supporting_evidence": 2, "counter_evidence": 0,
+                "independent_domains": 2, "question_relevance": 0.9,
+            },
+        )
+        thin = ClaimRow(
+            id=new_id(), run_id=row.id, text="The therapy is cost effective.", importance="minor",
+            status="qualified", confidence=0.4,
+            audit={
+                "supporting_evidence": 1, "counter_evidence": 0,
+                "independent_domains": 1, "question_relevance": 0.5,
+            },
+        )
+        session.add_all([strong, thin])
+        await session.flush()
+        session.add(EvidenceRow(
+            id=new_id(), claim_id=strong.id, source_version_id=version.id, direction="supports",
+            quote="mortality fell", location={}, entailment_score=0.9,
+        ))
+        await session.commit()
+
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        state = {"run_id": row.id, "protocol": protocol.model_dump(mode="json")}
+        await pipeline.adversarial_review(state)
+
+        claims = {c.id: (c.status, dict(c.audit)) for c in await repo.list_claims(row.id)}
+        events = [
+            dict(e.payload) for e in await repo.events_by_types(row.id, {"claim_appraisal"})
+        ]
+        return claims, events, strong.id, thin.id
+
+
+@pytest.mark.asyncio
+async def test_adversarial_review_writes_appraisal_into_claim_audit():
+    claims, _, strong_id, thin_id = await _appraisal_run()
+
+    _, strong = claims[strong_id]
+    assert strong["appraisal"]["grade"] == "strong"
+    assert strong["appraisal"]["tier"] in {"universal", "clinical"}
+    assert strong["appraisal"]["generated_by"] in {"model", "deterministic"}
+    # The keys AUDIT writes must survive the nested addition untouched.
+    assert strong["supporting_evidence"] == 2
+    assert strong["question_relevance"] == 0.9
+
+    assert claims[thin_id][1]["appraisal"]["grade"] == "limited"
+
+
+@pytest.mark.asyncio
+async def test_adversarial_review_emits_a_consumable_event():
+    _, events, _, _ = await _appraisal_run()
+    assert len(events) == 1
+    appraisal = events[0]
+    assert appraisal["tier"] in {"universal", "clinical"}
+    assert appraisal["grades"]
+    assert appraisal["generated_by"] in {"model", "fallback"}
+    assert "score" in appraisal["tier_evidence"]
+    assert isinstance(appraisal["latency_ms"], int)
+
+
+@pytest.mark.asyncio
+async def test_adversarial_review_does_not_change_claim_status():
+    """The grade informs the prose; it never decides what reaches the report."""
+    claims, _, strong_id, thin_id = await _appraisal_run()
+    assert claims[strong_id][0] == "supported"
+    assert claims[thin_id][0] == "qualified"

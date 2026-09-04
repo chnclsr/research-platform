@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .acquisition import AcquisitionService
 from .auth import Principal
+from .claim_appraisal import appraise_claims, propose_appraisal, select_appraisal_tier
 from .config import Settings
 from .connectors import build_registry
 from .coverage import calculate_coverage
@@ -74,6 +75,7 @@ from .relevance import (
     filter_and_rank_candidates,
     temporal_relevance,
 )
+from .report_synthesis import source_design_labels
 from .repository import Repository
 from .research_plan import build_research_plan, plan_display_and_strategy, plan_strategy
 from .schemas import (
@@ -176,7 +178,6 @@ class PipelineState(TypedDict, total=False):
     decompose_signature: str
     generated_queries: list[str]
     query_signature: str
-    report_outline_guidance: str
     invocation_source: str
 
 
@@ -3405,41 +3406,103 @@ class ResearchPipeline:
         return {"coverage": coverage.model_dump()}
 
     async def adversarial_review(self, state: PipelineState) -> dict:
+        """Grade how well each claim is evidenced, on top of AUDIT's counting.
+
+        AUDIT decides `supported` / `qualified` by counting independent sources and
+        entailment. That says a claim was corroborated; it says nothing about whether the
+        corroborating studies could carry the claim. Three small single-centre series and
+        one multicentre trial score identically there, which is the gap this closes.
+
+        The grade is written to `claim.audit["appraisal"]` and shown -- in the drafting
+        prompt, the findings block and the audit report. It deliberately does NOT touch
+        `exporter._is_reportable` or the reportable ordering: changing which claims reach a
+        report is invisible when it goes wrong, because a report that quietly lost a claim
+        reads exactly like one that never had it.
+        """
         await self._boundary(state, "ADVERSARIAL_REVIEW")
-        claims = await self.repo.list_claims(state["run_id"])
-        weak = [c.id for c in claims if c.status != "supported"]
-        excluded = [
-            c.id
-            for c in claims
-            if c.status in {"irrelevant", "unresolved"}
-            or c.audit.get("question_relevance", 0.0) < 0.20
+        run_id = state["run_id"]
+        protocol = ResearchProtocol.model_validate(state["protocol"])
+        claims = await self.repo.list_claims(run_id)
+        evidence = await self.repo.list_evidence(run_id)
+
+        evidence_by_claim: dict[str, list[tuple]] = defaultdict(list)
+        sources_by_id: dict[str, Any] = {}
+        for claim, link, source in evidence:
+            evidence_by_claim[str(claim.id)].append((link, source))
+            sources_by_id[str(source.id)] = source
+
+        sources = list(sources_by_id.values())
+        design_by_source = source_design_labels(sources)
+        tier, tier_evidence = select_appraisal_tier(protocol, sources, design_by_source)
+
+        summaries = [
+            {
+                "claim_id": str(claim.id),
+                "claim": str(claim.text)[:400],
+                "status": str(claim.status),
+                "supporting": (claim.audit or {}).get("supporting_evidence", 0),
+                "counter": (claim.audit or {}).get("counter_evidence", 0),
+                "independent_domains": (claim.audit or {}).get("independent_domains", 0),
+                "designs": sorted({
+                    design_by_source.get(str(source.id), "")
+                    for _, source in evidence_by_claim.get(str(claim.id), [])
+                } - {""}),
+            }
+            for claim in claims
+            if claim.status in {"supported", "qualified"}
         ]
-        await self.repo.event(
-            state["run_id"],
-            "adversarial_review",
-            {"weak_claim_ids": weak, "excluded_claim_ids": excluded},
+
+        started = time.monotonic()
+        proposal = await propose_appraisal(self.llm, tier, protocol, summaries)
+        await self._emit_llm_metrics(run_id, "ADVERSARIAL_REVIEW")
+        appraisals, rejected = appraise_claims(
+            claims,
+            evidence_by_claim,
+            design_by_source,
+            tier=tier,
+            minimum_independent_sources=protocol.evidence_policy.minimum_independent_sources,
+            proposal=proposal,
         )
-        outline = {
-            "title": ResearchProtocol.model_validate(state["protocol"]).title,
-            "sections": [
-                "Yönetici özeti",
-                "Kapsam ve yöntem",
-                "Denetlenmiş temel bulgular",
-                "Çelişen kanıtlar",
-                "Belirsizlikler ve kapsam boşlukları",
-                "Sonuç",
-            ],
-            "supported_claims": sum(claim.status == "supported" for claim in claims),
-            "qualified_claims": sum(claim.status == "qualified" for claim in claims),
-        }
-        response = await self._maybe_hitl(
+
+        by_claim = {item.claim_id: item for item in appraisals}
+        grades: Counter[str] = Counter()
+        downgraded: list[str] = []
+        for claim in claims:
+            appraisal = by_claim.get(str(claim.id))
+            if appraisal is None:
+                continue
+            # The whole key is reassigned, not mutated in place: `audit` is a plain JSON
+            # column, so SQLAlchemy only sees a change when the attribute itself is set.
+            claim.audit = {**(claim.audit or {}), "appraisal": appraisal.as_audit_entry()}
+            grades[appraisal.grade] += 1
+            if appraisal.reasons:
+                downgraded.append(str(claim.id))
+        await self.session.commit()
+
+        await self.repo.event(
+            run_id,
+            "claim_appraisal",
+            {
+                "tier": tier,
+                "tier_evidence": tier_evidence,
+                "grades": dict(grades),
+                "downgraded_claim_ids": downgraded,
+                "generated_by": "model" if proposal is not None else "fallback",
+                "latency_ms": int((time.monotonic() - started) * 1000),
+                "rejected": rejected,
+            },
+        )
+        await self._maybe_hitl(
             state,
             "outline_review",
-            {"outline": outline},
+            {
+                "tier": tier,
+                "tier_evidence": tier_evidence,
+                "grades": dict(grades),
+                "downgraded_claim_ids": downgraded,
+            },
             "ADVERSARIAL_REVIEW",
         )
-        if response and not response.get("approved", False):
-            return {"report_outline_guidance": str(response.get("modifications", ""))[:5000]}
         return {}
 
     async def synthesize_export(self, state: PipelineState) -> dict:
@@ -3454,7 +3517,6 @@ class ResearchPipeline:
             self.repo,
             self.store,
             self.llm,
-            outline_guidance=state.get("report_outline_guidance", ""),
         )
         await self._emit_llm_metrics(state["run_id"], "SYNTHESIZE_EXPORT")
         await self.repo.event(state["run_id"], "artifacts", {"names": artifacts})
