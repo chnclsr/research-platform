@@ -447,6 +447,31 @@ strateji sırasını belirleyen ayarların testler arası sızıntıyla değişi
 bakmak; `success` bozuluyorsa zamanlama/timeout yarışını aramak. Kök neden bulunana kadar
 test devre dışı bırakılmamalı — aralıklı da olsa gerçek bir sinyal taşıyor olabilir.
 
+**Traceback yakalandı (`2026-09-04`).** v0.22.0 çalışması sırasında düştü ve bu kez
+traceback alındı:
+
+```
+assert document.success is True
+E   AssertionError: assert False is True
+E    +  where False = AcquiredDocument(..., strategies_tried=[],
+E                     error='[Errno -3] Temporary failure in name resolution').success
+```
+
+Düşen assert `success is True`, ve `strategies_tried=[]` **hiçbir stratejinin
+çalışmadığını** söylüyor — yani hata `acquire()` içinde SSRF kapısında, `_direct`'e bile
+gelmeden oluşuyor. `validate_public_url` literal olmayan bir hostname için
+`socket.getaddrinfo`'yu `asyncio.to_thread` ile çağırıyor; test `example.org` kullandığı
+için mock'lu olmasına rağmen **gerçek bir DNS çözümlemesi** yapılıyor. Bu, "test ağa
+çıkmıyor" varsayımını çürütüyor: HTTP mock'lu ama ad çözümlemesi değil.
+
+Ardından modül tek başına beş kez koşturuldu, beşi de `15 passed`.
+
+**Kalan iş:** Kök neden hâlâ doğrulanmadı — DNS'in neden ara sıra düştüğü (yerel resolver
+yükü, tam paketteki eşzamanlı `to_thread` çağrıları, konteyner ağı) ölçülmedi. Muhtemel
+düzeltme, testin `validate_public_url`'ü diğer edinme testleri gibi monkeypatch'lemesi
+(`tests/test_open_access.py` bunu `allow_url` ile yapıyor); bu, testi ölçmek istediği şeye
+— edinme geri düşüş zincirine — daraltır ve ad çözümlemesini denklemden çıkarır.
+
 ## 24. Kanalsız bir koşu plan kapısında asılı kalabilir
 
 **Durum:** Panel artık HITL checkpoint'i yanıtlamıyor (raporun 56. bölümü); karar koşunun
@@ -719,6 +744,57 @@ free-threaded destekli sürümlere taşınana kadar kabul kriteri **engelli — 
 bekliyor** durumunda kalmalı. Yeniden açıldığında önce binary wheel kapısı, sonra
 free-threaded import/GIL kontrolü, ardından klasik/free-threaded digest karşılaştırması
 çalıştırılmalı.
+
+## 36. Kanıt notu raporlanabilirliği kapılamalı mı?
+
+**Durum:** v0.22.0'da eklenen kanıt notu (`claim.audit["appraisal"]["grade"]`) yalnızca
+gösteriliyor: çizim prompt'una, bulgular blokuna, denetim raporuna ve Word Ek D'ye giriyor.
+`exporter._is_reportable` ve `ordered_reportable` sıralaması **kasten** dokunulmadan
+bırakıldı.
+
+**Neden şimdilik böyle:** Kapıya ya da sıralamaya bağlamak hangi iddiaların teslim
+edildiğini değiştirir ve hata modu görünmezdir — bir iddiayı sessizce kaybetmiş rapor, o
+iddiaya hiç sahip olmamış rapordan ayırt edilemez. Notun raporları iyileştirdiğini
+gösteren bir ölçüm olmadan bu takas alınamaz.
+
+**Karar için gereken ölçüm:** Aynı koşu havuzunda not-kapılı ve not-kapısız iki dışa
+aktarım üretip (a) kaç iddianın düştüğünü, (b) düşenlerin insan değerlendirmesinde gerçekten
+zayıf olup olmadığını, (c) `12_uncertainty_report.md` içindeki dışlanan iddia listesinin
+büyüyüp büyümediğini karşılaştırmak. `insufficient` notunun kapı için doğal aday olduğu
+varsayılıyor ama doğrulanmadı.
+
+## 37. Açık erişim kapsamı: arama connector'ları ertelendi
+
+**Durum:** v0.22.0 yalnız **çözümleme** yolunu getirdi (Europe PMC JATS + isteğe bağlı
+Unpaywall). Şu arama kaynakları bilinçli olarak dışarıda bırakıldı: PubMed E-utilities,
+bioRxiv ve medRxiv API'leri, CORE, NCBI efetch JATS.
+
+**Gerekçe:** Europe PMC zaten biyomedikal anahtar kelime araması yapıyor ve
+bioRxiv/medRxiv preprint'lerini indeksliyor, dolayısıyla örtüşen recall eklerlerdi. Yeni
+bir arama connector'ı ise `recovery.py`'daki `FAMILY_CONNECTORS`, `query_compiler.py`'daki
+sorgu şekillendirme, `build_registry`, health raporu ve `coverage.py` aile aritmetiğinde
+eşgüdümlü düzenleme ister — yanlış özelliğe bağlanmış ikinci bir artımlık patlama yarıçapı.
+
+**Ne zaman gerekir:** Biyomedikal olmayan tam metin kapsamı sorun olursa CORE, ya da
+Europe PMC'nin indekslemediği bir preprint sunucusu hedeflenirse ilgili API. İkisi de
+mevcut `_open_access_fulltext` adımına ek hedef fonksiyonu olarak, connector eklemeden
+girebilir.
+
+## 38. `structured._flatten_xml` satır içi elemandan sonraki metni düşürüyor
+
+**Durum:** `_flatten_xml` her elemanın `element.tail`'ini yok sayıyor, dolayısıyla
+`<p>text <italic>x</italic> more</p>` içinde " more" kayboluyor. Karma içerik taşıyan her
+XML kaynağı bundan etkileniyor.
+
+**Neden düzeltilmedi:** `content_hash` ayrıştırılmış metnin sha256'sı ve source-version
+dedup'ını, MinIO anahtarlarını ve passage offset'lerini sürüyor. Düzeltmek şu ana kadar
+saklanmış her XML kaynağını yeniden hash'ler, aynı kaynağı iki sürüme böler ve mevcut
+passage offset'lerini geçersiz kılar. v0.22.0 JATS için ayrı bir ayrıştırıcı ekleyerek
+sorunu **o yol için** çözdü; genel XML yolu eski davranışta.
+
+**Yapılacak:** Düzeltme ancak bir yeniden ayrıştırma/yeniden hash'leme göçüyle birlikte
+anlamlı. Hangi kaynakların gerçekten karma içerikli XML olduğunu ölçmek ilk adım; sayı
+küçükse hedefli yeniden edinme, büyükse göç planı gerekir.
 
 ## Kapsam dışı bırakılanlar
 

@@ -3893,3 +3893,31 @@ madde için ölçümler ve yapılacak iş. Bu raporda bölüm bölüm dağılmı
 notlarının toplandığı yer orası; yeni bir sınır tespit edildiğinde oraya eklenmeli.
 
 Bu bölümü burada çoğaltmıyoruz — iki listenin zamanla birbirinden ayrışması kaçınılmazdı.
+
+## 68. Kanıt bütünlüğü
+
+Üç boşluk, tek tema — sistemin doğru çalıştığını sandığı yerde sessizce bilgi kaybetmesi.
+
+arXiv'in reddettiği sorgu koşuya "0 sonuç" olarak geçiyordu: sağlayıcı bozuk parametreye
+tek bir `<title>Error</title>` girdisiyle yanıt veriyor, `candidate()` o girdiyi `HttpUrl`
+doğrulamasında düşürüyordu. Artık `ConnectorQueryError` fırlatılıp mevcut
+`connector_errors` kanalına ulaşıyor; bozuk sorgu ve düşen bağlantı yeniden denenmiyor.
+Pacing örnek başına kilit yerine süreç genelindeki limitere taşındı.
+
+Akademik adayın açık erişim tam metni elde olduğu hâlde yayıncı HTML'i kazınıyordu —
+`open_access_location` OpenAlex ve Semantic Scholar tarafından zaten yazılıyor ama hiçbir
+yer okumuyordu. Yeni edinme adımı `_direct`'ten **önce** çalışıyor, çünkü `_direct` 400
+karakterlik bir özet sayfasını başarı sayıyor. JATS için ayrı bir ayrıştırıcı eklendi;
+`structured._flatten_xml`'in `element.tail` düşürme hatası bilinçli olarak düzeltilmedi.
+
+İddialar sayılıyor ama değerlendirilmiyordu; `adversarial_review()` fiilen no-op'tu.
+Artık her iddia `claim.audit["appraisal"]` altında bir kanıt notu taşıyor: LLM ince bir
+öneri üretiyor, nihai notu deterministik kod veriyor, model sinyali notu yalnızca
+düşürebiliyor ve stored audit'teki bir olguyla doğrulanmak zorunda. Not raporlanabilirlik
+kapısına dokunmuyor — sessizce iddia düşüren bir rapor, o iddiaya hiç sahip olmamış
+rapordan ayırt edilemez.
+
+Bilgi, MIT lisanslı `K-Dense-AI/scientific-agent-skills` deposundan port edildi; kod
+kopyalanmadı.
+
+Ayrıntı: [EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md](EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md)

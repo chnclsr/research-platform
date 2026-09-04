@@ -1,10 +1,10 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.21.0`
+Platform sürümü: `v0.22.0`
 
-Belge sürümü: `6.42`
+Belge sürümü: `6.43`
 
-Son güncelleme: `2026-09-03`
+Son güncelleme: `2026-09-04`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -16,7 +16,33 @@ ve [TELEGRAM_GEMINI_PREPARATION_V0.16.0_IMPLEMENTATION_REPORT.md](TELEGRAM_GEMIN
 ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md)
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 ve [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
+ve [EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md](EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.22.0 — 2026-09-04
+
+- arXiv'in reddettiği sorgu artık "0 sonuç" olarak geçmiyor; hata koşu kaydına
+  sağlayıcının kendi açıklamasıyla (`start must be an integer` gibi) düşüyor. Bozuk sorgu
+  ve düşen bağlantı yeniden denenmiyor, çünkü ikisi de arXiv'in throttle'ını uzatıyor.
+- arXiv istekleri artık makine genelinde saniyede 0.33 ile sınırlı; eşzamanlı koşular tek
+  bir bütçeyi paylaşıyor, her biri kendi bütçesini almıyor.
+- Bir arama sorgusu sağlayıcı tarafından sessizce değiştirilmişse kaynağın kaydına
+  işaretleniyor.
+- Akademik kaynağın açık erişim tam metni artık yayıncı sayfası kazınmadan önce
+  doğrudan alınıyor (Europe PMC JATS, ardından açık erişim PDF'i). Ölçülen örnekte 134 KB
+  JATS'ten 37.909 karakter yapısal metin çıktı; öncesinde yalnız özet sayfası
+  alınabiliyordu.
+- Yeni JATS ayrıştırıcısı bölüm başlıklarını, tabloları ve satır içi biçimlemenin
+  ardından gelen metni koruyor; kaynakça listesi düzyazıdan ayıklanıyor.
+- Unpaywall isteğe bağlı olarak eklenebilir (`ENABLE_UNPAYWALL`, `UNPAYWALL_MAILTO`);
+  yalnızca elde hiçbir açık erişim konumu yokken sorulur.
+- Her iddia artık denetlenebilir bir kanıt notu taşıyor (`strong` / `moderate` /
+  `limited` / `insufficient`); not raporda, denetim raporunda ve Word ekinde görünüyor.
+  Klinik sinyal taşıyan koşularda çalışma tasarımı da hesaba katılıyor: gözlemsel
+  çalışmalarla desteklenen bir iddia `strong` olamıyor ve daha güçlü tasarımlı çelişen
+  bir kaynak notu düşürüyor.
+- Kanıt notu hangi iddiaların rapora gireceğini değiştirmiyor; yalnızca raporun o
+  iddiadan nasıl söz ettiğini belirliyor.
 
 ## v0.21.0 — 2026-09-03
 
