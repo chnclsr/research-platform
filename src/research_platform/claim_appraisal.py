@@ -237,9 +237,6 @@ def appraise_claims(
     element so the run event can record what the model said and why it was refused.
     """
     signals = {s.claim_id: s for s in (proposal.signals if proposal else [])}
-    generated_by: Literal["model", "deterministic"] = (
-        "model" if proposal is not None else "deterministic"
-    )
     appraisals: list[ClaimAppraisal] = []
     rejected: list[dict[str, str]] = []
 
@@ -275,6 +272,10 @@ def appraise_claims(
                     grade = _lower(grade)
                     reasons.append("contradicted_by_stronger_design")
 
+        # Per claim, not per run. A run-level "model" would label a claim the model never
+        # mentioned -- or one whose every signal was refused -- as model-derived, which is
+        # the kind of provenance that overclaims by exactly one step.
+        generated_by: Literal["model", "deterministic"] = "deterministic"
         signal = signals.get(claim_id)
         if signal is not None:
             corroborated, refused = _apply_signal(signal, audit)
@@ -283,6 +284,7 @@ def appraise_claims(
             if corroborated:
                 grade = _lower(grade)
                 reasons.extend(corroborated)
+                generated_by = "model"
 
         appraisals.append(
             ClaimAppraisal(

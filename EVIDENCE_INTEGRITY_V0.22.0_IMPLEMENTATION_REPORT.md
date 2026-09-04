@@ -205,6 +205,11 @@ Model çökerse deterministik nota iniliyor, koşu düşmüyor. Prompt `self.llm
 gidiyor, `_preparation_provider()` ile değil: iddia metni korpustan geliyor ve kurulumun
 veri sınırı içinde kalmalı.
 
+`generated_by` iddia başına yazılıyor, koşu başına değil. Çalışma seviyesinde tek bir
+"model" değeri, modelin hiç bahsetmediği ya da bütün sinyalleri reddedilen bir iddiayı
+model türevi diye etiketlerdi — köken alanının tam olarak bir adım fazla iddia etmesi.
+Bir iddia ancak doğrulanmış bir model sinyali notunu düşürdüyse `model` etiketi alıyor.
+
 ### Not merdiveni ve klinik tavan
 
 | Not | Koşul |
@@ -276,9 +281,9 @@ histogramı ve düşürülen iddialar.
 
 ## Doğrulama
 
-**Tam kapı: 863 passed** (`TESTING=true .venv/bin/python -m pytest -q`, 67 sn), sürüm
+**Tam kapı: 866 passed** (`TESTING=true .venv/bin/python -m pytest -q`, 67 sn), sürüm
 `pyproject.toml` içinde 0.22.0'a yükseltilip `uv pip install -e ".[dev]"` ile yeniden
-kurulduktan sonra. Başlangıç 813, artımlar sırasıyla +13 / +23 / +27 test ekledi.
+kurulduktan sonra. Başlangıç 813, artımlar sırasıyla +13 / +23 / +30 test ekledi.
 
 | Dosya | Yeni test |
 |---|---|
@@ -286,7 +291,7 @@ kurulduktan sonra. Başlangıç 813, artımlar sırasıyla +13 / +23 / +27 test 
 | `tests/test_rate_limits.py` | 4 |
 | `tests/test_open_access.py` | 13 |
 | `tests/test_parsers.py` | 7 + JatsParser konformans paketine eklendi |
-| `tests/test_claim_appraisal.py` | 20 |
+| `tests/test_claim_appraisal.py` | 22 |
 | `tests/test_pipeline.py` | 3 (`adversarial_review()`'un ilk doğrudan çağrıları) |
 | `tests/test_report_synthesis.py` | 3 |
 

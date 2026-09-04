@@ -292,3 +292,26 @@ def test_grades_are_still_produced_when_no_proposal_arrived():
     )
     assert appraisals[0].generated_by == "deterministic"
     assert appraisals[0].grade == "strong"
+
+
+def test_generated_by_is_per_claim_not_per_run():
+    """A claim the model never mentioned must not be labelled model-derived."""
+    claims = [claim("c1", counter=1, domains=2), claim("c2", counter=1, domains=2)]
+    appraisals, _ = appraise_claims(
+        claims, {}, {},
+        tier="universal", minimum_independent_sources=2,
+        proposal=bundle(contradicted=True),      # names c1 only
+    )
+    by_id = {a.claim_id: a for a in appraisals}
+    assert by_id["c1"].generated_by == "model"
+    assert by_id["c2"].generated_by == "deterministic"
+
+
+def test_a_refused_signal_does_not_make_a_claim_model_derived():
+    appraisals, rejected = appraise_claims(
+        [claim("c1", counter=0, domains=2)], {}, {},
+        tier="universal", minimum_independent_sources=2,
+        proposal=bundle(contradicted=True),
+    )
+    assert rejected
+    assert appraisals[0].generated_by == "deterministic"
