@@ -143,6 +143,16 @@ class Settings(BaseSettings):
     # malformed requests harder than valid ones. Capped at 1.0 so no deployment can
     # configure itself above the provider's own stated limit.
     arxiv_rps: float = Field(0.33, gt=0, le=1.0)
+    enable_open_access_fulltext: bool = True
+    enable_unpaywall: bool = False
+    unpaywall_mailto: str | None = None
+    unpaywall_rps: float = Field(5.0, gt=0, le=10)
+    europe_pmc_fulltext_rps: float = Field(1.0, gt=0, le=10)
+    # Deliberately far above the 400-character floor `_direct` uses. That floor exists to
+    # keep a degraded parse from disappearing silently; here we asked a provider for full
+    # text, so a short body means the resolution missed and `_direct` should still run.
+    open_access_min_chars: int = Field(2000, ge=400, le=200_000)
+    open_access_timeout_s: float = Field(60.0, gt=0, le=600)
     zotero_local_url: str = "http://localhost:23119/api"
     zotero_local_enabled: bool = True
     zotero_api_key: str | None = None

@@ -17,6 +17,7 @@ from .github_repository import (
     parse_github_repository_url,
 )
 from .normalization import canonicalize_url, detect_document_type, detect_language
+from .open_access import candidate_doi, oa_targets_from_metadata, resolve_unpaywall
 from .parsers import ParsedDocument, ParserRegistry, build_parser_registry
 from .rate_limits import shared_domain_limiter
 from .schemas import AcquiredDocument, ConnectorCandidate
@@ -55,6 +56,7 @@ class UnsafeUrlError(ValueError):
 # it without restating it. Zotero candidates short-circuit before any of these.
 ACQUISITION_STRATEGY_ORDER = (
     "github_repository",
+    "open_access",
     "direct",
     "scholarly_metadata",
     "agentsearch_read",
@@ -133,6 +135,14 @@ class AcquisitionService:
         github = await self._github_repository(url, candidate, tried)
         if github and github.success:
             return github
+
+        # Ahead of _direct, not behind it. _direct calls any response yielding 400 parsed
+        # characters a success, and a publisher abstract landing page clears that easily,
+        # so a step placed after it would only ever run for candidates whose publisher page
+        # already failed -- the minority of exactly the population this is written for.
+        open_access = await self._open_access_fulltext(candidate, tried)
+        if open_access and open_access.success:
+            return open_access
 
         direct = await self._direct(url, candidate, tried)
         if direct and direct.success:
@@ -317,6 +327,96 @@ class AcquisitionService:
                 strategies_tried=tried.copy(),
                 error=str(exc),
             )
+
+    async def _open_access_fulltext(
+        self, candidate: ConnectorCandidate, tried: list[str],
+    ) -> AcquiredDocument | None:
+        """Fetch the open-access full text when one is already identified.
+
+        Returns None *without recording a strategy* when there is nothing to fetch. That
+        silence is the contract: `strategies_tried` is asserted as an exact list in several
+        tests, and a step that announced itself on every candidate it never acted on would
+        turn each of those into a maintenance tax for no diagnostic gain.
+
+        The fetch loop below duplicates about forty lines of `_direct` on purpose. `_direct`
+        also carries the 400-character ladder, the alternate-parser retry and the redirect
+        chain; extracting a shared helper would be a hundred-line change to the single most
+        flake-suspect path in the suite, which is a worse trade than the duplication.
+        """
+        if not self.settings.enable_open_access_fulltext:
+            return None
+        if candidate.family.value != "academic":
+            return None
+
+        targets = oa_targets_from_metadata(candidate)
+        if not targets and self.settings.enable_unpaywall and self.settings.unpaywall_mailto:
+            doi = candidate_doi(candidate)
+            if doi:
+                resolved = await resolve_unpaywall(
+                    self.client, doi,
+                    mailto=self.settings.unpaywall_mailto,
+                    timeout_s=self.settings.open_access_timeout_s,
+                    limiter=self.limiter,
+                )
+                if resolved is not None:
+                    targets = [resolved]
+        if not targets:
+            return None
+
+        tried.append("open_access")
+        target = targets[0]
+        try:
+            await validate_public_url(target.url, self.settings.allow_private_networks)
+            await self.limiter.wait(target.url)
+            response = await self.client.get(
+                target.url, follow_redirects=True,
+                headers={"User-Agent": self.settings.user_agent},
+                timeout=self.settings.open_access_timeout_s,
+            )
+            response.raise_for_status()
+            if len(response.content) > self.settings.max_download_bytes:
+                raise ValueError("Response exceeds download limit")
+            ctype = response.headers.get("content-type", "").lower()
+            document_type = detect_document_type(ctype, response.content)
+            if document_type not in {"text", "html", "json", "xml", "pdf"}:
+                return None
+            parser = self.parsers.select(
+                document_type, ctype, response.content, self.parser_overrides
+            )
+            if parser is None:
+                return None
+            parsed = await asyncio.to_thread(
+                parser.parse, response.content, url=target.url, content_type=ctype
+            )
+        except Exception as exc:  # noqa: BLE001 - a resolution miss falls through to _direct
+            logger.info("open-access fetch failed for %s: %s", target.url, exc)
+            candidate.metadata["open_access_rejected"] = "fetch_failed"
+            return None
+
+        if len(parsed.text.strip()) < self.settings.open_access_min_chars:
+            # We asked a provider for full text and got something short, so this is a miss,
+            # not a degraded parse. Say so and let _direct have the candidate back.
+            candidate.metadata["open_access_rejected"] = "too_short"
+            logger.info(
+                "open-access body for %s was %d chars, below the %d minimum",
+                target.url, len(parsed.text.strip()), self.settings.open_access_min_chars,
+            )
+            return None
+
+        candidate.metadata["content_scope"] = "full_text"
+        candidate.metadata["full_text_available"] = True
+        candidate.metadata["open_access_resolved_by"] = target.source
+        candidate.metadata["open_access_kind"] = target.kind
+        candidate.metadata["open_access_license"] = target.license
+        candidate.metadata["open_access_version"] = target.version
+        return self._document(
+            candidate, parsed.text, "open_access", tried,
+            ctype or "application/xml",
+            document_type=parsed.document_type,
+            final_url=str(response.url),
+            canonical_url=parsed.canonical_url,
+            parsed=parsed,
+        )
 
     async def _direct(self, url: str, candidate: ConnectorCandidate, tried: list[str]) -> AcquiredDocument | None:
         tried.append("direct")

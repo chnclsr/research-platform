@@ -15,6 +15,7 @@ import pytest
 from research_platform.parsers import (
     DocumentParser,
     HtmlParser,
+    JatsParser,
     ParsedDocument,
     ParsedTable,
     ParserRegistry,
@@ -29,6 +30,7 @@ from research_platform.passages import chunk_document
 
 ALL_PARSERS = [
     HtmlParser(),
+    JatsParser(),
     SmartPdfParser(),
     PyMuPdfParser(),
     PyPdfParser(),
@@ -1015,3 +1017,74 @@ def test_an_engine_that_reported_no_duration_is_not_recorded_as_zero():
         requested={"docling-service": [1]},
     )
     assert merged.engine_durations_ms == {}
+
+
+JATS_ARTICLE = (
+    b'<?xml version="1.0" encoding="UTF-8"?><article><front><article-meta>'
+    b"<title-group><article-title>Alpha study</article-title></title-group>"
+    b"<abstract><title>Abstract</title><p>An abstract paragraph.</p></abstract>"
+    b"</article-meta></front><body>"
+    b"<sec><title>Methods</title><p>text <italic>inline</italic> more</p>"
+    b"<table-wrap><table><tr><th>Arm</th><th>N</th></tr>"
+    b"<tr><td>Treatment</td><td>120</td></tr></table></table-wrap></sec>"
+    b"<sec><title>Results</title><p>A results paragraph.</p></sec>"
+    b"</body><back><ref-list>"
+    b"<ref><mixed-citation>Smith J. A cited paper. Journal 2020.</mixed-citation></ref>"
+    b"<ref><mixed-citation>Jones K. Another cited paper. Journal 2021.</mixed-citation></ref>"
+    b"</ref-list></back></article>"
+)
+
+
+def test_jats_parser_outranks_plain_text_for_article_xml():
+    parser = build_parser_registry().select("xml", "application/xml", JATS_ARTICLE)
+    assert parser is not None and parser.id == "jats_structured"
+
+
+def test_plain_text_still_wins_for_generic_xml():
+    """Only JATS is claimed; every other XML document keeps its existing path."""
+    generic = b'<?xml version="1.0"?><config><key>value</key></config>'
+    parser = build_parser_registry().select("xml", "application/xml", generic)
+    assert parser is not None and parser.id == "plain_text"
+
+
+def test_jats_parser_keeps_text_after_inline_elements():
+    """`structured._flatten_xml` drops `element.tail`; JATS prose is mixed content."""
+    text = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a").text
+    assert "text inline more" in text
+    assert "more" in text
+
+
+def test_jats_parser_builds_section_paths_for_chunking():
+    parsed = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a")
+    padded = parsed.text.replace(
+        "A results paragraph.", "A results paragraph. " + "word " * 200
+    )
+    passages = chunk_document(padded, "v1", target_tokens=120, overlap_tokens=20)
+    assert any("Results" in p.section_path for p in passages)
+
+
+def test_jats_parser_drops_the_reference_list_from_prose():
+    parsed = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a")
+    assert "cited paper" not in parsed.text
+    assert parsed.parse_provenance["references_dropped"] == 2
+    assert parsed.parse_provenance["sections"] == 2
+
+
+def test_jats_parser_does_not_repeat_a_section_title_as_prose():
+    text = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a").text
+    assert text.count("Methods") == 1
+
+
+def test_jats_parser_extracts_tables():
+    parsed = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a")
+    assert len(parsed.tables) == 1
+    assert parsed.tables[0].headers == ["Arm", "N"]
+    assert parsed.tables[0].rows == [["Treatment", "120"]]
+
+
+def test_jats_parser_is_deterministic():
+    """content_hash is the sha256 of this text and drives source-version dedup."""
+    first = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a")
+    second = JatsParser().parse(JATS_ARTICLE, url="https://example.org/a")
+    assert first.text == second.text
+    assert first.parse_provenance == second.parse_provenance

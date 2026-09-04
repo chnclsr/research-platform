@@ -99,7 +99,11 @@ def test_plan_carries_models_acquisition_order_and_rejection_feedback():
     plan = plan_for(protocol(), plan_feedback=["Add regulatory sources"])
     assert plan["models"]["llm"] == settings.llm_model
     assert plan["models"]["context_tokens"] == settings.llm_context_tokens
-    assert plan["acquisition"]["strategy_order"][:2] == ["github_repository", "direct"]
+    # open_access sits ahead of direct: _direct calls 400 parsed characters a success, so
+    # a publisher abstract page would win before open-access resolution ever ran.
+    assert plan["acquisition"]["strategy_order"][:3] == [
+        "github_repository", "open_access", "direct",
+    ]
     assert "html_structured" in plan["acquisition"]["parsers"]
     assert plan["feedback"] == ["Add regulatory sources"]
     assert plan["revision"] == 1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import DocumentParser, ParserHealth
 from .html import HtmlParser
+from .jats import JatsParser
 from .pdf import PdfParser, PyMuPdfParser, PyPdfParser
 from .smart_pdf import SmartPdfParser
 from .structured import PlainTextParser
@@ -83,6 +84,7 @@ class ParserRegistry:
 def build_parser_registry() -> ParserRegistry:
     return ParserRegistry([
         HtmlParser(),
+        JatsParser(),
         SmartPdfParser(),
         PyMuPdfParser(),
         PyPdfParser(),
