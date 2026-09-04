@@ -198,3 +198,17 @@ async def test_arxiv_pacing_is_shared_across_connector_instances(monkeypatch):
         monkeypatch.setattr(asyncio, "sleep", fake_sleep)
         await second.search("beta", 1)
     assert slept and slept[0] > 0
+
+
+@pytest.mark.asyncio
+async def test_arxiv_error_entry_is_read_even_when_the_status_is_400():
+    """Observed live 2026-09-04: `start=notanumber` answers 400 carrying the same entry.
+
+    A bare HTTPStatusError would say only "400"; the entry says what was wrong.
+    """
+    async def handler(request):
+        return httpx.Response(400, request=request, text=ERROR_FEED)
+
+    with pytest.raises(ConnectorQueryError) as caught:
+        await run_search(handler)
+    assert "start must be an integer" in str(caught.value)

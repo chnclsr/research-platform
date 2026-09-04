@@ -524,16 +524,26 @@ class ArxivConnector(SourceConnector):
                 "sortOrder": "descending",
             }
         )
-        response.raise_for_status()
+        # The error feed is read before the status is checked. arXiv answers a malformed
+        # parameter with 200 and an Error entry in some cases and with 400 and the same
+        # entry in others; either way the entry says what was actually wrong, which a bare
+        # HTTPStatusError does not.
+        parse_error: ET.ParseError | None = None
         try:
             root = ET.fromstring(response.text)
         except ET.ParseError as exc:
+            root, parse_error = None, exc
+        if root is not None:
+            error_detail = _arxiv_error_detail(root)
+            if error_detail is not None:
+                raise ConnectorQueryError(self.id, error_detail, query=search_query)
+        response.raise_for_status()
+        if root is None:
             raise ConnectorQueryError(
-                self.id, f"non-XML body ({exc}): {response.text[:120]!r}", query=search_query
-            ) from exc
-        error_detail = _arxiv_error_detail(root)
-        if error_detail is not None:
-            raise ConnectorQueryError(self.id, error_detail, query=search_query)
+                self.id,
+                f"non-XML body ({parse_error}): {response.text[:120]!r}",
+                query=search_query,
+            ) from parse_error
         # arXiv rewrites an unknown field prefix to `all:` -- `ti:x` is run as `all:ti:x`
         # -- and says so only in the feed title, which echoes the query as executed. A
         # rewritten query still returns usable results, so this is recorded rather than
