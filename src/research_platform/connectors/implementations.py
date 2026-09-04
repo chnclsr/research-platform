@@ -10,12 +10,12 @@ from typing import Any
 
 import httpx
 
-from .base import ConnectorQueryError, CredentialOnlyConnector, SourceConnector
 from ..rate_limits import shared_domain_limiter
 from ..relevance import github_repositories, topic_terms
 from ..schemas import ConnectorCandidate, ResearchScope, SourceFamily
 from ..scholarly import normalize_doi, reconstruct_abstract
 from ..temporal import parse_datetime
+from .base import ConnectorQueryError, CredentialOnlyConnector, SourceConnector
 
 logger = logging.getLogger(__name__)
 
@@ -493,20 +493,23 @@ class ArxivConnector(SourceConnector):
     async def search_scoped(
         self, query: str, limit: int = 20, scope: ResearchScope | None = None,
     ) -> list[ConnectorCandidate]:
-        distinctive = topic_terms(query)
-        ordered_terms = []
-        for token in re.findall(r"[A-Za-zÀ-ž0-9_-]+", query.lower()):
-            normalized = token.replace("-", "").replace("_", "")
-            if normalized in distinctive and normalized not in ordered_terms:
-                ordered_terms.append(normalized)
-        # arXiv treats every field term as mandatory. Three distinctive anchors keep
-        # precision high without turning natural-language questions into zero-hit queries.
-        selected_terms = ordered_terms[:3]
-        search_query = (
-            " AND ".join(f"all:{term}" for term in selected_terms)
-            if selected_terms
-            else f'all:"{query}"'
-        )
+        # Provider-native queries compiled upstream already carry fielded, parenthesised
+        # concept groups. Legacy/direct callers still receive a safe high-recall fallback.
+        if re.search(r"\ball:", query, re.IGNORECASE):
+            search_query = query
+        else:
+            distinctive = topic_terms(query)
+            ordered_terms = []
+            for token in re.findall(r"[A-Za-zÀ-ž0-9_-]+", query.lower()):
+                normalized = token.replace("-", "").replace("_", "")
+                if normalized in distinctive and normalized not in ordered_terms:
+                    ordered_terms.append(normalized)
+            selected_terms = ordered_terms[:8]
+            search_query = (
+                "(" + " OR ".join(f"all:{term}" for term in selected_terms) + ")"
+                if selected_terms
+                else f'all:"{query}"'
+            )
         if scope and (scope.start_date or scope.end_date):
             start = scope.start_date or parse_datetime("1900-01-01")
             end = scope.end_date or parse_datetime("2999-12-31")

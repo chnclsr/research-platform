@@ -5,7 +5,6 @@ import re
 from .relevance import TERM_ALIASES
 from .schemas import ResearchProtocol
 
-
 _QUESTION_NOISE = re.compile(
     r"\b(what|which|who|when|where|how|are|is|does|do|please|find|search|"
     r"nedir|nelerdir|nasıl|hangi|araştır|bul|lütfen)\b",
@@ -78,6 +77,57 @@ def _academic_english_anchors(*values: str, limit: int = 16) -> str:
     return " ".join(anchors[:limit])
 
 
+def _arxiv_term(value: str) -> str:
+    """Render one literal concept without letting model text become field syntax."""
+    cleaned = " ".join(re.findall(r"[A-Za-z0-9.+_-]+", value))[:100]
+    if not cleaned:
+        return ""
+    return f'all:"{cleaned}"' if " " in cleaned else f"all:{cleaned}"
+
+
+def _arxiv_query(
+    query: str,
+    protocol: ResearchProtocol,
+    concepts: list[str],
+) -> str:
+    """Compile required concept groups instead of AND-ing the first three words."""
+    groups: list[str] = []
+    facet_tokens: set[str] = set()
+    if protocol.scope_criteria is not None:
+        for facet in protocol.scope_criteria.required_facets:
+            values = list(dict.fromkeys(value.strip() for value in facet.accepted_values if value.strip()))
+            rendered = [item for value in values[:5] if (item := _arxiv_term(value))]
+            if rendered:
+                groups.append(f"({' OR '.join(rendered)})")
+            for value in values:
+                facet_tokens.update(re.findall(r"[a-z0-9]+", value.casefold()))
+
+    # Give each sub-question its own branch while retaining every approved mandatory
+    # boundary. The primary branch needs no extra term: it is the high-recall route.
+    if query.strip().casefold() != protocol.primary_question.strip().casefold():
+        branch = [
+            token
+            for token in _academic_english_anchors(query, " ".join(concepts), limit=8).split()
+            if token.casefold() not in facet_tokens
+        ][:3]
+        rendered = [item for token in branch if (item := _arxiv_term(token))]
+        if rendered:
+            groups.append(f"({' OR '.join(rendered)})")
+
+    if groups:
+        return " AND ".join(groups)
+    # Legacy protocols have no approved facets. Prefer a small OR concept group over the
+    # old position-dependent first-three-token AND, which made conversational verbs fatal.
+    anchors = _academic_english_anchors(
+        protocol.primary_question,
+        query,
+        " ".join(concepts),
+        limit=8,
+    ).split()
+    rendered = [item for token in anchors if (item := _arxiv_term(token))]
+    return f"({' OR '.join(rendered)})" if rendered else _arxiv_term(_compact(query, 4))
+
+
 def compile_provider_query(
     connector_id: str,
     query: str,
@@ -97,9 +147,7 @@ def compile_provider_query(
     concept_tail = " ".join(_compact(item, 3) for item in (concepts or [])[:2])
     enriched = " ".join(dict.fromkeys(f"{compact} {concept_tail}".split()))
     if connector_id == "arxiv":
-        terms = [term for term in enriched.split() if len(term) > 2][:12]
-        # ArxivConnector owns field/date syntax; pass concise lexical anchors here.
-        return " ".join(terms) or compact
+        return _arxiv_query(query, protocol, concepts or [])
     if connector_id in {"crossref", "openalex", "semantic_scholar", "europe_pmc"}:
         translated = _academic_english_anchors(
             protocol.primary_question,

@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.21.0`
+Platform sürümü: `v0.23.0`
 
-Belge sürümü: `12.43`
+Belge sürümü: `12.44`
 
-Son güncelleme: `2026-09-03`
+Son güncelleme: `2026-09-04`
 
 ## Kapsam
 
@@ -72,6 +72,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 57 | Telegram hazırlık çağrılarının Gemini'ye ayrılması | `eb13579` |
 | 58 | Ardışık boş recovery turlarının kontrollü sonlandırılması | _çalışma ağacı_ |
 | 59 | Kaynak → referans izi (kendi raporu var) | _çalışma ağacı_ |
+| 60 | Araştırma derinliği ve LLM metnini koruma (kendi raporu var) | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -87,6 +88,11 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 >
 > **Not:** 37. bölümün ayrıntıları
 > [HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md](HARDWARE_TELEMETRY_V0.14.0_IMPLEMENTATION_REPORT.md)
+> dosyasındadır.
+>
+> **Not:** 60. satırdaki araştırma derinliği, kapsam rolleri, dengeli pasaj seçimi ve
+> uyarıyla birlikte LLM metnini koruma değişikliklerinin ayrıntıları
+> [RESEARCH_DEPTH_AND_LLM_PROSE_V0.23.0_IMPLEMENTATION_REPORT.md](RESEARCH_DEPTH_AND_LLM_PROSE_V0.23.0_IMPLEMENTATION_REPORT.md)
 > dosyasındadır.
 >
 > **Not:** 39. bölümün ayrıntıları

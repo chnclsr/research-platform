@@ -13,7 +13,6 @@ from .schemas import (
     SourceFamily,
 )
 
-
 OFFICIAL_ENTITY_REGISTRY: tuple[tuple[tuple[str, ...], str, tuple[str, ...]], ...] = (
     (("model context protocol", " mcp ", "mcp taban"), "Model Context Protocol", ("modelcontextprotocol.io",)),
     (
@@ -161,9 +160,21 @@ def initial_missions(
         for connector in FAMILY_CONNECTORS.get(family, [])
     ))
     acquisition_slots = 5 if protocol.research_mode == "literature_scan" else 2
-    for index, query in enumerate(queries[:8]):
+    protected_ids = {
+        protocol.primary_question.strip().casefold(): "primary",
+        **{
+            question.strip().casefold(): f"SQ{index:02d}"
+            for index, question in enumerate(protocol.sub_questions, 1)
+        },
+    }
+    expansion_index = 0
+    for query in queries:
+        branch_identity = protected_ids.get(query.strip().casefold())
+        if branch_identity is None:
+            expansion_index += 1
+            branch_identity = f"expansion:{expansion_index:02d}"
         missions.append(SearchMission(
-            branch_id=f"query:{index}",
+            branch_id=f"query:{branch_identity}",
             query=query,
             connector_ids=connector_ids,
             result_limit=protocol.budget.results_per_connector,

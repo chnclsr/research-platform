@@ -1,8 +1,8 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.22.0`
+Platform sürümü: `v0.23.0`
 
-Belge sürümü: `6.43`
+Belge sürümü: `6.44`
 
 Son güncelleme: `2026-09-04`
 
@@ -17,7 +17,33 @@ ve [PREPARATION_PROVIDER_FALLBACK_V0.17.0_IMPLEMENTATION_REPORT.md](PREPARATION_
 ve [JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md](JIT_HARNESS_IDEAS_V0.18.0_IMPLEMENTATION_REPORT.md)
 ve [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md)
 ve [EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md](EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md)
+ve [RESEARCH_DEPTH_AND_LLM_PROSE_V0.23.0_IMPLEMENTATION_REPORT.md](RESEARCH_DEPTH_AND_LLM_PROSE_V0.23.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.23.0 — 2026-09-04
+
+- Araştırma planı artık zorunlu facet'leri ve açık dışlamaları yapılandırılmış kapsam
+  ölçütleri olarak saklıyor. Kaynaklar `primary_in_scope`, `supporting_benchmark`,
+  `near_scope` veya `excluded` rolüyle denetlenebilir biçimde ayrılıyor.
+- Modelin kapsam etiketi tek başına kabul edilmiyor: zorunlu facet kanıtı veya dışlama
+  kararı eksikse kaynak ana senteze giremiyor.
+- Alt sorular sabit `SQxx` kimlikleriyle tutuluyor; araştırma/eşleştirme metni ile rapor
+  başlığı birbirini değiştirmiyor. Reddedilen plan yeni alt sorularla gerçekten yeniden
+  hazırlanıyor.
+- arXiv sorgu dalları zorunlu anatomi/modalite, görev ve çıktı facet'lerini birlikte
+  koruyor; sağlayıcıya gönderilen sorgu metadata'da denetlenebiliyor.
+- Pasaj seçimi 48'e çıkarıldı, bütün soru dalları arasında dengelendi ve kaynak başına iki
+  pasajla sınırlandı. Sabit 4.253 pasajlık yeniden oynatmada 6/6 dal, 32 farklı kaynak
+  sürümü ve 48 seçili pasaj elde edildi.
+- Geçerli LLM metni artık citation, dil veya biçim denetimi tarafından yeniden yazılmıyor;
+  kusurlar `generation_status` ve `validation_warnings` olarak rapor, manifest, panel ve
+  Telegram'da görünür kalıyor.
+- Model tamamen kullanılamazsa claim kayıtları yapay bir anlatıya çevrilmiyor; okuyucuya
+  açık bir sentez-kullanılamıyor mesajı gösteriliyor ve denetim kayıtları korunuyor.
+- Uzlaşı yalnız birincil kapsam içindeki bağımsız kaynaklarla kuruluyor; supporting
+  benchmark kanıtı yalnız metrik/değerlendirme bağlamına girebiliyor.
+- Kullanıcının toplama süresi artık yalnız `SEARCH` ve `ACQUIRE` dış kaynak beklemesini
+  ölçüyor; planlama, embedding, denetim, sentez ve export bu bütçeyi tüketmiyor.
 
 ## v0.22.0 — 2026-09-04
 

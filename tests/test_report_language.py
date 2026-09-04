@@ -190,12 +190,7 @@ async def test_a_run_pays_for_one_call_however_many_claims_it_has():
 # ------------------------------------------------------------------- fallback path
 
 
-def test_the_fallback_section_speaks_the_report_language():
-    """The cause of the leak readers reported.
-
-    This path runs whenever the model's own prose is rejected, and it had no language check
-    at all -- only the "no narrative" message was ever localized.
-    """
+def test_the_failed_section_reports_unavailability_in_the_report_language():
     claim = Claim("C1", ENGLISH)
     section = _fallback_section(
         "Tema",
@@ -205,13 +200,12 @@ def test_the_fallback_section_speaks_the_report_language():
         turkish=True,
         claim_texts={"C1": TURKISH},
     )
-    assert TURKISH in section.synthesis
+    assert section.synthesis.startswith("LLM sentezi üretilemedi")
     assert "The study reports" not in section.synthesis
-    # The citation marker survives translation; without it the sentence is ungrounded.
-    assert "[S01]" in section.synthesis
+    assert "[S01]" not in section.synthesis
 
 
-def test_the_fallback_section_keeps_the_original_when_nothing_was_translated():
+def test_the_failed_section_never_turns_claims_into_english_narrative():
     claim = Claim("C1", ENGLISH)
     section = _fallback_section(
         "Theme",
@@ -220,7 +214,8 @@ def test_the_fallback_section_keeps_the_original_when_nothing_was_translated():
         {"SRC1": "S01"},
         turkish=False,
     )
-    assert ENGLISH in section.synthesis
+    assert section.synthesis.startswith("LLM synthesis could not be produced")
+    assert ENGLISH not in section.synthesis
 
 
 # -------------------------------------------------------------------------- sweep
@@ -350,13 +345,7 @@ async def test_claims_are_translated_in_batches_so_one_slow_call_is_not_fatal():
 
 
 @pytest.mark.asyncio
-async def test_the_sweep_reaches_the_prose_the_word_report_renders():
-    """The .docx renders `package.sections`, not the strings derived from the package.
-
-    Sweeping only `executive_summary` / `narrative` / `uncertainty` corrected the markdown
-    and left the Word report showing the pre-sweep English, because `build_word_report`
-    reads the section objects directly.
-    """
+async def test_the_package_sweep_diagnoses_but_never_rewrites_visible_prose():
     package = SynthesisPackage(
         executive_summary=TURKISH,
         sections=[SynthesisSection(title="Bulgular", synthesis=ENGLISH)],
@@ -372,18 +361,12 @@ async def test_the_sweep_reaches_the_prose_the_word_report_renders():
 
     swept, diagnostics = await sweep_synthesis_package(llm, package, "tr")
 
-    assert diagnostics["foreign"] == 1
-    assert diagnostics["translated"] == 1
-    assert ENGLISH not in swept.sections[0].synthesis
-    assert ENGLISH not in swept.narrative
+    assert diagnostics["mode"] == "diagnostic_only"
+    assert diagnostics["mismatches"] == ["section_0_synthesis"]
+    assert diagnostics["rewritten"] == 0
+    assert swept is package
+    assert ENGLISH in swept.sections[0].synthesis
+    assert ENGLISH in swept.narrative
     assert swept.sections[0].title == "Bulgular"
     assert swept.executive_summary == TURKISH
-
-    # The item ids reach the model as "- {key}:{index}: {text}". A key carrying its own
-    # colon leaves nothing to say where the id stops, the model answers with a truncated
-    # one, and every translation is dropped as `unknown_id` -- a whole run's sweep
-    # translating nothing while reporting the foreign sentences it found.
-    listed = re.findall(r"^- (\S+): ", llm.prompts[0], flags=re.MULTILINE)
-    assert listed
-    for item_id in listed:
-        assert item_id.count(":") == 1, item_id
+    assert llm.prompts == []

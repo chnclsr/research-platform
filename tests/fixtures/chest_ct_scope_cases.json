@@ -1,0 +1,19 @@
+[
+  {"title": "CPR-RAG", "text": "Chest CT 3D volumes are used for radiology report generation with RadGenome-ChestCT.", "role": "primary_in_scope"},
+  {"title": "DEAR", "text": "The model generates radiology reports from 3D chest CT scans containing the lung.", "role": "primary_in_scope"},
+  {"title": "PIPA", "text": "Radiology report generation uses 3D chest CT volumes from CT-RATE.", "role": "primary_in_scope"},
+  {"title": "VolumeVision", "text": "Chest CT volumes and axial slices are used for automated radiology report generation.", "role": "primary_in_scope"},
+  {"title": "SliceWorld", "text": "The system observes the axial sequence of a chest CT volume and generates its report.", "role": "primary_in_scope"},
+  {"title": "ALTER", "text": "Longitudinal 3D chest CT from RadGenome-ChestCT is used for report generation.", "role": "primary_in_scope"},
+  {"title": "MARCH", "text": "A multi-agent model generates radiology reports from volumetric chest CT.", "role": "primary_in_scope"},
+  {"title": "DCP-PD", "text": "Long-form chest CT reports are generated from volumetric scans.", "role": "primary_in_scope"},
+  {"title": "U-VLM", "text": "The model generates reports from 3D chest CT volumes in CT-RATE.", "role": "primary_in_scope"},
+  {"title": "Structure Observation", "text": "CT-RATE chest CT volumes are inputs to radiology report generation.", "role": "primary_in_scope"},
+  {"title": "DiffVP", "text": "volumetric chest CT from RadGenome-ChestCT is used to generate radiology reports.", "role": "primary_in_scope"},
+  {"title": "CT-FineBench", "text": "The benchmark evaluates generated reports for 3D chest CT from CT-RATE.", "role": "supporting_benchmark"},
+  {"title": "CTEST-METRIC", "text": "The metric evaluates radiology reports for volumetric chest CT in CT-RATE.", "role": "supporting_benchmark"},
+  {"title": "VietPET-RoI", "text": "The model generates reports from whole-body PET/CT 3D volumes.", "role": "excluded", "matched_exclusion": "PET/CT"},
+  {"title": "CT-Bench", "text": "The benchmark uses chest and abdominal CT with 2D-only input slices for VQA.", "role": "excluded", "matched_exclusion": "2D-only input"},
+  {"title": "Merlin", "text": "The model uses 3D abdominal CT for radiology report generation.", "role": "near_scope", "missing_facet": "anatomy"},
+  {"title": "SegReg-Rep", "text": "The model generates reports from 3D CT scans but the anatomy is not reported.", "role": "near_scope", "missing_facet": "anatomy"}
+]

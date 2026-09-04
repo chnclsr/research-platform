@@ -1531,6 +1531,12 @@ async def analyze_run_figures(
     source_labels = {
         str(source.id): f"S{index:02d}" for index, source in enumerate(sources, 1)
     }
+    synthesis_source_ids = {
+        str(source.id)
+        for source in sources
+        if str((getattr(source, "metadata_json", None) or {}).get("research_scope_role") or "primary_in_scope")
+        in {"primary_in_scope", "supporting_benchmark"}
+    }
     source_versions = await repo.list_source_versions(run_id)
     cached_rows = await repo.list_figure_observations(run_id)
     cached = {
@@ -1542,6 +1548,8 @@ async def analyze_run_figures(
     stored_analyses: dict[str, dict[str, Any]] = {}
     async with httpx.AsyncClient() as client:
         for source, version in source_versions:
+            if str(source.id) not in synthesis_source_ids:
+                continue
             label = source_labels.get(str(source.id))
             if not label:
                 continue

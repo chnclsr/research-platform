@@ -40,7 +40,7 @@ RISK = "B91C1C"
 PALE_BLUE = "EAF2FF"
 PALE_GREEN = "E8F5EE"
 PALE_GOLD = "FFF5DD"
-REPORT_PIPELINE_VERSION = "0.21.0"
+REPORT_PIPELINE_VERSION = "0.23.0"
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,11 @@ def _text(value: Any, limit: int | None = None) -> str:
     if limit is not None and len(rendered) > limit:
         return rendered[: max(1, limit - 1)].rstrip() + "…"
     return rendered
+
+
+def _model_text(value: str) -> str:
+    """Return model prose unchanged apart from XML-invalid NUL characters."""
+    return str(value or "").replace("\x00", "")
 
 
 def _is_turkish(language: str) -> bool:
@@ -130,13 +135,22 @@ def _publication_type(source: Any, turkish: bool) -> str:
 
 
 def _source_role(source: Any, turkish: bool) -> str:
-    role = str(_metadata(source).get("literature_relevance_tier") or "direct")
+    metadata = _metadata(source)
+    role = str(
+        metadata.get("research_scope_role")
+        or metadata.get("literature_relevance_tier")
+        or "primary_in_scope"
+    )
     if not turkish:
         return role
     return {
         "direct": "Doğrudan",
         "contextual": "Bağlamsal",
         "peripheral": "Çevresel",
+        "primary_in_scope": "Ana kapsam",
+        "supporting_benchmark": "Destekleyici benchmark",
+        "near_scope": "Yakın ama kapsam dışı",
+        "excluded": "Dışlandı",
     }.get(role, role.title())
 
 
@@ -734,7 +748,7 @@ def _add_cited_paragraph(
     """
     linkable = linkable or set()
     paragraph = document.add_paragraph()
-    for piece in re.split(r"(\[S\d{2,3}\])", _text(text, 12000)):
+    for piece in re.split(r"(\[S\d{2,3}\])", _model_text(text)):
         if not piece:
             continue
         if re.fullmatch(r"\[S\d{2,3}\]", piece):
@@ -745,6 +759,25 @@ def _add_cited_paragraph(
             _set_run_font(paragraph.add_run(piece), size=10.5, color=BLUE, bold=True)
         else:
             _set_run_font(paragraph.add_run(piece), size=10.5, color=INK)
+
+
+def _add_validation_warning(
+    document: Document,
+    warnings: list[str],
+    *,
+    turkish: bool,
+) -> None:
+    if not warnings:
+        return
+    table = document.add_table(rows=1, cols=1)
+    prefix = (
+        "LLM metni değiştirilmeden korunmuştur. Doğrulama uyarıları: "
+        if turkish
+        else "The LLM text is preserved unchanged. Validation warnings: "
+    )
+    table.rows[0].cells[0].text = prefix + ", ".join(warnings)
+    _set_cell_shading(table.rows[0].cells[0], PALE_GOLD)
+    _style_table(table, [6.5], header_fill=PALE_GOLD, font_size=9)
 
 
 def _figure_matches_section(target: str, section_title: str) -> bool:
@@ -980,8 +1013,17 @@ def _build_synthesis_word_report(
         "1. Özet" if turkish else "1. Summary",
         level=1,
     )
+    summary_warnings = list(
+        dict.fromkeys(
+            [
+                *package.validation_warnings.get("overview", []),
+                *package.validation_warnings.get("executive_summary", []),
+            ]
+        )
+    )
+    _add_validation_warning(document, summary_warnings, turkish=turkish)
     lead = document.add_table(rows=1, cols=1)
-    lead.rows[0].cells[0].text = _text(package.executive_summary, 6000)
+    lead.rows[0].cells[0].text = _model_text(package.executive_summary)
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
     _style_table(lead, [6.5], header_fill=PALE_BLUE, font_size=10.5)
     document.add_heading(
@@ -1023,6 +1065,29 @@ def _build_synthesis_word_report(
         _set_cell_shading(cells[0], HEADER_FILL)
     _style_table(frame, [1.65, 4.85])
 
+    near_scope_sources = [
+        source
+        for source in sources
+        if _metadata(source).get("research_scope_role") in {"near_scope", "excluded"}
+    ]
+    if near_scope_sources:
+        document.add_heading(
+            "Yakın ama kapsam dışı çalışmalar"
+            if turkish
+            else "Near-scope but excluded studies",
+            level=2,
+        )
+        for source in near_scope_sources:
+            paragraph = document.add_paragraph(style="List Bullet")
+            _add_hyperlink(
+                paragraph,
+                _source_link_label(source, turkish, 180),
+                str(source.url),
+            )
+            paragraph.add_run(
+                f" — {_metadata(source).get('research_scope_role')}"
+            )
+
     if package.report_mode != "compact":
         document.add_heading(
             "3. Tematik kanıt sentezi" if turkish else "3. Thematic evidence synthesis",
@@ -1037,6 +1102,11 @@ def _build_synthesis_word_report(
     visible_sections = package.sections if package.report_mode != "compact" else []
     for index, section in enumerate(visible_sections, 1):
         document.add_heading(f"3.{index} {_text(section.title, 240)}", level=2)
+        _add_validation_warning(
+            document,
+            section.validation_warnings,
+            turkish=turkish,
+        )
         _add_cited_paragraph(document, section.synthesis, linkable_labels)
         comparison_rows = [
             (
@@ -1060,7 +1130,7 @@ def _build_synthesis_word_report(
                 continue
             table = document.add_table(rows=1, cols=2)
             table.rows[0].cells[0].text = label
-            table.rows[0].cells[1].text = _text(value, 3500)
+            table.rows[0].cells[1].text = _model_text(value)
             _set_cell_shading(table.rows[0].cells[0], fill)
             _set_cell_shading(table.rows[0].cells[1], fill)
             _style_table(table, [1.55, 4.95], header_fill=fill, font_size=9.5)
@@ -1139,11 +1209,21 @@ def _build_synthesis_word_report(
             level=1,
         )
         if package.cross_study_assessment:
+            _add_validation_warning(
+                document,
+                package.validation_warnings.get("cross_study_assessment", []),
+                turkish=turkish,
+            )
             _add_cited_paragraph(
                 document, package.cross_study_assessment, linkable_labels
             )
         if package.conclusion:
             document.add_heading("Sonuç" if turkish else "Conclusion", level=2)
+            _add_validation_warning(
+                document,
+                package.validation_warnings.get("conclusion", []),
+                turkish=turkish,
+            )
             _add_cited_paragraph(document, package.conclusion, linkable_labels)
     document.add_heading(
         (
@@ -1160,7 +1240,12 @@ def _build_synthesis_word_report(
         level=1 if package.report_mode == "compact" else 2,
     )
     uncertainty_box = document.add_table(rows=1, cols=1)
-    uncertainty_box.rows[0].cells[0].text = _text(package.uncertainty, 6000)
+    _add_validation_warning(
+        document,
+        package.validation_warnings.get("uncertainty", []),
+        turkish=turkish,
+    )
+    uncertainty_box.rows[0].cells[0].text = _model_text(package.uncertainty)
     _set_cell_shading(uncertainty_box.rows[0].cells[0], PALE_GOLD)
     _style_table(uncertainty_box, [6.5], header_fill=PALE_GOLD, font_size=10)
 
@@ -1225,13 +1310,15 @@ def _build_synthesis_word_report(
     )
     document.add_paragraph(
         (
-            f"LLM sentez kapısı: {'tam olarak geçti' if package.generated_by_llm else 'kısmen deterministik geri dönüş kullandı'}. "
+            f"LLM sentez durumu: {package.generation_status}; "
+            f"özgün model metni {'tam' if package.generated_by_llm else 'kısmi veya üretilemedi'}. "
             f"Katman kaydı: {diagnostic_text or 'mevcut değil'}. "
             f"Connector kapsamı: {', '.join(connector_ids or []) or 'protokol varsayılanları'}."
         )
         if turkish
         else (
-            f"LLM synthesis gate: {'fully passed' if package.generated_by_llm else 'used deterministic fallback for at least one layer'}. "
+            f"LLM synthesis status: {package.generation_status}; original model prose "
+            f"{'complete' if package.generated_by_llm else 'partial or unavailable'}. "
             f"Layer record: {diagnostic_text or 'not available'}. "
             f"Connector scope: {', '.join(connector_ids or []) or 'protocol defaults'}."
         )
@@ -1256,9 +1343,11 @@ def _build_synthesis_word_report(
                 f"Eşik: {float(answerability.get('threshold', 0.35)):.2f}; gözlenen en yüksek "
                 f"soru ilgisi: "
                 f"{float(answerability.get('maximum_question_relevance', 0.0)):.2f}. "
-                f"Gerekçeler: {', '.join(answerability.get('reason_codes', [])) or 'yok'}. "
-                f"Geçersiz onarım katmanları: "
-                f"{', '.join(answerability.get('invalid_repair_layers', [])) or 'yok'}."
+                f"Alt soru kapsamı: "
+                f"{float(answerability.get('sub_question_coverage', 0.0)):.0%}. "
+                f"Kapsam içi katkı veren kaynak: "
+                f"{int(answerability.get('in_scope_contributing_sources', 0))}. "
+                f"Gerekçeler: {', '.join(answerability.get('reason_codes', [])) or 'yok'}."
             )
             if turkish
             else (
@@ -1266,9 +1355,11 @@ def _build_synthesis_word_report(
                 f"Threshold: {float(answerability.get('threshold', 0.35)):.2f}; highest observed "
                 f"question relevance: "
                 f"{float(answerability.get('maximum_question_relevance', 0.0)):.2f}. "
-                f"Reasons: {', '.join(answerability.get('reason_codes', [])) or 'none'}. "
-                f"Invalid repair layers: "
-                f"{', '.join(answerability.get('invalid_repair_layers', [])) or 'none'}."
+                f"Sub-question coverage: "
+                f"{float(answerability.get('sub_question_coverage', 0.0)):.0%}. "
+                f"In-scope contributing sources: "
+                f"{int(answerability.get('in_scope_contributing_sources', 0))}. "
+                f"Reasons: {', '.join(answerability.get('reason_codes', [])) or 'none'}."
             )
         )
 

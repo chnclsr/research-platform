@@ -108,6 +108,8 @@ def retrieve_passages(
     query_embeddings: list[list[float]] | None = None,
     *,
     per_question: int = 8,
+    max_total: int | None = None,
+    max_per_source: int | None = None,
 ) -> list[Passage]:
     if not passages or not questions:
         return []
@@ -118,9 +120,10 @@ def retrieve_passages(
         passage_terms.append(counts)
         document_frequency.update(counts.keys())
     total = len(passages)
-    selected: dict[str, Passage] = {}
-    matched: dict[str, set[str]] = defaultdict(set)
-    scores: dict[str, float] = defaultdict(float)
+    total_limit = max_total or per_question * len(questions)
+    source_limit = max_per_source or max(3, per_question // 2)
+    per_branch_target = min(per_question, math.ceil(total_limit / len(questions)))
+    ranked_by_question: list[list[tuple[float, Passage]]] = []
 
     for question_index, question in enumerate(questions):
         query_terms = expanded_terms(question)
@@ -167,36 +170,108 @@ def retrieve_passages(
             reranked = 0.50 * rrf + 0.30 * hybrid + 0.15 * query_coverage + 0.05 * prose_quality
             ranked.append((reranked, passage))
         ranked.sort(key=lambda item: item[0], reverse=True)
-        kept = 0
-        per_document: Counter[str] = Counter()
+        kept: list[tuple[float, Passage]] = []
         per_section: Counter[str] = Counter()
         seen_content: set[str] = set()
         for score, passage in ranked:
             if score <= 0:
-                continue
-            if per_document[passage.source_version_id] >= max(3, per_question // 2):
                 continue
             section_key = passage.section_path.lower()
             if per_section[section_key] >= 2:
                 continue
             if passage.content_hash in seen_content:
                 continue
-            selected[passage.id] = passage
-            matched[passage.id].add(question)
-            scores[passage.id] = max(scores[passage.id], score)
-            per_document[passage.source_version_id] += 1
+            kept.append((score, passage))
             per_section[section_key] += 1
             seen_content.add(passage.content_hash)
-            kept += 1
-            if kept >= per_question:
+            # Keep a reserve behind the branch quota. The global diversity pass may need
+            # to skip several high-ranked passages from an already saturated source.
+            if len(kept) >= max(per_branch_target * 4, per_question):
                 break
+        ranked_by_question.append(kept)
+
+    selected: dict[str, Passage] = {}
+    selected_order: list[str] = []
+    scores: dict[str, float] = defaultdict(float)
+    source_counts: Counter[str] = Counter()
+    branch_counts: Counter[int] = Counter()
+    positions = [0 for _ in questions]
+
+    def take(question_index: int, *, enforce_source_limit: bool) -> bool:
+        ranked = ranked_by_question[question_index]
+        while positions[question_index] < len(ranked):
+            score, passage = ranked[positions[question_index]]
+            positions[question_index] += 1
+            if passage.id in selected:
+                branch_counts[question_index] += 1
+                scores[passage.id] = max(scores[passage.id], score)
+                return True
+            if enforce_source_limit and source_counts[passage.source_version_id] >= source_limit:
+                continue
+            selected[passage.id] = passage
+            selected_order.append(passage.id)
+            source_counts[passage.source_version_id] += 1
+            branch_counts[question_index] += 1
+            scores[passage.id] = max(scores[passage.id], score)
+            return True
+        return False
+
+    # Round-robin is the contract: a generic review on the primary question cannot consume
+    # the entire global allowance before a dataset or evaluation branch gets a turn.
+    while len(selected) < total_limit:
+        progress = False
+        for question_index in range(len(questions)):
+            if branch_counts[question_index] >= per_branch_target:
+                continue
+            progress = take(question_index, enforce_source_limit=True) or progress
+            if len(selected) >= total_limit:
+                break
+        if not progress:
+            break
+
+    def fill(*, enforce_source_limit: bool) -> None:
+        reserve = sorted(
+            (
+                (score, question_index, passage)
+                for question_index, ranked in enumerate(ranked_by_question)
+                for score, passage in ranked
+                if passage.id not in selected
+            ),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        for score, _question_index, passage in reserve:
+            if len(selected) >= total_limit:
+                return
+            if passage.id in selected:
+                continue
+            if enforce_source_limit and source_counts[passage.source_version_id] >= source_limit:
+                continue
+            selected[passage.id] = passage
+            selected_order.append(passage.id)
+            source_counts[passage.source_version_id] += 1
+            scores[passage.id] = max(scores[passage.id], score)
+
+    fill(enforce_source_limit=True)
+    # A small corpus should still use its evidence. Relax diversity only after every source
+    # that could contribute under the approved cap has had the opportunity to do so.
+    if len(selected) < total_limit:
+        fill(enforce_source_limit=False)
+
+    matched: dict[str, set[str]] = defaultdict(set)
+    for question, ranked in zip(questions, ranked_by_question):
+        for score, passage in ranked:
+            if passage.id in selected:
+                matched[passage.id].add(question)
+                scores[passage.id] = max(scores[passage.id], score)
 
     output = []
-    for passage_id, passage in selected.items():
+    for passage_id in selected_order:
+        passage = selected[passage_id]
         passage.retrieval_score = round(scores[passage_id], 4)
         passage.matched_questions = sorted(matched[passage_id])
         output.append(passage)
-    return sorted(output, key=lambda passage: passage.retrieval_score, reverse=True)
+    return output
 
 
 def neighbor_context(passage: Passage, all_passages: list[Passage]) -> str:

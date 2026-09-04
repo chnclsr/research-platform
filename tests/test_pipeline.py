@@ -3,24 +3,45 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import json
 import zipfile
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 import pytest
-
 from conftest import acting_principal
+
 from research_platform.config import get_settings
 from research_platform.db import (
-    ClaimRow, EvidenceRow, SessionLocal, SourceRow, SourceVersionRow, create_schema,
+    ClaimRow,
+    EvidenceRow,
+    SessionLocal,
+    SourceRow,
+    SourceVersionRow,
+    create_schema,
 )
-from research_platform.pipeline import PipelineHalted, PipelineStageTimeout, ResearchPipeline
+from research_platform.pipeline import (
+    PipelineHalted,
+    PipelineStageTimeout,
+    ResearchPipeline,
+    _validated_scope_role,
+)
 from research_platform.repository import (
-    CheckpointTooLarge, Repository, checkpoint_payload,
+    CheckpointTooLarge,
+    Repository,
+    checkpoint_payload,
 )
 from research_platform.schemas import (
-    AcquiredDocument, ConnectorCandidate, ResearchProtocol, RunStatus, SearchMission,
-    SourceFamily, new_id,
+    AcquiredDocument,
+    ConnectorCandidate,
+    ResearchProtocol,
+    ResearchScopeCriteria,
+    RunStatus,
+    SearchMission,
+    SourceFamily,
+    SourceScopeRole,
+    new_id,
 )
 from research_platform.storage import ObjectStore
 
@@ -92,6 +113,150 @@ class FailingConnector(DummyConnector):
 class FailingRegistry:
     def selected(self, selection):
         return [FailingConnector()]
+
+
+def test_scope_role_requires_complete_facets_and_enforces_exclusions():
+    criteria = ResearchScopeCriteria.model_validate(
+        {
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+                {"name": "input_form", "accepted_values": ["3D"]},
+                {"name": "task", "accepted_values": ["report generation"]},
+            ],
+            "exclusion_signals": ["PET/CT", "2D-only input"],
+        }
+    )
+    text = "Chest CT uses a 3D volume for report generation; PET/CT is not used."
+    facets = [
+        {"facet": "anatomy", "matched": True, "evidence": "Chest"},
+        {"facet": "modality", "matched": True, "evidence": "CT"},
+        {"facet": "input_form", "matched": True, "evidence": "3D volume"},
+        {"facet": "task", "matched": True, "evidence": "report generation"},
+    ]
+    clear_exclusions = [
+        {"exclusion": "PET/CT", "matched": False, "evidence": ""},
+        {"exclusion": "2D-only input", "matched": False, "evidence": ""},
+    ]
+
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        facets,
+        clear_exclusions,
+        text,
+    ) == SourceScopeRole.PRIMARY_IN_SCOPE
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        facets[:-1],
+        clear_exclusions,
+        text,
+    ) == SourceScopeRole.NEAR_SCOPE
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.SUPPORTING_BENCHMARK,
+        facets[:-1],
+        clear_exclusions,
+        text,
+    ) == SourceScopeRole.SUPPORTING_BENCHMARK
+
+    matched_exclusion = [
+        {"exclusion": "PET/CT", "matched": True, "evidence": "PET/CT"},
+        clear_exclusions[1],
+    ]
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        facets,
+        matched_exclusion,
+        text,
+    ) == SourceScopeRole.EXCLUDED
+
+
+def test_filtered_chest_ct_list_scope_regression():
+    cases = json.loads(
+        (Path(__file__).parent / "fixtures" / "chest_ct_scope_cases.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    criteria = ResearchScopeCriteria.model_validate(
+        {
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest", "thorax", "lung"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+                {"name": "input_form", "accepted_values": ["3D", "volumetric", "axial"]},
+                {"name": "task", "accepted_values": ["report generation"]},
+            ],
+            "exclusion_signals": ["PET/CT", "2D-only input"],
+        }
+    )
+    results = []
+    for case in cases:
+        text = case["text"]
+        missing = case.get("missing_facet")
+        evidence = {
+            "anatomy": "chest",
+            "modality": "CT",
+            "input_form": next(
+                (
+                    value
+                    for value in ("3D", "volumetric", "volume", "axial")
+                    if value in text
+                ),
+                "",
+            ),
+            "task": next(
+                (value for value in ("report generation", "generates", "generate") if value in text),
+                "",
+            ),
+        }
+        facets = [
+            {"facet": name, "matched": True, "evidence": value}
+            for name, value in evidence.items()
+            if name != missing and value
+        ]
+        matched_exclusion = case.get("matched_exclusion")
+        exclusions = [
+            {
+                "exclusion": signal,
+                "matched": signal == matched_exclusion,
+                "evidence": signal if signal == matched_exclusion else "",
+            }
+            for signal in criteria.exclusion_signals
+        ]
+        requested = (
+            SourceScopeRole.SUPPORTING_BENCHMARK
+            if case["role"] == SourceScopeRole.SUPPORTING_BENCHMARK.value
+            else SourceScopeRole.PRIMARY_IN_SCOPE
+        )
+        results.append(
+            _validated_scope_role(criteria, requested, facets, exclusions, text).value
+        )
+
+    assert results.count(SourceScopeRole.PRIMARY_IN_SCOPE.value) == 11
+    assert results.count(SourceScopeRole.SUPPORTING_BENCHMARK.value) == 2
+    assert results.count(SourceScopeRole.EXCLUDED.value) == 2
+    assert results.count(SourceScopeRole.NEAR_SCOPE.value) == 2
+
+
+def test_collection_budget_counts_only_active_search_and_acquisition_time():
+    state = {
+        "protocol": ResearchProtocol(
+            title="Collection budget",
+            primary_question="Which evidence answers this research question?",
+            budget={"max_wall_minutes": 1},
+        ).model_dump(mode="json"),
+        "budget_started_at": (datetime.now(UTC) - timedelta(hours=3)).isoformat(),
+        "collection_elapsed_seconds": 10.0,
+        "collection_round_started_at": (
+            datetime.now(UTC) - timedelta(seconds=20)
+        ).isoformat(),
+    }
+
+    remaining = ResearchPipeline._collection_seconds_remaining(state)
+
+    assert 28 <= remaining <= 31
 
 
 class DummyAcquisition:
@@ -323,17 +488,13 @@ async def test_collection_budget_is_persistent_and_skips_new_discovery_after_res
         await repo.checkpoint(row.id, "VALIDATE_PROTOCOL", {
             "run_id": row.id,
             "protocol": protocol.model_dump(mode="json"),
-            "budget_started_at": (
-                datetime.now(timezone.utc) - timedelta(minutes=2)
-            ).isoformat(),
+            "collection_elapsed_seconds": 120.0,
         })
         pipeline = ResearchPipeline(get_settings(), session, client)
         result = await pipeline.search({
             "run_id": row.id,
             "protocol": protocol.model_dump(mode="json"),
-            "budget_started_at": (
-                datetime.now(timezone.utc) - timedelta(minutes=2)
-            ).isoformat(),
+            "collection_elapsed_seconds": 120.0,
         })
         events = await repo.events_after(row.id)
 
@@ -390,9 +551,7 @@ async def test_acquisition_cutoff_keeps_completed_documents_for_postprocessing()
             "run_id": row.id,
             "protocol": protocol.model_dump(mode="json"),
             "candidates": [item.model_dump(mode="json") for item in candidates],
-            "budget_started_at": (
-                datetime.now(timezone.utc) - timedelta(seconds=59.7)
-            ).isoformat(),
+            "collection_elapsed_seconds": 59.7,
         })
         events = await repo.events_after(row.id)
 

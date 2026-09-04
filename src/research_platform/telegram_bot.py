@@ -196,6 +196,7 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
             "inert": "Bağlayıcı olmayan sınır",
             "dates": "Tarih",
             "inferred": "sorudan çıkarıldı",
+            "scope_criteria": "Zorunlu kapsam ölçütleri",
             "answers": "Verdiğiniz yanıtlar",
             "feedback": "Önceki geri bildiriminiz",
             "strategy": "Strateji",
@@ -368,6 +369,7 @@ In the commands below you can use the run's name instead of <run_id>.
             "inert": "Non-binding limit",
             "dates": "Dates",
             "inferred": "inferred from the question",
+            "scope_criteria": "Required scope criteria",
             "answers": "Your answers",
             "feedback": "Your earlier feedback",
             "strategy": "Strategy",
@@ -693,6 +695,7 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
     branches = plan.get("query_plan") or []
     budget = plan.get("budget") or {}
     scope = plan.get("date_scope") or {}
+    criteria = plan.get("scope_criteria") or {}
     text = text_for(str(plan.get("display_language") or "tr"))["plan"]
     # The reader's own wording leads; the English the run uses stays underneath so a bad
     # translation can still be rejected here.
@@ -729,6 +732,16 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
         note = f" ({text['inferred']})" if scope.get("inferred_from_question") else ""
         decision.append(
             f"📅 {str(scope['start_date'])[:10]} → {str(scope.get('end_date'))[:10]}{note}"
+        )
+    facets = criteria.get("required_facets") or []
+    if facets:
+        summary = " · ".join(
+            f"{item.get('name', '')}: {' / '.join(item.get('accepted_values') or [])}"
+            for item in facets
+            if isinstance(item, dict)
+        )
+        decision.append(
+            f"🎯 <b>{text['scope_criteria']}</b>: {html.escape(summary[:500])}"
         )
     applied = plan.get("applied_settings") or []
     if applied:

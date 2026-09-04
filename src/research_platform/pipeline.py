@@ -8,7 +8,7 @@ import math
 import re
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any, TypedDict
 from urllib.parse import urlparse
 
@@ -88,9 +88,11 @@ from .schemas import (
     Passage,
     ProbeCandidate,
     ResearchProtocol,
+    ResearchScopeCriteria,
     RunStatus,
     SearchMission,
     SourceFamily,
+    SourceScopeRole,
     new_id,
 )
 from .scholarly import candidate_dedupe_key
@@ -168,6 +170,10 @@ class PipelineState(TypedDict, total=False):
     # `probe_strategies_exhausted`.
     probe_exhausted_reason: str
     budget_started_at: str
+    # Only SEARCH+ACQUIRE time spends the external collection budget.  The active marker
+    # survives checkpoints so a worker restart cannot reset an in-flight round.
+    collection_elapsed_seconds: float
+    collection_round_started_at: str
     planning_answers: list[str]
     applied_settings: list[dict[str, Any]]
     plan_feedback: list[str]
@@ -183,6 +189,69 @@ class PipelineState(TypedDict, total=False):
 
 class PipelineHalted(RuntimeError):
     pass
+
+
+def _validated_scope_role(
+    criteria: ResearchScopeCriteria,
+    requested_role: SourceScopeRole,
+    facet_assessments: list[dict[str, Any]],
+    exclusion_assessments: list[dict[str, Any]],
+    assessment_text: str,
+) -> SourceScopeRole:
+    """Fail uncertain scope decisions out of the main synthesis.
+
+    The model proposes a role, but only complete decisions with verbatim support may enter
+    the primary or benchmark lanes.  A proven exclusion is stronger than the proposed role;
+    a missing decision or an unverifiable excerpt is a near match rather than silent
+    inclusion.
+    """
+    if requested_role == SourceScopeRole.EXCLUDED:
+        return requested_role
+
+    haystack = assessment_text.casefold()
+    facet_by_name = {
+        str(item.get("facet") or ""): item
+        for item in facet_assessments
+        if str(item.get("facet") or "")
+    }
+    exclusion_by_name = {
+        str(item.get("exclusion") or ""): item
+        for item in exclusion_assessments
+        if str(item.get("exclusion") or "")
+    }
+
+    exclusion_decisions_complete = all(
+        signal in exclusion_by_name
+        and isinstance(exclusion_by_name[signal].get("matched"), bool)
+        for signal in criteria.exclusion_signals
+    )
+    for signal in criteria.exclusion_signals:
+        item = exclusion_by_name.get(signal)
+        if not item or item.get("matched") is not True:
+            continue
+        evidence = str(item.get("evidence") or "").strip().casefold()
+        if evidence and evidence in haystack:
+            return SourceScopeRole.EXCLUDED
+        return SourceScopeRole.NEAR_SCOPE
+
+    if requested_role not in {
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        SourceScopeRole.SUPPORTING_BENCHMARK,
+    }:
+        return requested_role
+    required = {facet.name for facet in criteria.required_facets}
+    if requested_role == SourceScopeRole.SUPPORTING_BENCHMARK:
+        required.discard("task")
+    proven = {
+        name
+        for name, item in facet_by_name.items()
+        if item.get("matched") is True
+        and (evidence := str(item.get("evidence") or "").strip().casefold())
+        and evidence in haystack
+    }
+    if not required.issubset(proven) or not exclusion_decisions_complete:
+        return SourceScopeRole.NEAR_SCOPE
+    return requested_role
 
 
 def preparation_signature(*parts: Any) -> str:
@@ -292,13 +361,21 @@ class ResearchPipeline:
     @staticmethod
     def _collection_seconds_remaining(state: PipelineState) -> float:
         protocol = ResearchProtocol.model_validate(state["protocol"])
-        started_at = datetime.fromisoformat(
-            state.get("budget_started_at", datetime.now(timezone.utc).isoformat()).replace(
-                "Z", "+00:00"
-            )
-        )
-        elapsed = max(0.0, (datetime.now(timezone.utc) - started_at).total_seconds())
+        elapsed = max(0.0, float(state.get("collection_elapsed_seconds", 0.0) or 0.0))
+        active = str(state.get("collection_round_started_at") or "")
+        if active:
+            started_at = datetime.fromisoformat(active)
+            elapsed += max(0.0, (datetime.now(UTC) - started_at).total_seconds())
         return protocol.budget.max_wall_minutes * 60 - elapsed
+
+    @staticmethod
+    def _finish_collection_round(state: PipelineState) -> float:
+        elapsed = max(0.0, float(state.get("collection_elapsed_seconds", 0.0) or 0.0))
+        active = str(state.get("collection_round_started_at") or "")
+        if active:
+            started_at = datetime.fromisoformat(active)
+            elapsed += max(0.0, (datetime.now(UTC) - started_at).total_seconds())
+        return elapsed
 
     async def _hitl_response(self, run_id: str, interaction_type: str) -> dict | None:
         run = await self.repo.get_run(run_id)
@@ -483,6 +560,17 @@ class ResearchPipeline:
                 language,
             )
             plan["questions"]["sub_questions_display"] = display_subs
+            if len(display_subs) == len(planning_state.get("sub_questions", [])):
+                for record, report_title in zip(
+                    plan["questions"].get("sub_question_records", []),
+                    display_subs,
+                ):
+                    record["report_title"] = report_title
+                payload = protocol.model_dump(mode="json")
+                payload["sub_question_report_titles"] = display_subs
+                planning_state["protocol"] = payload
+                output["protocol"] = payload
+                await self.repo.update_run(run_id, protocol=payload)
             plan["strategy_note"] = note
         await self._emit_llm_metrics(
             run_id, "PLAN", provider=self._preparation_provider()
@@ -849,11 +937,15 @@ class ResearchPipeline:
         if state.get("decompose_signature") == signature and state.get("sub_questions"):
             sub_questions = list(state.get("sub_questions", []))
             concepts = list(state.get("concepts", []))
+            scope_criteria = protocol.scope_criteria
         else:
-            sub_questions, concepts = await decompose(
+            sub_questions, concepts, scope_criteria = await decompose(
                 self._preparation_provider(),
                 protocol.primary_question,
-                protocol.sub_questions,
+                # A rejected plan explicitly asks for a new decomposition. Generated
+                # questions are persisted in the protocol for stable identities, so they
+                # must not be mistaken for immutable user-supplied questions here.
+                [] if feedback else protocol.sub_questions,
                 guidance=guidance,
             )
             sub_questions = [
@@ -867,13 +959,39 @@ class ResearchPipeline:
             await self._emit_llm_metrics(
                 state["run_id"], "DECOMPOSE", provider=self._preparation_provider()
             )
+        resolved_sub_questions = sub_questions[:12]
+        scope_changed = scope_criteria is not None and scope_criteria != protocol.scope_criteria
+        sub_questions_changed = resolved_sub_questions != protocol.sub_questions
+        if scope_changed or sub_questions_changed:
+            protocol = protocol.model_copy(
+                update={
+                    "scope_criteria": scope_criteria or protocol.scope_criteria,
+                    "sub_questions": resolved_sub_questions,
+                    # A changed operational list invalidates positional display titles.
+                    "sub_question_report_titles": (
+                        protocol.sub_question_report_titles
+                        if not sub_questions_changed
+                        else []
+                    ),
+                }
+            )
+            await self.repo.update_run(
+                state["run_id"], protocol=protocol.model_dump(mode="json")
+            )
+            if scope_changed:
+                await self.repo.event(
+                    state["run_id"],
+                    "scope_criteria_resolved",
+                    scope_criteria.model_dump(mode="json"),
+                )
         output = {
-            "sub_questions": sub_questions[:12],
+            "sub_questions": resolved_sub_questions,
             "concepts": concepts[:20],
             "decompose_signature": signature,
         }
-        if applied:
+        if applied or scope_changed or sub_questions_changed:
             output["protocol"] = protocol.model_dump(mode="json")
+        if applied:
             output["applied_settings"] = applied
         if planning:
             output["planning_answers"] = planning
@@ -1037,6 +1155,11 @@ class ResearchPipeline:
             guidance,
             protocol.scope.start_date,
             protocol.scope.end_date,
+            (
+                protocol.scope_criteria.model_dump(mode="json")
+                if protocol.scope_criteria is not None
+                else None
+            ),
         )
         cached = state.get("generated_queries")
         if state.get("query_signature") == signature and cached is not None:
@@ -1071,12 +1194,15 @@ class ResearchPipeline:
                 "BUILD_QUERY_BRANCHES",
                 provider=self._preparation_provider(),
             )
-        queries = list(
-            dict.fromkeys([protocol.primary_question, *state.get("sub_questions", []), *generated])
+        core_queries = list(
+            dict.fromkeys([protocol.primary_question, *state.get("sub_questions", [])])
         )
+        queries = list(dict.fromkeys([*core_queries, *generated]))
         for concept in state.get("concepts", [])[:3]:
             queries.append(f"{concept} criticism limitations")
-        queries = queries[:8]
+        # Every approved sub-question owns a discovery branch. Generated expansions use
+        # only the remaining bounded slots and may never evict an approved branch.
+        queries = list(dict.fromkeys(queries))[: max(20, len(core_queries))]
         missions = initial_missions(protocol, queries)
         output = {
             "queries": queries,
@@ -1091,6 +1217,8 @@ class ResearchPipeline:
         return await self._plan_gate(state, output, protocol)
 
     async def search(self, state: PipelineState) -> dict:
+        if not state.get("collection_round_started_at"):
+            state["collection_round_started_at"] = datetime.now(UTC).isoformat()
         await self._boundary(state, "SEARCH")
         if self._collection_seconds_remaining(state) <= 0:
             await self.repo.event(
@@ -1775,6 +1903,8 @@ class ResearchPipeline:
         return {
             "documents": [d.model_dump(mode="json") for d in docs],
             "discovery_stats": discovery_stats,
+            "collection_elapsed_seconds": self._finish_collection_round(state),
+            "collection_round_started_at": "",
         }
 
     async def _semantic_source_judgment(
@@ -1783,6 +1913,20 @@ class ResearchPipeline:
         document: AcquiredDocument,
     ) -> tuple[bool, float, str]:
         """Use the local model only after deterministic gates pass."""
+        scope_instruction = ""
+        if protocol.scope_criteria is not None:
+            scope_instruction = (
+                " Also classify the source under the approved SCOPE_CRITERIA. Return "
+                "scope_role as primary_in_scope, supporting_benchmark, near_scope, or "
+                "excluded; and facet_assessments as an array with facet, matched (boolean), "
+                "reason, and a short verbatim evidence excerpt from TITLE, DISCOVERY_SNIPPET, "
+                "or DOCUMENT_EXCERPT. Also return exclusion_assessments with exclusion, matched, "
+                "reason, and verbatim evidence. primary_in_scope requires every required facet "
+                "and no applicable exclusion. A benchmark, "
+                "dataset, metric, or evaluation paper that supports an in-scope evaluation but "
+                "does not itself generate reports is supporting_benchmark. A useful adjacent "
+                "source is near_scope, never primary_in_scope."
+            )
         if protocol.research_mode == "literature_scan":
             system_prompt = (
                 "Act as a high-recall literature screening classifier. Retain both directly "
@@ -1793,6 +1937,7 @@ class ResearchPipeline:
                 "directly_relevant=true for direct OR useful contextual literature. Return one "
                 "JSON object with directly_relevant (boolean), relevance_score (0..1), and reason. "
                 "Begin reason with 'direct:', 'contextual:', or 'unrelated:'."
+                f"{scope_instruction}"
             )
         else:
             system_prompt = (
@@ -1803,11 +1948,13 @@ class ResearchPipeline:
                 "a newly published systematic review can be relevant even when it summarizes "
                 "older studies. Return one JSON object with directly_relevant (boolean), "
                 "relevance_score (0..1, where 0 is unrelated and 1 is directly useful), and "
-                "reason (short string)."
+                f"reason (short string).{scope_instruction}"
             )
         user_prompt = (
             f"QUESTION: {protocol.primary_question}\n"
             f"DATE_SCOPE: {protocol.scope.start_date} to {protocol.scope.end_date}\n"
+            f"SCOPE_CRITERIA: "
+            f"{json.dumps(protocol.scope_criteria.model_dump(mode='json'), ensure_ascii=False) if protocol.scope_criteria else '(none)'}\n"
             f"TITLE: {document.candidate.title}\n"
             f"DISCOVERY_SNIPPET: {document.candidate.snippet[:1500]}\n"
             f"DOCUMENT_EXCERPT: {document.content[:6000]}"
@@ -1826,6 +1973,57 @@ class ResearchPipeline:
                     0.0,
                     min(1.0, float(result.get("relevance_score", 0.5))),
                 )
+                if protocol.scope_criteria is not None:
+                    role_value = str(result.get("scope_role") or "near_scope")
+                    try:
+                        role = SourceScopeRole(role_value)
+                    except ValueError:
+                        role = SourceScopeRole.NEAR_SCOPE
+                    raw_assessments = result.get("facet_assessments") or []
+                    assessments = [
+                        {
+                            "facet": str(item.get("facet") or "")[:80],
+                            "matched": item.get("matched"),
+                            "reason": str(item.get("reason") or "")[:300],
+                            "evidence": str(item.get("evidence") or "")[:500],
+                        }
+                        for item in raw_assessments
+                        if isinstance(item, dict)
+                        and isinstance(item.get("matched"), bool)
+                    ]
+                    exclusion_assessments = [
+                        {
+                            "exclusion": str(item.get("exclusion") or "")[:300],
+                            "matched": item.get("matched"),
+                            "reason": str(item.get("reason") or "")[:300],
+                            "evidence": str(item.get("evidence") or "")[:500],
+                        }
+                        for item in (result.get("exclusion_assessments") or [])
+                        if isinstance(item, dict)
+                        and isinstance(item.get("matched"), bool)
+                    ]
+                    assessment_text = " ".join(
+                        [
+                            document.candidate.title,
+                            document.candidate.snippet,
+                            document.content[:6000],
+                        ]
+                    )
+                    role = _validated_scope_role(
+                        protocol.scope_criteria,
+                        role,
+                        assessments,
+                        exclusion_assessments,
+                        assessment_text,
+                    )
+                    document.candidate.metadata["scope_assessment"] = {
+                        "role": role.value,
+                        "facet_assessments": assessments,
+                        "exclusion_assessments": exclusion_assessments,
+                        "reason": str(result.get("reason", ""))[:500],
+                        "model": self.settings.llm_model,
+                    }
+                    document.candidate.metadata["research_scope_role"] = role.value
                 return (
                     bool(result["directly_relevant"]),
                     relevance_score,
@@ -1942,6 +2140,18 @@ class ResearchPipeline:
                     "reason": judge_reason,
                     "model": self.settings.llm_model,
                 }
+                scope_role = document.candidate.metadata.get("research_scope_role")
+                if scope_role == SourceScopeRole.EXCLUDED.value:
+                    content_rejected.append(
+                        {
+                            "url": str(document.candidate.url),
+                            "reason": "approved_scope_excluded",
+                            "relevance_score": judge_score,
+                            "details": document.candidate.metadata.get("scope_assessment", {}),
+                            "stage": "post_acquisition_scope",
+                        }
+                    )
+                    continue
                 reject_semantic = (
                     (not judged_relevant or judge_score < 0.45)
                     if protocol.research_mode == "focused_answer"
@@ -1992,6 +2202,16 @@ class ResearchPipeline:
                         else "contextual"
                     ),
                 )
+            document.candidate.metadata.setdefault(
+                "research_scope_role",
+                (
+                    SourceScopeRole.PRIMARY_IN_SCOPE.value
+                    if protocol.scope_criteria is None
+                    or self.settings.testing
+                    or document.candidate.metadata.get("sentinel_required")
+                    else SourceScopeRole.NEAR_SCOPE.value
+                ),
+            )
             snapshot = document.raw_content or document.content
             if snapshot and document.content_hash:
                 extension = {
@@ -2259,6 +2479,29 @@ class ResearchPipeline:
         passages = await self.repo.list_passages(
             state["run_id"], None if recovered else version_ids
         )
+        scope_filtered = 0
+        if protocol.scope_criteria is not None:
+            source_versions = await self.repo.list_source_versions(state["run_id"])
+            roles_by_version = {
+                version.id: str(
+                    (source.metadata_json or {}).get("research_scope_role") or ""
+                )
+                for source, version in source_versions
+            }
+            # Runs created before v0.23.0 have no role metadata. Do not erase their corpus
+            # during an explicit replay; new runs always have roles by this stage.
+            if any(roles_by_version.values()):
+                allowed_roles = {
+                    SourceScopeRole.PRIMARY_IN_SCOPE.value,
+                    SourceScopeRole.SUPPORTING_BENCHMARK.value,
+                }
+                retained = [
+                    passage
+                    for passage in passages
+                    if roles_by_version.get(passage.source_version_id) in allowed_roles
+                ]
+                scope_filtered = len(passages) - len(retained)
+                passages = retained
         questions = list(
             dict.fromkeys(
                 [
@@ -2288,7 +2531,9 @@ class ResearchPipeline:
             questions,
             query_embeddings,
             per_question=self.settings.passages_per_question,
-        )[:16]
+            max_total=self.settings.max_selected_passages,
+            max_per_source=self.settings.max_passages_per_source,
+        )
         await self.repo.save_passages(selected)
         await self.repo.event(
             state["run_id"],
@@ -2297,6 +2542,9 @@ class ResearchPipeline:
                 "question_count": len(questions),
                 "candidate_count": len(passages),
                 "selected_count": len(selected),
+                "scope_filtered_count": scope_filtered,
+                "selection_limit": self.settings.max_selected_passages,
+                "source_diversity_limit": self.settings.max_passages_per_source,
                 # Named so a recovered round is visible afterwards. A recovery that nobody can
                 # see is indistinguishable from the silence it was meant to end.
                 "reason": "recovered_run_corpus" if recovered else "new_source_versions",
@@ -2825,16 +3073,7 @@ class ResearchPipeline:
             discovery_observations=discovery_observations,
             quality_diagnostics_active=quality_diagnostics_active,
         )
-        budget_started_at = datetime.fromisoformat(
-            state.get("budget_started_at", datetime.now(timezone.utc).isoformat()).replace(
-                "Z",
-                "+00:00",
-            )
-        )
-        elapsed = max(
-            0.0,
-            (datetime.now(timezone.utc) - budget_started_at).total_seconds() / 60,
-        )
+        elapsed = self._finish_collection_round(state) / 60
         source_budget_hit = (
             protocol.budget.max_sources is not None and len(sources) >= protocol.budget.max_sources
         )

@@ -221,7 +221,7 @@ const planLabels={
   start:'Başlangıç',end:'Bitiş',geography:'Coğrafya',noLimit:'sınır yok',dateWarn:'Bu tarih aralığı sorunun metninden otomatik çıkarıldı; her sorguyu daraltır.',
   llm:'LLM',embedding:'Embedding',vision:'Görsel',contextWindow:'Bağlam penceresi',strategyOrder:'Strateji sırası',parsers:'Parser',parserOverrides:'Parser override',
   delivery:'Teslimat',reportLanguage:'Rapor dili',bundles:'Paketler',note:'Not',stops:'Duraklar',noStops:'yok — onaydan sonra kesintisiz çalışır',
-  duration:'Araştırma süresi (dakika)',
+  duration:'Araştırma süresi (dakika)',scopeCriteria:'Dahil/dışla ölçütleri',requiredFacets:'Zorunlu fasetler',exclusionSignals:'Dışlama işaretleri',nearPolicy:'Yakın eşleşme politikası',supportRoles:'Destekleyici roller',
   queryNote:'Bu dizeler connector servislerine birebir böyle gönderilir.',applied:'Yanıtlarınızdan uygulanan ayarlar'},
  en:{questions:'Questions',queryPlan:'Query plan',sourceSelection:'Source selection',dateScope:'Date scope',limits:'Budget and effective limits',models:'Models',acquisition:'Acquisition and parsing',deliverables:'Deliverables',checkpoints:'Remaining checkpoints',strategy:'Strategy note',feedback:'Your earlier feedback',revision:'revision',researchWording:'Research wording (English)',
   branchCols:['Branch','Query','Family','Result limit'],limitCols:['Limit','Value','Binding','Note'],yes:'yes',no:'no',
@@ -229,11 +229,11 @@ const planLabels={
   start:'Start',end:'End',geography:'Geography',noLimit:'no limit',dateWarn:'This date window was inferred from the question text; it narrows every query.',
   llm:'LLM',embedding:'Embedding',vision:'Vision',contextWindow:'Context window',strategyOrder:'Strategy order',parsers:'Parsers',parserOverrides:'Parser overrides',
   delivery:'Delivery',reportLanguage:'Report language',bundles:'Bundles',note:'Note',stops:'Stops',noStops:'none — runs uninterrupted after approval',
-  duration:'Research duration (minutes)',
+  duration:'Research duration (minutes)',scopeCriteria:'Inclusion/exclusion criteria',requiredFacets:'Required facets',exclusionSignals:'Exclusion signals',nearPolicy:'Near-match policy',supportRoles:'Supporting roles',
   queryNote:'These strings go to the connectors exactly as they are.',applied:'Settings applied from your answers'}};
 const planText=plan=>planLabels[plan&&plan.display_language==='en'?'en':'tr'];
 // The approval document: what the run will actually do, in the order a reader needs it.
-function planView(plan){const t=planText(plan),wrap=h('div','plan-view'),q=plan.questions||{},scope=plan.date_scope||{},sel=plan.source_selection||{},models=plan.models||{},acq=plan.acquisition||{},out=plan.deliverables||{};
+function planView(plan){const t=planText(plan),wrap=h('div','plan-view'),q=plan.questions||{},scope=plan.date_scope||{},criteria=plan.scope_criteria||{},sel=plan.source_selection||{},models=plan.models||{},acq=plan.acquisition||{},out=plan.deliverables||{};
 // The reader's own wording leads; the English the run actually uses stays visible under it
 // so a wrong translation can still be caught here.
 const lead=q.translated&&q.original?q.original:q.primary;
@@ -243,6 +243,7 @@ const subs=(q.sub_questions_display&&q.sub_questions_display.length?q.sub_questi
 const branches=plan.query_plan||[];if(branches.length){const box=h('div','table-wrap'),table=h('table'),thead=h('thead'),hr=h('tr');for(const x of t.branchCols)hr.append(h('th','',x));thead.append(hr);const tbody=h('tbody');for(const row of branches){const tr=h('tr');tr.append(textCell(row.branch_id),textCell(row.query),textCell(row.required_family||'—'),textCell(row.result_limit??'—'));tbody.append(tr)}table.append(thead,tbody);box.append(table);const block=planBlock(t.queryPlan,box);block.append(h('div','plan-note',t.queryNote));wrap.append(block)}
 wrap.append(planBlock(t.sourceSelection,planPairs([[t.profile,sel.profile],[t.families,(sel.included_families||[]).join(', ')],[t.excluded,(sel.excluded_connectors||[]).join(', ')],[t.required,(sel.required_connectors||[]).join(', ')],[t.citationDepth,sel.citation_depth]])));
 const dates=h('div');dates.append(planPairs([[t.start,scope.start_date||t.noLimit],[t.end,scope.end_date||t.noLimit],[t.geography,(scope.geography||[]).join(', ')]]));if(scope.inferred_from_question)dates.append(h('div','plan-warn',t.dateWarn));wrap.append(planBlock(t.dateScope,dates));
+const facets=criteria.required_facets||[];if(facets.length){const facetText=facets.map(row=>`${row.name}: ${(row.accepted_values||[]).join(' / ')}`).join(' · ');wrap.append(planBlock(t.scopeCriteria,planPairs([[t.requiredFacets,facetText],[t.exclusionSignals,(criteria.exclusion_signals||[]).join(', ')],[t.supportRoles,(criteria.supporting_roles||[]).join(', ')],[t.nearPolicy,criteria.near_match_policy||'separate']])))}
 // The scoping answers that became protocol fields. Shown apart from the rest because this
 // is the part the run has no choice about; the others only reach the prompts.
 const applied=plan.applied_settings||[];if(applied.length)wrap.append(planBlock(t.applied,planPairs(applied.map(row=>[row.label,row.detail]))));

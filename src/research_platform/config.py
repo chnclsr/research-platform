@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     passage_target_tokens: int = Field(700, ge=200, le=1800)
     passage_overlap_tokens: int = Field(100, ge=0, le=400)
     passages_per_question: int = Field(8, ge=1, le=30)
+    max_selected_passages: int = Field(48, ge=8, le=200)
+    max_passages_per_source: int = Field(2, ge=1, le=10)
     frontier_max_links_per_document: int = Field(50, ge=0, le=500)
     frontier_max_depth: int = Field(2, ge=0, le=5)
     local_corpus_results: int = Field(8, ge=0, le=50)

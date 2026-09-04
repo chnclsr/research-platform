@@ -160,6 +160,28 @@ async def test_arxiv_records_the_query_the_provider_executed():
 
 
 @pytest.mark.asyncio
+async def test_arxiv_sends_precompiled_facet_groups_without_rewriting_them():
+    compiled = (
+        '(all:chest OR all:thorax) AND (all:CT OR all:"computed tomography") '
+        'AND (all:3D OR all:volumetric) AND all:"radiology report generation"'
+    )
+    sent = {}
+
+    async def handler(request):
+        sent["query"] = request.url.params["search_query"]
+        return httpx.Response(
+            200,
+            request=request,
+            text=paper_feed(f"{sent['query']}&start=0&max_results=5"),
+        )
+
+    rows = await run_search(handler, query=compiled)
+
+    assert sent["query"] == compiled
+    assert rows[0].metadata["arxiv_query_rewritten"] is False
+
+
+@pytest.mark.asyncio
 async def test_arxiv_flags_a_silently_rewritten_field_prefix():
     """An unknown prefix is rewritten to `all:` with no error -- results still stand.
 

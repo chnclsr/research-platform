@@ -13,7 +13,12 @@ import httpx
 
 from .capacity import model_lease
 from .config import PREPARATION_PROVIDERS, Settings
-from .schemas import AcquiredDocument, ExtractedClaim
+from .schemas import (
+    AcquiredDocument,
+    ExtractedClaim,
+    ResearchScopeCriteria,
+    ScopeFacet,
+)
 
 # Statuses worth trying again -- on this provider if the wait is short, on the next one
 # otherwise. Everything else is the request's own fault and will fail identically anywhere.
@@ -743,9 +748,16 @@ async def decompose(
     question: str,
     supplied: list[str],
     guidance: list[str] | None = None,
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], ResearchScopeCriteria | None]:
+    """Decompose the question and make its admission boundary explicit.
+
+    Scope criteria ride on the existing preparation request so approval gains a real
+    machine-readable contract without spending another external-provider call. Supplied
+    sub-questions retain the old zero-call path and receive only conservative, literal
+    criteria inferred from wording the caller actually supplied.
+    """
     if supplied:
-        return supplied, []
+        return supplied, [], _infer_literal_scope(question, guidance or [])
     steering = (
         "\nUSER_GUIDANCE (narrow the decomposition to this; do not turn it into "
         f"questions of its own):\n{json.dumps(guidance, ensure_ascii=False)}"
@@ -753,11 +765,91 @@ async def decompose(
         else ""
     )
     data = await llm.complete_json(
-        "Return JSON with sub_questions (3-8 strings) and concepts (strings). Write them in "
-        "English: they become search queries and are matched against source text. No prose.",
+        "Return JSON with sub_questions (3-8 strings), concepts (strings), and "
+        "scope_criteria. Write sub_questions and concepts in English: they become search "
+        "queries and are matched against source text. scope_criteria must contain "
+        "required_facets (objects with snake_case name, accepted_values, description), "
+        "exclusion_signals, supporting_roles, and near_match_policy='separate'. Each facet "
+        "must be an independently mandatory boundary explicitly stated by QUESTION or "
+        "USER_GUIDANCE; synonyms belong together in accepted_values. Do not turn optional "
+        "analysis angles into mandatory source criteria. No prose.",
         f"QUESTION:\n{question}{steering}",
     )
-    return list(data.get("sub_questions", [])) or [question], list(data.get("concepts", []))
+    concepts = list(data.get("concepts", []))
+    criteria: ResearchScopeCriteria | None = None
+    try:
+        raw_criteria = data.get("scope_criteria")
+        if raw_criteria:
+            criteria = ResearchScopeCriteria.model_validate(raw_criteria)
+    except (TypeError, ValueError):
+        criteria = None
+    if criteria is None or not criteria.required_facets:
+        criteria = _infer_literal_scope(question, [*(guidance or []), *concepts])
+    return list(data.get("sub_questions", [])) or [question], concepts, criteria
+
+
+def _infer_literal_scope(
+    question: str,
+    guidance: list[str],
+) -> ResearchScopeCriteria | None:
+    """Recover only unmistakable boundaries when preparation omits the new field.
+
+    This is intentionally small. It does not guess a population or study design; doing so
+    after the user approved a broad question would be a hidden scope change. The aliases
+    below cover the concrete chest-CT/report-generation failure that motivated v0.23.0.
+    """
+    text = " ".join([question, *guidance]).casefold()
+    facets: list[ScopeFacet] = []
+    exclusions: list[str] = []
+    if re.search(r"\b(chest|thorax|thoracic|göğüs|gogus|toraks|lung|pulmonary)\b", text):
+        facets.append(
+            ScopeFacet(
+                name="anatomy",
+                accepted_values=["chest", "thorax", "thoracic", "lung", "pulmonary"],
+                description="The imaged anatomy is the chest or thorax.",
+            )
+        )
+    if re.search(r"\b(ct|computed tomography|bt|bilgisayarlı tomografi)\b", text):
+        facets.append(
+            ScopeFacet(
+                name="modality",
+                accepted_values=["CT", "computed tomography", "BT"],
+                description="Computed tomography is the image modality.",
+            )
+        )
+    if re.search(r"\b(3d|three[- ]dimensional|volumetric|volume|aksiyel|axial)\b", text):
+        facets.append(
+            ScopeFacet(
+                name="input_form",
+                accepted_values=["3D", "volumetric", "volume", "axial stack"],
+                description="The model consumes an axial stack or a volumetric 3D input.",
+            )
+        )
+        exclusions.extend(["2D-only input", "single-slice input"])
+    if re.search(
+        r"\b(report generation|generate reports?|radiology report|rapor (?:üret|yaz)|"
+        r"raporu (?:üret|yaz))",
+        text,
+    ):
+        facets.append(
+            ScopeFacet(
+                name="task",
+                accepted_values=[
+                    "radiology report generation",
+                    "automated report generation",
+                    "report writing",
+                ],
+                description="The model generates a radiology report from the image input.",
+            )
+        )
+    if not facets:
+        return None
+    if any(facet.name == "modality" for facet in facets):
+        exclusions.append("PET/CT unless CT-only image input is evaluated separately")
+    return ResearchScopeCriteria(
+        required_facets=facets,
+        exclusion_signals=list(dict.fromkeys(exclusions)),
+    )
 
 
 async def extract_claims(

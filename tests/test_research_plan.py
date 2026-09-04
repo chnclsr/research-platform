@@ -159,6 +159,36 @@ def test_sub_question_display_copies_never_replace_the_operational_list():
     assert plan["questions"]["sub_questions_display"] == ["Hangi veri setleri kullanılıyor?"]
 
 
+def test_plan_exposes_scope_contract_and_stable_sub_question_text_roles():
+    research_protocol = protocol(
+        sub_questions=["Which datasets are used?"],
+        sub_question_report_titles=["Hangi veri setleri kullanılıyor?"],
+        scope_criteria={
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest", "thorax"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+            ],
+            "exclusion_signals": ["2D-only input"],
+            "near_match_policy": "separate",
+        },
+    )
+
+    plan = plan_for(
+        research_protocol,
+        sub_questions=research_protocol.sub_questions,
+    )
+
+    assert plan["scope_criteria"]["near_match_policy"] == "separate"
+    assert plan["questions"]["sub_question_records"] == [
+        {
+            "id": "SQ01",
+            "search_text": "Which datasets are used?",
+            "evidence_match_text": "Which datasets are used?",
+            "report_title": "Hangi veri setleri kullanılıyor?",
+        }
+    ]
+
+
 def test_the_strategy_prompt_names_the_language_instead_of_burying_it():
     """It used to pass {"language": "tr"} inside JSON full of English plan content, and the
     model mirrored the content."""

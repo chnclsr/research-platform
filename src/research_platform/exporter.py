@@ -7,14 +7,14 @@ import json
 import re
 import zipfile
 from collections import Counter
-from dataclasses import replace
 from typing import Any
 
 import yaml
 
-from .claim_localization import localize_claim_texts, sweep_foreign_prose
+from .claim_localization import localize_claim_texts
 from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
+from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
 from .report_synthesis import SynthesisPackage, build_synthesis_package
 from .repository import Repository
@@ -236,46 +236,31 @@ _SWEPT_SECTION_FIELDS = ("synthesis", "consensus", "disagreements", "implication
 async def sweep_synthesis_package(
     llm: LLMProvider, package: SynthesisPackage, language: str
 ) -> tuple[SynthesisPackage, dict[str, Any]]:
-    """Put every reader-facing string in the package through the language sweep.
-
-    The package rather than the strings derived from it: `build_word_report` renders
-    `package.sections` directly, so sweeping only `executive_summary` / `narrative` /
-    `uncertainty` corrected the markdown and left the .docx showing the pre-sweep prose.
-    """
+    """Diagnose language drift without replacing any reader-facing model output."""
     prose = {
         "executive_summary": package.executive_summary,
         "cross_study_assessment": package.cross_study_assessment,
         "conclusion": package.conclusion,
         "uncertainty": package.uncertainty,
     }
-    # No colons in these keys. `sweep_foreign_prose` builds its item ids as `{key}:{index}`
-    # and lists them to the model as "- {id}: {text}", so a key carrying its own colons
-    # leaves the model no way to tell where the id stops -- it answers with a truncated id
-    # and every translation is discarded as `unknown_id`.
     for index, section in enumerate(package.sections):
         for name in _SWEPT_SECTION_FIELDS:
             prose[f"section_{index}_{name}"] = getattr(section, name)
-    swept, diagnostics = await sweep_foreign_prose(llm, prose, language)
-    return (
-        replace(
-            package,
-            executive_summary=swept["executive_summary"],
-            cross_study_assessment=swept["cross_study_assessment"],
-            conclusion=swept["conclusion"],
-            uncertainty=swept["uncertainty"],
-            sections=[
-                replace(
-                    section,
-                    **{
-                        name: swept[f"section_{index}_{name}"]
-                        for name in _SWEPT_SECTION_FIELDS
-                    },
-                )
-                for index, section in enumerate(package.sections)
-            ],
-        ),
-        diagnostics,
-    )
+    mismatches = [
+        key
+        for key, value in prose.items()
+        if value and (
+            not language_matches(value, language)
+            or bool(foreign_sentences(value, language))
+        )
+    ]
+    return package, {
+        "mode": "diagnostic_only",
+        "checked": len(prose),
+        "mismatches": mismatches,
+        "rewritten": 0,
+        "preserved": len(prose),
+    }
 
 
 async def build_exports(
@@ -335,8 +320,9 @@ async def build_exports(
         sources=sources,
         reportable_claims=[] if protocol.output_mode == "raw" else ordered_reportable,
         evidence_by_claim=evidence_by_claim,
-        # Sub-questions become section headings in the report, so these are printed text.
-        sub_questions=protocol.sub_questions_for_report(),
+        # Matching stays in research-language English; the paired titles are display-only.
+        sub_questions=protocol.sub_questions,
+        sub_question_titles=protocol.sub_questions_for_report(),
         claim_texts=claim_texts,
         display_question=protocol.question_for_report(),
         coverage=coverage.model_dump(),
@@ -346,6 +332,8 @@ async def build_exports(
         "synthesis_generation",
         {
             "generated_by_llm": synthesis_package.generated_by_llm,
+            "generation_status": synthesis_package.generation_status,
+            "validation_warnings": synthesis_package.validation_warnings,
             "layers": synthesis_package.generation_diagnostics,
             "report_mode": synthesis_package.report_mode,
             "answerability_status": synthesis_package.answerability_status,
@@ -383,11 +371,8 @@ async def build_exports(
             ),
         }
     else:
-        # Swept before the documents are built, because there is no .docx to take apart
-        # afterwards. The sweep covers the package itself rather than the three strings
-        # rendered from it: `build_word_report` renders `synthesis_package.sections`
-        # directly, so sweeping only the derived strings corrected the markdown and left
-        # the Word report showing the pre-sweep prose.
+        # v0.23.0 keeps this hook as a diagnostic surface only. It must return the exact
+        # package it received even when the prose is in the wrong language.
         synthesis_package, sweep_diagnostics = await sweep_synthesis_package(
             llm, synthesis_package, protocol.report_language
         )
@@ -439,6 +424,7 @@ async def build_exports(
         metadata = source.metadata_json or {}
         linked = evidence_by_source.get(source.id, [])
         tier = metadata.get("literature_relevance_tier", "direct")
+        scope_role = metadata.get("research_scope_role", "primary_in_scope")
         published = (
             metadata.get("published_at")
             or metadata.get("publication_year")
@@ -484,7 +470,8 @@ async def build_exports(
         return (
             f"### {index}. [{source.title}]({source.url})\n\n"
             f"- Kaynak ailesi: `{source.family}` · Connector: `{source.connector_id}`\n"
-            f"- Literatür rolü: `{tier}` · Yayın tarihi: `{published}` · Tür: `{publication_type}`\n"
+            f"- Literatür rolü: `{tier}` · Kapsam rolü: `{scope_role}` · "
+            f"Yayın tarihi: `{published}` · Tür: `{publication_type}`\n"
             f"- Kalıcı kimlik: `{source.persistent_id or 'yok'}`\n"
             f"- Discovery relevance: `{float(metadata.get('relevance_score', 0.0)):.2f}` · "
             f"İçerik relevance: `{float(metadata.get('content_relevance_score', 0.0)):.2f}`\n\n"
@@ -527,11 +514,49 @@ async def build_exports(
         if synthesis.get("report")
         else ""
     )
+    warning_codes = sorted(
+        {
+            warning
+            for warnings in synthesis_package.validation_warnings.values()
+            for warning in warnings
+        }
+    )
+    validation_note = (
+        (
+            "> ⚠ LLM metni doğrulama uyarılarıyla birlikte özgün biçimde korunmuştur: "
+            if language_is_turkish
+            else "> ⚠ The original LLM text is preserved with validation warnings: "
+        )
+        + ", ".join(warning_codes)
+        + "\n\n"
+        if warning_codes
+        else ""
+    )
+    near_scope_sources = [
+        source
+        for source in sources
+        if (source.metadata_json or {}).get("research_scope_role")
+        in {"near_scope", "excluded"}
+    ]
+    near_scope_block = ""
+    if near_scope_sources:
+        heading = (
+            "## Yakın ama kapsam dışı çalışmalar"
+            if language_is_turkish
+            else "## Near-scope but excluded studies"
+        )
+        rows = "\n".join(
+            f"- [{source.title}]({source.url}) — "
+            f"`{(source.metadata_json or {}).get('research_scope_role')}`"
+            for source in near_scope_sources
+        )
+        near_scope_block = f"{heading}\n\n{rows}\n\n"
     report_md = (
         f"# {protocol.title}\n\n"
         f"{corpus_note}"
         f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
-        f"## {summary_heading}\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"{near_scope_block}"
+        f"## {summary_heading}\n\n{validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{thematic_block}"
         f"## {labels['uncertainty']}\n\n"
         f"{_markdown(synthesis.get('uncertainty'))}\n\n"
@@ -543,7 +568,7 @@ async def build_exports(
     executive_md = (
         f"# {summary_heading}\n\n"
         f"{corpus_note}"
-        f"{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"{validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{labels['summary_note']}\n"
     )
 
@@ -626,7 +651,7 @@ async def build_exports(
         _csv_bytes(
             [
                 "source_id", "family", "connector", "title", "url", "persistent_id",
-                "literature_role", "published_at", "discovery_relevance",
+                "literature_role", "scope_role", "published_at", "discovery_relevance",
                 "content_relevance", "evidence_claims", "reportable_claims",
             ],
             [
@@ -638,6 +663,7 @@ async def build_exports(
                     s.url,
                     s.persistent_id,
                     (s.metadata_json or {}).get("literature_relevance_tier", "direct"),
+                    (s.metadata_json or {}).get("research_scope_role", "primary_in_scope"),
                     (s.metadata_json or {}).get("published_at"),
                     (s.metadata_json or {}).get("relevance_score", 0),
                     (s.metadata_json or {}).get("content_relevance_score", 0),
@@ -704,6 +730,8 @@ async def build_exports(
         "coverage": coverage.model_dump(),
         "synthesis": {
             "generated_by_llm": synthesis_package.generated_by_llm,
+            "generation_status": synthesis_package.generation_status,
+            "validation_warnings": synthesis_package.validation_warnings,
             "layers": synthesis_package.generation_diagnostics,
             "report_mode": synthesis_package.report_mode,
             "answerability_status": synthesis_package.answerability_status,

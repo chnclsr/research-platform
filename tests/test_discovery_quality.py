@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from research_platform.discovery_quality import (
-    estimated_completeness, relation_to_candidate, sentinel_recall,
+    estimated_completeness,
+    relation_to_candidate,
+    sentinel_recall,
 )
 from research_platform.query_compiler import compile_provider_query
-from research_platform.relevance import classify_candidate_admission, topic_terms
 from research_platform.recovery import select_mission_balanced_candidates
+from research_platform.relevance import classify_candidate_admission, topic_terms
 from research_platform.schemas import (
-    ConnectorCandidate, ResearchProtocol, SearchMission, SentinelSource, SourceFamily,
+    ConnectorCandidate,
+    ResearchProtocol,
+    SearchMission,
+    SentinelSource,
+    SourceFamily,
 )
 
 
@@ -68,6 +74,38 @@ def test_literature_query_branch_inherits_primary_subject_context():
     assert "radiology" in compiled_lower
     assert "multimodal" in compiled_lower
     assert "prospective" in compiled_lower
+
+
+def test_arxiv_query_preserves_every_approved_chest_ct_facet_on_each_branch():
+    research_protocol = ResearchProtocol(
+        title="Volumetric chest CT report generation",
+        primary_question="Which models generate radiology reports from volumetric chest CT?",
+        sub_questions=["Which evaluation metrics are used?"],
+        scope_criteria={
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest", "thorax"]},
+                {"name": "modality", "accepted_values": ["CT", "computed tomography"]},
+                {"name": "input_form", "accepted_values": ["3D", "volumetric"]},
+                {
+                    "name": "task",
+                    "accepted_values": ["radiology report generation", "report writing"],
+                },
+            ],
+            "near_match_policy": "separate",
+        },
+        connectors={"profile": "custom", "included_families": ["academic"]},
+        budget={"max_wall_minutes": 30},
+    )
+
+    for branch in [
+        research_protocol.primary_question,
+        research_protocol.sub_questions[0],
+    ]:
+        compiled = compile_provider_query("arxiv", branch, research_protocol)
+        assert "all:chest OR all:thorax" in compiled
+        assert 'all:CT OR all:"computed tomography"' in compiled
+        assert "all:3D OR all:volumetric" in compiled
+        assert 'all:"radiology report generation" OR all:"report writing"' in compiled
 
 
 def test_low_metadata_result_is_reserved_while_injection_is_hard_rejected():

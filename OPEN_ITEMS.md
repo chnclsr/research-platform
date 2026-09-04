@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-09-03`
+Son güncelleme: `2026-09-04`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -42,10 +42,6 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 28 | Altı sabit probe stratejisi hâlâ duruyor | İki kod yolu birlikte bakılıyor | Düşük |
 | 29 | Blueprint arşivi yok | Probe deneyimi koşular arasında birikmiyor | Bekliyor |
 | 30 | İddia çevirisinde sayı sırası: 8/31 iddia İngilizce kalıyor | Türkçe raporda İngilizce bulgu başlıkları | Orta |
-| 31 | Yanıtlanabilirlik yalnız `max(question_relevance)` ile karar veriyor | Tek yüksek iddia kapıyı açar, dağınık kanıt kapatır | Orta |
-| 32 | Bozuk kaynak etiketi (`S1-3`) atıf temizleyicisinden kaçıyor | Okuyucu hiçbir yere gitmeyen atıf görüyor | **Yüksek** |
-| 33 | Sentez metnine iç defter dili sızıyor | Rapor kanıt yerine kendi girdisini anlatıyor | Orta |
-| 34 | Anahtar kelime satırı `qualified` iddia olarak kabul edilmiş | Rapor gövdesinde kaynak diye alıntılanıyor | Orta |
 | 35 | Free-threaded Docling production pinleri `cp314t` zincirinde engelli | Kabul kriteri passed değil, upstream wheel bekliyor | Belgelendi |
 
 ---
@@ -634,90 +630,6 @@ all hospitalized patients (6,971 of 38,455)`). Sıra kontrolü yalnız kaynak me
 Çalışacak tek yol bu görünüyor. Uygulanırsa yönlü ifade listesi Türkçe tarafta da
 eksiksiz olmalı; eksik bir kelime, gevşetmenin tam da korumak istediği durumda devreye
 girmesi demektir.
-
-## 31. Yanıtlanabilirlik tek bir skora dayanıyor
-
-**Durum:** `build_synthesis_package` kompakt bir raporu "yetersiz" ilan ederken yalnız
-`max(question_relevance)` değerini `_DIRECT_ANSWER_RELEVANCE_THRESHOLD = 0.35` ile
-karşılaştırıyor (`src/research_platform/report_synthesis.py`). Tek bir ölçüt, tek bir
-iddiaya dayanıyor.
-
-**Neden yetersiz.** İki yönde de yanılıyor. Soruya çok yakın **tek** bir iddia, geri kalan
-kanıt tamamen dağınık olsa bile kapıyı açıyor. Buna karşılık her biri `0.30` civarında
-gezinen, farklı kaynaklardan gelen ve alt soruların tümünü kapsayan on iddia — birlikte
-soruyu gerçekten yanıtlayan bir küme — kapıya takılıyor.
-
-**Yapılacak.** Karar üç sinyalin birleşimine taşınmalı:
-
-- eşiği geçen **ilgili iddia sayısı** (tek iddia yeterli sayılmamalı),
-- bu iddialara **katkı sağlayan ayrı kaynak sayısı** (`_contributing_sources` hazır),
-- **araştırma alt amaçlarının kapsanma oranı** — `sub_questions` başına en az bir ilgili
-  iddia düşüp düşmediği; `_plan_themes` bu eşleştirmeyi zaten kuruyor, aynı eşleştirme
-  yeniden kullanılabilir.
-
-Eşikler ölçümle belirlenmeli; şimdilik tek skor korunuyor. Bu iş, v0.20.1'deki kompakt
-çöküş düzeltmesinin kapsamı dışında bırakıldı — o düzeltme rapor **görünürlüğünü** onarır,
-bu madde yanıtlanabilirlik **kararının kalitesini** ilgilendirir.
-
-## 32. Bozuk kaynak etiketi atıf temizleyicisinden kaçıyor
-
-**Durum:** `_TOKEN_RE = re.compile(r"\[S\d{2,3}\]")` yalnız köşeli parantezli, iki-üç haneli
-etiketi tanıyor. Model `S1-3` yazdığında bu ne geçerli bir atıf sayılıyor ne de
-temizleniyor; düz metin olarak okuyucuya gidiyor.
-
-**Ölçüm** (`01M1GXGZW8NP674E80YD6NNM27`, 2026-09-02 re-export): 3.2 bölümünde bir kez —
-"Ancak **S1-3**, açık kaynak veya açık ağırlıklar ile ilgili doğrudan bir ifade yapmaz."
-Okuyucu bunu atıf sanıyor, Ek C'de karşılığı yok.
-
-**Neden önemli.** Görünür bir kaynak referansının hiçbir kayda bağlanmaması, ürünün
-provenance vaadini doğrudan deliyor. Diğer sızıntılardan (33. madde) ayrı tutulmasının
-nedeni bu: ötekiler üslup kusuru, bu bir kaynaklandırma kusuru.
-
-**Yapılacak.** İki taraflı: (a) `_clean_cited_text` çıplak `S\d`, `S\d-\d`, `Sxx` benzeri
-kaynak-görünümlü ama geçersiz dizgileri de yakalayıp düşürsün; (b) tema ve overview
-istemleri yalnız `[Sxx]` biçimini kabul ettiğini açıkça söylesin. (a) tek başına yeterli —
-(b) yalnız modelin doğru üretme olasılığını artırır.
-
-## 33. Sentez metnine iç defter dili sızıyor
-
-**Durum:** Model, kanıtı anlatmak yerine kendi görev tanımını ve girdi paketini anlatıyor.
-Aynı koşuda ölçülenler:
-
-| Sızıntı | Nerede |
-|---|---|
-| "İki **yetkilendirilmiş** ifade…" — claim `status` alanı okuyucu metninde | 3.5 |
-| "…'Doğrulama ve genellenebilirlik' **temalı ile** doğrudan ilişkilidir" — model kendi tema atamasını anlatıyor | 3.5 |
-| "**Veri paketinde** … bilgi yoktur" ×2 | 3.3, Sonuç |
-| "**orijinal okuyucu sorusunun** tüm kapsamı" ×2 | Sonuç |
-| `C02`, `C03` cümle öznesi olarak | 3.3 |
-
-`C0x` etiketleri Ek D'de tanımlı, yani okuyucu çözebiliyor; yine de sentez paragrafı iddia
-defteri satırına değil kaynağa atıf yapmalı. Diğerleri karşılıksız.
-
-**Ölçülen bağlam:** aynı koşuda **5 temanın 5'i de** `repair_forced_grounding` taşıyor —
-her temanın ilk taslağı dayanaksız bulunup onarıma gitmiş. Tek seferlik sapma değil;
-istemin sistematik olarak yanlış kaydı ürettiğine işaret ediyor. 33. madde çözülürken bu
-oran ölçüt alınmalı: onarım payı düşmüyorsa düzeltme yüzeyseldir.
-
-**Yapılacak.** Tema isteminde okuyucu kaydını açıkça tanımla (rapor kanıtı anlatır, kendi
-üretim sürecini değil) ve `_clean_cited_text` sonrası deterministik bir kayıt kapısı ekle:
-`status`, tema başlığına atıf, "veri paketi", "okuyucu sorusu" gibi meta ifadeler
-yakalanırsa fallback'e düş. Eşikler ölçülmeden sabitlenmemeli.
-
-## 34. Anahtar kelime satırı iddia olarak kabul edilmiş
-
-**Durum:** Aynı koşunun Ek D kaydında `C03` şu: *"Keywords: artificial intelligence,
-multi…"* — bir makalenin anahtar kelime satırı. Statü `qualified`, güven `0.97`, soru
-ilgisi `0.96`. Rapor gövdesinde (3.3) kaynak gibi alıntılanıyor.
-
-**Neden geçti.** Çıkarım bunu cümle sanıyor, denetim de yüksek soru ilgisi veriyor: anahtar
-kelime satırı sorunun bütün terimlerini birebir taşıdığı için **ilgi skoru yapay olarak
-yükseliyor.** Yani mevcut denetim bu kusuru yakalayamaz, tam tersine ödüllendirir.
-
-**Yapılacak.** Çıkarım aşamasında yapısal öneri kalıplarını (`Keywords:`, `Abstract:`,
-`Index Terms:`, `Highlights:` ve başlık/DOI satırları) iddia adayı olmaktan çıkar. Denetim
-tarafında da fiil içermeyen, yüklemsiz aday bir iddia sayılmamalı. 31. maddeyle birlikte
-bakılmalı: soru ilgisi tek başına kalite ölçüsü değil.
 
 ## 35. Free-threaded Docling production pinleri `cp314t` zincirinde engelli
 

@@ -174,6 +174,39 @@ class ResearchScope(BaseModel):
     dates_chosen: bool = False
 
 
+class SourceScopeRole(StrEnum):
+    """How a retained source may be used in the reader-facing report."""
+
+    PRIMARY_IN_SCOPE = "primary_in_scope"
+    SUPPORTING_BENCHMARK = "supporting_benchmark"
+    NEAR_SCOPE = "near_scope"
+    EXCLUDED = "excluded"
+
+
+class ScopeFacet(BaseModel):
+    """One independently testable boundary of the approved research question."""
+
+    name: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9_]+$")
+    accepted_values: list[str] = Field(min_length=1, max_length=20)
+    description: str = Field("", max_length=500)
+
+
+class ResearchScopeCriteria(BaseModel):
+    """Machine-readable inclusion policy shown at the plan approval gate.
+
+    This is deliberately part of the protocol rather than an unrecorded prompt detail:
+    admission, passage selection and export must all enforce the same decision.
+    """
+
+    required_facets: list[ScopeFacet] = Field(default_factory=list, max_length=12)
+    exclusion_signals: list[str] = Field(default_factory=list, max_length=30)
+    supporting_roles: list[str] = Field(
+        default_factory=lambda: ["benchmark", "dataset", "metric", "evaluation"],
+        max_length=20,
+    )
+    near_match_policy: Literal["separate"] = "separate"
+
+
 class SentinelSource(BaseModel):
     """A known relevant source used to measure whether discovery misses obvious evidence."""
 
@@ -230,6 +263,10 @@ class ResearchProtocol(BaseModel):
     primary_question: str = Field(min_length=5, max_length=5000)
     research_mode: Literal["literature_scan", "focused_answer"] = "literature_scan"
     sub_questions: list[str] = Field(default_factory=list, max_length=30)
+    # Display-only titles produced for the approved report language. Retrieval and evidence
+    # matching continue to use `sub_questions`; this parallel list prevents a translated
+    # heading from becoming a lexical matching key.
+    sub_question_report_titles: list[str] = Field(default_factory=list, max_length=30)
     # Research runs in English: the pipeline translates primary_question and sub_questions
     # in place at VALIDATE_PROTOCOL and keeps what the user typed in these three fields.
     # Recorded rather than recomputed, for the same reason as scope.dates_inferred.
@@ -241,6 +278,10 @@ class ResearchProtocol(BaseModel):
     # and feeds question_for_report(), while this is a preference and outranks it.
     interaction_language: Literal["tr", "en"] | None = None
     scope: ResearchScope = Field(default_factory=ResearchScope)
+    # Optional for wire compatibility with runs created before v0.23.0. New decompositions
+    # populate it before the approval gate; a genuinely empty policy preserves the legacy
+    # broad-admission behaviour instead of silently inventing a boundary after approval.
+    scope_criteria: ResearchScopeCriteria | None = None
     languages: list[str] = Field(default_factory=lambda: ["tr", "en"], min_length=1)
     # Only the two languages the synthesis guard can actually verify: _language_matches()
     # in report_synthesis.py checks Turkish output and passes everything else through, so a
@@ -337,9 +378,34 @@ class ResearchProtocol(BaseModel):
         return self.primary_question
 
     def sub_questions_for_report(self) -> list[str]:
+        if len(self.sub_question_report_titles) == len(self.sub_questions):
+            return list(self.sub_question_report_titles)
         if self.original_sub_questions and self.original_language == self.report_language:
             return list(self.original_sub_questions)
         return list(self.sub_questions)
+
+    def sub_question_records(self) -> list[dict[str, str]]:
+        """Stable identities for search, evidence matching, and report display.
+
+        Older protocols store parallel string lists, so the identity is positional and
+        deterministic instead of requiring a schema migration. The three text roles are
+        deliberately separate: translating a heading must never change retrieval or theme
+        assignment.
+        """
+        display = self.sub_questions_for_report()
+        return [
+            {
+                "id": f"SQ{index:02d}",
+                "search_text": question,
+                "evidence_match_text": question,
+                "report_title": (
+                    display[index - 1]
+                    if index <= len(display) and display[index - 1]
+                    else question
+                ),
+            }
+            for index, question in enumerate(self.sub_questions, 1)
+        ]
 
     def primary_questions(self) -> list[str]:
         """The main question alone, in every language the run holds it in.

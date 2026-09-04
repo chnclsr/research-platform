@@ -123,6 +123,9 @@ def build_research_plan(
         for mission in state.get("missions", [])
     ]
     selection = protocol.connectors
+    display_sub_questions = list(
+        sub_questions_display or protocol.sub_question_report_titles
+    )
     checkpoints = [
         name
         for name in ("planning_questions", "source_review", "outline_review")
@@ -141,7 +144,21 @@ def build_research_plan(
             "translated": bool(protocol.original_question),
             "sub_questions": list(state.get("sub_questions", [])),
             # Reading copy only. The English list above is what becomes search queries.
-            "sub_questions_display": list(sub_questions_display or []),
+            "sub_questions_display": display_sub_questions,
+            "sub_question_records": [
+                {
+                    "id": f"SQ{index:02d}",
+                    "search_text": question,
+                    "evidence_match_text": question,
+                    "report_title": (
+                        display_sub_questions[index - 1]
+                        if index <= len(display_sub_questions)
+                        and display_sub_questions[index - 1]
+                        else question
+                    ),
+                }
+                for index, question in enumerate(state.get("sub_questions", []), 1)
+            ],
             "concepts": list(state.get("concepts", [])),
         },
         "query_plan": missions,
@@ -155,6 +172,11 @@ def build_research_plan(
             "citation_depth": selection.citation_depth,
         },
         "date_scope": _date_scope(protocol),
+        "scope_criteria": (
+            protocol.scope_criteria.model_dump(mode="json")
+            if protocol.scope_criteria is not None
+            else None
+        ),
         "budget": protocol.budget.model_dump(mode="json"),
         "effective_limits": _effective_limits(protocol, language),
         "stopping_criteria": protocol.stopping_criteria.model_dump(mode="json"),
@@ -216,6 +238,7 @@ def _strategy_payload(plan: dict[str, Any]) -> dict[str, Any]:
     """The half of the plan a strategy note may talk about."""
     return {
         "questions": plan.get("questions", {}),
+        "scope_criteria": plan.get("scope_criteria"),
         "query_plan": plan.get("query_plan", []),
         "budget": plan.get("budget", {}),
         "effective_limits": plan.get("effective_limits", []),

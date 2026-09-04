@@ -7,11 +7,11 @@ from typing import Any
 from research_platform.llm import LLMProvider
 from research_platform.report_synthesis import (
     SynthesisSection,
-    _clean_cited_text,
-    _deduplicated_executive_summary,
+    _claim_evidence_block,
     _draft_overview,
     _evidence_packets,
     _merge_sections_into_compact_answer,
+    _reader_text,
     _report_mode,
     _scope_anchors,
     _section_packet_budget,
@@ -181,7 +181,7 @@ async def test_synthesis_package_writes_bounded_thematic_prose() -> None:
     assert "retrieval" not in package.executive_summary.lower()
 
 
-async def test_unknown_source_citations_trigger_grounded_fallback() -> None:
+async def test_unknown_source_citations_preserve_model_text_and_add_warning() -> None:
     source, claim, link = _fixture()
     package = await build_synthesis_package(
         llm=InventingLLM(),
@@ -192,25 +192,155 @@ async def test_unknown_source_citations_trigger_grounded_fallback() -> None:
         evidence_by_claim={claim.id: [(link, source)]},
     )
 
-    assert package.generated_by_llm is False
+    assert package.generated_by_llm is True
+    assert package.generation_status == "complete_with_warnings"
     assert package.report_mode == "compact"
-    assert "[S99]" not in package.executive_summary
-    assert "[S01]" in package.executive_summary
-    assert package.generation_diagnostics["theme_1"] == "fallback:invalid_repair"
+    assert package.executive_summary == "An invented source proves the result [S99]."
+    assert package.generation_diagnostics["theme_1"] == "initial_visible:warnings"
+    assert package.validation_warnings["theme_1"] == [
+        "synthesis:unknown_citations:[S99]",
+        "synthesis:stronger_than_available_evidence",
+    ]
 
 
-def test_flat_string_lists_become_prose_without_python_serialisation() -> None:
-    cleaned = _clean_cited_text(
-        ["İlk tam cümle [S01].", "İkinci tam cümle [S01]."],
-        {"[S01]"},
+class ForeignProseLLM(LLMProvider):
+    async def complete_json(self, system: str, user: str):
+        return {
+            "synthesis": "The original English wording remains unchanged [S01].",
+            "consensus": "A definitive consensus has been proven [S01].",
+            "disagreements": "",
+            "implications": "",
+        }
+
+
+async def test_language_and_strength_warnings_never_rewrite_model_prose() -> None:
+    source, claim, link = _fixture()
+    expected = "The original English wording remains unchanged [S01]."
+
+    package = await build_synthesis_package(
+        llm=ForeignProseLLM(),
+        question="Yöntem ölçülen sonucu iyileştiriyor mu?",
+        language="tr",
+        sources=[source],
+        reportable_claims=[claim],
+        evidence_by_claim={claim.id: [(link, source)]},
     )
 
-    assert cleaned == "İlk tam cümle [S01]. İkinci tam cümle [S01]."
-    assert "['" not in cleaned
-    assert _clean_cited_text({"sentence": "Metin [S01]."}, {"[S01]"}) == ""
+    assert package.executive_summary == expected
+    assert package.sections[0].synthesis == expected
+    assert "synthesis:language_mismatch" in package.validation_warnings["theme_1"]
+    assert "consensus:no_multi_source_moderate_evidence" in package.validation_warnings[
+        "theme_1"
+    ]
+    assert "consensus:stronger_than_available_evidence" in package.validation_warnings[
+        "theme_1"
+    ]
 
 
-async def test_overview_is_budgeted_and_repaired_once() -> None:
+def test_consensus_requires_two_primary_in_scope_sources():
+    claim = SimpleNamespace(
+        id="claim",
+        text="The metric improved.",
+        status="supported",
+        audit={"appraisal": {"grade": "moderate"}},
+    )
+    primary = SimpleNamespace(
+        id="primary",
+        metadata_json={"research_scope_role": "primary_in_scope"},
+    )
+    benchmark = SimpleNamespace(
+        id="benchmark",
+        metadata_json={"research_scope_role": "supporting_benchmark"},
+    )
+    links = {
+        claim.id: [
+            (SimpleNamespace(quote="The metric improved.", direction="supports"), primary),
+            (SimpleNamespace(quote="The metric improved.", direction="supports"), benchmark),
+        ]
+    }
+
+    block, _ = _claim_evidence_block(
+        claim,
+        links,
+        {primary.id: "S01", benchmark.id: "S02"},
+    )
+
+    assert "consensus_eligible=false" in block
+
+
+async def test_supporting_benchmark_only_enters_evaluation_topics():
+    benchmark = SimpleNamespace(
+        id="benchmark",
+        title="Chest CT benchmark",
+        metadata_json={"research_scope_role": "supporting_benchmark"},
+    )
+    method_claim = SimpleNamespace(
+        id="method",
+        text="The architecture generates a full report.",
+        status="qualified",
+        audit={"question_relevance": 0.9},
+    )
+    metric_claim = SimpleNamespace(
+        id="metric",
+        text="The benchmark evaluates reports with the RadGraph metric.",
+        status="qualified",
+        audit={"question_relevance": 0.9},
+    )
+    evidence = {
+        method_claim.id: [
+            (SimpleNamespace(quote=method_claim.text, direction="supports"), benchmark)
+        ],
+        metric_claim.id: [
+            (SimpleNamespace(quote=metric_claim.text, direction="supports"), benchmark)
+        ],
+    }
+
+    package = await build_synthesis_package(
+        llm=SynthesisLLM(),
+        question="How are chest CT reports generated and evaluated?",
+        language="en",
+        sources=[benchmark],
+        reportable_claims=[method_claim, metric_claim],
+        evidence_by_claim=evidence,
+    )
+
+    assert package.quality_diagnostics["scope_eligible_claim_count"] == 1
+    assert package.quality_diagnostics["unique_claim_count"] == 1
+
+
+class CompletelyFailingLLM(LLMProvider):
+    async def complete_json(self, system: str, user: str):
+        raise RuntimeError("provider unavailable")
+
+
+async def test_complete_provider_failure_never_turns_claims_into_narrative():
+    source, claim, link = _fixture()
+
+    package = await build_synthesis_package(
+        llm=CompletelyFailingLLM(),
+        question="Does the method improve the measured outcome?",
+        language="en",
+        sources=[source],
+        reportable_claims=[claim],
+        evidence_by_claim={claim.id: [(link, source)]},
+    )
+
+    assert package.generated_by_llm is False
+    assert package.generation_status == "failed"
+    assert package.executive_summary.startswith("LLM synthesis could not be produced")
+    assert claim.text not in package.executive_summary
+    assert all("fallback:" not in value for value in package.generation_diagnostics.values())
+
+
+def test_reader_text_preserves_strings_character_for_character() -> None:
+    value = "  Eksik atıflı özgün metin [S99].\nİkinci satır.  "
+
+    assert _reader_text(value) == value
+    assert _reader_text(["Metin [S01]."]) == ""
+    assert _reader_text({"sentence": "Metin [S01]."}) == ""
+
+
+async def test_overview_is_budgeted_and_keeps_first_usable_text() -> None:
     llm = OverviewRepairLLM()
     long_sentence = (
         "Çok merkezli kanıt farklı klinik ortamlarda dikkatle doğrulanmalıdır [S01]. "
@@ -228,7 +358,7 @@ async def test_overview_is_budgeted_and_repaired_once() -> None:
         for index in range(5)
     ]
 
-    overview, succeeded, diagnostic = await _draft_overview(
+    overview, succeeded, diagnostic, warnings = await _draft_overview(
         llm,
         question="Kanıt ne gösteriyor?",
         sections=sections,
@@ -237,15 +367,17 @@ async def test_overview_is_budgeted_and_repaired_once() -> None:
     )
 
     assert succeeded is True
-    assert diagnostic == "repair_passed"
-    assert len(llm.requests) == 2
+    assert diagnostic == "initial_visible:warnings"
+    assert len(llm.requests) == 1
     assert len(llm.requests[0][1]) < 12000
     assert "THEME: Tema 4" in llm.requests[0][1]
-    assert "['" not in overview["executive_summary"]
-    assert overview["executive_summary"].endswith("[S01].")
+    assert overview["executive_summary"] == "Geçersiz kaynaklı ilk taslak [S99]."
+    assert warnings["executive_summary"] == [
+        "executive_summary:unknown_citations:[S99]"
+    ]
 
 
-async def test_deterministic_overview_fallback_uses_complete_sentences() -> None:
+async def test_overview_invalid_citation_is_preserved_with_warnings() -> None:
     sentence = "Bulgular farklı merkezlerde yeniden doğrulanmalıdır [S01]."
     sections = [
         SynthesisSection(
@@ -259,7 +391,7 @@ async def test_deterministic_overview_fallback_uses_complete_sentences() -> None
         for index in range(5)
     ]
 
-    overview, succeeded, diagnostic = await _draft_overview(
+    overview, succeeded, diagnostic, warnings = await _draft_overview(
         InvalidOverviewLLM(),
         question="Kanıt ne gösteriyor?",
         sections=sections,
@@ -267,17 +399,16 @@ async def test_deterministic_overview_fallback_uses_complete_sentences() -> None
         turkish=True,
     )
 
-    assert succeeded is False
-    assert diagnostic.startswith("fallback:")
-    assert len(overview["executive_summary"]) <= 2600
-    assert len(overview["cross_study_assessment"]) <= 3500
-    assert len(overview["conclusion"]) <= 2400
-    assert overview["executive_summary"].endswith("[S01].")
-    assert overview["cross_study_assessment"].endswith("[S01].")
-    assert overview["conclusion"].endswith("[S01].")
+    assert succeeded is True
+    assert diagnostic.startswith("initial_visible")
+    assert overview["executive_summary"] == "Uydurma kaynak [S99]."
+    assert warnings["executive_summary"] == [
+        "executive_summary:unknown_citations:[S99]",
+        "executive_summary:language_mismatch",
+    ]
 
 
-async def test_overview_overlap_triggers_one_distinct_role_repair() -> None:
+async def test_overview_overlap_is_diagnostic_and_does_not_rewrite() -> None:
     llm = OverlapRepairLLM()
     sections = [
         SynthesisSection(
@@ -287,7 +418,7 @@ async def test_overview_overlap_triggers_one_distinct_role_repair() -> None:
         )
     ]
 
-    overview, succeeded, diagnostic = await _draft_overview(
+    overview, succeeded, diagnostic, warnings = await _draft_overview(
         llm,
         question="Kanıt ne gösteriyor?",
         sections=sections,
@@ -296,9 +427,10 @@ async def test_overview_overlap_triggers_one_distinct_role_repair() -> None:
     )
 
     assert succeeded is True
-    assert diagnostic == "repair_passed"
-    assert llm.calls == 2
-    assert overview["executive_summary"] != sections[0].synthesis
+    assert diagnostic == "initial_visible:warnings"
+    assert llm.calls == 1
+    assert overview["executive_summary"] == sections[0].synthesis
+    assert warnings["overlap"]
 
 
 class ScopeDriftLLM(LLMProvider):
@@ -392,15 +524,15 @@ async def test_sparse_semantic_claims_choose_one_compact_evidence_summary() -> N
     )
 
     assert package.report_mode == "compact"
-    assert package.answerability_status == "insufficient"
+    assert package.answerability_status == "limited"
     assert package.quality_diagnostics["answerability"] == {
-        "status": "insufficient",
+        "status": "limited",
         "threshold": 0.35,
         "maximum_question_relevance": 0.2,
-        "reason_codes": ["compact_low_question_relevance"],
-        "invalid_repair_layers": [],
+        "in_scope_contributing_sources": 3,
+        "sub_question_coverage": 1.0,
+        "reason_codes": ["low_question_relevance"],
     }
-    assert "insufficient" in package.executive_summary
     assert "Surgery" not in package.executive_summary
     assert package.quality_diagnostics["unique_claim_count"] == 6
     assert len(package.sections) == 1
@@ -413,7 +545,7 @@ async def test_sparse_semantic_claims_choose_one_compact_evidence_summary() -> N
     ]
 
 
-async def test_invalid_repair_is_recorded_but_does_not_define_answerability() -> None:
+async def test_validation_warning_does_not_define_answerability() -> None:
     source, claim, link = _fixture()
     claim.audit = {"question_relevance": 0.20}
 
@@ -426,15 +558,16 @@ async def test_invalid_repair_is_recorded_but_does_not_define_answerability() ->
         evidence_by_claim={claim.id: [(link, source)]},
     )
 
-    assert package.answerability_status == "insufficient"
-    assert package.generation_diagnostics["theme_1"] == "fallback:invalid_repair"
-    assert package.quality_diagnostics["answerability"]["invalid_repair_layers"] == [
-        "theme_1"
+    assert package.answerability_status == "limited"
+    assert package.generation_diagnostics["theme_1"] == "initial_visible:warnings"
+    assert package.quality_diagnostics["answerability"]["reason_codes"] == [
+        "fewer_than_2_in_scope_sources",
+        "low_question_relevance",
     ]
     assert claim.text not in package.executive_summary
 
 
-async def test_relevance_boundary_keeps_a_grounded_compact_fallback() -> None:
+async def test_relevance_boundary_keeps_original_compact_prose() -> None:
     source, claim, link = _fixture()
     claim.audit = {"question_relevance": 0.35}
 
@@ -448,9 +581,9 @@ async def test_relevance_boundary_keeps_a_grounded_compact_fallback() -> None:
     )
 
     assert package.report_mode == "compact"
-    assert package.answerability_status == "answerable"
-    assert package.generation_diagnostics["theme_1"] == "fallback:invalid_repair"
-    assert "[S01]" in package.executive_summary
+    assert package.answerability_status == "limited"
+    assert package.generation_diagnostics["theme_1"] == "initial_visible:warnings"
+    assert "[S99]" in package.executive_summary
 
 
 async def test_standard_report_is_not_suppressed_by_the_compact_answerability_gate() -> None:
@@ -493,11 +626,11 @@ async def test_standard_report_is_not_suppressed_by_the_compact_answerability_ga
     )
 
     assert package.report_mode == "standard"
-    assert package.answerability_status == "answerable"
+    assert package.answerability_status == "limited"
     assert package.quality_diagnostics["answerability"]["maximum_question_relevance"] == 0.2
 
 
-async def test_empty_reportable_corpus_keeps_existing_empty_behavior() -> None:
+async def test_empty_reportable_corpus_is_explicitly_insufficient() -> None:
     package = await build_synthesis_package(
         llm=SynthesisLLM(),
         question="What does the evidence show?",
@@ -508,7 +641,7 @@ async def test_empty_reportable_corpus_keeps_existing_empty_behavior() -> None:
     )
 
     assert package.report_mode == "compact"
-    assert package.answerability_status == "answerable"
+    assert package.answerability_status == "insufficient"
     assert package.executive_summary == ""
 
 
@@ -604,9 +737,7 @@ async def test_overview_overlapping_a_theme_keeps_the_standard_thematic_report()
     assert package.report_mode == "standard"
     assert len(package.sections) >= 2
     assert len({section.title for section in package.sections}) == len(package.sections)
-    assert not prose_overlaps(
-        package.executive_summary, package.sections[0].synthesis
-    )
+    assert prose_overlaps(package.executive_summary, package.sections[0].synthesis)
     assert package.narrative
     for section in package.sections:
         assert section.title in package.narrative
@@ -620,10 +751,8 @@ async def test_overview_overlapping_a_theme_keeps_the_standard_thematic_report()
         "executive_summary_overlaps_theme"
         not in package.quality_diagnostics["mode_reasons"]
     )
-    assert package.generation_diagnostics["executive_summary"] in {
-        "rebuilt_from_theme_leads",
-        "fallback:scoped_pointer",
-    }
+    assert package.generation_diagnostics["overview"].startswith("initial_visible")
+    assert package.validation_warnings.get("overlap")
 
 
 async def test_overview_fallback_does_not_collapse_a_standard_report() -> None:
@@ -636,49 +765,8 @@ async def test_overview_fallback_does_not_collapse_a_standard_report() -> None:
     assert not prose_overlaps(
         package.executive_summary, package.sections[0].synthesis
     )
-    assert package.generation_diagnostics["overview"].startswith("fallback:")
-
-
-def test_repeated_executive_summary_is_rebuilt_without_hiding_themes() -> None:
-    sections = [
-        SynthesisSection(
-            title="Alpha",
-            synthesis="Alpha findings concern design [S01]. Alpha needs replication [S01].",
-            source_ids=["S01"],
-        ),
-        SynthesisSection(
-            title="Beta",
-            synthesis="Beta findings concern performance [S02]. Beta needs validation [S02].",
-            source_ids=["S02"],
-        ),
-    ]
-
-    summary, diagnostic = _deduplicated_executive_summary(
-        sections[0].synthesis, sections, turkish=False
-    )
-
-    assert diagnostic == "rebuilt_from_theme_leads"
-    assert not prose_overlaps(summary, sections[0].synthesis)
-    assert "[S01]" in summary and "[S02]" in summary
-
-
-def test_a_clean_executive_summary_is_left_untouched() -> None:
-    sections = [
-        SynthesisSection(
-            title="Alpha",
-            synthesis="Alpha findings concern design [S01].",
-            source_ids=["S01"],
-        )
-    ]
-
-    summary, diagnostic = _deduplicated_executive_summary(
-        "The evidence answers the question only under stated conditions [S01].",
-        sections,
-        turkish=False,
-    )
-
-    assert diagnostic == "llm"
-    assert summary == "The evidence answers the question only under stated conditions [S01]."
+    assert package.generation_diagnostics["overview"].startswith("unavailable:")
+    assert package.generation_status == "partial"
 
 
 def test_compact_transition_merges_themes_instead_of_hiding_them() -> None:
@@ -832,7 +920,7 @@ async def test_a_rejected_draft_reports_why_it_was_rejected() -> None:
         evidence_by_claim=evidence,
     )
 
-    assert package.generation_diagnostics["theme_1"] == "fallback:invalid_repair"
+    assert package.generation_diagnostics["theme_1"] == "initial_visible:warnings"
 
 
 def _packet_fixture(count: int, *, quote_chars: int = 600):
@@ -1017,18 +1105,17 @@ async def test_every_claim_reaches_the_prompt_across_the_passes() -> None:
     assert sum(row["passes"] for row in quality["theme_coverage"]) == llm.drafts
 
 
-async def test_a_failed_consolidation_keeps_every_pass_rather_than_dropping_them() -> None:
+async def test_invalid_consolidation_citation_is_preserved_with_a_warning() -> None:
     llm = MultiPassLLM(consolidation_valid=False)
 
     package = await _multi_pass_package(llm)
 
     assert llm.consolidations == 1
     assert len(package.sections) == 1
-    assert package.generation_diagnostics["theme_1"].startswith("consolidate_failed")
+    assert package.generation_diagnostics["theme_1"].startswith("consolidated_visible")
     body = package.sections[0].synthesis
-    assert "Pass alpha reports" in body
-    assert "Pass beta reports" in body
-    assert "[S99]" not in body
+    assert body == "An invented source integrates the passes [S99]."
+    assert "synthesis:unknown_citations:[S99]" in package.sections[0].validation_warnings
 
 
 class OnePassFailsLLM(LLMProvider):
@@ -1055,20 +1142,15 @@ class OnePassFailsLLM(LLMProvider):
         return {"synthesis": "An invented source proves the result [S99]."}
 
 
-async def test_a_discarded_pass_is_visible_rather_than_counted_as_covered() -> None:
-    """`claims_shown` counts what reached a prompt, which is not what the reader gets.
-
-    A pass whose draft fails grounding is dropped, so its claims were shown to the model
-    and are still absent from the section. `passes_used` is what makes that difference
-    auditable instead of hiding behind a full `claims_shown`.
-    """
+async def test_a_warned_pass_remains_visible_and_counted_as_used() -> None:
     llm = OnePassFailsLLM()
 
     package = await _multi_pass_package(llm)
 
     row = package.quality_diagnostics["theme_coverage"][0]
     assert row["claims_shown"] == row["claims_total"]
-    assert row["passes"] > row["passes_used"]
+    assert row["passes"] == row["passes_used"]
+    assert "[S99]" in package.sections[0].synthesis
 
 
 def test_claim_block_carries_the_appraisal_to_the_model():

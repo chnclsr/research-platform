@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 
 import pytest
 
-from research_platform.llm import DeterministicProvider, extract_claims
 from research_platform.evidence_quality import evidence_quality_gate, is_non_evidence_section
+from research_platform.llm import DeterministicProvider, extract_claims
 from research_platform.passages import (
-    chunk_document, html_to_markdown, merge_passage_claims, neighbor_context,
+    chunk_document,
+    html_to_markdown,
+    merge_passage_claims,
+    neighbor_context,
     relevant_sentence_claims,
     retrieve_passages,
 )
@@ -66,6 +70,45 @@ def test_dense_signal_can_retrieve_semantic_match_without_lexical_overlap():
         [first, second], ["unmatched query words"], [[1.0, 0.0]], per_question=1,
     )
     assert selected[0].id == second.id
+
+
+def test_retrieval_balances_all_question_branches_and_source_diversity():
+    questions = [
+        "architecture model design",
+        "dataset cohort construction",
+        "evaluation metric performance",
+        "clinical workflow integration",
+    ]
+    passages = []
+    for source_index in range(30):
+        for question_index, question in enumerate(questions):
+            text = f"{question} evidence from independent study {source_index}."
+            passages.append(
+                Passage(
+                    source_version_id=f"source-{source_index}",
+                    chunk_index=question_index,
+                    section_path=f"Question {question_index} / Study {source_index}",
+                    start_char=0,
+                    end_char=len(text),
+                    text=text,
+                    token_count=8,
+                    content_hash=hashlib.sha256(
+                        f"{source_index}:{question_index}".encode()
+                    ).hexdigest(),
+                )
+            )
+
+    selected = retrieve_passages(
+        passages,
+        questions,
+        per_question=20,
+        max_total=48,
+        max_per_source=2,
+    )
+
+    assert len(selected) == 48
+    assert all(any(question in passage.matched_questions for passage in selected) for question in questions)
+    assert max(Counter(passage.source_version_id for passage in selected).values()) <= 2
 
 
 @pytest.mark.asyncio
@@ -201,6 +244,24 @@ def test_evidence_gate_rejects_question_title_bibliography_and_source_title_clai
     )
     assert not valid
     assert reason == "source_title_as_claim"
+
+
+def test_evidence_gate_rejects_keyword_and_predicateless_title_lists():
+    valid, reason = evidence_quality_gate(
+        "Keywords: chest CT, report generation, multimodal model",
+        "Keywords: chest CT, report generation, multimodal model",
+        section_path="Abstract",
+    )
+    assert not valid
+    assert reason == "keyword_list"
+
+    valid, reason = evidence_quality_gate(
+        "Chest CT; axial volume; radiology report generation; benchmark dataset",
+        "Chest CT; axial volume; radiology report generation; benchmark dataset",
+        section_path="Highlights",
+    )
+    assert not valid
+    assert reason == "missing_predicate"
 
 
 def test_evidence_gate_accepts_substantive_result_sentence():
