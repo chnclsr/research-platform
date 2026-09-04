@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     semantic_scholar_api_key: str | None = None
     semantic_scholar_rps: float = Field(1.0, gt=0, le=100)
     semantic_scholar_citation_limit: int = Field(20, ge=0, le=500)
+    # arXiv accepts one request every three seconds on a single connection, and penalises
+    # malformed requests harder than valid ones. Capped at 1.0 so no deployment can
+    # configure itself above the provider's own stated limit.
+    arxiv_rps: float = Field(0.33, gt=0, le=1.0)
     zotero_local_url: str = "http://localhost:23119/api"
     zotero_local_enabled: bool = True
     zotero_api_key: str | None = None

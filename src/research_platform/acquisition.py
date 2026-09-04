@@ -6,8 +6,6 @@ import hashlib
 import ipaddress
 import logging
 import socket
-import time
-from collections import defaultdict
 from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
@@ -20,6 +18,7 @@ from .github_repository import (
 )
 from .normalization import canonicalize_url, detect_document_type, detect_language
 from .parsers import ParsedDocument, ParserRegistry, build_parser_registry
+from .rate_limits import shared_domain_limiter
 from .schemas import AcquiredDocument, ConnectorCandidate
 
 logger = logging.getLogger(__name__)
@@ -84,37 +83,6 @@ async def validate_public_url(url: str, allow_private: bool = False) -> None:
     for address in addresses:
         if not address.is_global:
             raise UnsafeUrlError(f"Non-public destination is blocked: {address}")
-
-
-class DomainLimiter:
-    def __init__(self, delay_s: float):
-        self.delay_s = delay_s
-        self.last_access: dict[str, float] = defaultdict(float)
-        self.locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-
-    async def wait(self, url: str) -> None:
-        domain = urlparse(url).hostname or ""
-        async with self.locks[domain]:
-            wait_for = self.delay_s - (time.monotonic() - self.last_access[domain])
-            if wait_for > 0:
-                await asyncio.sleep(wait_for)
-            self.last_access[domain] = time.monotonic()
-
-
-# Politeness is a property of the machine, not of a run. One limiter per AcquisitionService
-# meant that with N runs in flight the same publisher was hit N times faster -- domain_delay_s
-# silently became domain_delay_s / N. The reactive 429 backoff in the connectors is not a
-# substitute: by the time it fires, the requests have already gone out.
-_SHARED_LIMITERS: dict[float, DomainLimiter] = {}
-
-
-def shared_domain_limiter(delay_s: float) -> DomainLimiter:
-    """The process-wide limiter for this delay, created once."""
-    limiter = _SHARED_LIMITERS.get(delay_s)
-    if limiter is None:
-        limiter = DomainLimiter(delay_s)
-        _SHARED_LIMITERS[delay_s] = limiter
-    return limiter
 
 
 class AcquisitionService:

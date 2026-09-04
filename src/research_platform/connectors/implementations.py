@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import html
+import logging
 import re
 import time
 import xml.etree.ElementTree as ET
 from typing import Any
-from .base import CredentialOnlyConnector, SourceConnector
+
+import httpx
+
+from .base import ConnectorQueryError, CredentialOnlyConnector, SourceConnector
+from ..rate_limits import shared_domain_limiter
 from ..relevance import github_repositories, topic_terms
 from ..schemas import ConnectorCandidate, ResearchScope, SourceFamily
 from ..scholarly import normalize_doi, reconstruct_abstract
 from ..temporal import parse_datetime
+
+logger = logging.getLogger(__name__)
 
 
 def _text(value: Any) -> str:
@@ -399,9 +406,86 @@ class CrossrefConnector(SourceConnector):
         return output
 
 
+_ARXIV_API = "https://export.arxiv.org/api/query"
+_ARXIV_NS = {
+    "a": "http://www.w3.org/2005/Atom",
+    "os": "http://a9.com/-/spec/opensearch/1.1/",
+}
+_ARXIV_ECHO_QUERY = re.compile(
+    r"search_query=(.*?)(?:&(?:id_list|start|max_results|sortBy|sortOrder)=|$)"
+)
+
+
+def _arxiv_error_detail(root: ET.Element) -> str | None:
+    """The `<summary>` of arXiv's HTTP-200 error feed, or None for a real feed.
+
+    A malformed parameter is answered with status 200, `totalResults` 1, and a single
+    entry whose `<title>` is exactly "Error". Its `<id>` is a placeholder that fails
+    `HttpUrl` validation, so `candidate()` drops it and the run reports zero results for
+    a query the provider actually rejected.
+    """
+    entries = root.findall("a:entry", _ARXIV_NS)
+    if len(entries) != 1:
+        return None
+    entry = entries[0]
+    if (entry.findtext("a:title", "", _ARXIV_NS) or "").strip() != "Error":
+        return None
+    return (entry.findtext("a:summary", "", _ARXIV_NS) or "unspecified error").strip()
+
+
+def _arxiv_query_echo(root: ET.Element) -> str:
+    """The feed `<title>`, which echoes the whole request as arXiv executed it."""
+    return (root.findtext("a:title", "", _ARXIV_NS) or "").strip()
+
+
+def _arxiv_executed_query(echo: str) -> str:
+    """The `search_query` arXiv actually ran, taken out of the feed title echo."""
+    match = _ARXIV_ECHO_QUERY.search(echo)
+    return match.group(1).strip() if match else ""
+
+
+def _arxiv_comparable(query: str) -> str:
+    """Normalise for comparison: the echo spells spaces as `+` and may re-space terms."""
+    return " ".join(query.replace("+", " ").split())
+
+
 class ArxivConnector(SourceConnector):
     id = "arxiv"
     family = SourceFamily.ACADEMIC
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # arXiv's limit is a budget for the whole machine on a single connection, not a
+        # budget per run. The per-instance lock the other connectors use would give each
+        # concurrent run its own three-second allowance, so this takes the process-wide
+        # limiter and holds the slot across the request rather than only spacing starts.
+        self._limiter = shared_domain_limiter(
+            0.0 if self.settings.testing else 1 / self.settings.arxiv_rps
+        )
+
+    async def _get(self, params: dict[str, Any]) -> httpx.Response:
+        """Paced arXiv fetch. Retries throttling; never retries a rejected query.
+
+        Throttling arrives as HTTP 429 with a bare `Rate exceeded.` body -- 14 bytes, no
+        Atom envelope -- and under sustained throttling the connection is dropped outright.
+        Neither a dropped connection nor a rejected query is retried here: reconnecting
+        into an active throttle sustains it, and a repeated malformed request is what earns
+        a throttle measured in half-hours.
+        """
+        for attempt in range(3):
+            async with self._limiter.hold(_ARXIV_API):
+                response = await self.client.get(_ARXIV_API, params=params)
+            if response.status_code != 429 or attempt == 2:
+                return response
+            retry_after = response.headers.get("Retry-After", "3")
+            try:
+                delay = float(retry_after)
+            except ValueError:
+                delay = 3.0
+            # Floor at the provider's own interval: the 1.0s the other connectors use is
+            # below arXiv's minimum and would retry straight back into the throttle.
+            await asyncio.sleep(min(30.0, max(3.0, delay)))
+        return response
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
         return await self.search_scoped(query, limit)
@@ -431,19 +515,42 @@ class ArxivConnector(SourceConnector):
             search_query = (
                 f"({search_query}) AND submittedDate:[{start_text} TO {end_text}]"
             )
-        response = await self.client.get(
-            "https://export.arxiv.org/api/query",
-            params={
+        response = await self._get(
+            {
                 "search_query": search_query,
                 "start": 0,
                 "max_results": min(limit, 100),
                 "sortBy": "submittedDate",
                 "sortOrder": "descending",
-            },
+            }
         )
         response.raise_for_status()
-        root = ET.fromstring(response.text)
-        ns = {"a": "http://www.w3.org/2005/Atom"}
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            raise ConnectorQueryError(
+                self.id, f"non-XML body ({exc}): {response.text[:120]!r}", query=search_query
+            ) from exc
+        error_detail = _arxiv_error_detail(root)
+        if error_detail is not None:
+            raise ConnectorQueryError(self.id, error_detail, query=search_query)
+        # arXiv rewrites an unknown field prefix to `all:` -- `ti:x` is run as `all:ti:x`
+        # -- and says so only in the feed title, which echoes the query as executed. A
+        # rewritten query still returns usable results, so this is recorded rather than
+        # raised: dropping the results to report the warning would cost more than the
+        # warning is worth. Comparing the executed query against the sent one is the only
+        # way to see it, since the rewrite keeps the original prefix as literal text.
+        echo = _arxiv_query_echo(root)
+        executed = _arxiv_executed_query(echo)
+        rewritten = bool(executed) and _arxiv_comparable(executed) != _arxiv_comparable(
+            search_query
+        )
+        if rewritten:
+            logger.warning(
+                "arxiv executed a different query than requested: sent=%r executed=%r",
+                search_query, echo,
+            )
+        ns = _ARXIV_NS
         output = []
         for entry in root.findall("a:entry", ns):
             url = entry.findtext("a:id", "", ns)
@@ -456,7 +563,12 @@ class ArxivConnector(SourceConnector):
                 authors=[a.findtext("a:name", "", ns) for a in entry.findall("a:author", ns)],
                 publisher="arXiv",
                 published_at=published,
-                metadata={"published": published.isoformat() if published else None, "updated": updated},
+                metadata={
+                    "published": published.isoformat() if published else None,
+                    "updated": updated,
+                    "arxiv_query_echo": echo,
+                    "arxiv_query_rewritten": rewritten,
+                },
             )
             if item:
                 output.append(item)

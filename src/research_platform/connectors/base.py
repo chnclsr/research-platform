@@ -11,6 +11,23 @@ from ..schemas import ConnectorCandidate, ConnectorHealth, ResearchScope, Source
 from ..temporal import publication_datetime
 
 
+class ConnectorQueryError(RuntimeError):
+    """A provider answered, and the answer says the query was wrong.
+
+    Distinct from a transport failure in two ways that matter. It must not be retried --
+    several providers penalise a repeated malformed request harder than a valid one -- and
+    it must reach `connector_errors` rather than being flattened into an empty result list,
+    because a rejected query and a genuine no-match are indistinguishable to the caller
+    once both have become `[]`.
+    """
+
+    def __init__(self, connector_id: str, detail: str, *, query: str = "") -> None:
+        self.connector_id = connector_id
+        self.detail = detail
+        self.query = query
+        super().__init__(f"{connector_id}: {detail}")
+
+
 class SourceConnector(ABC):
     id: str
     family: SourceFamily
