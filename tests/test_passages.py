@@ -101,7 +101,6 @@ def test_retrieval_balances_all_question_branches_and_source_diversity():
     selected = retrieve_passages(
         passages,
         questions,
-        per_question=20,
         max_total=48,
         max_per_source=2,
     )
@@ -109,6 +108,11 @@ def test_retrieval_balances_all_question_branches_and_source_diversity():
     assert len(selected) == 48
     assert all(any(question in passage.matched_questions for passage in selected) for question in questions)
     assert max(Counter(passage.source_version_id for passage in selected).values()) <= 2
+    selected_origins = Counter(
+        int(passage.section_path.split(" /", 1)[0].removeprefix("Question "))
+        for passage in selected
+    )
+    assert selected_origins == {index: 12 for index in range(len(questions))}
 
 
 @pytest.mark.asyncio
@@ -262,6 +266,18 @@ def test_evidence_gate_rejects_keyword_and_predicateless_title_lists():
     )
     assert not valid
     assert reason == "missing_predicate"
+
+    for heading in (
+        "Three-dimensional chest CT radiology report generation benchmark dataset",
+        "Chest CT automated radiology report generation architecture and evaluation",
+    ):
+        valid, reason = evidence_quality_gate(
+            heading,
+            heading,
+            section_path="Highlights",
+        )
+        assert not valid
+        assert reason == "missing_predicate"
 
 
 def test_evidence_gate_accepts_substantive_result_sentence():

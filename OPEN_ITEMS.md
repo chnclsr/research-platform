@@ -43,6 +43,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 29 | Blueprint arşivi yok | Probe deneyimi koşular arasında birikmiyor | Bekliyor |
 | 30 | İddia çevirisinde sayı sırası: 8/31 iddia İngilizce kalıyor | Türkçe raporda İngilizce bulgu başlıkları | Orta |
 | 35 | Free-threaded Docling production pinleri `cp314t` zincirinde engelli | Kabul kriteri passed değil, upstream wheel bekliyor | Belgelendi |
+| 39 | Duraklatılan koşunun bekleme süresi toplama bütçesine yazılıyor | Preempt edilen koşu bütçesini uyurken tüketir | Orta |
 
 ---
 
@@ -707,6 +708,26 @@ sorunu **o yol için** çözdü; genel XML yolu eski davranışta.
 **Yapılacak:** Düzeltme ancak bir yeniden ayrıştırma/yeniden hash'leme göçüyle birlikte
 anlamlı. Hangi kaynakların gerçekten karma içerikli XML olduğunu ölçmek ilk adım; sayı
 küçükse hedefli yeniden edinme, büyükse göç planı gerekir.
+
+## 39. Duraklatılan koşunun bekleme süresi toplama bütçesine yazılıyor
+
+`collection_round_started_at` checkpoint'te bilinçli olarak saklanıyor — amaç, worker
+yeniden başladığında yarım kalan toplama turunun sıfırlanmaması (`PipelineState` üzerindeki
+yorum bunu açıkça söylüyor). v0.23.1'e kadar sayaç zaten hiç birikmediği için bu kararın
+ters etkisi görünmüyordu.
+
+Sayaç artık işlediğine göre: `ACQUIRE` sırasında preempt edilen ya da duraklatılan bir koşu
+resume'da işaretçiyi **eski** zaman damgasıyla geri alır ve `_finish_collection_round()`
+duraklama boyunca geçen duvar saatini de toplama süresi sayar. İki saat bekleyen bir koşu,
+180 dakikalık bütçesinin tamamını hiçbir şey toplamadan harcamış olur.
+
+Ne yanlış olduğu açık, doğrusunun ne olduğu bir karar: işaretçiyi resume'da şimdiye
+yeniden çıpalamak duraklamayı hiç yazmaz ama yarım turun gerçek süresini kaybeder;
+`_boundary()` her checkpoint'te kısmi süreyi biriktirirse ikisi de doğru olur, karşılığında
+sayaç aşama sınırlarında yazılır.
+
+**Yapılacak:** İki seçenekten biri seçilip `_finish_collection_round()` ile `run()`'daki
+resume yolu birlikte güncellenmeli; duraklama üzerinden geçen bir resume testi eklenmeli.
 
 ## Kapsam dışı bırakılanlar
 

@@ -206,3 +206,15 @@ değişikliği olduğundan test paketi yeniden çalıştırılmadı.
 - Container içinden sürüm ve ayarlar doğrulandı.
 - Branch `developments-supplementer` olarak kaldı.
 - Commit ve push yapılmadı.
+
+---
+
+## v0.23.2 kabul düzeltmesi
+
+Bu rapordaki iki açık çok-geçiş sınırı ile sonradan bulunan dinamik dal kotası, JSON metin
+eşitliği, scope/sentinel, coverage bağımsızlığı, yüklemsiz iddia ve arXiv tanılama boşlukları
+v0.23.2'de kapatıldı. Güncel davranış ve regresyon sonuçları
+[DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) 70. bölümde
+yer alır. Buradaki v0.23.0 yeniden oynatma ölçümü tarihsel sonuç olarak korunmuştur; artık
+geçerli olmayan `claims_shown` ve deterministik çok-geçiş fallback sınırları güncel sözleşme
+olarak okunmamalıdır.

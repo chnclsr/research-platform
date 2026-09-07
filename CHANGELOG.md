@@ -1,10 +1,10 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.23.0`
+Platform sürümü: `v0.23.2`
 
-Belge sürümü: `6.44`
+Belge sürümü: `6.47`
 
-Son güncelleme: `2026-09-04`
+Son güncelleme: `2026-09-07`
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
@@ -19,6 +19,42 @@ ve [PROVENANCE_TRACE_V0.19.0_IMPLEMENTATION_REPORT.md](PROVENANCE_TRACE_V0.19.0_
 ve [EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md](EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md)
 ve [RESEARCH_DEPTH_AND_LLM_PROSE_V0.23.0_IMPLEMENTATION_REPORT.md](RESEARCH_DEPTH_AND_LLM_PROSE_V0.23.0_IMPLEMENTATION_REPORT.md)
 içindedir; v0.9.1 ve öncesinin raporları [previous_reports/](previous_reports/) altındadır.
+
+## v0.23.2 — 2026-09-04
+
+- 48 pasajlık küresel kota artık varsayılan sekizlik dal sınırına takılmıyor; ilk
+  çeşitlilik turu her soru dalına doğrudan `ceil(48 / dal_sayısı)` hedefi veriyor.
+- Bir tema paketinin veya çok geçişli konsolidasyonun iki kullanılabilir olmayan LLM
+  yanıtıyla sonuçlanması artık başarılı paketleri sessizce birleştirmiyor. Bölüm açık
+  başarısızlık durumuna geçiyor; `generation_status`, gösterilen iddia ve kullanılan geçiş
+  sayaçları gerçek sonucu yansıtıyor. Geçerli ama uyarılı model metni aynen korunuyor.
+- JSON manifest artık Word ve Markdown'da gösterilen özgün LLM metninin tamamını, bölüm
+  uyarılarını ve kaynak kapsam rollerini taşıyor; Markdown model metnini `.strip()` ile
+  değiştirmiyor.
+- Kanıtsız `excluded` etiketi ve sentinel otomatik kabulü kapatıldı. Eksik kararlar
+  `near_scope` oluyor; yakın/dışlanmış kaynaklar ham iziyle saklanıyor fakat pasaj,
+  iddia, coverage, saturation ve kaynak bütçesi hesabını tüketmiyor.
+- Yüklemsiz başlık biçimli metinlerin iddia kapısından geçmesi engellendi. Cevaplanabilirlik
+  yalnız farklı kayıtları değil bağımsız birincil kaynak kökenlerini de sayıyor ve
+  `qualified` bulgular okuyucuya tek çalışma uyarısıyla gösteriliyor.
+- arXiv hata olayları derlenmiş ve gerçekten gönderilmiş sorguyu saklıyor. İngilizce
+  stopword'ler dal odağından çıkarıldı; arXiv'in yalnız parantez ve tarih aralığı biçimini
+  değiştirmesi artık sahte sorgu-rewrite uyarısı üretmiyor.
+- API, worker, MCP gateway ve Telegram bot v0.23.2 imajıyla yenilendi; API bağımlılık
+  sağlık denetimi ve container içi sürüm doğrulaması geçti. Host kontrol panelinin editable
+  kurulumu da v0.23.2'ye yükseltildi ve servis yeniden başlatıldı. Linux durum betiği MCP
+  sağlığını artık sabit loopback yerine yapılandırılmış bind adresinden ölçüyor.
+- Sabit 4.253 pasajlık kabul verisi salt okunur yeniden oynatmada 48 pasaj, 6/6 soru dalı,
+  32 farklı kaynak sürümü ve kaynak başına en çok 2 pasaj sonucunu korudu.
+
+## v0.23.1 — 2026-09-04
+
+- Toplama bütçesi yeniden işliyor. v0.23.0'da `SEARCH` açtığı süre işaretçisini yalnız
+  kendi yerel state kopyasına yazıyordu; graf düğüm dönüşlerini birleştirdiği için işaretçi
+  `ACQUIRE`'a hiç ulaşmıyor, her tur boş işaretçiyle kapanıyor ve
+  `collection_elapsed_seconds` koşu boyunca `0.0` kalıyordu. Sonuç: `max_wall_minutes`
+  hiçbir zaman tetiklenmiyordu. Tur sınırı `literature_scan` modunda bilinçli olarak
+  kapalı olduğundan, bu koşuların zamana bağlı tek durma koşulu da yoktu.
 
 ## v0.23.0 — 2026-09-04
 

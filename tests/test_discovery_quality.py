@@ -107,6 +107,14 @@ def test_arxiv_query_preserves_every_approved_chest_ct_facet_on_each_branch():
         assert "all:3D OR all:volumetric" in compiled
         assert 'all:"radiology report generation" OR all:"report writing"' in compiled
 
+    noisy_branch = compile_provider_query(
+        "arxiv",
+        "What are the benchmark datasets and the clinical accuracy results?",
+        research_protocol,
+    )
+    assert "all:the" not in noisy_branch.lower()
+    assert "all:and" not in noisy_branch.lower()
+
 
 def test_low_metadata_result_is_reserved_while_injection_is_hard_rejected():
     weak = ConnectorCandidate(

@@ -9,6 +9,7 @@ import pytest
 from research_platform.config import Settings
 from research_platform.connectors.base import ConnectorQueryError
 from research_platform.connectors.implementations import ArxivConnector
+from research_platform.schemas import ResearchScope
 
 FEED_OPEN = (
     '<?xml version="1.0" encoding="UTF-8"?>'
@@ -178,6 +179,37 @@ async def test_arxiv_sends_precompiled_facet_groups_without_rewriting_them():
     rows = await run_search(handler, query=compiled)
 
     assert sent["query"] == compiled
+    assert rows[0].metadata["arxiv_query_rewritten"] is False
+    assert rows[0].metadata["arxiv_query_sent"] == compiled
+
+
+@pytest.mark.asyncio
+async def test_arxiv_echo_parentheses_and_date_format_are_not_semantic_rewrites():
+    compiled = '(all:chest OR all:"computed tomography")'
+    sent = f"({compiled}) AND submittedDate:[202309050858 TO 202609040858]"
+    echoed = (
+        '( (all:chest OR all:"computed tomography") ) '
+        'AND submittedDate:"202309050858 TO 202609040858"'
+    )
+
+    async def handler(request):
+        assert request.url.params["search_query"] == sent
+        return httpx.Response(
+            200,
+            request=request,
+            text=paper_feed(f"{echoed}&id_list=&start=0&max_results=5"),
+        )
+
+    connector_settings = settings()
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        connector = ArxivConnector(connector_settings, client)
+        scope = ResearchScope(
+            start_date="2023-09-05T08:58:00Z",
+            end_date="2026-09-04T08:58:00Z",
+        )
+        rows = await connector.search_scoped(compiled, 5, scope)
+
     assert rows[0].metadata["arxiv_query_rewritten"] is False
 
 

@@ -122,7 +122,10 @@ def retrieve_passages(
     total = len(passages)
     total_limit = max_total or per_question * len(questions)
     source_limit = max_per_source or max(3, per_question // 2)
-    per_branch_target = min(per_question, math.ceil(total_limit / len(questions)))
+    # A supplied global allowance defines the first-pass branch quota. With 48 passages
+    # and four branches this must be 12; capping it at the historical per-question default
+    # would send the remaining 16 slots into the global score fill and weaken balance.
+    per_branch_target = math.ceil(total_limit / len(questions))
     ranked_by_question: list[list[tuple[float, Passage]]] = []
 
     for question_index, question in enumerate(questions):

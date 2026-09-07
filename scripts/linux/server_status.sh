@@ -14,6 +14,7 @@ sor() {  # sor <ad> <url> [jq-yolu]
 }
 
 PANEL_PORT="$(grep -E '^CONTROL_PANEL_PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
+MCP_STATUS_HOST="$(grep -E '^MCP_BIND_HOST=' .env 2>/dev/null | cut -d= -f2 | tr -d '[:space:]')"
 
 echo "== Container'lar =="
 docker compose ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
@@ -26,7 +27,7 @@ docker compose -f scripts/linux/searxng/docker-compose.searxng.yml ps \
 echo
 echo "== Uclar =="
 sor "API"      "http://127.0.0.1:8000/health"
-sor "MCP"      "http://127.0.0.1:8010/health"
+sor "MCP"      "http://${MCP_STATUS_HOST:-127.0.0.1}:8010/health"
 sor "Docling"  "http://127.0.0.1:3941/health"
 sor "Panel"    "http://127.0.0.1:${PANEL_PORT:-1111}/health"
 sor "AgentSearch" "http://127.0.0.1:3940/health"

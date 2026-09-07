@@ -6,13 +6,15 @@ from .relevance import TERM_ALIASES
 from .schemas import ResearchProtocol
 
 _QUESTION_NOISE = re.compile(
-    r"\b(what|which|who|when|where|how|are|is|does|do|please|find|search|"
+    r"\b(a|an|and|as|at|by|for|in|of|on|or|than|the|to|what|which|who|"
+    r"when|where|how|are|is|does|do|please|find|search|"
     r"nedir|nelerdir|nasıl|hangi|araştır|bul|lütfen)\b",
     flags=re.IGNORECASE,
 )
 
 _ANCHOR_NOISE = {
-    "between", "compare", "compared", "evidence", "evaluate", "evaluates",
+    "a", "an", "and", "as", "at", "between", "by", "compare", "compared",
+    "evidence", "evaluate", "evaluates", "for", "in", "of", "on", "or", "the", "to",
     "evaluation", "finding", "findings", "from", "latest", "published", "recent",
     "research", "result", "results", "show", "shows", "study", "studies", "using",
     "what", "which", "with", "year", "years",

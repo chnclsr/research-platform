@@ -25,12 +25,22 @@ _KEYWORD_LEAD = re.compile(
 )
 _PREDICATE_SIGNAL = re.compile(
     r"\b(?:is|are|was|were|be|been|being|has|have|had|does|do|did|"
-    r"show(?:s|ed)?|reports|reported|find(?:s|ings|found)?|demonstrat(?:e|es|ed)|"
+    r"can|could|may|might|must|shall|should|will|would|"
+    r"show(?:s|ed)?|reports|reported|finds|found|demonstrat(?:e|es|ed)|"
     r"improv(?:e|es|ed)|reduc(?:e|es|ed)|increas(?:e|es|ed)|use(?:s|d)?|"
     r"achiev(?:e|es|ed)|outperform(?:s|ed)?|predict(?:s|ed)?|generat(?:e|es|ed)|"
+    r"produc(?:e|es|ed)|includ(?:e|es|ed)|contain(?:s|ed)?|enabl(?:e|es|ed)|"
+    r"requir(?:e|es|ed)|provid(?:e|es|ed)|perform(?:s|ed)?|yield(?:s|ed)?|"
+    r"associat(?:e|es|ed)|correlat(?:e|es|ed)|support(?:s|ed)?|"
+    r"indicat(?:e|es|ed)|suggest(?:s|ed)?|remain(?:s|ed)?|lead(?:s|ing)?|"
+    r"result(?:s|ed)?|compar(?:e|es|ed)|measur(?:e|es|ed)|train(?:s|ed)?|"
+    r"validat(?:e|es|ed)|detect(?:s|ed)?|classif(?:y|ies|ied)|segment(?:s|ed)?|"
+    r"present(?:s|ed)?|observ(?:e|es|ed)|identif(?:y|ies|ied)|"
+    r"propos(?:e|es|ed)|develop(?:s|ed)?|attain(?:s|ed)?|"
     r"oldu|olduğu|olan|vardır|göster(?:ir|di|miştir)|bul(?:du|muştur)|"
     r"art(?:ar|tı|mıştır)|azal(?:ır|dı|mıştır)|kullan(?:ır|dı|ılmıştır)|"
-    r"üret(?:ir|ti|miştir))\b",
+    r"üret(?:ir|ti|miştir)|içer(?:ir|di|miştir)|sağla(?:r|dı|mıştır)|"
+    r"gerektir(?:ir|di|miştir)|doğrula(?:r|dı|mıştır)|öner(?:ir|di|miştir))\b",
     re.IGNORECASE,
 )
 
@@ -103,14 +113,9 @@ def evidence_quality_gate(
         similarity = SequenceMatcher(None, claim_value.casefold(), source_title.casefold()).ratio()
         if similarity >= 0.90:
             return False, "source_title_as_claim"
-    # A comma/semicolon-separated noun list can easily clear the word-count gate while
-    # still asserting nothing. Apply the predicate requirement only to list-shaped text so
-    # terse but grammatical scientific findings are not rejected wholesale.
-    list_shaped = (
-        claim_value.count(",") + claim_value.count(";") >= 2
-        or bool(re.match(r"^[^.!?]{2,80}:\s*[^.!?]+$", claim_value))
-    )
-    if list_shaped and not _PREDICATE_SIGNAL.search(claim_value):
+    # A reportable claim is a proposition, not a title or topic label. Restricting this
+    # check to delimiter-heavy lists let ordinary noun-phrase headings through unchanged.
+    if not _PREDICATE_SIGNAL.search(claim_value):
         return False, "missing_predicate"
     if quote_value.endswith("?") and not claim_value.endswith("?"):
         return False, "question_does_not_entail_assertion"

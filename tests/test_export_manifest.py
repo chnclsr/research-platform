@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from research_platform.exporter import _parsing_manifest
+from research_platform.exporter import _markdown, _parsing_manifest, _synthesis_manifest_payload
+from research_platform.report_synthesis import SynthesisPackage, SynthesisSection
 
 
 def _cift(source_id: str, provenance: dict) -> tuple:
@@ -128,3 +129,49 @@ def test_a_record_from_before_timing_was_measured_still_exports():
 
     assert "duration_ms" not in kayit
     assert "engine_durations_ms" not in kayit
+
+
+def test_manifest_and_markdown_preserve_the_full_llm_prose_warnings_and_roles():
+    original = "  Model prose keeps its surrounding whitespace [S01].\n"
+    package = SynthesisPackage(
+        executive_summary=original,
+        sections=[
+            SynthesisSection(
+                title="Theme",
+                synthesis=original,
+                source_ids=["S01"],
+                claim_ids=["C01"],
+                validation_warnings=["synthesis:unknown_citations:[S99]"],
+            )
+        ],
+        cross_study_assessment=original,
+        conclusion=original,
+        uncertainty=original,
+        study_profiles=[],
+        generated_by_llm=True,
+        generation_status="complete_with_warnings",
+        validation_warnings={
+            "theme_1": ["synthesis:unknown_citations:[S99]"]
+        },
+    )
+    source = SimpleNamespace(
+        id="source-1",
+        metadata_json={
+            "research_scope_role": "near_scope",
+            "scope_assessment": {"reason": "one required facet is absent"},
+        },
+    )
+
+    payload = _synthesis_manifest_payload(package, [source])
+
+    assert payload["synthesis"]["executive_summary"] == original
+    assert payload["synthesis"]["sections"][0]["synthesis"] == original
+    assert payload["synthesis"]["validation_warnings"] == package.validation_warnings
+    assert payload["source_roles"] == [
+        {
+            "source_id": "source-1",
+            "role": "near_scope",
+            "assessment": {"reason": "one required facet is absent"},
+        }
+    ]
+    assert _markdown(original) == original

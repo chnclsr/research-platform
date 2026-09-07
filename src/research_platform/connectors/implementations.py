@@ -445,8 +445,17 @@ def _arxiv_executed_query(echo: str) -> str:
 
 
 def _arxiv_comparable(query: str) -> str:
-    """Normalise for comparison: the echo spells spaces as `+` and may re-space terms."""
-    return " ".join(query.replace("+", " ").split())
+    """Canonicalise documented echo formatting without hiding semantic rewrites."""
+    value = query.replace("+", " ")
+    value = re.sub(
+        r'\bsubmittedDate\s*:\s*"(\d{12}\s+TO\s+\d{12})"',
+        r"submittedDate:[\1]",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = re.sub(r"\s*([()])\s*", r"\1", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value.casefold()
 
 
 class ArxivConnector(SourceConnector):
@@ -579,6 +588,7 @@ class ArxivConnector(SourceConnector):
                 metadata={
                     "published": published.isoformat() if published else None,
                     "updated": updated,
+                    "arxiv_query_sent": search_query,
                     "arxiv_query_echo": echo,
                     "arxiv_query_rewritten": rewritten,
                 },

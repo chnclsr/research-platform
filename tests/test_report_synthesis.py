@@ -10,7 +10,6 @@ from research_platform.report_synthesis import (
     _claim_evidence_block,
     _draft_overview,
     _evidence_packets,
-    _merge_sections_into_compact_answer,
     _reader_text,
     _report_mode,
     _scope_anchors,
@@ -200,6 +199,7 @@ async def test_unknown_source_citations_preserve_model_text_and_add_warning() ->
     assert package.validation_warnings["theme_1"] == [
         "synthesis:unknown_citations:[S99]",
         "synthesis:stronger_than_available_evidence",
+        "qualified:single_study_findings",
     ]
 
 
@@ -306,6 +306,7 @@ async def test_supporting_benchmark_only_enters_evaluation_topics():
 
     assert package.quality_diagnostics["scope_eligible_claim_count"] == 1
     assert package.quality_diagnostics["unique_claim_count"] == 1
+    assert package.answerability_status == "insufficient"
 
 
 class CompletelyFailingLLM(LLMProvider):
@@ -530,6 +531,7 @@ async def test_sparse_semantic_claims_choose_one_compact_evidence_summary() -> N
         "threshold": 0.35,
         "maximum_question_relevance": 0.2,
         "in_scope_contributing_sources": 3,
+        "independent_in_scope_contributors": 3,
         "sub_question_coverage": 1.0,
         "reason_codes": ["low_question_relevance"],
     }
@@ -561,7 +563,7 @@ async def test_validation_warning_does_not_define_answerability() -> None:
     assert package.answerability_status == "limited"
     assert package.generation_diagnostics["theme_1"] == "initial_visible:warnings"
     assert package.quality_diagnostics["answerability"]["reason_codes"] == [
-        "fewer_than_2_in_scope_sources",
+        "fewer_than_2_independent_in_scope_sources",
         "low_question_relevance",
     ]
     assert claim.text not in package.executive_summary
@@ -584,6 +586,48 @@ async def test_relevance_boundary_keeps_original_compact_prose() -> None:
     assert package.answerability_status == "limited"
     assert package.generation_diagnostics["theme_1"] == "initial_visible:warnings"
     assert "[S99]" in package.executive_summary
+
+
+async def test_answerability_requires_independent_primary_source_origins() -> None:
+    sources = [
+        SimpleNamespace(
+            id=f"source-{index}",
+            title=f"Primary study {index}",
+            url=f"https://repository.example/paper-{index}",
+            metadata_json={"research_scope_role": "primary_in_scope"},
+        )
+        for index in range(2)
+    ]
+    claims = [
+        SimpleNamespace(
+            id=f"claim-{index}",
+            text=f"The primary study reports measured outcome {index}.",
+            status="qualified",
+            audit={"question_relevance": 0.9},
+        )
+        for index in range(2)
+    ]
+    evidence = {
+        claim.id: [
+            (SimpleNamespace(quote=claim.text, direction="supports"), sources[index])
+        ]
+        for index, claim in enumerate(claims)
+    }
+
+    package = await build_synthesis_package(
+        llm=SynthesisLLM(),
+        question="What do the primary studies report?",
+        language="en",
+        sources=sources,
+        reportable_claims=claims,
+        evidence_by_claim=evidence,
+    )
+
+    answerability = package.quality_diagnostics["answerability"]
+    assert answerability["in_scope_contributing_sources"] == 2
+    assert answerability["independent_in_scope_contributors"] == 1
+    assert package.answerability_status == "limited"
+    assert "fewer_than_2_independent_in_scope_sources" in answerability["reason_codes"]
 
 
 async def test_standard_report_is_not_suppressed_by_the_compact_answerability_gate() -> None:
@@ -767,38 +811,6 @@ async def test_overview_fallback_does_not_collapse_a_standard_report() -> None:
     )
     assert package.generation_diagnostics["overview"].startswith("unavailable:")
     assert package.generation_status == "partial"
-
-
-def test_compact_transition_merges_themes_instead_of_hiding_them() -> None:
-    sections = [
-        SynthesisSection(
-            title="Alpha",
-            synthesis="Alpha findings concern design [S01].",
-            implications="Alpha needs replication [S01].",
-            source_ids=["S01"],
-            claim_ids=["claim-1"],
-        ),
-        SynthesisSection(
-            title="Beta",
-            synthesis="Beta findings concern performance [S02].",
-            source_ids=["S02"],
-            claim_ids=["claim-2"],
-        ),
-    ]
-
-    merged = _merge_sections_into_compact_answer(sections, turkish=False)
-
-    assert len(merged) == 1
-    assert merged[0].title == "Evidence summary"
-    for fragment in (
-        "Alpha findings concern design [S01].",
-        "Alpha needs replication [S01].",
-        "Beta findings concern performance [S02].",
-    ):
-        assert fragment in merged[0].synthesis
-    assert merged[0].source_ids == ["S01", "S02"]
-    assert merged[0].claim_ids == ["claim-1", "claim-2"]
-    assert "merged_for_compact" in merged[0].generation_note
 
 
 def test_collapsed_completeness_estimate_no_longer_forces_a_compact_report() -> None:
@@ -1118,6 +1130,56 @@ async def test_invalid_consolidation_citation_is_preserved_with_a_warning() -> N
     assert "synthesis:unknown_citations:[S99]" in package.sections[0].validation_warnings
 
 
+class UnusableConsolidationLLM(MultiPassLLM):
+    async def complete_json(self, system: str, user: str):
+        if "merging several partial drafts" in system:
+            self.consolidations += 1
+            return {}
+        return await super().complete_json(system, user)
+
+
+async def test_unusable_consolidation_retries_then_shows_only_explicit_failure() -> None:
+    llm = UnusableConsolidationLLM()
+
+    package = await _multi_pass_package(llm)
+
+    assert llm.consolidations == 2
+    assert package.generation_status == "failed"
+    assert package.generated_by_llm is False
+    assert package.sections[0].synthesis == (
+        "LLM synthesis could not be produced; evidence records remain in the audit appendices."
+    )
+    assert "Pass alpha" not in package.sections[0].synthesis
+    coverage = package.quality_diagnostics["theme_coverage"][0]
+    assert coverage["claims_shown"] == 0
+    assert coverage["passes_drafted"] == coverage["passes"]
+    assert coverage["passes_used"] == 0
+
+
+class UnusableLaterPacketLLM(MultiPassLLM):
+    async def complete_json(self, system: str, user: str):
+        if "merging several partial drafts" in system:
+            raise AssertionError("a partial packet set must not be consolidated")
+        if "claim=Finding 0:" not in user:
+            self.drafts += 1
+            return {}
+        return await super().complete_json(system, user)
+
+
+async def test_one_unusable_packet_cannot_be_silently_omitted_from_a_complete_theme() -> None:
+    package = await _multi_pass_package(UnusableLaterPacketLLM())
+
+    assert package.generation_status == "failed"
+    assert package.generated_by_llm is False
+    assert package.sections[0].synthesis.startswith("LLM synthesis could not be produced")
+    assert "llm_synthesis_partial_packet_failure" in package.sections[0].validation_warnings
+    coverage = package.quality_diagnostics["theme_coverage"][0]
+    assert coverage["claims_offered"] == coverage["claims_total"]
+    assert coverage["claims_shown"] == 0
+    assert coverage["passes_drafted"] < coverage["passes"]
+    assert coverage["passes_used"] == 0
+
+
 class OnePassFailsLLM(LLMProvider):
     """Drafts the first pass cleanly and returns an ungrounded second pass."""
 
@@ -1183,3 +1245,4 @@ def test_source_design_labels_reuse_the_report_classifier():
     from research_platform.report_synthesis import source_design_labels
 
     assert source_design_labels([source]) == {"source-1": "Dış doğrulama"}
+

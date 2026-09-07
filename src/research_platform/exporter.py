@@ -36,7 +36,9 @@ def _markdown(value: Any, level: int = 0) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
-        return value.strip()
+        # Reader-facing model text is opaque output. Surrounding whitespace may be odd,
+        # but changing it here would make Markdown differ from JSON and Word.
+        return value
     if isinstance(value, list):
         return "\n".join(f"- {_markdown(item, level + 1).replace(chr(10), ' ')}" for item in value)
     if isinstance(value, dict):
@@ -228,6 +230,25 @@ def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
         record.update({key: parse[key] for key in kept if parse.get(key) is not None})
         records.append(record)
     return records
+
+
+def _synthesis_manifest_payload(
+    package: SynthesisPackage, sources: list[Any]
+) -> dict[str, Any]:
+    """The JSON surface for the exact prose, warnings, and scope roles readers receive."""
+    return {
+        "synthesis": package.as_dict(),
+        "source_roles": [
+            {
+                "source_id": source.id,
+                "role": (source.metadata_json or {}).get(
+                    "research_scope_role", "primary_in_scope"
+                ),
+                "assessment": (source.metadata_json or {}).get("scope_assessment", {}),
+            }
+            for source in sources
+        ],
+    }
 
 
 _SWEPT_SECTION_FIELDS = ("synthesis", "consensus", "disagreements", "implications")
@@ -514,24 +535,31 @@ async def build_exports(
         if synthesis.get("report")
         else ""
     )
-    warning_codes = sorted(
-        {
-            warning
-            for warnings in synthesis_package.validation_warnings.values()
-            for warning in warnings
-        }
-    )
-    validation_note = (
-        (
-            "> ⚠ LLM metni doğrulama uyarılarıyla birlikte özgün biçimde korunmuştur: "
-            if language_is_turkish
-            else "> ⚠ The original LLM text is preserved with validation warnings: "
+
+    def validation_note_for(*fields: str) -> str:
+        warning_codes = list(
+            dict.fromkeys(
+                warning
+                for field in fields
+                for warning in synthesis_package.validation_warnings.get(field, [])
+            )
         )
-        + ", ".join(warning_codes)
-        + "\n\n"
-        if warning_codes
-        else ""
+        if not warning_codes:
+            return ""
+        return (
+            (
+                "> ⚠ LLM metni doğrulama uyarılarıyla birlikte özgün biçimde korunmuştur: "
+                if language_is_turkish
+                else "> ⚠ The original LLM text is preserved with validation warnings: "
+            )
+            + ", ".join(warning_codes)
+            + "\n\n"
+        )
+
+    summary_validation_note = validation_note_for(
+        "executive_summary", "overview", "overlap"
     )
+    uncertainty_validation_note = validation_note_for("uncertainty")
     near_scope_sources = [
         source
         for source in sources
@@ -556,10 +584,10 @@ async def build_exports(
         f"{corpus_note}"
         f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
         f"{near_scope_block}"
-        f"## {summary_heading}\n\n{validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"## {summary_heading}\n\n{summary_validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{thematic_block}"
         f"## {labels['uncertainty']}\n\n"
-        f"{_markdown(synthesis.get('uncertainty'))}\n\n"
+        f"{uncertainty_validation_note}{_markdown(synthesis.get('uncertainty'))}\n\n"
         f"## {labels['appendix_a']}\n\n{answerability_appendix_note}{findings_md}\n\n"
         f"## {labels['appendix_b']}\n\n{answerability_appendix_note}{qualified_md}\n\n"
         f"## {labels['appendix_c']}\n\n"
@@ -568,7 +596,7 @@ async def build_exports(
     executive_md = (
         f"# {summary_heading}\n\n"
         f"{corpus_note}"
-        f"{validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"{summary_validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{labels['summary_note']}\n"
     )
 
@@ -728,15 +756,9 @@ async def build_exports(
         "source_ids": [s.id for s in sources],
         "parsing": _parsing_manifest(versions),
         "coverage": coverage.model_dump(),
-        "synthesis": {
-            "generated_by_llm": synthesis_package.generated_by_llm,
-            "generation_status": synthesis_package.generation_status,
-            "validation_warnings": synthesis_package.validation_warnings,
-            "layers": synthesis_package.generation_diagnostics,
-            "report_mode": synthesis_package.report_mode,
-            "answerability_status": synthesis_package.answerability_status,
-            "quality": synthesis_package.quality_diagnostics,
-        },
+        # Full, unmodified model prose lives beside the diagnostics so JSON, Markdown and
+        # Word expose the same synthesis rather than three different subsets of it.
+        **_synthesis_manifest_payload(synthesis_package, sources),
     }
     files["10_reproducibility_manifest.json"] = (
         "application/json",

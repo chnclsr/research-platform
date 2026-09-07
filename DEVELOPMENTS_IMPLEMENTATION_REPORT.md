@@ -1,10 +1,10 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.23.0`
+Platform sürümü: `v0.23.2`
 
-Belge sürümü: `12.44`
+Belge sürümü: `12.47`
 
-Son güncelleme: `2026-09-04`
+Son güncelleme: `2026-09-07`
 
 ## Kapsam
 
@@ -73,6 +73,8 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 58 | Ardışık boş recovery turlarının kontrollü sonlandırılması | _çalışma ağacı_ |
 | 59 | Kaynak → referans izi (kendi raporu var) | _çalışma ağacı_ |
 | 60 | Araştırma derinliği ve LLM metnini koruma (kendi raporu var) | _çalışma ağacı_ |
+| 61 | Toplama bütçesi işaretçisinin graf kanalına ulaşmaması | _çalışma ağacı_ |
+| 62 | v0.23 araştırma derinliği kabul boşluklarının kapatılması | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -3927,3 +3929,111 @@ Bilgi, MIT lisanslı `K-Dense-AI/scientific-agent-skills` deposundan port edildi
 kopyalanmadı.
 
 Ayrıntı: [EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md](EVIDENCE_INTEGRITY_V0.22.0_IMPLEMENTATION_REPORT.md)
+
+## 69. Toplama bütçesinin hiç işlemediği tur
+
+v0.23.0 `max_wall_minutes`'ı yalnız dış kaynak beklemesini ölçecek şekilde daralttı: sayaç
+`SEARCH` başında açılıyor, `ACQUIRE` sonunda birikiyor. Sözleşme doğruydu, taşıma yolu
+değildi.
+
+`search()` işaretçiyi `state["collection_round_started_at"]`'a **yerinde** yazıyordu ve
+dönüş sözlüğüne koymuyordu. LangGraph düğüm dönüşlerini kanala birleştirir; girdi
+sözlüğüne yapılan yazma kanala geçmez. Bu yüzden `ACQUIRE` her turda işaretçiyi boş
+görüyor, `_finish_collection_round()` sıfır döndürüyor ve `collection_elapsed_seconds`
+koşu boyunca `0.0` kalıyordu.
+
+Hata gözden kaçtı çünkü `_boundary()` checkpoint'e aynı yerel sözlüğü döküyor: `SEARCH`
+checkpoint'inde işaretçi **görünüyor**. Canlı koşu `01M1NT3VCT2R0G10DFD4BRVVG1` üzerinde
+ölçülen tablo:
+
+| Checkpoint | `collection_elapsed_seconds` | İşaretçi |
+|---|---:|---|
+| `SEARCH` | — | `2026-09-04T09:01:03.877496+00:00` |
+| `ACQUIRE` | — | boş |
+| `NORMALIZE` | `0.0` | boş |
+
+Gerçek SEARCH+ACQUIRE süresi 11 dakika 21 saniyeydi; bütçeye sıfır yazıldı.
+
+Etkisi tek bir yanlış sayaçtan büyük. `literature_scan` + `exhaustive_until_budget`
+modunda tur sınırı bilinçli olarak devre dışıdır (`round_budget_hit` yalnız bu mod kapalıyken
+hesaplanır). `elapsed` de hep sıfır kalınca `budget_hit` asla doğru olamıyor ve
+`stop_reason` "budget_exhausted"a hiç ulaşmıyor. Geriye tek durdurucu olarak ardışık boş
+kurtarma turları kalıyor — yani kullanıcının seçtiği süre koşuyu hiç durdurmuyordu.
+
+**Düzeltme.** İşaretçi artık dönüş sözlüğünde taşınıyor; `search()`'ün her iki çıkışı da
+(bütçe tükenmiş erken dönüş ve `_search_node` sonucu) onu döndürüyor. Zaten açık olan bir
+turun işaretçisi korunuyor, yeniden açılmıyor.
+
+**Testin kaçırdığı yer.** Mevcut bütçe testlerinin hepsi iki alanı da tek bir düğüme elle
+enjekte ediyordu; hiçbiri bir düğümün dönüşünü bir sonrakine vermiyordu. Eklenen iki
+regresyon testinden ilki tam olarak bu devri kuruyor — `search()`'ün dönüşü state'e
+birleştiriliyor, sonra `_acquire_node()` çağrılıyor ve biriken sürenin sıfırdan büyük
+olması bekleniyor. Düzeltme geri alındığında ikisi de düşüyor.
+
+**Kalan sınır.** İşaretçi checkpoint'te bilinçli olarak saklanıyor ki worker yeniden
+başladığında yarım tur sıfırlanmasın. Sayaç artık gerçekten biriktiği için bunun ters
+etkisi ilk kez görünür hâle geldi: `ACQUIRE` sırasında duraklatılan bir koşu, resume'da
+duraklama süresini de toplama bütçesine yazar. [OPEN_ITEMS.md](OPEN_ITEMS.md) 39. madde.
+
+## 70. v0.23 araştırma derinliği kabul boşlukları
+
+v0.23.0'ın canlı ve statik kabul denetimi, ana yönün doğru olmasına rağmen sekiz davranış
+boşluğu buldu. Bunlar v0.23.2'de birlikte kapatıldı; v0.23.1'in toplama sayacı düzeltmesi
+aynen korundu.
+
+**Dengeli seçim.** `retrieve_passages()` ilk tur dal hedefini
+`min(passages_per_question, ceil(max_total / dal_sayısı))` ile hesaplıyordu. Varsayılan
+sekiz, 48 pasaj/dört dal koşusunda hedefi 12 yerine sekize indiriyor; kalan kota küresel
+puanla doluyordu. Dal hedefi artık doğrudan dinamik bölümdür ve regresyon testi varsayılan
+ayarlarla dal başına en az 12 eşleşmeyi doğrular.
+
+**Sentez başarısızlığı.** Çok paketli temada tek bir başarısız paket diğer başarılı
+taslakların arkasında kaybolabiliyor, konsolidasyon hatasında taslaklar deterministik olarak
+yan yana getirilebiliyordu. Artık her paket iki kez yalnız taşıma/boş/ayrıştırılamayan çıktı
+için denenir. Bir paket yine başarısızsa tema açık `LLM synthesis could not be produced`
+durumuna geçer. Konsolidasyon da iki başarısız denemeden sonra aynı biçimde kapanır;
+model taslaklarını veya iddiaları birleştiren fallback yoktur. `claims_offered`,
+`claims_shown`, `passes_drafted` ve `passes_used` ayrıdır; kısmi içerik `complete`
+sayılamaz. Bilinmeyen atıf veya dil sapması taşıyan kullanılabilir metin bu yolu tetiklemez
+ve karakter karakter korunur.
+
+**Kapsam kapıları.** Modelin çıplak `excluded` etiketi artık dışlama değildir; onaylanmış
+bir dışlama sinyali için gerekçe ve metinde doğrulanan pasaj gerekir. Her zorunlu facet ve
+dışlama kararı saklanır, eksik karar açık `model_decision_missing` kaydıyla `near_scope`
+olur. Sentinel kaynaklar aynı sınıflandırmadan geçer. `near_scope` ve `excluded` kaynakların
+kaynak sürümü/ham izi korunur, ancak chunk, claim, coverage, saturation ve in-scope kaynak
+bütçesi kanallarına girmez.
+
+**Çıktı eşitliği ve cevaplanabilirlik.** Reproducibility JSON'u artık tam
+`SynthesisPackage` ile kaynak rol/assessment listesini taşır. Markdown model dizgilerine
+`.strip()` uygulamaz; uyarılar ilgili özet, tema, çapraz değerlendirme, sonuç ve belirsizlik
+alanının yanında gösterilir. `qualified` temalar ile özet tek çalışma uyarısı taşır.
+Cevaplanabilirlik, supporting benchmark kayıtlarını birincil kaynak sayısından çıkarır ve
+aynı alan adındaki iki kaydı iki bağımsız katkı olarak saymaz.
+
+**Sorgu ve iddia tanılaması.** Başlık biçimli yüklemsiz dizgiler artık bütün biçimlerde
+reddedilir. arXiv alt soru odaklarından İngilizce stopword'ler çıkarılır. Sağlayıcının
+parantez boşluğu ile `submittedDate` bracket/quote farkı normalize edilirken gerçek alan
+rewrite'ı görünür kalır. Başarılı aramada gönderilen/yankılanan sorgu; hata yolunda ise
+orijinal, derlenmiş ve sağlayıcıya gönderilmiş sorgu olaylara birlikte yazılır.
+
+**Sabit veri kabulü.** `01M1KKJPQ0CARBG2EMGB4X6EYN` koşusunun 4.253 saklı pasajı eski
+koşuya hiçbir yazma yapmadan v0.23.2 koduyla yeniden oynatıldı: 48 pasaj, 6/6 temsil edilen
+soru dalı, 32 farklı kaynak sürümü ve kaynak başına en çok 2 pasaj. Dal eşleşmeleri
+sırasıyla `10, 9, 9, 8, 10, 8` oldu; v0.23.0 kabul tablosundaki derinlik kazanımı yeni
+dinamik kota düzeltmesi altında da korundu.
+
+**Doğrulama ve kurulum.** Son kaynak değişikliğinden sonraki zorunlu Ubuntu paketi
+`887 passed, 2 skipped, 1 warning` sonucunu verdi. Hedefli pasaj/sorgu/arXiv/sentez/manifest
+grubu `84 passed`, pipeline grubu `29 passed` oldu. Tek uyarı mevcut Starlette/httpx
+deprecation kaydıdır. İlk doğrulama çalışan göğüs BT koşusunu kesmemek için dağıtım
+yapmadan tamamlandı. Koşu `completed_incomplete / COMPLETE` durumuna ulaştıktan ve başka
+aktif koşu bulunmadığı doğrulandıktan sonra API, worker, MCP gateway ve profil arkasındaki
+Telegram bot v0.23.2 imajıyla yenilendi. Container içinden dört serviste de paket sürümü
+`0.23.2`, API sağlık çıktısında bütün bağımlılıklar `ok` ve Docling cihazı `cuda` olarak
+doğrulandı. Host editable kurulumunun metadata'sı da `0.23.2` oldu. Kontrol panelinin
+systemd yönetim çağrısı etkileşimli sudo istediği için birimin `User=cezeri` ve
+`Restart=always` sözleşmesi kullanıldı: doğrulanan eski sürece `TERM` gönderildi ve systemd
+paneli yeni PID ile yeniden başlattı. Panel `active/running`, başlangıç logu temizdir.
+Dağıtım sonrası durum betiğinin MCP'yi compose'un gerçek `MCP_BIND_HOST` değeri yerine
+loopback'te aradığı ve bu nedenle yanlış `erişilemedi` gösterdiği de düzeltildi.

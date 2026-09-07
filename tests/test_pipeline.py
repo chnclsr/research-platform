@@ -25,6 +25,7 @@ from research_platform.pipeline import (
     PipelineHalted,
     PipelineStageTimeout,
     ResearchPipeline,
+    _scope_role_allows_evidence,
     _validated_scope_role,
 )
 from research_platform.repository import (
@@ -129,14 +130,14 @@ def test_scope_role_requires_complete_facets_and_enforces_exclusions():
     )
     text = "Chest CT uses a 3D volume for report generation; PET/CT is not used."
     facets = [
-        {"facet": "anatomy", "matched": True, "evidence": "Chest"},
-        {"facet": "modality", "matched": True, "evidence": "CT"},
-        {"facet": "input_form", "matched": True, "evidence": "3D volume"},
-        {"facet": "task", "matched": True, "evidence": "report generation"},
+        {"facet": "anatomy", "matched": True, "reason": "anatomy", "evidence": "Chest"},
+        {"facet": "modality", "matched": True, "reason": "modality", "evidence": "CT"},
+        {"facet": "input_form", "matched": True, "reason": "input", "evidence": "3D volume"},
+        {"facet": "task", "matched": True, "reason": "task", "evidence": "report generation"},
     ]
     clear_exclusions = [
-        {"exclusion": "PET/CT", "matched": False, "evidence": ""},
-        {"exclusion": "2D-only input", "matched": False, "evidence": ""},
+        {"exclusion": "PET/CT", "matched": False, "reason": "absent", "evidence": ""},
+        {"exclusion": "2D-only input", "matched": False, "reason": "absent", "evidence": ""},
     ]
 
     assert _validated_scope_role(
@@ -145,6 +146,7 @@ def test_scope_role_requires_complete_facets_and_enforces_exclusions():
         facets,
         clear_exclusions,
         text,
+        "all required facets are present",
     ) == SourceScopeRole.PRIMARY_IN_SCOPE
     assert _validated_scope_role(
         criteria,
@@ -152,17 +154,27 @@ def test_scope_role_requires_complete_facets_and_enforces_exclusions():
         facets[:-1],
         clear_exclusions,
         text,
+        "one facet is missing",
     ) == SourceScopeRole.NEAR_SCOPE
     assert _validated_scope_role(
         criteria,
         SourceScopeRole.SUPPORTING_BENCHMARK,
-        facets[:-1],
+        [
+            *facets[:-1],
+            {
+                "facet": "task",
+                "matched": False,
+                "reason": "benchmark does not generate reports",
+                "evidence": "",
+            },
+        ],
         clear_exclusions,
         text,
+        "benchmark supports evaluation",
     ) == SourceScopeRole.SUPPORTING_BENCHMARK
 
     matched_exclusion = [
-        {"exclusion": "PET/CT", "matched": True, "evidence": "PET/CT"},
+        {"exclusion": "PET/CT", "matched": True, "reason": "explicit", "evidence": "PET/CT"},
         clear_exclusions[1],
     ]
     assert _validated_scope_role(
@@ -171,7 +183,57 @@ def test_scope_role_requires_complete_facets_and_enforces_exclusions():
         facets,
         matched_exclusion,
         text,
+        "an exclusion applies",
     ) == SourceScopeRole.EXCLUDED
+
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.EXCLUDED,
+        facets,
+        clear_exclusions,
+        text,
+        "the model asserted exclusion without evidence",
+    ) == SourceScopeRole.NEAR_SCOPE
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        [{**item, "reason": ""} for item in facets],
+        clear_exclusions,
+        text,
+        "all required facets are present",
+    ) == SourceScopeRole.NEAR_SCOPE
+
+
+def test_scope_roles_gate_evidence_and_coverage_but_keep_legacy_runs_compatible():
+    scoped = ResearchProtocol(
+        title="Scoped",
+        primary_question="Which volumetric chest CT systems generate reports?",
+        scope_criteria={
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest"]},
+            ],
+        },
+        budget={"max_wall_minutes": 30},
+    )
+    assert _scope_role_allows_evidence(
+        scoped, {"research_scope_role": "primary_in_scope"}
+    )
+    assert _scope_role_allows_evidence(
+        scoped, {"research_scope_role": "supporting_benchmark"}
+    )
+    assert not _scope_role_allows_evidence(
+        scoped, {"research_scope_role": "near_scope"}
+    )
+    assert not _scope_role_allows_evidence(scoped, {"research_scope_role": "excluded"})
+    assert _scope_role_allows_evidence(scoped, {})
+
+    legacy = ResearchProtocol(
+        title="Legacy",
+        primary_question="What is known?",
+        budget={"max_wall_minutes": 30},
+    )
+    assert _scope_role_allows_evidence(legacy, {"research_scope_role": "excluded"})
+    assert _scope_role_allows_evidence(None, {"research_scope_role": "excluded"})
 
 
 def test_filtered_chest_ct_list_scope_regression():
@@ -212,15 +274,26 @@ def test_filtered_chest_ct_list_scope_regression():
             ),
         }
         facets = [
-            {"facet": name, "matched": True, "evidence": value}
+            {"facet": name, "matched": True, "reason": "matched", "evidence": value}
             for name, value in evidence.items()
             if name != missing and value
         ]
+        facets.extend(
+            {
+                "facet": name,
+                "matched": False,
+                "reason": "not established",
+                "evidence": "",
+            }
+            for name in evidence
+            if name == missing or not evidence[name]
+        )
         matched_exclusion = case.get("matched_exclusion")
         exclusions = [
             {
                 "exclusion": signal,
                 "matched": signal == matched_exclusion,
+                "reason": "matched" if signal == matched_exclusion else "absent",
                 "evidence": signal if signal == matched_exclusion else "",
             }
             for signal in criteria.exclusion_signals
@@ -231,7 +304,14 @@ def test_filtered_chest_ct_list_scope_regression():
             else SourceScopeRole.PRIMARY_IN_SCOPE
         )
         results.append(
-            _validated_scope_role(criteria, requested, facets, exclusions, text).value
+            _validated_scope_role(
+                criteria,
+                requested,
+                facets,
+                exclusions,
+                text,
+                "fixture classification",
+            ).value
         )
 
     assert results.count(SourceScopeRole.PRIMARY_IN_SCOPE.value) == 11
@@ -379,6 +459,86 @@ async def test_semantic_source_judge_retries_and_uses_delivery_failure_policy(
 
 
 @pytest.mark.asyncio
+async def test_required_sentinel_is_scope_classified_and_excluded_source_is_retained():
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Sentinel scope classification",
+        primary_question="Which systems generate reports from volumetric chest CT?",
+        research_mode="literature_scan",
+        scope_criteria={
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+                {"name": "input_form", "accepted_values": ["3D", "volumetric"]},
+                {"name": "task", "accepted_values": ["report generation"]},
+            ],
+            "exclusion_signals": ["PET/CT"],
+        },
+        budget={"max_wall_minutes": 30},
+        hitl={"source_review": False},
+    )
+    content = (
+        "This study generates radiology reports from volumetric chest CT acquisitions. "
+        "The excluded comparator uses whole-body PET/CT for report generation. "
+    ) * 8
+    candidate = ConnectorCandidate(
+        connector_id="fixture",
+        family=SourceFamily.ACADEMIC,
+        title="Whole-body PET/CT report generator",
+        url="https://example.com/pet-report",
+        metadata={"sentinel_required": True},
+    )
+    document = AcquiredDocument(
+        candidate=candidate,
+        success=True,
+        access_status="open",
+        content=content,
+        content_hash=hashlib.sha256(content.encode()).hexdigest(),
+        acquisition_method="fixture",
+    )
+
+    class MemoryStore:
+        async def put(self, *_args, **_kwargs):
+            return None
+
+    judged: list[str] = []
+
+    async def classify(_protocol, acquired):
+        judged.append(acquired.candidate.title)
+        acquired.candidate.metadata["research_scope_role"] = "excluded"
+        acquired.candidate.metadata["scope_assessment"] = {
+            "role": "excluded",
+            "reason": "PET/CT exclusion is explicit",
+        }
+        return True, 0.95, "direct: relevant but excluded by scope"
+
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        settings = get_settings().model_copy(update={"testing": False})
+        pipeline = ResearchPipeline(settings, session, client)
+        pipeline.store = MemoryStore()
+        pipeline._semantic_source_judgment = classify
+
+        result = await pipeline.normalize(
+            {
+                "run_id": row.id,
+                "protocol": protocol.model_dump(mode="json"),
+                "documents": [document.model_dump(mode="json")],
+                "sub_questions": [],
+            }
+        )
+        sources = await repo.list_sources(row.id)
+        versions = await repo.list_source_versions(row.id)
+
+    assert judged == [candidate.title]
+    assert result["documents"] == []
+    assert len(sources) == len(versions) == 1
+    assert sources[0].metadata_json["research_scope_role"] == "excluded"
+    assert sources[0].metadata_json["evidence_eligible"] is False
+
+
+@pytest.mark.asyncio
 async def test_pipeline_preserves_cancellation_before_worker_start():
     await create_schema()
     protocol = ResearchProtocol(
@@ -504,6 +664,84 @@ async def test_collection_budget_is_persistent_and_skips_new_discovery_after_res
         and event.payload["action"] == "skip_new_discovery"
         for event in events
     )
+
+
+@pytest.mark.asyncio
+async def test_search_hands_the_open_collection_marker_to_acquisition():
+    """SEARCH must return the marker, not only write it onto its local state dict.
+
+    The graph merges node return values into state.  While the marker was set in place
+    only, the stage checkpoint showed it -- that dump is taken from the same local dict --
+    but ACQUIRE received the previous, empty value and closed every round against it.
+    `collection_elapsed_seconds` then stayed at 0.0 for the whole run, so the wall budget
+    never fired and a literature scan, whose round cap is deliberately disabled, lost its
+    only time-based stop condition.
+    """
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Collection marker handover",
+        primary_question="Does the collection marker survive the hop to acquisition?",
+        budget={"max_wall_minutes": 180},
+    )
+
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+
+        async def search_without_connectors(state):
+            return {"candidates": [], "corpus_documents": [], "branch_result_counts": {}}
+
+        pipeline._search_node = search_without_connectors
+        state = {
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "collection_elapsed_seconds": 0.0,
+            "collection_round_started_at": "",
+        }
+
+        search_update = await pipeline.search(state)
+        assert search_update["collection_round_started_at"], (
+            "SEARCH returned no collection marker, so ACQUIRE cannot close the round"
+        )
+
+        # Exactly what the graph does between the two nodes.
+        state.update(search_update)
+        await asyncio.sleep(0.05)
+        acquire_update = await pipeline._acquire_node(state)
+
+    assert acquire_update["collection_elapsed_seconds"] > 0.0
+    assert acquire_update["collection_round_started_at"] == ""
+
+
+@pytest.mark.asyncio
+async def test_collection_marker_is_not_restarted_by_a_second_search_in_one_round():
+    """A round already holding a marker keeps it, so its elapsed time is not reset."""
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Collection marker continuity",
+        primary_question="Does an open collection round keep its original start time?",
+        budget={"max_wall_minutes": 180},
+    )
+    opened_at = (datetime.now(UTC) - timedelta(seconds=45)).isoformat()
+
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+
+        async def search_without_connectors(state):
+            return {"candidates": [], "corpus_documents": [], "branch_result_counts": {}}
+
+        pipeline._search_node = search_without_connectors
+        search_update = await pipeline.search({
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "collection_elapsed_seconds": 0.0,
+            "collection_round_started_at": opened_at,
+        })
+
+    assert search_update["collection_round_started_at"] == opened_at
 
 
 @pytest.mark.asyncio
@@ -821,7 +1059,13 @@ async def test_concurrent_connector_failures_are_recorded_without_breaking_sessi
         completed = await repo.get_run(row.id)
         assert completed.status == RunStatus.COMPLETED_INCOMPLETE.value
         events = await repo.events_after(row.id)
-        assert any(event.event_type == "connector_error" for event in events)
+        connector_error = next(
+            event for event in events if event.event_type == "connector_error"
+        )
+        assert connector_error.payload["compiled_query"]
+        assert connector_error.payload["provider_query"] == connector_error.payload[
+            "compiled_query"
+        ]
 
 
 def test_checkpoint_payload_strips_raw_content_without_touching_live_state():

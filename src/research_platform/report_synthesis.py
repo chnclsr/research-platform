@@ -8,11 +8,11 @@ evidence packet and may cite only stable source labels such as ``[S03]``.
 
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
@@ -100,8 +100,18 @@ class SynthesisPackage:
                 if value:
                     parts.append(f"**{label}:** {value}")
         if self.cross_study_assessment:
+            warnings = self.validation_warnings.get("cross_study_assessment", [])
+            if warnings:
+                parts.append(
+                    "> ⚠ Sentez doğrulama uyarısı: " + ", ".join(warnings)
+                )
             parts.append(f"## Çalışmalar arası değerlendirme\n\n{self.cross_study_assessment}")
         if self.conclusion:
+            warnings = self.validation_warnings.get("conclusion", [])
+            if warnings:
+                parts.append(
+                    "> ⚠ Sentez doğrulama uyarısı: " + ", ".join(warnings)
+                )
             parts.append(f"## Sonuç\n\n{self.conclusion}")
         return "\n\n".join(parts)
 
@@ -491,6 +501,19 @@ def _contributing_sources(
     }
 
 
+def _independent_contributors(
+    claims: list[Any], evidence_by_claim: dict[str, list[tuple[Any, Any]]]
+) -> set[str]:
+    """Return independent evidence origins, using the audit layer's domain convention."""
+    identities: set[str] = set()
+    for claim in claims:
+        for _, source in evidence_by_claim.get(str(claim.id), []):
+            host = (urlparse(str(getattr(source, "url", ""))).hostname or "").lower()
+            host = re.sub(r"^www\.", "", host)
+            identities.add(f"domain:{host}" if host else f"source:{source.id}")
+    return identities
+
+
 def _report_mode(
     claims: list[Any],
     evidence_by_claim: dict[str, list[tuple[Any, Any]]],
@@ -849,76 +872,6 @@ def _overview_overlap_rows(
     return overlaps
 
 
-def _merge_sections_into_compact_answer(
-    sections: list[SynthesisSection],
-    *,
-    turkish: bool,
-    title: str = "",
-    note: str = "merged_for_compact",
-) -> list[SynthesisSection]:
-    """Fold several drafted sections into one, keeping every word and every id.
-
-    Compact rendering drops `sections` from the reader-visible surface, so a mode change
-    that leaves several drafted themes behind deletes them from the report. Merging first
-    keeps every theme's prose and provenance in the one section that still gets rendered.
-
-    `title` and `note` also make this the safe landing for a theme drafted over several
-    evidence packets whose consolidation call failed: concatenating the passes reads worse
-    than one integrated section, but it loses nothing, which is the property that matters
-    when the alternative is discarding drafted prose.
-    """
-    if len(sections) <= 1:
-        return sections
-    body = " ".join(
-        value
-        for section in sections
-        for value in (
-            section.synthesis,
-            section.consensus,
-            section.disagreements,
-            section.implications,
-        )
-        if value
-    ).strip()
-    return [
-        SynthesisSection(
-            title=title or ("Kanıt özeti" if turkish else "Evidence summary"),
-            synthesis=body,
-            source_ids=list(
-                dict.fromkeys(
-                    source_id
-                    for section in sections
-                    for source_id in section.source_ids
-                )
-            ),
-            claim_ids=list(
-                dict.fromkeys(
-                    claim_id for section in sections for claim_id in section.claim_ids
-                )
-            ),
-            generation_note=";".join(
-                dict.fromkeys(
-                    [
-                        *(
-                            section.generation_note
-                            for section in sections
-                            if section.generation_note
-                        ),
-                        note,
-                    ]
-                )
-            ),
-            validation_warnings=list(
-                dict.fromkeys(
-                    warning
-                    for section in sections
-                    for warning in section.validation_warnings
-                )
-            ),
-        )
-    ]
-
-
 def _fallback_section(
     title: str,
     claims: list[Any],
@@ -1024,20 +977,7 @@ async def _consolidate_passes(
     turkish: bool,
     scope_context: str = "",
 ) -> tuple[SynthesisSection, bool, str]:
-    """Integrate a theme drafted over several evidence packets into one section.
-
-    A theme too large for one prompt is drafted in passes, and concatenating those passes
-    would produce exactly the study-by-study listing the section prompt forbids. This is the
-    reduce half, built the same way `_draft_overview` reduces themes: compress each pass
-    with `_prompt_excerpt`, then ask for one integrated section over the compressed cards.
-
-    Falls back to the deterministic merge rather than to a stitched-claims section: the
-    passes are real drafted prose, and losing them to a failed reduce would be a worse
-    outcome than a section that reads like two halves.
-    """
-    preserved = _merge_sections_into_compact_answer(
-        passes, turkish=turkish, title=title, note="merged_passes"
-    )[0]
+    """Integrate multiple model passes, retrying only unusable/transport failures."""
     allowed_ids = list(
         dict.fromkeys(source_id for section in passes for source_id in section.source_ids)
     )
@@ -1066,22 +1006,27 @@ async def _consolidate_passes(
         )
         for number, section in enumerate(passes, 1)
     )
-    try:
-        data = await llm.complete_json(
-            "You are merging several partial drafts of ONE thematic section of a research "
-            "report into a single integrated section. Return one JSON object with keys "
-            "synthesis, consensus, disagreements, implications. The passes cover different "
-            "studies from the same theme: combine them into one argument rather than "
-            "reporting them in sequence, and say where the passes agree and where they "
-            "diverge. Use only facts present in the passes. Never invent a source, number, "
-            "method, population, result, or URL, and never add a citation that is not "
-            "already in the passes. Keep at least one supplied [Sxx] citation on every "
-            "factual sentence. Do not mention passes, drafts, prompts, or an evidence "
-            f"packet. Write in report language '{language}'.",
-            f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
-            f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
-            f"ALLOWED_SOURCE_IDS: {', '.join(allowed_ids)}\n\nPASSES:\n{cards}",
-        )
+    errors: list[str] = []
+    for attempt in range(2):
+        try:
+            data = await llm.complete_json(
+                "You are merging several partial drafts of ONE thematic section of a research "
+                "report into a single integrated section. Return one JSON object with keys "
+                "synthesis, consensus, disagreements, implications. The passes cover different "
+                "studies from the same theme: combine them into one argument rather than "
+                "reporting them in sequence, and say where the passes agree and where they "
+                "diverge. Use only facts present in the passes. Never invent a source, number, "
+                "method, population, result, or URL, and never add a citation that is not "
+                "already in the passes. Keep at least one supplied [Sxx] citation on every "
+                "factual sentence. Do not mention passes, drafts, prompts, or an evidence "
+                f"packet. Write in report language '{language}'.",
+                f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
+                f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
+                f"ALLOWED_SOURCE_IDS: {', '.join(allowed_ids)}\n\nPASSES:\n{cards}",
+            )
+        except Exception as exc:  # noqa: BLE001 - one transport retry is intentional
+            errors.append(type(exc).__name__)
+            continue
         section = _advisory_section_from_data(
             data,
             title=title,
@@ -1095,42 +1040,37 @@ async def _consolidate_passes(
                 for section in passes
             ),
         )
-        if section is not None:
-            warnings = list(
-                dict.fromkeys(
-                    [
-                        *(warning for item in passes for warning in item.validation_warnings),
-                        *section.validation_warnings,
-                    ]
-                )
+        if section is None:
+            errors.append("unusable_response")
+            continue
+        warnings = list(
+            dict.fromkeys(
+                [
+                    *(warning for item in passes for warning in item.validation_warnings),
+                    *section.validation_warnings,
+                ]
             )
-            return replace(section, validation_warnings=warnings), True, "consolidated_visible"
-    except Exception as exc:  # noqa: BLE001 - a failed reduce must not cost the passes
-        return (
-            replace(
-                preserved,
-                validation_warnings=list(
-                    dict.fromkeys(
-                        [
-                            *preserved.validation_warnings,
-                            f"consolidation:{type(exc).__name__}",
-                        ]
-                    )
-                ),
-            ),
-            False,
-            f"consolidation_unavailable:{type(exc).__name__}",
         )
-    return (
-        replace(
-            preserved,
-            validation_warnings=list(
-                dict.fromkeys([*preserved.validation_warnings, "consolidation:unusable_response"])
-            ),
+        note = "consolidated_visible" if attempt == 0 else "consolidated_retry_visible"
+        if warnings:
+            note += ":warnings"
+        return replace(section, validation_warnings=warnings), True, note
+
+    unavailable = SynthesisSection(
+        title=title,
+        synthesis=(
+            "LLM sentezi üretilemedi; kanıt kayıtları denetim eklerinde korunmuştur."
+            if turkish
+            else "LLM synthesis could not be produced; evidence records remain in the audit appendices."
         ),
-        False,
-        "consolidation_unavailable:unusable_response",
+        source_ids=allowed_ids,
+        claim_ids=claim_ids,
+        validation_warnings=[
+            "llm_synthesis_unavailable",
+            *[f"consolidation:{error}" for error in errors],
+        ],
     )
+    return unavailable, False, f"consolidation_unavailable:{'+'.join(errors) or 'unknown'}"
 
 
 async def _draft_overview(
@@ -1327,7 +1267,9 @@ async def build_synthesis_package(
         )
         drafts: list[SynthesisSection] = []
         pass_notes: list[str] = []
-        for packet in packets or [EvidencePacket("", [], [])]:
+        drafted_claim_ids: list[str] = []
+        attempted_packets = packets or [EvidencePacket("", [], [])]
+        for packet in attempted_packets:
             drafted, drafted_ok, note = await _draft_section(
                 llm,
                 question=question,
@@ -1342,15 +1284,37 @@ async def build_synthesis_package(
             pass_notes.append(note)
             if drafted_ok:
                 drafts.append(drafted)
+                drafted_claim_ids.extend(packet.claim_ids)
         if not drafts:
-            section, succeeded, diagnostic = fallback, False, pass_notes[0]
+            section, succeeded = fallback, False
+            diagnostic = f"all_passes_unavailable:{'+'.join(pass_notes)}"
+        elif len(drafts) != len(attempted_packets):
+            # Showing only the successful slice would silently omit the failed packet's
+            # claims while describing the whole theme as complete. Preserve no partial
+            # slice as the final theme: expose an explicit failure and keep every claim in
+            # the audit appendices.
+            section = replace(
+                fallback,
+                validation_warnings=list(
+                    dict.fromkeys(
+                        [
+                            *fallback.validation_warnings,
+                            "llm_synthesis_partial_packet_failure",
+                            *[
+                                f"packet:{note}"
+                                for note in pass_notes
+                                if note.startswith("unavailable:")
+                            ],
+                        ]
+                    )
+                ),
+            )
+            succeeded = False
+            diagnostic = f"partial_packet_failure:{'+'.join(pass_notes)}"
         elif len(drafts) == 1:
-            # One usable pass needs no reduce, whether the theme fit in one packet or the
-            # other passes failed. Consolidating a single draft would spend a call to
-            # rewrite prose that already passed.
             section, succeeded, diagnostic = drafts[0], True, pass_notes[0]
         else:
-            section, _consolidated, note = await _consolidate_passes(
+            section, succeeded, note = await _consolidate_passes(
                 llm,
                 question=question,
                 title=title,
@@ -1359,24 +1323,28 @@ async def build_synthesis_package(
                 turkish=turkish,
                 scope_context=scope_context,
             )
-            # A failed reduce still yields every pass's prose through the deterministic
-            # merge, so the theme counts as model-written either way. `llm_successes` is
-            # compared against `len(sections)`, so it must move once per theme and never
-            # once per pass.
-            succeeded = True
             diagnostic = f"{note}({'+'.join(pass_notes)})"
+        if any(str(getattr(claim, "status", "")) == "qualified" for claim in theme_claims):
+            section = replace(
+                section,
+                validation_warnings=list(
+                    dict.fromkeys(
+                        [*section.validation_warnings, "qualified:single_study_findings"]
+                    )
+                ),
+            )
         theme_coverage.append(
             {
                 "theme": title,
                 "claims_total": len(theme_claims),
-                # Claims that reached a prompt. Not the same as claims the reader's section
-                # ends up reflecting: `passes_used` below is what says whether a pass was
-                # drafted and then discarded for being ungrounded, which leaves its claims
-                # shown to the model but absent from the prose.
-                "claims_shown": sum(len(packet.claim_ids) for packet in packets),
+                "claims_offered": sum(len(packet.claim_ids) for packet in packets),
+                # A failed packet or reduce produces an explicit unavailable section, so
+                # none of the packet claims may be reported as present in final prose.
+                "claims_shown": len(set(drafted_claim_ids)) if succeeded else 0,
                 "claims_without_evidence": len(unbacked),
                 "passes": len(packets),
-                "passes_used": len(drafts),
+                "passes_drafted": len(drafts),
+                "passes_used": len(drafts) if succeeded else 0,
             }
         )
         # The diagnostic travels with the section as well as in the run-level map. Reading
@@ -1391,7 +1359,6 @@ async def build_synthesis_package(
     if report_mode == "standard" and len(sections) < 2:
         report_mode = "compact"
         mode_reasons.append("fewer_than_2_viable_themes")
-        sections = _merge_sections_into_compact_answer(sections, turkish=turkish)
 
     if report_mode == "compact":
         overview = {
@@ -1416,6 +1383,13 @@ async def build_synthesis_package(
             turkish=turkish,
             scope_context=scope_context,
         )
+    if any(str(getattr(claim, "status", "")) == "qualified" for claim in unique_claims):
+        overview_warnings.setdefault("executive_summary", []).append(
+            "qualified:single_study_findings"
+        )
+        overview_warnings["executive_summary"] = list(
+            dict.fromkeys(overview_warnings["executive_summary"])
+        )
     overlap_rows = (
         [] if report_mode == "compact" else _overview_overlap_rows(overview, sections)
     )
@@ -1424,6 +1398,20 @@ async def build_synthesis_package(
     relevance_scores = [_question_relevance(claim) for claim in unique_claims]
     maximum_question_relevance = max(relevance_scores, default=0.0)
     contributing_sources = _contributing_sources(unique_claims, synthesis_evidence)
+    primary_synthesis_evidence = {
+        claim_id: [
+            (link, source)
+            for link, source in links
+            if str(source.id) in primary_source_ids
+        ]
+        for claim_id, links in synthesis_evidence.items()
+    }
+    primary_contributing_sources = _contributing_sources(
+        unique_claims, primary_synthesis_evidence
+    )
+    independent_contributors = _independent_contributors(
+        unique_claims, primary_synthesis_evidence
+    )
     questions = [item for item in (sub_questions or []) if item.strip()]
     covered_questions = sum(
         any(
@@ -1435,12 +1423,14 @@ async def build_synthesis_package(
     sub_question_coverage = covered_questions / len(questions) if questions else 1.0
     answerability_status: Literal["answerable", "limited", "insufficient"] = "answerable"
     answerability_reasons: list[str] = []
-    if not unique_claims or not contributing_sources:
+    if not unique_claims or not primary_contributing_sources:
         answerability_status = "insufficient"
         answerability_reasons.append("no_reportable_in_scope_evidence")
     else:
-        if len(contributing_sources) < 2:
-            answerability_reasons.append("fewer_than_2_in_scope_sources")
+        if len(independent_contributors) < 2:
+            answerability_reasons.append(
+                "fewer_than_2_independent_in_scope_sources"
+            )
         if sub_question_coverage < 0.5:
             answerability_reasons.append("sub_question_coverage_below_half")
         if maximum_question_relevance < _DIRECT_ANSWER_RELEVANCE_THRESHOLD:
@@ -1449,8 +1439,8 @@ async def build_synthesis_package(
             answerability_status = "limited"
     generation_diagnostics["overview"] = overview_diagnostic
     generation_diagnostics["report_mode"] = report_mode
-    # Compact rendering shows only `sections[0]`, so more than one section here would be
-    # silently deleted from the report. Every path to compact must merge first.
+    # Compact rendering shows only `sections[0]`; theme planning must therefore have
+    # selected one integrated model call, never a deterministic merge of several drafts.
     assert not (report_mode == "compact" and len(sections) > 1), (
         "compact reports must carry a single integrated section"
     )
@@ -1511,13 +1501,10 @@ async def build_synthesis_package(
                 "status": answerability_status,
                 "threshold": _DIRECT_ANSWER_RELEVANCE_THRESHOLD,
                 "maximum_question_relevance": round(maximum_question_relevance, 4),
-                "in_scope_contributing_sources": len(contributing_sources),
+                "in_scope_contributing_sources": len(primary_contributing_sources),
+                "independent_in_scope_contributors": len(independent_contributors),
                 "sub_question_coverage": round(sub_question_coverage, 4),
                 "reason_codes": answerability_reasons,
             },
         },
     )
-
-
-def synthesis_manifest(package: SynthesisPackage) -> str:
-    return json.dumps(package.as_dict(), ensure_ascii=False, indent=2)

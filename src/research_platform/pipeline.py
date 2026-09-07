@@ -197,6 +197,7 @@ def _validated_scope_role(
     facet_assessments: list[dict[str, Any]],
     exclusion_assessments: list[dict[str, Any]],
     assessment_text: str,
+    classification_reason: str,
 ) -> SourceScopeRole:
     """Fail uncertain scope decisions out of the main synthesis.
 
@@ -205,9 +206,6 @@ def _validated_scope_role(
     a missing decision or an unverifiable excerpt is a near match rather than silent
     inclusion.
     """
-    if requested_role == SourceScopeRole.EXCLUDED:
-        return requested_role
-
     haystack = assessment_text.casefold()
     facet_by_name = {
         str(item.get("facet") or ""): item
@@ -219,19 +217,31 @@ def _validated_scope_role(
         for item in exclusion_assessments
         if str(item.get("exclusion") or "")
     }
+    if not str(classification_reason or "").strip():
+        return SourceScopeRole.NEAR_SCOPE
 
     exclusion_decisions_complete = all(
         signal in exclusion_by_name
         and isinstance(exclusion_by_name[signal].get("matched"), bool)
+        and bool(str(exclusion_by_name[signal].get("reason") or "").strip())
         for signal in criteria.exclusion_signals
     )
     for signal in criteria.exclusion_signals:
         item = exclusion_by_name.get(signal)
-        if not item or item.get("matched") is not True:
+        if (
+            not item
+            or item.get("matched") is not True
+            or not str(item.get("reason") or "").strip()
+        ):
             continue
         evidence = str(item.get("evidence") or "").strip().casefold()
         if evidence and evidence in haystack:
             return SourceScopeRole.EXCLUDED
+        return SourceScopeRole.NEAR_SCOPE
+
+    # A bare model label is not evidence. If it requested exclusion without proving an
+    # approved exclusion signal, retain the source as near-scope for inspection.
+    if requested_role == SourceScopeRole.EXCLUDED:
         return SourceScopeRole.NEAR_SCOPE
 
     if requested_role not in {
@@ -239,7 +249,14 @@ def _validated_scope_role(
         SourceScopeRole.SUPPORTING_BENCHMARK,
     }:
         return requested_role
-    required = {facet.name for facet in criteria.required_facets}
+    all_facets = {facet.name for facet in criteria.required_facets}
+    facet_decisions_complete = all(
+        name in facet_by_name
+        and isinstance(facet_by_name[name].get("matched"), bool)
+        and bool(str(facet_by_name[name].get("reason") or "").strip())
+        for name in all_facets
+    )
+    required = set(all_facets)
     if requested_role == SourceScopeRole.SUPPORTING_BENCHMARK:
         required.discard("task")
     proven = {
@@ -249,9 +266,27 @@ def _validated_scope_role(
         and (evidence := str(item.get("evidence") or "").strip().casefold())
         and evidence in haystack
     }
-    if not required.issubset(proven) or not exclusion_decisions_complete:
+    if (
+        not facet_decisions_complete
+        or not required.issubset(proven)
+        or not exclusion_decisions_complete
+    ):
         return SourceScopeRole.NEAR_SCOPE
     return requested_role
+
+
+def _scope_role_allows_evidence(
+    protocol: ResearchProtocol | None,
+    metadata: dict[str, Any] | None,
+) -> bool:
+    """Keep explicit near/excluded roles out while preserving legacy unlabelled runs."""
+    if protocol is None or protocol.scope_criteria is None:
+        return True
+    role = str((metadata or {}).get("research_scope_role") or "")
+    return not role or role in {
+        SourceScopeRole.PRIMARY_IN_SCOPE.value,
+        SourceScopeRole.SUPPORTING_BENCHMARK.value,
+    }
 
 
 def preparation_signature(*parts: Any) -> str:
@@ -1217,8 +1252,12 @@ class ResearchPipeline:
         return await self._plan_gate(state, output, protocol)
 
     async def search(self, state: PipelineState) -> dict:
-        if not state.get("collection_round_started_at"):
-            state["collection_round_started_at"] = datetime.now(UTC).isoformat()
+        # The marker has to travel in the returned update, not only on the local dict.
+        # The graph merges node return values into state, so an in-place write reaches the
+        # stage checkpoint -- which dumps this dict -- but never reaches ACQUIRE, and the
+        # round would then close against an empty marker and bill itself zero seconds.
+        started_at = state.get("collection_round_started_at") or datetime.now(UTC).isoformat()
+        state["collection_round_started_at"] = started_at
         await self._boundary(state, "SEARCH")
         if self._collection_seconds_remaining(state) <= 0:
             await self.repo.event(
@@ -1233,13 +1272,15 @@ class ResearchPipeline:
                 "source_count_before_round": len(
                     await self.repo.list_sources(state["run_id"])
                 ),
+                "collection_round_started_at": started_at,
             }
-        return await self._interruptible(
+        result = await self._interruptible(
             self._search_node(state),
             state,
             "SEARCH",
             self.settings.search_stage_timeout_s,
         )
+        return {**result, "collection_round_started_at": started_at}
 
     async def _search_node(self, state: PipelineState) -> dict:
         protocol = ResearchProtocol.model_validate(state["protocol"])
@@ -1304,6 +1345,7 @@ class ResearchPipeline:
             nonlocal citation_seeds_used
             async with semaphore:
                 started = time.perf_counter()
+                provider_query = ""
                 try:
                     provider_query = compile_provider_query(
                         connector.id,
@@ -1416,6 +1458,22 @@ class ResearchPipeline:
                             "connector": connector.id,
                             "query": mission.query,
                             "compiled_query": provider_query,
+                            "provider_query": next(
+                                (
+                                    str(row.metadata.get("arxiv_query_sent"))
+                                    for row in rows
+                                    if row.metadata.get("arxiv_query_sent")
+                                ),
+                                provider_query,
+                            ),
+                            "provider_query_echo": next(
+                                (
+                                    str(row.metadata.get("arxiv_query_echo"))
+                                    for row in rows
+                                    if row.metadata.get("arxiv_query_echo")
+                                ),
+                                "",
+                            ),
                             "mission_id": mission.id,
                             "branch_id": mission.branch_id,
                             "latency_seconds": round(time.perf_counter() - started, 4),
@@ -1425,11 +1483,21 @@ class ResearchPipeline:
                     )
                     return rows
                 except Exception as exc:
-                    connector_errors.append({"connector": connector.id, "error": str(exc)[:500]})
+                    sent_query = str(getattr(exc, "query", "") or provider_query)
+                    connector_errors.append(
+                        {
+                            "connector": connector.id,
+                            "error": str(exc)[:500],
+                            "compiled_query": provider_query,
+                            "provider_query": sent_query,
+                        }
+                    )
                     connector_metrics.append(
                         {
                             "connector": connector.id,
                             "query": mission.query,
+                            "compiled_query": provider_query,
+                            "provider_query": sent_query,
                             "mission_id": mission.id,
                             "branch_id": mission.branch_id,
                             "latency_seconds": round(time.perf_counter() - started, 4),
@@ -2002,6 +2070,34 @@ class ResearchPipeline:
                         if isinstance(item, dict)
                         and isinstance(item.get("matched"), bool)
                     ]
+                    assessed_facets = {
+                        item["facet"] for item in assessments if item["facet"]
+                    }
+                    assessments.extend(
+                        {
+                            "facet": facet.name,
+                            "matched": None,
+                            "reason": "model_decision_missing",
+                            "evidence": "",
+                        }
+                        for facet in protocol.scope_criteria.required_facets
+                        if facet.name not in assessed_facets
+                    )
+                    assessed_exclusions = {
+                        item["exclusion"]
+                        for item in exclusion_assessments
+                        if item["exclusion"]
+                    }
+                    exclusion_assessments.extend(
+                        {
+                            "exclusion": exclusion,
+                            "matched": None,
+                            "reason": "model_decision_missing",
+                            "evidence": "",
+                        }
+                        for exclusion in protocol.scope_criteria.exclusion_signals
+                        if exclusion not in assessed_exclusions
+                    )
                     assessment_text = " ".join(
                         [
                             document.candidate.title,
@@ -2009,18 +2105,20 @@ class ResearchPipeline:
                             document.content[:6000],
                         ]
                     )
+                    classification_reason = str(result.get("reason") or "")[:500]
                     role = _validated_scope_role(
                         protocol.scope_criteria,
                         role,
                         assessments,
                         exclusion_assessments,
                         assessment_text,
+                        classification_reason,
                     )
                     document.candidate.metadata["scope_assessment"] = {
                         "role": role.value,
                         "facet_assessments": assessments,
                         "exclusion_assessments": exclusion_assessments,
-                        "reason": str(result.get("reason", ""))[:500],
+                        "reason": classification_reason or "classification_incomplete",
                         "model": self.settings.llm_model,
                     }
                     document.candidate.metadata["research_scope_role"] = role.value
@@ -2128,9 +2226,7 @@ class ResearchPipeline:
                 )
                 continue
             deterministic_direct = relevant
-            if not self.settings.testing and not document.candidate.metadata.get(
-                "sentinel_required"
-            ):
+            if not self.settings.testing:
                 judged_relevant, judge_score, judge_reason = await self._semantic_source_judgment(
                     protocol, document
                 )
@@ -2141,7 +2237,8 @@ class ResearchPipeline:
                     "model": self.settings.llm_model,
                 }
                 scope_role = document.candidate.metadata.get("research_scope_role")
-                if scope_role == SourceScopeRole.EXCLUDED.value:
+                scope_excluded = scope_role == SourceScopeRole.EXCLUDED.value
+                if scope_excluded:
                     content_rejected.append(
                         {
                             "url": str(document.candidate.url),
@@ -2151,13 +2248,12 @@ class ResearchPipeline:
                             "stage": "post_acquisition_scope",
                         }
                     )
-                    continue
                 reject_semantic = (
                     (not judged_relevant or judge_score < 0.45)
                     if protocol.research_mode == "focused_answer"
                     else (not judged_relevant and judge_score < 0.20)
                 )
-                if reject_semantic:
+                if reject_semantic and not scope_excluded:
                     content_rejected.append(
                         {
                             "url": str(document.candidate.url),
@@ -2208,10 +2304,15 @@ class ResearchPipeline:
                     SourceScopeRole.PRIMARY_IN_SCOPE.value
                     if protocol.scope_criteria is None
                     or self.settings.testing
-                    or document.candidate.metadata.get("sentinel_required")
                     else SourceScopeRole.NEAR_SCOPE.value
                 ),
             )
+            scope_evidence_eligible = _scope_role_allows_evidence(
+                protocol,
+                document.candidate.metadata,
+            )
+            if not scope_evidence_eligible:
+                document.candidate.metadata["evidence_eligible"] = False
             snapshot = document.raw_content or document.content
             if snapshot and document.content_hash:
                 extension = {
@@ -2241,6 +2342,11 @@ class ResearchPipeline:
                 )
                 continue
             existing_version_ids.add(version.id)
+            # Near-scope and excluded documents remain fully reproducible in the source
+            # catalog and raw export, but they never enter chunking, claim extraction, or
+            # the main evidence quota.
+            if not scope_evidence_eligible:
+                continue
             payload = document.model_dump(mode="json")
             # raw_content holds the untouched snapshot, and for PDFs that is the whole
             # binary base64-encoded (up to max_download_bytes * 4/3 per document). It is
@@ -2431,10 +2537,17 @@ class ResearchPipeline:
         in_flight = {
             payload.get("source_version_id") for payload in state.get("documents", [])
         }
+        protocol_payload = state.get("protocol")
+        protocol = (
+            ResearchProtocol.model_validate(protocol_payload)
+            if protocol_payload is not None
+            else None
+        )
         versions = [
             (source, version)
             for source, version in await self.repo.list_unchunked_versions(state["run_id"])
             if version.id not in in_flight
+            and _scope_role_allows_evidence(protocol, source.metadata_json)
         ]
         for _, version in versions:
             if not version.content:
@@ -2878,9 +2991,6 @@ class ResearchPipeline:
         ]
         claims = await self.repo.list_claims(state["run_id"])
         evidence = await self.repo.list_evidence(state["run_id"])
-        previous_count = state.get("source_count_before_round", 0)
-        new_count = max(0, len(sources) - previous_count)
-        rate = new_count / max(len(sources), 1)
         previous = CoverageMetrics.model_validate(state.get("coverage", {}))
         round_number = state.get("round_number", 1)
         round_new_source_versions = int(
@@ -2913,7 +3023,8 @@ class ResearchPipeline:
         relevant_sources = [
             source
             for source in sources
-            if (
+            if _scope_role_allows_evidence(protocol, source.metadata_json)
+            and (
                 (
                     source.family
                     in {
@@ -2941,6 +3052,10 @@ class ResearchPipeline:
                 )
             )
         ]
+        relevant_source_ids = {source.id for source in relevant_sources}
+        # Scope-separated discoveries do not count as progress toward an answer. Use the
+        # in-scope versions admitted this round and the in-scope denominator for saturation.
+        rate = round_new_source_versions / max(len(relevant_sources), 1)
         branch_counts: dict[str, int] = defaultdict(int)
         for branch_id in state.get("required_branch_ids", []):
             branch_counts[branch_id] = 0
@@ -2951,7 +3066,11 @@ class ResearchPipeline:
                     if branch in branch_counts:
                         branch_counts[branch] += 1
         for claim, link, source in evidence:
-            if link.entailment_score < 0.5 or claim.status in {"irrelevant", "unresolved"}:
+            if (
+                source.id not in relevant_source_ids
+                or link.entailment_score < 0.5
+                or claim.status in {"irrelevant", "unresolved"}
+            ):
                 continue
             for branch in (source.metadata_json or {}).get("query_branches", []):
                 if branch in branch_counts:
@@ -2966,7 +3085,9 @@ class ResearchPipeline:
             evidence_source_ids = {
                 source.id
                 for claim, link, source in evidence
-                if link.entailment_score >= 0.5 and claim.status not in {"irrelevant", "unresolved"}
+                if source.id in relevant_source_ids
+                and link.entailment_score >= 0.5
+                and claim.status not in {"irrelevant", "unresolved"}
             }
             for entity in official_entities:
                 if any(
@@ -3075,7 +3196,8 @@ class ResearchPipeline:
         )
         elapsed = self._finish_collection_round(state) / 60
         source_budget_hit = (
-            protocol.budget.max_sources is not None and len(sources) >= protocol.budget.max_sources
+            protocol.budget.max_sources is not None
+            and len(relevant_sources) >= protocol.budget.max_sources
         )
         literature_budget_mode = (
             protocol.research_mode == "literature_scan"
