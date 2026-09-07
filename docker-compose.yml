@@ -164,6 +164,12 @@ services:
       # planner has reserved for Ollama (see capacity._gpu_slots).
       DOCLING_MAX_CONCURRENT: ${DOCLING_MAX_CONCURRENT:-1}
       DOCLING_NUM_THREADS: ${DOCLING_NUM_THREADS:-4}
+      # Idle seconds before the CUDA caching allocator hands its unused blocks back.
+      # torch never releases a cached block on its own, so without this the resident
+      # converter's VRAM only ratchets up and eventually crowds Ollama off the card.
+      # 0 disables. Only meaningful on DOCLING_DEVICE=cuda.
+      DOCLING_IDLE_RELEASE_S: ${DOCLING_IDLE_RELEASE_S:-90}
+      DOCLING_IDLE_POLL_S: ${DOCLING_IDLE_POLL_S:-15}
     ports:
       - "127.0.0.1:3941:3941"
     healthcheck:

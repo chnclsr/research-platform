@@ -50,8 +50,23 @@ NUM_THREADS = int(os.environ.get("DOCLING_NUM_THREADS", "4"))
 #: reserved for Ollama. The client keeps its own queue in engines.py; this is the
 #: limit that actually holds.
 MAX_CONCURRENT = max(1, int(os.environ.get("DOCLING_MAX_CONCURRENT", "1")))
+#: Idle seconds before the CUDA caching allocator is asked to hand its unused blocks
+#: back to the driver. 0 disables the sweep. See _bosta_serbest_birak() for why a
+#: resident converter needs one at all.
+IDLE_RELEASE_S = float(os.environ.get("DOCLING_IDLE_RELEASE_S", "90"))
+#: How often the watcher looks. Well below IDLE_RELEASE_S so the release lands close
+#: to the moment the service actually went idle.
+IDLE_POLL_S = float(os.environ.get("DOCLING_IDLE_POLL_S", "15"))
 
 _KAPI = threading.BoundedSemaphore(MAX_CONCURRENT)
+
+_SAYAC = threading.Lock()
+#: Set by every finished conversion, cleared by the sweep: the allocator owes us a
+#: release. Without it an idle service would call into CUDA forever.
+_borc = False
+_son_is_bitti = time.monotonic()
+_serbest_sayisi = 0
+_son_serbest: dict | None = None
 
 
 def _surum(paket: str) -> str:
@@ -125,6 +140,12 @@ def health() -> dict:
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "",
         "models": ARTIFACTS or "hf-cache",
         "max_concurrent": MAX_CONCURRENT,
+        "idle_release_s": IDLE_RELEASE_S,
+        "releases": _serbest_sayisi,
+        "last_release": _son_serbest,
+        "reserved_bytes": (
+            torch.cuda.memory_reserved() if _DEVICE == AcceleratorDevice.CUDA else 0
+        ),
     }
 
 
@@ -153,6 +174,9 @@ def extract(file: UploadFile = File(...), blocks: str = Form(...)) -> dict:
     except Exception as exc:
         return {"error": f"{type(exc).__name__}: {exc}"}
     finally:
+        # Marked on the failure path too: a conversion that raised still left blocks
+        # in the allocator.
+        _isi_isaretle()
         _sil(yol)
 
 
@@ -184,6 +208,76 @@ def _donustur(yol: str, bloklar: list[tuple[int, int]]) -> dict:
         "build": BUILD,
         "duration_ms": (time.perf_counter() - started) * 1000,
     }
+
+
+def _isi_isaretle() -> None:
+    """Record that a conversion just ended, so the watcher knows what to wait on."""
+    global _borc, _son_is_bitti
+    with _SAYAC:
+        _borc = True
+        _son_is_bitti = time.monotonic()
+
+
+def _bosta_serbest_birak() -> dict | None:
+    """Give the allocator's unused blocks back while nothing is converting.
+
+    torch never returns a block it has cached, so a resident converter's VRAM only
+    ratchets up. Measured 2026-09-04 on this deployment: a service two days old held
+    4818 MiB against a 1838 MiB single-conversion peak, which left Ollama too little
+    of the 8 GB card and pushed 35% of its layers onto the CPU.
+
+    Idle is the right hook, and not only because it is free -- there is no queued work
+    to slow down. It is also exactly when the card is wanted elsewhere: docling does
+    not run during the pipeline's NORMALIZE stage, which is the LLM's heaviest stretch,
+    so the service is naturally idle at the moment Ollama needs the VRAM most.
+
+    Returns None when a conversion holds the gate; the caller keeps the debt and
+    retries on the next tick rather than contending for the card.
+
+    This does not return everything: the CUDA context, cuDNN and cuBLAS workspaces
+    live outside the caching allocator. The measured floor is ~724 MiB, not zero.
+    """
+    if _DEVICE != AcceleratorDevice.CUDA:
+        return None
+    alinan = 0
+    try:
+        for _ in range(MAX_CONCURRENT):
+            if not _KAPI.acquire(blocking=False):
+                return None
+            alinan += 1
+        onceki = torch.cuda.memory_reserved()
+        torch.cuda.empty_cache()
+        return {
+            "reserved_before": onceki,
+            "reserved_after": torch.cuda.memory_reserved(),
+            "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }
+    finally:
+        for _ in range(alinan):
+            _KAPI.release()
+
+
+def _gozcu() -> None:
+    """Watch for idle and sweep once per idle period."""
+    global _borc, _serbest_sayisi, _son_serbest
+    while True:
+        time.sleep(IDLE_POLL_S)
+        with _SAYAC:
+            # Clearing the debt before the sweep, not after: a conversion that finishes
+            # while empty_cache() runs re-arms it and gets its own sweep next tick.
+            hazir = _borc and (time.monotonic() - _son_is_bitti) >= IDLE_RELEASE_S
+            if hazir:
+                _borc = False
+        if not hazir:
+            continue
+        olcum = _bosta_serbest_birak()
+        if olcum is None:
+            with _SAYAC:
+                _borc = True
+            continue
+        with _SAYAC:
+            _serbest_sayisi += 1
+            _son_serbest = olcum
 
 
 def _cihaz_adi() -> str:
@@ -220,6 +314,8 @@ def main() -> None:
     # Load the models now rather than on the first request, so a client's timeout
     # budget is spent on its own document and not on our startup.
     CONVERTER.initialize_pipeline(InputFormat.PDF)
+    if IDLE_RELEASE_S > 0 and _DEVICE == AcceleratorDevice.CUDA:
+        threading.Thread(target=_gozcu, name="idle-release", daemon=True).start()
     uvicorn.run(app, host="0.0.0.0", port=PORT)
 
 
