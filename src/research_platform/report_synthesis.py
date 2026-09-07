@@ -252,6 +252,54 @@ def _prompt_excerpt(value: str, max_chars: int) -> str:
     return cleaned[: boundary if boundary > 0 else max_chars].rstrip()
 
 
+#: report_language is Literal["tr", "en"], so this stays a closed map rather than a
+#: lookup that could silently fall through to a language nothing enforces.
+_LANGUAGE_NAMES = {"tr": "Turkish", "en": "English"}
+#: A closing line in the target language, for a deliverable whose language is not the
+#: evidence's. English gets none: the whole prompt already is English.
+_LANGUAGE_CLOSERS = {"tr": " Son kural: cevabın tamamı Türkçe olacak."}
+#: The language claims and quotes are stored in. The packet is built from them verbatim,
+#: so this is the language the model is reading no matter what it is asked to write.
+_EVIDENCE_LANGUAGE = "en"
+
+
+def _language_directive(language: str) -> str:
+    """Name the output language, and when it differs from the evidence's, forbid copying.
+
+    The old instruction was `Write in report language 'tr'.` -- an ISO code, in English, at
+    the tail of an English prompt whose EVIDENCE_PACKET is entirely English because claims
+    are stored in the research language. Measured 2026-09-07 on qwen3:4b-instruct against
+    real packets from run 01M1NT3VCT2R0G10DFD4BRVVG1: with the English RESEARCH_QUESTION
+    the drafting call produced English in 0/9 fields; naming the language and forbidding
+    sentence copying took it to 10/10. Malformed `[S1, S2]` citations fell from 3 to 1 over
+    the same four packets -- a model that has slipped into copying its English evidence
+    copies that evidence's citation habits too -- so this reduces that failure without
+    fixing it; the citation format needs its own guard.
+
+    The translate-don't-copy clause is conditional because it is nonsense when the report
+    language is the evidence language: telling a model to write English, translate, and
+    never copy an English sentence is three instructions that disagree.
+
+    The constraint body stays English on purpose. Translating the whole prompt also fixes
+    the language, but in the same measurement it dropped the synthesis field entirely in
+    one run of three; the rules that keep the model from inventing sources are worth more
+    than the symmetry.
+    """
+    # Resolved once: a value outside the schema must fall back whole, not pick up the
+    # default's name while losing its closing line.
+    resolved = language if language in _LANGUAGE_NAMES else "tr"
+    name = _LANGUAGE_NAMES[resolved]
+    if resolved == _EVIDENCE_LANGUAGE:
+        return f"OUTPUT LANGUAGE: {name}."
+    evidence_name = _LANGUAGE_NAMES[_EVIDENCE_LANGUAGE]
+    return (
+        f"OUTPUT LANGUAGE: {name}. The evidence below is in {evidence_name}, but every "
+        f"sentence of every field MUST be written in {name}. Translate the findings; never "
+        f"copy an {evidence_name} sentence."
+        f"{_LANGUAGE_CLOSERS.get(resolved, '')}"
+    )
+
+
 def _prompt_char_budget(llm: LLMProvider) -> int:
     """Reserve output and fixed-prompt room before filling a prompt with evidence.
 
@@ -926,7 +974,7 @@ async def _draft_section(
         "only from claims marked consensus_eligible=true; otherwise leave it empty. Do not "
         "mention prompts, claims, auditing, retrieval, or an evidence packet. Preserve literal "
         "scope boundaries. "
-        f"Write in report language '{language}'."
+        + _language_directive(language)
     )
     user = (
         f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
@@ -1019,7 +1067,7 @@ async def _consolidate_passes(
                 "method, population, result, or URL, and never add a citation that is not "
                 "already in the passes. Keep at least one supplied [Sxx] citation on every "
                 "factual sentence. Do not mention passes, drafts, prompts, or an evidence "
-                f"packet. Write in report language '{language}'.",
+                "packet. " + _language_directive(language),
                 f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
                 f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
                 f"ALLOWED_SOURCE_IDS: {', '.join(allowed_ids)}\n\nPASSES:\n{cards}",
@@ -1118,7 +1166,7 @@ async def _draft_overview(
             "Each field has a distinct role and must not reuse sentences or close paraphrases from "
             "the theme cards or another field. Preserve the original scope boundaries; never replace "
             "a time, condition, population, intervention, or outcome with a neighbouring concept. "
-            f"Write in report language '{language}'."
+            + _language_directive(language)
     )
     user = (
         f"RESEARCH_QUESTION:\n{question}\n\nALLOWED_SOURCE_IDS: "

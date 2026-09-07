@@ -334,8 +334,12 @@ async def build_exports(
 
     synthesis_package = await build_synthesis_package(
         llm=llm,
-        # The model reasons over English claims, so it gets the English question; the
-        # "write in report language" instruction inside the synthesis handles the output.
+        # The model reasons over English claims, so it gets the English question. That
+        # makes the prompt English on every side -- question, packet, instructions -- and
+        # the output language then rests entirely on the synthesis directive. It did not
+        # hold: `Write in report language 'tr'.` left four of eight body sections of run
+        # 01M1NT3VCT2R0G10DFD4BRVVG1 in English. _language_directive() is what carries it
+        # now; keep the question English, but do not weaken that directive.
         question=protocol.primary_question,
         language=protocol.report_language,
         sources=sources,

@@ -8,6 +8,7 @@ from research_platform.llm import LLMProvider
 from research_platform.report_synthesis import (
     SynthesisSection,
     _claim_evidence_block,
+    _language_directive,
     _draft_overview,
     _evidence_packets,
     _reader_text,
@@ -1246,3 +1247,92 @@ def test_source_design_labels_reuse_the_report_classifier():
 
     assert source_design_labels([source]) == {"source-1": "Dış doğrulama"}
 
+
+class PromptCapturingLLM(LLMProvider):
+    """Keeps every system prompt so a test can assert what the model was actually told."""
+
+    def __init__(self) -> None:
+        self.systems: list[str] = []
+
+    async def complete_json(self, system: str, user: str):
+        self.systems.append(system)
+        if "integrative layer" in system:
+            return {
+                "executive_summary": "The evidence indicates improvement in context [S01].",
+                "cross_study_assessment": "The available design is limited [S01].",
+                "conclusion": "Replication is needed before generalisation [S01].",
+                "uncertainty": "External validation was not demonstrated [S01].",
+            }
+        return {
+            "synthesis": "The measured outcome improved in the validation cohort [S01].",
+            "consensus": "",
+            "disagreements": "",
+            "implications": "Replication is needed [S01].",
+        }
+
+
+def test_language_directive_names_the_language_instead_of_its_code() -> None:
+    """`Write in report language 'tr'` measured 0/6 Turkish fields; the name measured 8/8."""
+    directive = _language_directive("tr")
+
+    assert "Turkish" in directive
+    assert "'tr'" not in directive
+    assert "never copy an English sentence" in directive
+    assert "Son kural" in directive
+
+
+def test_english_report_is_not_told_to_translate_away_from_english() -> None:
+    """Write English, translate, never copy English is three instructions that disagree."""
+    directive = _language_directive("en")
+
+    assert directive == "OUTPUT LANGUAGE: English."
+    assert "Translate" not in directive
+    assert "never copy" not in directive
+
+
+def test_unenforceable_language_falls_back_to_the_report_default() -> None:
+    """report_language is Literal["tr", "en"]; anything else must not silently pass through."""
+    assert _language_directive("de") == _language_directive("tr")
+
+
+async def test_every_synthesis_prompt_carries_the_language_directive() -> None:
+    """Drafting, consolidation and the overview each build their own system prompt."""
+    llm = PromptCapturingLLM()
+    sources, claims, evidence = _standard_corpus()
+    await build_synthesis_package(
+        llm=llm,
+        question="How do the alpha protocol and beta outcome differ?",
+        language="tr",
+        sources=sources,
+        reportable_claims=claims,
+        evidence_by_claim=evidence,
+        sub_questions=["Alpha method protocol", "Beta outcome performance"],
+        coverage={"estimated_completeness": 0.8},
+    )
+
+    assert llm.systems, "no prompt reached the model"
+    assert all("OUTPUT LANGUAGE: Turkish." in system for system in llm.systems)
+    assert not any("report language 'tr'" in system for system in llm.systems)
+    # The drafting and overview layers are separate prompts, and the bug was in both.
+    assert any("evidence-grounded thematic section" in system for system in llm.systems)
+    assert any("integrative layer" in system for system in llm.systems)
+
+
+async def test_language_directive_does_not_displace_the_invention_guards() -> None:
+    """The constraint body stays English precisely so these survive the language fix."""
+    llm = PromptCapturingLLM()
+    sources, claims, evidence = _standard_corpus()
+    await build_synthesis_package(
+        llm=llm,
+        question="How do the alpha protocol and beta outcome differ?",
+        language="tr",
+        sources=sources,
+        reportable_claims=claims,
+        evidence_by_claim=evidence,
+        sub_questions=["Alpha method protocol", "Beta outcome performance"],
+        coverage={"estimated_completeness": 0.8},
+    )
+
+    drafting = next(s for s in llm.systems if "evidence-grounded thematic section" in s)
+    assert "Never invent a source, number, method, population, result, or URL." in drafting
+    assert "consensus_eligible=true" in drafting
