@@ -9,6 +9,7 @@ import pytest
 from research_platform.config import Settings
 from research_platform.connectors.base import ConnectorQueryError
 from research_platform.connectors.implementations import ArxivConnector
+from research_platform.diagnostics import CONNECTOR_OBSERVATION
 from research_platform.schemas import ResearchScope
 
 FEED_OPEN = (
@@ -124,7 +125,14 @@ async def test_arxiv_backs_off_on_plain_text_throttle(monkeypatch):
         slept.append(seconds)
 
     monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-    assert await run_search(handler) == []
+    observation = {}
+    token = CONNECTOR_OBSERVATION.set(observation)
+    try:
+        assert await run_search(handler) == []
+    finally:
+        CONNECTOR_OBSERVATION.reset(token)
+    assert [a["http_status"] for a in observation["attempts"]] == [429, 200]
+    assert observation["provider_query_echo"]
     assert calls == 2
     assert slept and min(slept) >= 3.0
 
@@ -138,8 +146,14 @@ async def test_arxiv_does_not_reconnect_after_a_dropped_connection():
         calls += 1
         raise httpx.ReadError("connection dropped")
 
-    with pytest.raises(httpx.ReadError):
-        await run_search(handler)
+    observation = {}
+    token = CONNECTOR_OBSERVATION.set(observation)
+    try:
+        with pytest.raises(httpx.ReadError):
+            await run_search(handler)
+    finally:
+        CONNECTOR_OBSERVATION.reset(token)
+    assert observation["attempts"] == [{"attempt": 1, "http_status": None, "error_type": "ReadError"}]
     assert calls == 1
 
 

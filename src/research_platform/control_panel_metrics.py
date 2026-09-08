@@ -4,7 +4,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-
 PIPELINE_STAGES = (
     ("INIT", "Başlangıç"),
     ("VALIDATE_PROTOCOL", "Protokol"),
@@ -239,9 +238,22 @@ def _tool_row(
 def _tool_rows(events: list[Any]) -> list[dict[str, Any]]:
     """Aggregate the metric events of a single stage visit into per-tool rows."""
     rows: dict[tuple[str, str], dict[str, Any]] = {}
+    canonical_calls = any(_event_value(e, "event_type") == "connector_call" for e in events)
     for event in events:
         event_type = _event_value(event, "event_type")
         payload = _event_value(event, "payload", {}) or {}
+        if canonical_calls and event_type in {"connector_metrics", "connector_error"}:
+            continue
+        if event_type == "connector_call":
+            row = _tool_row(rows, "connector", str(payload.get("connector") or "unknown"))
+            row["calls"] += 1
+            row["ok"] += int(bool(payload.get("success")))
+            row["errors"] += int(payload.get("success") is False)
+            row["results"] += int(payload.get("result_count", 0))
+            row["seconds"] += float(payload.get("latency_seconds", 0))
+            operation = str(payload.get("operation") or "search")
+            if operation not in row["phases"]:
+                row["phases"].append(operation)
         if event_type == "connector_metrics":
             for call in payload.get("calls", []):
                 row = _tool_row(rows, "connector", str(call.get("connector") or "unknown"))
@@ -274,7 +286,8 @@ def _tool_rows(events: list[Any]) -> list[dict[str, Any]]:
             for call in payload.get("calls", []):
                 row = _tool_row(rows, kind, str(call.get("model") or "unknown"))
                 row["calls"] += 1
-                row["ok"] += 1
+                row["ok"] += int(call.get("success", True) is not False)
+                row["errors"] += int(call.get("success") is False)
                 row["tokens"] += int(call.get("prompt_tokens", 0)) + int(
                     call.get("completion_tokens", 0)
                 )
@@ -373,6 +386,7 @@ def stage_visit_details(
         if item["stage"] != stage:
             continue
         row = _visit_row(visits, index, now)
+        row["visit_id"] = item["event_id"]
         row["tools"] = _tool_rows(item["events"])
         row["summary"] = _visit_summary(row["tools"])
         output.append(row)

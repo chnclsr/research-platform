@@ -1,10 +1,25 @@
 # Değişiklik Günlüğü
 
-Platform sürümü: `v0.23.2`
+Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.47`
+Belge sürümü: `6.49`
 
-Son güncelleme: `2026-09-07`
+Son güncelleme: `2026-09-08`
+
+## v0.24.0 — 2026-09-08
+
+- Panelde audit/coverage dahil araç çağrısı olmayan adımların karar ayrıntıları açılıyor;
+  yeni koşularda tur bazlı iddia, kapsam, parser ve sentez tanılamaları saklanıyor.
+- Connector hataları çağrı kimliğiyle izleniyor; HTTP/hata sınıfı, sorgu ve kayıtlı retry
+  geçmişi görülebiliyor. Sıfır sonuç hatadan ayrılıyor; yinelenen hata sayımı önleniyor.
+- Uzun koşularda 5.000 olay sınırı kaldırıldı; 200'den sonraki ziyaretler erişilebilir.
+  Canlı ayrıntılar açık tur, filtre ve kaydırma korunarak yenileniyor.
+- Sessiz canlı yenileme artık çekmeceyi ara durumda boşaltmıyor. Açık aşama/tur, genel
+  açılır bölümler, kaynak izleri ve kaynak filtresi tek hamlelik DOM değişiminde korunuyor;
+  sayfanın dururken kendiliğinden açılıp kapanması giderildi.
+- Tarihsel karar yokluğu açık etiketleniyor; olay erişimi sahiplik kontrolü, sır maskeleme
+  ve güvenli metin gösterimiyle sunuluyor. Tanılama LLM anlatısını/eşikleri değiştirmiyor.
+- Ayrıntılar: [Panel tanılama uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile

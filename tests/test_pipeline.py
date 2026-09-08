@@ -999,6 +999,16 @@ async def test_pipeline_resumes_to_auditable_export():
         assert completed.status in {RunStatus.COMPLETED.value, RunStatus.COMPLETED_INCOMPLETE.value}
         assert completed.sources_count == 1
         assert completed.claims_count >= 1
+        diagnostics = await repo.events_by_types(row.id, {
+            "connector_call", "acquisition_call", "source_decision", "audit_claim",
+            "audit_summary", "coverage_snapshot", "appraisal_claim", "synthesis_generation",
+        })
+        assert {event.event_type for event in diagnostics} == {
+            "connector_call", "acquisition_call", "source_decision", "audit_claim",
+            "audit_summary", "coverage_snapshot", "appraisal_claim", "synthesis_generation",
+        }
+        assert all(event.payload["visit_id"] and event.payload["schema_version"] == 1
+                   for event in diagnostics)
         artifacts = await repo.list_artifacts(row.id)
         assert len(artifacts) == 21
         # The report's name now carries the run's topic handle, so it is looked up by the

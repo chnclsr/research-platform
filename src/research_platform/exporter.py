@@ -365,6 +365,12 @@ async def build_exports(
             "quality": synthesis_package.quality_diagnostics,
         },
     )
+    await repo.diagnostic_batch(run_id, "synthesis_section", [
+        {"title": section.title, "source_ids": section.source_ids,
+         "claim_ids": section.claim_ids, "generation_note": section.generation_note,
+         "validation_warnings": section.validation_warnings}
+        for section in synthesis_package.sections
+    ])
     figure_result = FigurePipelineResult()
     if protocol.output_mode != "raw":
         figure_result = await analyze_run_figures(

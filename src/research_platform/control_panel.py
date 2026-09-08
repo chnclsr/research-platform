@@ -10,9 +10,9 @@ import secrets
 import socket
 import sys
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import httpx
 import psutil
@@ -53,13 +53,9 @@ from .control_panel_metrics import (
     CLAIM_OK_STATUSES,
     PIPELINE_STAGES,
     connector_operations,
-    llm_summary,
     pipeline_flow,
     pipeline_progress,
-    query_branch_summary,
-    serialize_event,
     source_chain,
-    source_funnel,
     stage_visit_details,
     stage_visits,
 )
@@ -90,6 +86,13 @@ from .identity import (
     set_password,
     telegram_ids_for,
     unlink_telegram,
+)
+from .panel_diagnostics import (
+    SUMMARY_EVENTS,
+    current_claims,
+    diagnostic_event,
+    event_page,
+    run_aggregates,
 )
 from .repository import ACTIVE_RUN_STATUSES, Repository
 from .schemas import RunStatus
@@ -687,14 +690,18 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
             await session.scalars(
                 select(EventRow)
                 .where(EventRow.run_id == run_id, EventRow.event_type != SAMPLE_EVENT)
-                .order_by(EventRow.id)
-                .limit(5000)
+                .order_by(EventRow.id.desc()).limit(150)
             )
         )
-        # The 5000 above is a payload ceiling, and a long run blows past it: a 205-round run
-        # logged 16563 events, so the aggregates below see its first third. Stage boundaries
-        # are cheap enough to read in full (2069 rows for that run), and the flow view has to
-        # be complete -- it reports how many times each stage ran.
+        events.reverse()
+        source_count = await session.scalar(select(func.count()).select_from(SourceRow).where(
+            SourceRow.run_id == run_id,
+        ))
+        aggregates = await run_aggregates(session, run_id, source_count or 0)
+        empty_corpus = await session.scalar(select(EventRow.id).where(
+            EventRow.run_id == run_id, EventRow.event_type == "empty_synthesis_with_corpus",
+        ).limit(1))
+        # Boundaries are small and complete; heavyweight history is loaded per visit.
         stage_events = list(
             await session.scalars(
                 select(EventRow)
@@ -726,8 +733,8 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
             )
         )
         checkpoints = list(
-            await session.scalars(
-                select(CheckpointRow)
+            await session.execute(
+                select(CheckpointRow.stage, CheckpointRow.created_at)
                 .where(CheckpointRow.run_id == run_id)
                 .order_by(CheckpointRow.created_at)
             )
@@ -736,10 +743,6 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
     claim_statuses: dict[str, int] = {}
     for claim in claims:
         claim_statuses[claim.status] = claim_statuses.get(claim.status, 0) + 1
-    latest_quality: dict[str, Any] = {}
-    for event in events:
-        if event.event_type == "coverage_gaps":
-            latest_quality = (event.payload or {}).get("discovery_quality", {}) or latest_quality
     created = run.created_at
     updated = run.updated_at
     elapsed = max(0.0, (updated - created).total_seconds()) if created and updated else 0.0
@@ -768,10 +771,10 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
             round_number=run.round_number,
             now=updated or datetime.now(timezone.utc),
         ),
-        "funnel": source_funnel(events, len(sources)),
-        "quality": {**(run.coverage or {}), **latest_quality},
-        "query_branches": query_branch_summary(events),
-        "llm": llm_summary(events),
+        "funnel": aggregates["funnel"],
+        "quality": {**(run.coverage or {}), **aggregates["quality"]},
+        "query_branches": aggregates["query_branches"],
+        "llm": aggregates["llm"],
         "claim_summary": {
             "total": len(claims),
             "major": sum(claim.importance == "major" for claim in claims),
@@ -801,10 +804,8 @@ async def _run_detail(run_id: str, principal: Principal) -> dict[str, Any]:
         ],
         # A run that gathered sources and extracted nothing says so once, at the top. Without
         # it the trace table is dozens of identical red rows and no stated reason.
-        "empty_corpus": any(
-            event.event_type == "empty_synthesis_with_corpus" for event in events
-        ),
-        "events": [serialize_event(event) for event in events[-150:]],
+        "empty_corpus": empty_corpus is not None,
+        "events": [diagnostic_event(event) for event in events[-150:]],
         "checkpoints": [
             {
                 "stage": checkpoint.stage,
@@ -843,7 +844,7 @@ async def _run_stage_detail(
         if run is None or not _may_see(run, principal):
             raise HTTPException(status_code=404, detail="Araştırma bulunamadı")
         # A missing updated_at falls through to the metrics layer's own "now" default.
-        now = run.updated_at
+        now = datetime.now(UTC) if run.status == "running" else run.updated_at
         stage_events = list(
             await session.scalars(
                 select(EventRow)
@@ -876,17 +877,21 @@ async def _run_stage_detail(
                     .where(
                         EventRow.run_id == run_id,
                         EventRow.event_type != SAMPLE_EVENT,
+                        EventRow.event_type.in_({
+                            "stage", "connector_metrics", "connector_error", "connector_call", "acquisition_metrics",
+                            "llm_metrics", "embedding_metrics", *SUMMARY_EVENTS,
+                        }),
                         or_(*windows_sql),
                     )
                     .order_by(EventRow.id)
                 )
             )
         details = {
-            row["started_at"]: row for row in stage_visit_details(metric_events, stage, now)
+            row["visit_id"]: row for row in stage_visit_details(metric_events, stage, now)
         }
         page_rows = []
         for visit in page:
-            detail = details.get(visit["started_at"], {})
+            detail = details.get(visit["start_event_id"], {})
             # Durations come from the complete boundary list, never from the sliced one: the
             # last visit on a page has no following boundary inside the slice, so the sliced
             # walk would measure it against `now` instead of the stage that followed it.
@@ -896,7 +901,16 @@ async def _run_stage_detail(
                     "round": visit["round"],
                     "started_at": visit["started_at"],
                     "duration_seconds": visit["duration_seconds"],
-                    "active": visit["active"],
+                    "active": visit["active"] and run.status == "running",
+                    "visit_id": visit["start_event_id"],
+                    "decisions": [
+                        {"id": event.id, "type": event.event_type,
+                         "description": diagnostic_event(event)["description"]}
+                        for event in metric_events
+                        if event.event_type in SUMMARY_EVENTS
+                        and event.id >= visit["start_event_id"]
+                        and (visit["end_event_id"] is None or event.id < visit["end_event_id"])
+                    ][-3:],
                     "tools": detail.get("tools", []),
                     "summary": detail.get("summary", {}),
                 }
@@ -1466,6 +1480,35 @@ async def run_stage_detail(
     principal: Principal = Depends(require_user),
 ) -> dict[str, Any]:
     return await _run_stage_detail(run_id, stage, offset, principal)
+
+
+@app.get("/api/runs/{run_id}/claims/current")
+async def run_current_claims(
+    run_id: str, principal: Annotated[Principal, Depends(require_user)], offset: int = 0,
+) -> dict[str, Any]:
+    return await current_claims(run_id, principal, offset)
+
+
+@app.get("/api/runs/{run_id}/events")
+async def run_events(
+    run_id: str, principal: Annotated[Principal, Depends(require_user)], offset: int = 0, limit: int = 50,
+    event_type: str | None = None, severity: str | None = None,
+    connector: str | None = None,
+) -> dict[str, Any]:
+    return await event_page(run_id, principal, offset=offset, limit=limit,
+                            event_type=event_type, severity=severity, connector=connector)
+
+
+@app.get("/api/runs/{run_id}/stages/{stage}/visits/{visit_id}")
+async def run_visit_detail(
+    run_id: str, stage: str, visit_id: int, principal: Annotated[Principal, Depends(require_user)],
+    offset: int = 0, limit: int = 50,
+    event_type: str | None = None, severity: str | None = None,
+    connector: str | None = None,
+) -> dict[str, Any]:
+    return await event_page(run_id, principal, stage=stage, visit_id=visit_id,
+                            offset=offset, limit=limit, event_type=event_type,
+                            severity=severity, connector=connector)
 
 
 @app.get("/api/connectors")

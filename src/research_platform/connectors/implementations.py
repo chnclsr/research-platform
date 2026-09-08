@@ -10,6 +10,7 @@ from typing import Any
 
 import httpx
 
+from ..diagnostics import observe_attempt, observe_connector, observe_transport_error
 from ..rate_limits import shared_domain_limiter
 from ..relevance import github_repositories, topic_terms
 from ..schemas import ConnectorCandidate, ResearchScope, SourceFamily
@@ -231,8 +232,13 @@ class SemanticScholarConnector(SourceConnector):
                 wait = minimum_interval - (time.monotonic() - self._last_request)
                 if wait > 0:
                     await asyncio.sleep(wait)
-                response = await self.client.get(url, headers=self._headers(), **kwargs)
+                try:
+                    response = await self.client.get(url, headers=self._headers(), **kwargs)
+                except httpx.HTTPError as exc:
+                    observe_transport_error(exc, attempt)
+                    raise
                 self._last_request = time.monotonic()
+            observe_attempt(response, attempt)
             if response.status_code != 429 or attempt == 2:
                 return response
             retry_after = response.headers.get("Retry-After", "1")
@@ -483,7 +489,12 @@ class ArxivConnector(SourceConnector):
         """
         for attempt in range(3):
             async with self._limiter.hold(_ARXIV_API):
-                response = await self.client.get(_ARXIV_API, params=params)
+                try:
+                    response = await self.client.get(_ARXIV_API, params=params)
+                except httpx.HTTPError as exc:
+                    observe_transport_error(exc, attempt)
+                    raise
+            observe_attempt(response, attempt)
             if response.status_code != 429 or attempt == 2:
                 return response
             retry_after = response.headers.get("Retry-After", "3")
@@ -563,6 +574,7 @@ class ArxivConnector(SourceConnector):
         # warning is worth. Comparing the executed query against the sent one is the only
         # way to see it, since the rewrite keeps the original prefix as literal text.
         echo = _arxiv_query_echo(root)
+        observe_connector(provider_query_echo=echo, provider_query=search_query)
         executed = _arxiv_executed_query(echo)
         rewritten = bool(executed) and _arxiv_comparable(executed) != _arxiv_comparable(
             search_query

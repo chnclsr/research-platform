@@ -1,10 +1,12 @@
 # `developments-supplementer` Branch Değişiklik Raporu
 
-Platform sürümü: `v0.23.2`
+Platform sürümü: `v0.24.0`
 
-Belge sürümü: `12.47`
+Belge sürümü: `12.48`
 
-Son güncelleme: `2026-09-07`
+Son güncelleme: `2026-09-08`
+
+v0.24.0 panel adım/hata/karar ayrıntıları ve doğrulama: [uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
 
 ## Kapsam
 
@@ -4037,3 +4039,25 @@ systemd yönetim çağrısı etkileşimli sudo istediği için birimin `User=cez
 paneli yeni PID ile yeniden başlattı. Panel `active/running`, başlangıç logu temizdir.
 Dağıtım sonrası durum betiğinin MCP'yi compose'un gerçek `MCP_BIND_HOST` değeri yerine
 loopback'te aradığı ve bu nedenle yanlış `erişilemedi` gösterdiği de düzeltildi.
+
+## 71. Panel sessiz yenileme kararlılığı
+
+v0.24.0 panelinin 5 saniyelik ayrıntı yenilemesi görünür çekmece gövdesini eşzamanlı
+isteklerden önce yeniden kuruyordu. Bunun sonucu açık aşama ve turun kısa süreli kapanıp
+yeniden açılması, genel `<details>` bölümlerinin ise kapalı kalmasıydı. Canlı ölçüm eski
+davranışta 224 örneğin dördünde tur listesinin boş olduğunu, gövdenin 16 kez değiştiğini
+ve genel açılır bölümün kapandığını gösterdi.
+
+Sessiz yenileme artık yeni içeriği bağlantısız bir DOM ağacında hazırlar, aşama ve olay
+yüklerini kararlı biçimde sonuna kadar bekler ve hazır ağacı tek işlemle görünür gövdeye
+taşır. Açık genel bölümler, kaynak izleri ve kaynak filtresi koşu değişene kadar saklanır;
+mevcut aşama, tur, olay filtresi/sayfası ve kaydırma koruması devam eder. Koşu değişimi ve
+eski ağ yanıtı kapıları korunmuştur.
+
+Regresyon testi gerçek Chromium'da 205 turluk görünümün yenileme sırasında hiç
+boşalmadığını ve genel bölümün açık kaldığını doğruladı. Zorunlu paket son kaynak
+değişikliğinden sonra `919 passed, 3 skipped, 1 warning`; opt-in tarayıcı testi
+`1 passed` sonucunu verdi. Aktif `01M203HHZXZB61YF59AZZQ2YA4` koşusuna ve worker'a
+dokunulmadan yalnız host panel systemd süreci yenilendi. Üretim Chromium ölçümünde 223
+örneğin tümünde aşama, tur ve genel bölüm açık kaldı; yalnız bir atomik gövde değişimi ve
+sıfır JavaScript hatası kaydedildi.

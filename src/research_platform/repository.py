@@ -34,6 +34,7 @@ from .db import (
     SourceVersionRow,
     UserRow,
 )
+from .diagnostics import event_severity, safe_diagnostic
 from .normalization import canonicalize_url
 from .queueing import NORMAL, URGENT, normalize_priority
 from .relevance import evidence_entailment
@@ -258,6 +259,7 @@ class Repository(metaclass=_OwnershipEnforced):
     def __init__(self, session: AsyncSession, *, actor: Principal | None = None):
         self.session = session
         self.actor = actor
+        self._event_context: dict[str, dict[str, Any]] = {}
 
     def require_actor(self) -> Principal:
         if self.actor is None:
@@ -619,9 +621,32 @@ class Repository(metaclass=_OwnershipEnforced):
 
     async def event(
         self, run_id: str, event_type: str, payload: dict[str, Any] | None = None
-    ) -> None:
-        self.session.add(EventRow(run_id=run_id, event_type=event_type, payload=payload or {}))
+    ) -> int:
+        data = {**self._event_context.get(run_id, {}), **(payload or {})}
+        data["diagnostic_severity"] = event_severity(event_type, data)
+        row = EventRow(run_id=run_id, event_type=event_type, payload=safe_diagnostic(data))
+        self.session.add(row)
+        await self.session.flush()
+        if event_type == "stage":
+            context = {"schema_version": 1, "visit_id": row.id, "round": data.get("round", 0)}
+            self._event_context[run_id] = context
+            row.payload = {**row.payload, **context}
         await self.session.commit()
+        return row.id
+
+    async def diagnostic_batch(
+        self, run_id: str, event_type: str, records: list[dict[str, Any]]
+    ) -> None:
+        """Persist small historical decisions in bounded batches, outside checkpoints."""
+        for start in range(0, len(records), 100):
+            self.session.add_all([
+                EventRow(run_id=run_id, event_type=event_type, payload=safe_diagnostic({
+                    **self._event_context.get(run_id, {}), "schema_version": 1, **record,
+                    "diagnostic_severity": event_severity(event_type, record),
+                }))
+                for record in records[start:start + 100]
+            ])
+            await self.session.commit()
 
     async def events_after(self, run_id: str, after_id: int = 0) -> list[EventRow]:
         rows = await self.session.scalars(

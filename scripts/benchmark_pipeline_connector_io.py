@@ -85,6 +85,9 @@ class BenchmarkRepo:
     async def event(self, run_id: str, event_type: str, payload: dict[str, Any]) -> None:
         self.events.append((event_type, payload))
 
+    async def diagnostic_batch(self, run_id: str, event_type: str, records: list[dict[str, Any]]) -> None:
+        self.events.extend((event_type, record) for record in records)
+
     async def update_run(self, run_id: str, **values: Any) -> None:
         self.updates += 1
 

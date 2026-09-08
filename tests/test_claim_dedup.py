@@ -24,6 +24,9 @@ class FakeRepository:
     async def event(self, run_id, event_type, payload):
         self.events.append((event_type, payload))
 
+    async def diagnostic_batch(self, run_id, event_type, records):
+        self.events.extend((event_type, record) for record in records)
+
 
 class FakeEmbeddings:
     async def embed(self, texts):
