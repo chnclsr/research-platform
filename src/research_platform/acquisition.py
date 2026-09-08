@@ -47,6 +47,45 @@ PAYWALL_MARKERS = (
     "abone olarak", "abonelik gereklidir", "sign in to continue reading",
 )
 
+#: Bot-check interstitials, which a paywall marker does not catch and a length gate cannot:
+#: measured 2026-09-08 over 467 acquired sources from three scoped runs, all 45 such pages
+#: cleared the old 400-character floor, their median length being 602 characters.
+#:
+#: These are separated from PAYWALL_MARKERS because the outcome differs. A paywall means the
+#: document exists and is withheld -- access_status "restricted". A bot check means we never
+#: reached the document at all, so the honest status is "unavailable"; recording it as
+#: restricted would claim knowledge of a paywall nobody saw.
+#:
+#: Rejecting these is safe in a way that rejecting boilerplate is not. In the same
+#: measurement none of the 45 carried any trace of article text (no abstract, no
+#: "we propose/present", no introduction), whereas 83% of the navigation-wrapped pages did
+#: -- so chrome must be stripped rather than dropped, and is deliberately not handled here.
+BLOCKED_MARKERS = (
+    "just a moment", "security check required", "checking your browser",
+    "verify you are human", "please make sure you are authorized",
+    "we've detected unusual activity", "performing security verification",
+    "enable javascript and cookies to continue",
+)
+
+#: What an interstitial never has and a paper always does. A marker alone cannot decide:
+#: a paper *about* bot detection quotes the same phrases, and rejecting it would be
+#: rejecting a source for its subject matter. In the 2026-09-08 measurement none of the 45
+#: interstitials carried any of these, so requiring their absence costs nothing there while
+#: protecting the paper that discusses them.
+ARTICLE_TEXT_MARKERS = (
+    "## abstract", "abstract:", "we propose", "we present", "we introduce",
+    "in this paper", "in this study", "in this work", "## introduction",
+    "our method", "experimental results",
+)
+
+#: The shortest parsed body treated as a document. Raised from 400 on 2026-09-08: over the
+#: same 467 sources, 400 rejected 2% of the unusable pages and 900 rejects 27% of them while
+#: still rejecting none of the 254 usable ones. The ladder stops here on purpose -- 2500
+#: would only reach 30% of the unusable while discarding 19% of the usable, because
+#: navigation-heavy pages are long, not short (their median body is 5,902 characters against
+#: 6,933 for clean ones). Length cannot separate those; only shape can.
+MIN_USABLE_TEXT_CHARS = 900
+
 
 class UnsafeUrlError(ValueError):
     pass
@@ -238,12 +277,28 @@ class AcquisitionService:
         # the parsed text. Base64 for PDFs is unaffected; a stray NUL from any other
         # strategy would otherwise reject the insert and fail the run.
         raw_content = raw_content.replace("\x00", "")
-        restricted = any(marker in normalized.lower() for marker in PAYWALL_MARKERS)
+        lowered = normalized.lower()
+        restricted = any(marker in lowered for marker in PAYWALL_MARKERS)
+        # Two conditions, because either alone is wrong. The marker must open the body --
+        # an interstitial announces itself immediately -- and the body must carry no trace
+        # of article text, which is what separates a real block from a paper that merely
+        # discusses one. Measured: interstitials satisfy both, papers about bot detection
+        # satisfy only the first.
+        blocked = (
+            not restricted
+            and any(marker in lowered[:1500] for marker in BLOCKED_MARKERS)
+            and not any(marker in lowered for marker in ARTICLE_TEXT_MARKERS)
+        )
+        withheld = restricted or blocked
         return AcquiredDocument(
-            candidate=candidate, success=bool(normalized) and not restricted,
-            access_status="restricted" if restricted else ("open" if normalized else "unavailable"),
-            content="" if restricted else normalized,
-            raw_content="" if restricted else raw_content,
+            candidate=candidate, success=bool(normalized) and not withheld,
+            access_status=(
+                "unavailable" if blocked
+                else "restricted" if restricted
+                else ("open" if normalized else "unavailable")
+            ),
+            content="" if withheld else normalized,
+            raw_content="" if withheld else raw_content,
             content_type=content_type, document_type=document_type,
             language=detect_language(normalized), acquisition_method=method,
             canonical_url=canonical_url or canonicalize_url(final_url or str(candidate.url)),
@@ -251,10 +306,10 @@ class AcquisitionService:
             outgoing_links=outgoing_links or [],
             parser_id=parsed.parser_id if parsed else "",
             parse_provenance=parsed.parse_provenance if parsed else {},
-            tables=[] if restricted else [t.model_dump(mode="json") for t in parsed.tables] if parsed else [],
-            code_blocks=[] if restricted else (parsed.code_blocks if parsed else []),
+            tables=[] if withheld else [t.model_dump(mode="json") for t in parsed.tables] if parsed else [],
+            code_blocks=[] if withheld else (parsed.code_blocks if parsed else []),
             content_hash=hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None,
-            strategies_tried=tried.copy(), error="Paywall detected" if restricted else None,
+            strategies_tried=tried.copy(), error=("Paywall detected" if restricted else "Bot check interstitial" if blocked else None),
         )
 
     async def _github_repository(
@@ -458,7 +513,7 @@ class AcquisitionService:
                 parsed = await asyncio.to_thread(
                     parser.parse, response.content, url=current, content_type=ctype
                 )
-                if len(parsed.text.strip()) < 400:
+                if len(parsed.text.strip()) < MIN_USABLE_TEXT_CHARS:
                     # Said once, here: the fallback ladder replaces `parsed`, and the
                     # alternatives carry no provenance of their own, so if the document is
                     # dropped further down there is otherwise nothing left explaining why
@@ -477,12 +532,12 @@ class AcquisitionService:
                                 alt_parsed = await asyncio.to_thread(
                                     alt.parse, response.content, url=current, content_type=ctype
                                 )
-                                if len(alt_parsed.text.strip()) >= 400:
+                                if len(alt_parsed.text.strip()) >= MIN_USABLE_TEXT_CHARS:
                                     parsed = alt_parsed
                                     break
                             except Exception:
                                 pass
-                if len(parsed.text.strip()) < 400:
+                if len(parsed.text.strip()) < MIN_USABLE_TEXT_CHARS:
                     # A parser that had to degrade -- no OCR engine available for a
                     # scanned PDF, say -- produces almost nothing, which is
                     # indistinguishable here from a genuinely empty document. Say so,
@@ -613,7 +668,7 @@ class AcquisitionService:
             if len(response.content) > self.settings.max_download_bytes:
                 raise ValueError("Jina Reader response exceeds download limit")
             markdown = response.text.strip()
-            if len(markdown) < 400:
+            if len(markdown) < MIN_USABLE_TEXT_CHARS:
                 return None
             return self._document(
                 candidate,
@@ -652,7 +707,7 @@ class AcquisitionService:
             parsed = await asyncio.to_thread(
                 parser.parse, payload, url=url, content_type="text/html"
             )
-            if len(parsed.text.strip()) < 400:
+            if len(parsed.text.strip()) < MIN_USABLE_TEXT_CHARS:
                 return None
             return self._document(
                 candidate, parsed.text, "scrapling", tried, "text/html", raw_content=raw,

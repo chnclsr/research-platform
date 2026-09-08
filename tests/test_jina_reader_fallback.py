@@ -20,7 +20,9 @@ def _candidate() -> ConnectorCandidate:
 
 @pytest.mark.asyncio
 async def test_jina_reader_forces_browser_and_returns_markdown():
-    body = "# Rendered article\n\n" + ("Evidence recovered from JavaScript. " * 20)
+    # Comfortably over MIN_USABLE_TEXT_CHARS: this test is about the browser engine and
+    # the recorded strategy, not the length floor, which has its own test below.
+    body = "# Rendered article\n\n" + ("Evidence recovered from JavaScript. " * 40)
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert str(request.url) == (
@@ -101,3 +103,25 @@ async def test_acquire_uses_jina_before_scrapling(monkeypatch: pytest.MonkeyPatc
     assert document.success
     assert calls == ["direct", "agentsearch_read", "crawl4ai", "jina_reader"]
     assert ACQUISITION_STRATEGY_ORDER[-2:] == ("jina_reader", "scrapling")
+
+
+@pytest.mark.asyncio
+async def test_jina_reader_discards_a_body_under_the_usable_floor():
+    """A rendered stub is not a document; the floor is shared with every other strategy."""
+    body = "# Stub\n\n" + ("Too little to be a document. " * 8)
+    assert len(body) < acquisition_module.MIN_USABLE_TEXT_CHARS
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/plain"})
+
+    settings = Settings(
+        enable_jina_reader_fallback=True,
+        jina_reader_url="https://r.jina.ai/",
+        jina_reader_timeout_s=45,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        document = await AcquisitionService(settings, client)._jina_reader(
+            str(_candidate().url), _candidate(), []
+        )
+
+    assert document is None
