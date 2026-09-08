@@ -49,7 +49,8 @@ def test_trace_row_draws_the_seven_chain_steps_and_opens_the_vertical_trace():
         "['retrieve','Getirme'],['evidence','Kanıt'],['claim','İddia'],['report','Rapor']]"
     ) in CONTROL_PANEL_HTML
     assert "chain-cell ${state}" in CONTROL_PANEL_HTML
-    assert "/sources/${encodeURIComponent(s.id)}/trace" in CONTROL_PANEL_HTML
+    assert "/sources/${encodeURIComponent(sourceId)}/trace" in CONTROL_PANEL_HTML
+    assert "cachedSourceTrace(data.run.id,s.id)" in CONTROL_PANEL_HTML
     # Opening the paper and expanding the trace are different intents on the same row.
     assert "link.onclick=e=>e.stopPropagation()" in CONTROL_PANEL_HTML
     # The run-level reason is stated once rather than implied by dozens of red rows.

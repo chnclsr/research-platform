@@ -70,10 +70,10 @@ düzenlemeleri korunmuştur; panel düzeltmesi olarak sahiplenilmemiştir.
 ## Doğrulama
 
 - Son kod değişikliğinden sonra zorunlu tam paket: **919 passed, 3 skipped, 1 warning**
-  (68,59 sn). Komut: `TESTING=true .venv/bin/python -m pytest -q`.
+  (69,18 sn). Komut: `TESTING=true .venv/bin/python -m pytest -q`.
   Bir uyarı mevcut Starlette/httpx deprecation kaydıdır. Tarayıcı testi varsayılan
   pakette opt-in olarak atlanır ve aşağıdaki komutla ayrıca geçirilmiştir.
-- Gerçek headless Chromium: **1 passed** (13,86 sn).
+- Gerçek headless Chromium: **1 passed** (13,33 sn).
   `RUN_PANEL_BROWSER_TESTS=true TESTING=true .venv/bin/python -m pytest -q tests/test_panel_browser.py`.
   205 ziyaret, klavye, hata filtresi, olay sayfası, kaynak izi, güvenli metin,
   canlı yenileme ve terminal durma sınandı. Sabit API verisiyle gerçek panel JavaScript'i
@@ -133,3 +133,17 @@ container'larına ve worker'a dokunulmadı. `01M203HHZXZB61YF59AZZQ2YA4` koşusu
 öncesi ve sonrası `running` kaldı. Üretim panelindeki salt okunur Chromium ölçümünde 223
 örneğin hiçbirinde tur listesi boşalmadı, seçili aşama/açık tur/açık genel bölüm kapanmadı;
 gövde yalnız bir kez atomik değişti ve JavaScript hatası oluşmadı.
+
+İkinci kararlılık denetimi atomik değişimin kapsamadığı iç durumları buldu: üst olay kartı
+açık kalırken `Teknik olay verisi`, `scope_assessment/gaps` gibi iç içe alanlar ve olay
+kartından yüklenen kaynak izi kapanıyordu. Her ayrıntıya olay kimliği ile tam alan yolundan
+kararlı bir anahtar verildi. Olay içi kaynak izi aç/kapat davranışı kazandı; aynı koşudaki
+kaynak izi yanıtları promise önbelleğinde tutuldu ve koşu/çekmece değişiminde temizlendi.
+Ana kaynak tablosu da aynı önbelleği kullanır.
+
+Yeni üretim Chromium kabulünde gerçek 5 saniyelik yenileme boyunca 222 örneğin hiçbirinde
+olay kartı, teknik JSON, facet ayrıntısı, olay içi kaynak izi veya ana kaynak satırı
+kapanmadı. Bir alt seviye alan da açık kaldı. Kaynak izi GET sayısı yenileme öncesi ve
+sonrasında `2 → 2` kaldı; yeniden yükleme/parlama oluşmadı ve JavaScript hatası yoktu.
+Yalnız host paneli `771117` PID'sinden `877116` PID'sine yenilendi; aktif araştırma worker'ı
+ve container'lar kesilmedi.

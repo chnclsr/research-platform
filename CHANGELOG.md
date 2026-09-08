@@ -17,6 +17,9 @@ Son güncelleme: `2026-09-08`
 - Sessiz canlı yenileme artık çekmeceyi ara durumda boşaltmıyor. Açık aşama/tur, genel
   açılır bölümler, kaynak izleri ve kaynak filtresi tek hamlelik DOM değişiminde korunuyor;
   sayfanın dururken kendiliğinden açılıp kapanması giderildi.
+- Teknik olay JSON'u, iç içe facet/kanıt alanları ve olay kartından açılan kaynak izi de
+  kararlı kimliklerle korunuyor. Kaynak izi koşu boyunca önbelleğe alındığı için canlı
+  yenilemede kapanmıyor veya yeniden yükleme parlaması göstermiyor.
 - Tarihsel karar yokluğu açık etiketleniyor; olay erişimi sahiplik kontrolü, sır maskeleme
   ve güvenli metin gösterimiyle sunuluyor. Tanılama LLM anlatısını/eşikleri değiştirmiyor.
 - Ayrıntılar: [Panel tanılama uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).

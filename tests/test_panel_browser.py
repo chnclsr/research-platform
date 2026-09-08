@@ -49,7 +49,8 @@ def test_panel_visits_filters_paging_refresh_and_safe_text():
                     "has_more": offset == 0, "next_offset": offset + 50, "summaries": [],
                     "events": [{"id": 700 + offset, "label": "İddia denetimi", "type": "audit_claim",
                                 "severity": "error", "payload": {"error": "<img src=x onerror=window.pwned=1>",
-                                                                   "source_id": "s1"}}]}
+                                                                   "source_id": "s1",
+                                                                   "scope_assessment": {"gaps": ["ct"]}}}]}
         elif path.endswith("/trace"):
             data = {"source": {"family": "academic"}, "passages": {}, "evidence": [],
                     "claims": [], "citation": None, "fate": {"label": "Kaynak izi testi"}}
@@ -80,6 +81,8 @@ def test_panel_visits_filters_paging_refresh_and_safe_text():
         card.locator(":scope > summary").click()
         expect(card.get_by_text("<img src=x onerror=window.pwned=1>", exact=False).first).to_be_visible()
         assert page.evaluate("window.pwned") is None
+        card.get_by_text("Facet kararları", exact=True).click()
+        card.get_by_text("Teknik olay verisi", exact=True).click()
         card.get_by_role("button", name="Kaynak ve kanıt izini aç").click()
         expect(card.locator(".trace")).to_have_count(1)
         generic_section = page.locator("details.collapsible-section").first
@@ -109,6 +112,11 @@ def test_panel_visits_filters_paging_refresh_and_safe_text():
         expect(page.locator(".round-detail:not([hidden])")).to_have_count(1)
         expect(page.locator(".round-detail:not([hidden]) select")).to_have_value("error")
         expect(page.locator("details.collapsible-section").first).to_have_attribute("open", "")
+        refreshed_card = page.locator('[data-event-id="750"]')
+        expect(refreshed_card.get_by_text("Facet kararları", exact=True).locator("xpath=..")).to_have_attribute("open", "")
+        expect(refreshed_card.get_by_text("Teknik olay verisi", exact=True).locator("xpath=..")).to_have_attribute("open", "")
+        expect(refreshed_card.locator(".trace")).to_have_count(1)
+        assert sum(path.endswith("/trace") for path, _ in calls) == 1
         assert page.locator(".drawer").evaluate("e=>e.scrollTop") == 500
         # Actual interval, not an explicit openRun, refreshes even with button focus.
         page.locator(".round-row").first.focus()

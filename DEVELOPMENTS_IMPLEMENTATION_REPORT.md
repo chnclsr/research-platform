@@ -4061,3 +4061,17 @@ değişikliğinden sonra `919 passed, 3 skipped, 1 warning`; opt-in tarayıcı t
 dokunulmadan yalnız host panel systemd süreci yenilendi. Üretim Chromium ölçümünde 223
 örneğin tümünde aşama, tur ve genel bölüm açık kaldı; yalnız bir atomik gövde değişimi ve
 sıfır JavaScript hatası kaydedildi.
+
+İlk atomik düzeltmeden sonra üst olay kartları korunurken kart içindeki teknik JSON,
+iç içe tanılama nesneleri ve düğmeyle yüklenen kaynak/kanıt izi hâlâ yeni DOM'da kapalı
+başlıyordu. Bu alt öğeler artık `event id + tam alan yolu` anahtarıyla izlenir. Olay içi
+kaynak izi ayrıca açık/kapalı durum taşır; kaynak izi yanıtı koşu ömrüyle sınırlı promise
+önbelleğinde paylaşılır. Böylece hem olay içi görünüm hem ana kaynak tablosu yenilemede
+aynı veriyi tekrar istemez.
+
+Genişletilen gerçek Chromium testi teknik JSON, facet ağacı ve olay içi izi sessiz
+yenilemeden sonra açık; trace çağrısını tek bırakır. Üretimde 222 örnek boyunca bu beş
+durumun hiçbirinde kapanma görülmedi, iki trace isteği yenileme sonrasında da iki kaldı
+ve JavaScript hatası oluşmadı. Son kaynak değişikliğinden sonraki zorunlu paket
+`919 passed, 3 skipped, 1 warning` sonucunu verdi. Yalnız host panel PID'si
+`771117 → 877116` yenilendi; çalışan araştırma etkilenmedi.
