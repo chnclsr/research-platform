@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.49`
+Belge sürümü: `6.50`
 
 Son güncelleme: `2026-09-08`
 
@@ -22,6 +22,13 @@ Son güncelleme: `2026-09-08`
   yenilemede kapanmıyor veya yeniden yükleme parlaması göstermiyor.
 - Tarihsel karar yokluğu açık etiketleniyor; olay erişimi sahiplik kontrolü, sır maskeleme
   ve güvenli metin gösterimiyle sunuluyor. Tanılama LLM anlatısını/eşikleri değiştirmiyor.
+- GitHub aramasına cümle değil onaylanmış kapsam facet'leri gönderiliyor. Sağlayıcı serbest
+  metin terimlerini VE'lediği için on kelimelik bir cümle hiçbir depoyla eşleşemiyordu;
+  cümle sonu noktalaması da terimin parçası sayılıyordu ve bu akademik sağlayıcıları da
+  etkiliyordu. Doyum sondasının iç kayıt metni artık hiçbir sağlayıcıya ulaşmıyor.
+- Her connector çağrısı HTTP durumunu, gerçek deneme geçmişini ve hata sınıfını kaydediyor;
+  panelde "Kaydedilmemiş" kalmıyor. GitHub'ın reddettiği sorgu (422) sıfır sonuçtan,
+  zaman aşımına uğrayan arama ise "eşleşme yok"tan ayrılıyor.
 - Ayrıntılar: [Panel tanılama uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
 
 Ayrıntılı gerekçeler ve ölçümler

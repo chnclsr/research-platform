@@ -69,10 +69,12 @@ düzenlemeleri korunmuştur; panel düzeltmesi olarak sahiplenilmemiştir.
 
 ## Doğrulama
 
-- Son kod değişikliğinden sonra zorunlu tam paket: **919 passed, 3 skipped, 1 warning**
-  (69,18 sn). Komut: `TESTING=true .venv/bin/python -m pytest -q`.
+- Bu çalışmanın son kod değişikliğinden sonra zorunlu tam paket: **919 passed, 3 skipped,
+  1 warning** (69,18 sn). Komut: `TESTING=true .venv/bin/python -m pytest -q`.
   Bir uyarı mevcut Starlette/httpx deprecation kaydıdır. Tarayıcı testi varsayılan
   pakette opt-in olarak atlanır ve aşağıdaki komutla ayrıca geçirilmiştir.
+  Dal bu rapordan sonra 34 test daha aldı; güncel toplam için
+  [branch raporunun 72. bölümü](DEVELOPMENTS_IMPLEMENTATION_REPORT.md).
 - Gerçek headless Chromium: **1 passed** (13,33 sn).
   `RUN_PANEL_BROWSER_TESTS=true TESTING=true .venv/bin/python -m pytest -q tests/test_panel_browser.py`.
   205 ziyaret, klavye, hata filtresi, olay sayfası, kaynak izi, güvenli metin,

@@ -819,6 +819,41 @@ gelir.
 
 `_deduplicate_report_claims()` bu listede **yok** — ölçüldü, bugün zarar vermiyor.
 
+## 41. Aile adı ham enum değeriyle sağlayıcı sorgusuna sızıyor
+
+**Durum:** `recovery.py:280` boşluk konusunu `f"{family.value} evidence for {primary_question}"`
+diye kuruyor. `SourceFamily.CODE_DATA.value` `code_data`, `GREY_LITERATURE` ise
+`grey_literature` — yani sağlayıcıya gönderilen sorgu bir alt çizgili enum değeriyle
+başlıyor. GitHub facet yoluna geçtiği için orada etkisi kalmadı, ama web ve akademik
+dallar bu metni hâlâ alıyor.
+
+**Gerekçe:** 72. bölümdeki doyum sondası iskelesiyle aynı sınıf kusur: kendi iç kayıt
+sözlüğümüz arama terimi gibi davranıyor. Çözümü de aynı — kelimeleri kara listeye almak
+değil (`web`, `academic`, `company` meşru konu kelimeleri), frazı önekten şeritlemek:
+`^(?:<her SourceFamily değeri>) evidence for ` deseni `compile_provider_query`'de,
+`_PROBE_SCAFFOLD` ile aynı yerde.
+
+**Ne zaman gerekir:** Bir kapsam boşluğu kurtarma turunun web/akademik dalda beklenenden
+az sonuç döndürdüğü ölçüldüğünde. Tek başına ölçülmüş bir kayıp yok; 72. bölümde bilinçli
+olarak kapsam dışı bırakıldı.
+
+## 42. `AcquisitionService` HTTP gözlemi yok
+
+**Durum:** 72. bölüm `SourceConnector.observed_get` ile bütün connector çağrılarını kayda
+aldı. `AcquisitionService` aynı `httpx.AsyncClient`'ı paylaşıyor ama `SourceConnector`
+olmadığı için yardımcıyı miras almıyor; crawl4ai, jina ve agentsearch-read stratejileri
+HTTP durumunu kaydetmiyor.
+
+**Gerekçe:** Aynı yardımcıyı oraya bağlamak yanlış olurdu. `CONNECTOR_OBSERVATION` yalnız
+`pipeline.one()` içinde kuruluyor, dolayısıyla edinimde kalıcı no-op olur ve "acquisition
+enstrümante" diye yanlış güven verirdi. Çağrı şekli de farklı: `acquisition.py:483` elle
+yönlendirme döngüsü, orada `attempt` "redirect hop" demek olurdu ve bu bilgi zaten
+`redirect_chain` olarak üretiliyor.
+
+**Ne zaman gerekir:** Edinim tarafında "neden bu belge alınamadı" sorusu panelden
+cevaplanamadığında. Kendi gözlem sözlüğünü hak ediyor — deneme yerine strateji/hop
+ekseninde, `acquisition_call` tanılamasının içine.
+
 ## Kapsam dışı bırakılanlar
 
 **Otomatik retention** — provenance/reproducibility vaadiyle çelişiyor (1. maddeye bakınız).

@@ -2,7 +2,7 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `12.48`
+Belge sürümü: `12.49`
 
 Son güncelleme: `2026-09-08`
 
@@ -4075,3 +4075,78 @@ durumun hiçbirinde kapanma görülmedi, iki trace isteği yenileme sonrasında 
 ve JavaScript hatası oluşmadı. Son kaynak değişikliğinden sonraki zorunlu paket
 `919 passed, 3 skipped, 1 warning` sonucunu verdi. Yalnız host panel PID'si
 `771117 → 877116` yenilendi; çalışan araştırma etkilenmedi.
+
+## 72. GitHub'a cümle gönderen sorgu derleyicisi ve kaydedilmeyen connector çağrıları
+
+Panelde bir `github` connector kaydı `success=true`, `result_count=0`, `HTTP durumu:
+Kaydedilmemiş` gösterdi. Tur 3'ün doyum sondası sağlayıcıya şu sorguyla gitti:
+`Investigate artificial intelligence studies writing radiology reports from CT images.`
+GitHub depo araması serbest metin terimlerini VE'ler, yani bu on kelimenin hepsini aynı
+anda taşıyan bir depo arandı. HTTP 200 döndü, `items` boştu, 0,35 saniye sürdü. Sonda tam
+da "hâlâ yeni kanıt geliyor mu?" sorusunu ölçerken sessizce boş döndü.
+
+İki kelime tek başına öldürücüydü. `Investigate` araştırma prompt'undan gelen bir emir
+fiili; `images.` ise tokenizer'ın cümle sonu noktasını kelimenin parçası saymasının
+sonucu. İkincisi github'a özgü değildi — aynı kusur `_compact`, `_primary_anchors` ve
+`_academic_english_anchors`'ta aynıydı, dolayısıyla `images.` akademik sağlayıcılara da
+gitti. Artık yalnız token kenarlarındaki `.:/-` kırpılıyor; iç karakterler duruyor çünkü
+`v1.2`, `SARS-CoV-2`, `owner/repo` ve `C++` aranan şeylerdir.
+
+Terimler artık konumdan değil onaylanmış kapsam facet'lerinden geliyor. Her facet'in
+GitHub-güvenli ilk `accepted_value`'su alınıp (`:` ve `/` içeren LLM metni eleniyor) en
+özgülden başa sıralanıyor, üç terim tırnaklanıp `in:name,description,topics,readme` ile
+gönderiliyor. Protokol sırası bir önceliklendirme değil: birebir alınca bütçe
+`chest CT 3D`'ye gidiyor ve task facet'i düşüyordu. Ölçülen çıktı
+`"radiology report generation" chest CT in:name,description,topics,readme` oldu.
+`_arxiv_query` bu dersi zaten almıştı; yorumu aynen söylüyor: konuma bağlı ilk-üç-token
+AND'i konuşma fiillerini öldürücü yapıyordu.
+
+`in:` niteleyicisi süs değil. Onsuz GitHub yalnız ad, açıklama ve topic okur — aşağı
+yukarı bir cümle — ve her terimi ona karşı VE'ler; üç terim bile çoğu zaman sıfır
+döndürür. Facet onaylanmamış eski protokoller anchor yoluna düşüyor, orada dört terim:
+ölçüldü, ilk üç `artificial intelligence writing` çıkıp alan terimi `radiology` dördüncü
+sıraya düşüyor.
+
+`independent recent evidence saturation probe N` iskelesi kaynağında değil derleyicide
+siliniyor. `mission_signature` sorgunun birebir kendisi ve sayaç, her turun sondasını
+`attempted_signatures`'ın atlamadığı ayrı bir görev yapan tek şey; imzanın aşağısında
+silmek sağlayıcıya soruyu, recovery'ye kimliğini bırakıyor. Boyut sonekleri
+(`official documentation...`, `latest version`) korundu — onlar gerçek arama niyeti.
+`_ANCHOR_NOISE` yalnızca araştırma-prompt fiilleriyle büyüdü; `review`, `report` ve
+`reports` bilinçli olarak dışarıda, `saturation` ve `probe` ise hiç eklenmedi: oksijen
+satürasyonu ve moleküler prob bu külliyatta gerçek terimler, fraz silme onları gereksiz
+kılıyor. İngilizce `CT` de geri geldi — `len >= 3` kuralı onu düşürüyordu ve
+`TERM_ALIASES`'te yalnız Türkçe `bt` vardı.
+
+`github_repositories()` şemasız yazımı kaçırıyordu: `github.com/owner/repo`
+`('github.com','owner')` olarak ayrışıyordu. Bu yalnız derleyiciyi değil relevance'ı da
+zehirliyor; `target_repositories`'i bu listeden kuran filtre `github_repository_mismatch`
+ile sorunun adıyla andığı deponun ta kendisini reddedebiliyordu.
+
+İkinci kusur gözlem kapsamıydı. `observe_attempt` yalnız arXiv ve Semantic Scholar'a
+bağlıydı, yani HTTP yapan 17 connector'un 15'inde panel "Kaydedilmemiş" gösteriyordu.
+`SourceConnector.observed_get` eklendi ve 22 sessiz çağrı noktası oraya taşındı;
+Crossref'in dört denemelik retry döngüsü bugüne kadar hiçbir şey kaydetmiyordu. Yardımcı
+bilinçli olarak `raise_for_status` çağırmıyor: üç connector non-2xx'i ölümcül saymıyor
+(GitHub 404'ü "o depo değil, ara" okur) ve arXiv gövdedeki hata feed'ini durumdan önce
+ayrıştırmak zorunda. Tek bir aramada birden fazla istek yapanlar `phase` ile ayrılıyor,
+böylece iki ayrı istek retry gibi okunmuyor; `phase` verilmediğinde anahtar hiç yazılmıyor.
+
+Zotero'nun öğe başına ek/fulltext çağrıları kasıtlı olarak dışarıda: ekleri olan 20
+sonuçluk tek arama `attempts`'e 40+ satır eklerdi ve aramayı anlatan tek satırı gömerdi.
+İşaretlendi ve testle sabitlendi. Bir guard testi iki connector modülünde de işaretsiz
+`self.client.get` kalmadığını doğruluyor — 24 çağrı noktası gözden geçirmeyle senkron
+tutulamaz.
+
+GitHub 422'si artık `ConnectorQueryError`. Önceden `success=true, result_count=0` diye
+kaydediliyordu, yani gerçek "eşleşme yok"tan ayırt edilemiyordu. Sağlayıcı yankısı da
+dolduruldu: `incomplete_results` true iken `items` boş olması GitHub aramasının zaman
+aşımına uğradığı anlamına gelir, bulamadığı değil.
+
+Bu değişiklikler araştırma eşiklerini, kaynak seçimini ve okuyucuya sunulan LLM metnini
+değiştirmiyor. Zorunlu paket **953 passed, 3 skipped, 1 warning** (73,18 sn) — 71. bölümün
+919'una 34 yeni test eklendi. Opt-in tarayıcı testi `1 passed`. Değişen ve yeni dosyalarda
+Ruff temiz; deponun taban borcu artırılmadı. Planın bir öngörüsü tutmadı ve testi gerçek
+davranışa göre yazıldı: iskele silindikten sonra sonda arXiv'de birincil soruya birebir
+eşitlenmiyor, çünkü recovery `query_branch` sonekini (`evidence`) de ekliyor; ek OR-grubu
+duruyor ama artık `saturation probe 1` yerine soru kelimelerinden kuruluyor.
