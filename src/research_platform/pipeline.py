@@ -191,6 +191,61 @@ class PipelineHalted(RuntimeError):
     pass
 
 
+def _scope_signal_key(value: str) -> str:
+    """Fold a scope-signal label so wording differences stop deciding scope."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).split())
+
+
+def _exclusion_decision(
+    signal: str,
+    exclusion_assessments: list[dict[str, Any]],
+    approved_signals: list[str],
+) -> dict[str, Any] | None:
+    """Find the model's decision for one approved exclusion signal.
+
+    The prompt asks for the approved label verbatim and the model often rewords or merges
+    it. Measured on run 01M1XQTGQEFT08K2F0S0YP3665: 12 of 19 near-scope sources had every
+    exclusion recorded under a merged label -- "2D-only or single-slice input" standing for
+    two separate approved signals -- so an exact-key lookup read them as undecided and
+    downgraded papers whose own classification reason began "direct:". EXACT echoed the
+    three labels verbatim and reached primary_in_scope; OrganLens did not and did not.
+    Nothing about the sources differed, only the model's formatting.
+
+    Matching is token-subset and must be unambiguous: a fragment that fits more than one
+    approved signal ("input") decides neither. Coordination elides the shared head, so
+    "2D-only" has to reach "2D-only input" while never reaching "single-slice input".
+
+    A merged label may complete a decision but may never prove an exclusion. Accepting
+    "A or B: matched=true" for both A and B would assert a per-signal finding the model
+    never made, and EXCLUDED is the one verdict that removes a source outright.
+    """
+    wanted = _scope_signal_key(signal)
+    if not wanted:
+        return None
+    wanted_tokens = set(wanted.split())
+    approved_tokens = [
+        set(_scope_signal_key(other).split()) for other in approved_signals
+    ]
+    compound: dict[str, Any] | None = None
+    for item in exclusion_assessments:
+        label = str(item.get("exclusion") or "")
+        if not label:
+            continue
+        if _scope_signal_key(label) == wanted:
+            return item
+        if item.get("matched") is not False:
+            continue
+        for part in re.split(r"\s+or\s+|/|,", label):
+            tokens = set(_scope_signal_key(part).split())
+            if not tokens or not tokens <= wanted_tokens:
+                continue
+            if sum(tokens <= other for other in approved_tokens) != 1:
+                continue
+            compound = compound or item
+            break
+    return compound
+
+
 def _validated_scope_role(
     criteria: ResearchScopeCriteria,
     requested_role: SourceScopeRole,
@@ -212,22 +267,23 @@ def _validated_scope_role(
         for item in facet_assessments
         if str(item.get("facet") or "")
     }
-    exclusion_by_name = {
-        str(item.get("exclusion") or ""): item
-        for item in exclusion_assessments
-        if str(item.get("exclusion") or "")
+    exclusion_by_signal = {
+        signal: _exclusion_decision(
+            signal, exclusion_assessments, criteria.exclusion_signals
+        )
+        for signal in criteria.exclusion_signals
     }
     if not str(classification_reason or "").strip():
         return SourceScopeRole.NEAR_SCOPE
 
     exclusion_decisions_complete = all(
-        signal in exclusion_by_name
-        and isinstance(exclusion_by_name[signal].get("matched"), bool)
-        and bool(str(exclusion_by_name[signal].get("reason") or "").strip())
+        (item := exclusion_by_signal.get(signal)) is not None
+        and isinstance(item.get("matched"), bool)
+        and bool(str(item.get("reason") or "").strip())
         for signal in criteria.exclusion_signals
     )
     for signal in criteria.exclusion_signals:
-        item = exclusion_by_name.get(signal)
+        item = exclusion_by_signal.get(signal)
         if (
             not item
             or item.get("matched") is not True
@@ -1983,17 +2039,34 @@ class ResearchPipeline:
         """Use the local model only after deterministic gates pass."""
         scope_instruction = ""
         if protocol.scope_criteria is not None:
+            # The two format rules below are load-bearing, not style. Measured on run
+            # 01M1XQTGQEFT08K2F0S0YP3665: of 19 sources the model itself called "direct:",
+            # 16 lost a required facet to an empty evidence field and 12 lost every
+            # exclusion decision to a reworded or merged label. Both are silent -- the
+            # source is downgraded to near_scope and never reaches the report.
+            exclusion_lines = "\n".join(
+                f"  {index}. {signal}"
+                for index, signal in enumerate(protocol.scope_criteria.exclusion_signals, 1)
+            )
             scope_instruction = (
                 " Also classify the source under the approved SCOPE_CRITERIA. Return "
                 "scope_role as primary_in_scope, supporting_benchmark, near_scope, or "
                 "excluded; and facet_assessments as an array with facet, matched (boolean), "
-                "reason, and a short verbatim evidence excerpt from TITLE, DISCOVERY_SNIPPET, "
-                "or DOCUMENT_EXCERPT. Also return exclusion_assessments with exclusion, matched, "
-                "reason, and verbatim evidence. primary_in_scope requires every required facet "
+                "reason, and evidence. primary_in_scope requires every required facet "
                 "and no applicable exclusion. A benchmark, "
                 "dataset, metric, or evaluation paper that supports an in-scope evaluation but "
                 "does not itself generate reports is supporting_benchmark. A useful adjacent "
                 "source is near_scope, never primary_in_scope."
+                " EVIDENCE IS MANDATORY: every facet_assessments entry whose matched is true "
+                "must carry an evidence string copied word-for-word from TITLE, "
+                "DISCOVERY_SNIPPET, or DOCUMENT_EXCERPT. An empty or paraphrased evidence "
+                "field means that facet does not count, however sound your reason is."
+                " Also return exclusion_assessments with exclusion, matched, reason and "
+                "evidence, containing exactly one entry for each approved exclusion signal:\n"
+                f"{exclusion_lines}\n"
+                "Copy the exclusion label verbatim from that list. Never merge two signals "
+                "into one entry, never reword a label, and never invent a signal that is not "
+                "listed."
             )
         if protocol.research_mode == "literature_scan":
             system_prompt = (

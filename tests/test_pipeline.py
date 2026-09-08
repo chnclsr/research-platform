@@ -1238,3 +1238,275 @@ async def test_adversarial_review_does_not_change_claim_status():
     claims, _, strong_id, thin_id = await _appraisal_run()
     assert claims[strong_id][0] == "supported"
     assert claims[thin_id][0] == "qualified"
+
+
+def _organlens_kriterleri() -> ResearchScopeCriteria:
+    """Run 01M1XQTGQEFT08K2F0S0YP3665's approved scope, verbatim."""
+    return ResearchScopeCriteria.model_validate(
+        {
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["lung"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+                {"name": "input_form", "accepted_values": ["3D"]},
+            ],
+            "exclusion_signals": [
+                "2D-only input",
+                "single-slice input",
+                "PET/CT unless CT-only image input is evaluated separately",
+            ],
+        }
+    )
+
+
+_ORGANLENS_METIN = (
+    "OrganLens: Organ-Specific Representation Learning for CT Foundation Models. "
+    "An organ identity conditions a shared CT encoder, while organ-specific distillation "
+    "and anatomy-mask supervision shape features for anatomy-weighted pooling."
+)
+_ORGANLENS_FACETS = [
+    {
+        "facet": "anatomy",
+        "matched": True,
+        "reason": "chest CT includes lung",
+        "evidence": "Organ-Specific Representation Learning",
+    },
+    {
+        "facet": "modality",
+        "matched": True,
+        "reason": "CT foundation model",
+        "evidence": "a shared CT encoder",
+    },
+    {
+        "facet": "input_form",
+        "matched": True,
+        "reason": "volumetric",
+        "evidence": "anatomy-weighted pooling",
+    },
+]
+
+
+def test_merged_exclusion_label_no_longer_discards_an_in_scope_source():
+    """OrganLens was downgraded for wording alone; EXACT passed only by echoing labels."""
+    merged = [
+        # The label the model actually returned, standing for two approved signals.
+        {
+            "exclusion": "2D-only or single-slice input",
+            "matched": False,
+            "reason": "the model operates on 3D volumetric CT",
+            "evidence": "",
+        },
+        {
+            "exclusion": "PET/CT unless CT-only image input is evaluated separately",
+            "matched": False,
+            "reason": "CT only",
+            "evidence": "",
+        },
+    ]
+
+    assert _validated_scope_role(
+        _organlens_kriterleri(),
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        _ORGANLENS_FACETS,
+        merged,
+        _ORGANLENS_METIN,
+        "direct: meets all required criteria",
+    ) == SourceScopeRole.PRIMARY_IN_SCOPE
+
+
+def test_invented_exclusion_label_is_ignored_not_counted():
+    """The model also returned 'X-ray (CXR) input', which no approved signal names."""
+    invented_only = [
+        {"exclusion": "X-ray (CXR) input", "matched": False, "reason": "CT", "evidence": ""},
+    ]
+
+    assert _validated_scope_role(
+        _organlens_kriterleri(),
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        _ORGANLENS_FACETS,
+        invented_only,
+        _ORGANLENS_METIN,
+        "direct: meets all required criteria",
+    ) == SourceScopeRole.NEAR_SCOPE
+
+
+def test_merged_label_may_complete_a_decision_but_never_prove_an_exclusion():
+    """`A or B: matched=true` asserts a per-signal finding the model never made."""
+    merged_hit = [
+        {
+            "exclusion": "2D-only or single-slice input",
+            "matched": True,
+            "reason": "single slice",
+            "evidence": "a shared CT encoder",
+        },
+        {
+            "exclusion": "PET/CT unless CT-only image input is evaluated separately",
+            "matched": False,
+            "reason": "CT only",
+            "evidence": "",
+        },
+    ]
+
+    # Not EXCLUDED: the merged label cannot carry an exclusion for either signal, and with
+    # the decision left incomplete the source is held for inspection.
+    assert _validated_scope_role(
+        _organlens_kriterleri(),
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        _ORGANLENS_FACETS,
+        merged_hit,
+        _ORGANLENS_METIN,
+        "direct: meets all required criteria",
+    ) == SourceScopeRole.NEAR_SCOPE
+
+
+def test_verbatim_exclusion_label_still_proves_an_exclusion():
+    """Fix 1 must not weaken the path that removes a genuinely excluded source."""
+    exact_hit = [
+        {
+            "exclusion": "2D-only input",
+            "matched": True,
+            "reason": "single axial slice",
+            "evidence": "a shared CT encoder",
+        },
+        {"exclusion": "single-slice input", "matched": False, "reason": "n/a", "evidence": ""},
+        {
+            "exclusion": "PET/CT unless CT-only image input is evaluated separately",
+            "matched": False,
+            "reason": "CT only",
+            "evidence": "",
+        },
+    ]
+
+    assert _validated_scope_role(
+        _organlens_kriterleri(),
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        _ORGANLENS_FACETS,
+        exact_hit,
+        _ORGANLENS_METIN,
+        "direct:",
+    ) == SourceScopeRole.EXCLUDED
+
+
+def test_ambiguous_exclusion_fragment_decides_nothing():
+    """'input' fits both approved signals, so it may not stand for either."""
+    ambiguous = [
+        {"exclusion": "input", "matched": False, "reason": "vague", "evidence": ""},
+        {
+            "exclusion": "PET/CT unless CT-only image input is evaluated separately",
+            "matched": False,
+            "reason": "CT only",
+            "evidence": "",
+        },
+    ]
+
+    assert _validated_scope_role(
+        _organlens_kriterleri(),
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        _ORGANLENS_FACETS,
+        ambiguous,
+        _ORGANLENS_METIN,
+        "direct:",
+    ) == SourceScopeRole.NEAR_SCOPE
+
+
+def test_empty_facet_evidence_still_downgrades():
+    """Fix 1 is deliberately narrow: the 16-source empty-evidence failure is untouched."""
+    no_evidence = [dict(item, evidence="") for item in _ORGANLENS_FACETS]
+    clean = [
+        {"exclusion": signal, "matched": False, "reason": "absent", "evidence": ""}
+        for signal in _organlens_kriterleri().exclusion_signals
+    ]
+
+    assert _validated_scope_role(
+        _organlens_kriterleri(),
+        SourceScopeRole.PRIMARY_IN_SCOPE,
+        no_evidence,
+        clean,
+        _ORGANLENS_METIN,
+        "direct:",
+    ) == SourceScopeRole.NEAR_SCOPE
+
+
+class PromptYakalayanJudgeLLM:
+    """Keeps the system prompt so a test can assert what the judge was actually told."""
+
+    def __init__(self):
+        self.system_prompts: list[str] = []
+
+    async def complete_json(self, system_prompt, user_prompt):
+        self.system_prompts.append(system_prompt)
+        return {"directly_relevant": True, "relevance_score": 0.9, "reason": "direct:"}
+
+
+@pytest.mark.asyncio
+async def test_scope_prompt_enumerates_every_exclusion_signal_verbatim():
+    """A reworded or merged label costs the source its scope; spell the list out."""
+    protocol = ResearchProtocol(
+        title="Scope prompt",
+        primary_question="Which 3D lung CT foundation models exist?",
+        budget={"max_wall_minutes": 30},
+        scope_criteria={
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["lung"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+            ],
+            "exclusion_signals": [
+                "2D-only input",
+                "single-slice input",
+                "PET/CT unless CT-only image input is evaluated separately",
+            ],
+        },
+    )
+    document = AcquiredDocument(
+        candidate=ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.ACADEMIC,
+            title="Fixture publication",
+            url="https://example.com/publication",
+        ),
+        success=True,
+        content="Publication content",
+        content_type="text/plain",
+        acquisition_method="fixture",
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        judge = PromptYakalayanJudgeLLM()
+        pipeline.llm = judge
+        await pipeline._semantic_source_judgment(protocol, document)
+
+    assert judge.system_prompts
+    prompt = judge.system_prompts[0]
+    for index, signal in enumerate(protocol.scope_criteria.exclusion_signals, 1):
+        assert f"  {index}. {signal}" in prompt, f"{signal!r} is not spelled out"
+    assert "Never merge two signals" in prompt
+    assert "EVIDENCE IS MANDATORY" in prompt
+
+
+@pytest.mark.asyncio
+async def test_scope_prompt_is_absent_without_approved_scope_criteria():
+    """A run with no scope contract must not be told to fill scope fields."""
+    protocol = ResearchProtocol(
+        title="No scope",
+        primary_question="What recent CT models estimate lung cancer risk?",
+        budget={"max_wall_minutes": 30},
+    )
+    document = AcquiredDocument(
+        candidate=ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.ACADEMIC,
+            title="Fixture publication",
+            url="https://example.com/publication",
+        ),
+        success=True,
+        content="Publication content",
+        content_type="text/plain",
+        acquisition_method="fixture",
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        judge = PromptYakalayanJudgeLLM()
+        pipeline.llm = judge
+        await pipeline._semantic_source_judgment(protocol, document)
+
+    assert "EVIDENCE IS MANDATORY" not in judge.system_prompts[0]
+    assert "exclusion_assessments" not in judge.system_prompts[0]

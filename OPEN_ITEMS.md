@@ -44,6 +44,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 30 | İddia çevirisinde sayı sırası: 8/31 iddia İngilizce kalıyor | Türkçe raporda İngilizce bulgu başlıkları | Orta |
 | 35 | Free-threaded Docling production pinleri `cp314t` zincirinde engelli | Kabul kriteri passed değil, upstream wheel bekliyor | Belgelendi |
 | 39 | Duraklatılan koşunun bekleme süresi toplama bütçesine yazılıyor | Preempt edilen koşu bütçesini uyurken tüketir | Orta |
+| 40 | Kanıt tabanı 18 kaynağa iniyor: 231 iddianın 230'u tek kaynaklı kalıyor | Kanıt notu tabanda, mutabakat yapısal olarak yazılamıyor | Yüksek |
 
 ---
 
@@ -728,6 +729,95 @@ sayaç aşama sınırlarında yazılır.
 
 **Yapılacak:** İki seçenekten biri seçilip `_finish_collection_round()` ile `run()`'daki
 resume yolu birlikte güncellenmeli; duraklama üzerinden geçen bir resume testi eklenmeli.
+
+## 40. Kanıt tabanı 18 kaynağa iniyor, kanıt notu bu yüzden tabanda kalıyor
+
+Koşu `01M1NT3VCT2R0G10DFD4BRVVG1` (2026-09-04, 260 kaynak) 231 raporlanabilir iddia üretti
+ve denetim şunu yazdı: `strong` 1, `limited` 230, `insufficient` 29 — 230'unun gerekçesi
+`single_independent_domain`. Raporun Ek A'sında (bağımsız kaynaklarla desteklenen bulgular)
+**1**, Ek B'sinde (tek kaynaklı) **230** başlık var.
+
+**Bu bir notlama hatası değil.** Ölçüm doğruyu söylüyor: 260 iddianın 255'i tek kaynaklı.
+Tek kaynaklı bir iddianın bağımsız köken sayısı da birdir; v0.22.0'ın değerlendirme
+katmanı elindeki kanıtın inceliğini doğru raporluyor.
+
+### Sebep: kaynak hunisi
+
+```
+260 kaynak
+  near_scope           222   <- kanita hic girmiyor (40. madde degil, tasarim)
+  primary_in_scope      36
+  supporting_benchmark   2
+        |
+  kanit ureten          18
+        |
+  231 iddia -- her biri tek kaynakli
+```
+
+Kanıt üreten havuz **18 kaynak**; kaynak başına ~13 iddia. Bir iddianın doğrulanması için o
+18 kaynaktan ikisinin aynı spesifik önermeyi söylemesi gerekiyor. Bu havuz büyüklüğünde tek
+kaynaklılık neredeyse aritmetik bir zorunluluk.
+
+Aynı koşunun kapsam raporu ikinci sinyali veriyor: `reserve_false_negative_rate: 0.3`
+(eşik 0.1) — kabul kapısının reddettiği kaynakların yaklaşık üçte biri aslında alınmalıydı.
+`query_branch_coverage: 0.1429` (hedef 0.9) da aynı yöne bakıyor.
+
+### Bakıldı, sorun burada değil: `_deduplicate_report_claims()`
+
+İlk teşhis "iddialar kaynaklar arası birleşmiyor, o yüzden tek kaynaklı görünüyorlar"
+şeklindeydi. **Ölçüldü ve çürütüldü**, tekrar aynı yola girilmesin diye buraya yazılıyor.
+
+Fonksiyon bu koşuda `merged_claim_ids: 0` üretti — hiç birleştirme yapmadı. 231
+raporlanabilir iddianın 26.565 çifti tarandı:
+
+| eşik | çift |
+|---|---|
+| `word_cosine >= 0.68` (bugünkü kapı) | 1 |
+| `>= 0.60` | 6 |
+| `>= 0.50` | 23 |
+| `>= 0.45` | 39 |
+
+Tek 0.68 adayı yanlış eşleşme (bir yöntem cümlesi ile bir arama sorgusu dizesi).
+0.45–0.60 aralığındaki çiftler elle bakıldığında **farklı önermeler**; yalnızca alan
+kelimelerini paylaşıyorlar ("decoder transformer" ile "GAN mode collapse", "2D VLM" ile
+"3D'ye genişletme"). Yani birleşmeyi bekleyen gizli bir yığın yok; eşiği gevşetmek kazanç
+değil yanlış birleşme üretir.
+
+Fonksiyondaki `bool(source_ids & other_sources)` şartı da keyfî değil: `word_cosine` bir
+kelime torbası ve rol tersliğini ("A, B'yi geçiyor" / "B, A'yı geçiyor") yakalayamıyor —
+`claim_guard_compatible` yalnız sayı ve olumsuzluk imzasına bakıyor. Ortak kaynak şartı
+bunun ucuz panzehiri. **Dokunulmamalı.**
+
+Çekince: `word_cosine` kelime torbası olduğu için dağarcığı tamamen ayrık bir paraphrase'i
+kaçırabilir. Bu dar alanda kelimeler fazlasıyla ortak olduğundan ölçüm yanlış pozitif
+üretiyor, yanlış negatif değil; yine de kesin konuşmak için gömü tabanlı bir kontrol
+gerekir. Bugünkü kanıt tek yöntemli.
+
+### İkincil bulgu: domain sayımı hostname üzerinden
+
+`audit()` bağımsızlığı hostname ile sayıyor
+([pipeline.py](src/research_platform/pipeline.py), `domains = {...s.url...}`). 260 kaynak
+yalnız 61 hostname'e düşüyor: `doi.org` 50, `arxiv.org` 37, `www.mdpi.com` 21,
+`link.springer.com` 21, `pmc.ncbi.nlm.nih.gov` 20. `doi.org` bir yayıncı değil, yönlendirme
+servisi — 50 ayrı dergideki makale tek "domain" sayılıyor.
+
+Ölçüldü: iki veya daha fazla kaynağı olan 5 iddiadan 4'ü aynı hostta eziliyor. Yani bugün
+**4 iddiayı** etkiliyor, 230'un sebebi değil. Kanıt tabanı genişlediğinde bağlayıcı hâle
+gelir.
+
+### Yapılacak
+
+1. **Kabul kapısı kalibrasyonu — asıl iş.** 222/260 kaynağın `near_scope`'a düşmesi ve
+   `reserve_false_negative_rate: 0.3` birlikte okunmalı. Reddedilen kaynaklardan bir
+   örneklem elle etiketlenip kapının gerçek yanlış-negatif oranı ölçülmeli; kanıt tabanı
+   18'den çıkmadan not merdiveni tabanda kalır.
+2. **`doi.org` çözümlemesi.** Hostname yerine DOI registrant ön eki kullanılmalı; veri
+   zaten kaynak metadata'sında (`DOI`, `ISSN`, yayıncı `link`'i). Tek başına ölçülebilir
+   kazanç vermez (4 iddia), 1. madde ilerledikçe gerekli olur.
+3. **arXiv/PMC gibi arşivlerin tek domain sayılması** 1. ve 2. madde sonrası yeniden ele
+   alınmalı.
+
+`_deduplicate_report_claims()` bu listede **yok** — ölçüldü, bugün zarar vermiyor.
 
 ## Kapsam dışı bırakılanlar
 
