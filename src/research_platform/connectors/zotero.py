@@ -53,7 +53,7 @@ class ZoteroConnector(SourceConnector):
             )
         try:
             _, base = scope
-            response = await self.client.get(
+            response = await self.observed_get(
                 f"{base}/items", params={"limit": 1}, headers=self._headers(), timeout=3
             )
             return ConnectorHealth(
@@ -89,7 +89,7 @@ class ZoteroConnector(SourceConnector):
             params.update({"q": query, "qmode": "everything"})
         if since is not None:
             params["since"] = since
-        response = await self.client.get(
+        response = await self.observed_get(
             f"{base}/items", params=params, headers=self._headers()
         )
         response.raise_for_status()
@@ -106,7 +106,7 @@ class ZoteroConnector(SourceConnector):
         if scope is None:
             return []
         _, base = scope
-        response = await self.client.get(
+        response = await self.observed_get(
             f"{base}/collections", params={"format": "json", "limit": 100},
             headers=self._headers(),
         )
@@ -145,7 +145,12 @@ class ZoteroConnector(SourceConnector):
             and item_key
             and self.settings.zotero_include_attachments
         ):
-            children = await self.client.get(
+            # These two run once per item rather than once per search, so recording them
+            # would append an attempt row per attachment: one 20-result search with
+            # attachments buries the single row describing the search under forty
+            # describing its downloads. If this signal is ever wanted, the shape is a
+            # count via observe_connector, not attempt rows.
+            children = await self.client.get(  # unobserved: per-item, see above
                 f"{base}/items/{item_key}/children",
                 params={"format": "json", "limit": 100},
                 headers=self._headers(),
@@ -157,7 +162,7 @@ class ZoteroConnector(SourceConnector):
                         continue
                     child_key = child_data.get("key")
                     attachment_keys.append(child_key)
-                    fulltext = await self.client.get(
+                    fulltext = await self.client.get(  # unobserved: per-item, see above
                         f"{base}/items/{child_key}/fulltext", headers=self._headers()
                     )
                     if fulltext.is_success:

@@ -115,8 +115,17 @@ def domain_matches(url: str, domains: list[str]) -> bool:
 
 
 def github_repositories(value: str) -> list[tuple[str, str]]:
+    """Every `owner/repo` a text names, however it spells the host.
+
+    The host prefix is optional but must be consumed when present. Matching only the
+    `https://` form left `github.com/owner/repo` to fall through to the bare `word/word`
+    branch, which read the host itself as the owner and returned `(github.com, owner)` --
+    so a protocol that mentioned a repository without a scheme built a target list that
+    the real repository could never match, and `github_repository_mismatch` then rejected
+    the very source the question asked about.
+    """
     matches = re.findall(
-        r"(?:https?://github\.com/|(?<![\w.-]))([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)",
+        r"(?:(?:https?://)?(?:www\.)?github\.com/|(?<![\w.-]))([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)",
         value,
         flags=re.IGNORECASE,
     )

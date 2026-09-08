@@ -58,6 +58,13 @@ ENTITY_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Appended to the primary question to build each round's saturation probe, together with a
+# round counter. It is bookkeeping, not search intent: `mission_signature` is the mission's
+# query verbatim, so the counter is the only thing that makes round N's probe a distinct
+# mission rather than one `attempted_signatures` skips. Do not drop it here -- the query
+# compiler strips it back off before any provider sees it.
+SATURATION_PROBE_SCAFFOLD = "independent recent evidence saturation probe"
+
 FAMILY_CONNECTORS: dict[SourceFamily, list[str]] = {
     SourceFamily.WEB: ["agentsearch_web"],
     SourceFamily.ACADEMIC: [
@@ -368,8 +375,8 @@ def diagnose_gaps(
         gaps.append(CoverageGap(
             dimension="query_branch",
             topic=(
-                f"{protocol.primary_question} independent recent evidence "
-                f"saturation probe {coverage.saturated_rounds + 1}"
+                f"{protocol.primary_question} {SATURATION_PROBE_SCAFFOLD} "
+                f"{coverage.saturated_rounds + 1}"
             ),
             branch_id=best_branch,
             preferred_connectors=targeted_connector_ids(protocol),

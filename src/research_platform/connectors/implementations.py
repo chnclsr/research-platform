@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from ..diagnostics import observe_attempt, observe_connector, observe_transport_error
+from ..diagnostics import observe_connector
 from ..rate_limits import shared_domain_limiter
 from ..relevance import github_repositories, topic_terms
 from ..schemas import ConnectorCandidate, ResearchScope, SourceFamily
@@ -46,7 +46,7 @@ class AgentSearchConnector(SourceConnector):
         params: dict[str, Any] = {"q": query, "count": min(limit, 50), "mode": self.mode}
         if domain:
             params["domain"] = domain
-        response = await self.client.get(f"{self.settings.agentsearch_url}/search", params=params)
+        response = await self.observed_get(f"{self.settings.agentsearch_url}/search", params=params)
         response.raise_for_status()
         output = []
         for row in response.json().get("results", []):
@@ -106,7 +106,7 @@ class OpenAlexConnector(SourceConnector):
             filters.append(f"to_publication_date:{scope.end_date.date().isoformat()}")
         if filters:
             params["filter"] = ",".join(filters)
-        response = await self.client.get("https://api.openalex.org/works", params=params)
+        response = await self.observed_get("https://api.openalex.org/works", params=params)
         response.raise_for_status()
         output = []
         for row in response.json().get("results", []):
@@ -180,11 +180,15 @@ class OpenAlexConnector(SourceConnector):
         ]
         if references:
             params = {**params_base, "filter": f"openalex_id:{'|'.join(references)}"}
-            response = await self.client.get("https://api.openalex.org/works", params=params)
+            response = await self.observed_get(
+                "https://api.openalex.org/works", params=params, phase="references"
+            )
             response.raise_for_status()
             responses.append(("cites", response.json().get("results", [])))
         params = {**params_base, "filter": f"cites:{openalex_id}"}
-        response = await self.client.get("https://api.openalex.org/works", params=params)
+        response = await self.observed_get(
+            "https://api.openalex.org/works", params=params, phase="cited_by"
+        )
         response.raise_for_status()
         responses.append(("cited_by", response.json().get("results", [])))
         relations: list[dict[str, Any]] = []
@@ -232,13 +236,10 @@ class SemanticScholarConnector(SourceConnector):
                 wait = minimum_interval - (time.monotonic() - self._last_request)
                 if wait > 0:
                     await asyncio.sleep(wait)
-                try:
-                    response = await self.client.get(url, headers=self._headers(), **kwargs)
-                except httpx.HTTPError as exc:
-                    observe_transport_error(exc, attempt)
-                    raise
+                response = await self.observed_get(
+                    url, attempt=attempt, headers=self._headers(), **kwargs
+                )
                 self._last_request = time.monotonic()
-            observe_attempt(response, attempt)
             if response.status_code != 429 or attempt == 2:
                 return response
             retry_after = response.headers.get("Retry-After", "1")
@@ -366,7 +367,7 @@ class CrossrefConnector(SourceConnector):
                 wait = minimum_interval - (time.monotonic() - self._last_request)
                 if wait > 0:
                     await asyncio.sleep(wait)
-                response = await self.client.get(url, **kwargs)
+                response = await self.observed_get(url, attempt=attempt, **kwargs)
                 self._last_request = time.monotonic()
             if response.status_code != 429 or attempt == 3:
                 return response
@@ -489,12 +490,7 @@ class ArxivConnector(SourceConnector):
         """
         for attempt in range(3):
             async with self._limiter.hold(_ARXIV_API):
-                try:
-                    response = await self.client.get(_ARXIV_API, params=params)
-                except httpx.HTTPError as exc:
-                    observe_transport_error(exc, attempt)
-                    raise
-            observe_attempt(response, attempt)
+                response = await self.observed_get(_ARXIV_API, attempt=attempt, params=params)
             if response.status_code != 429 or attempt == 2:
                 return response
             retry_after = response.headers.get("Retry-After", "3")
@@ -625,7 +621,7 @@ class EuropePmcConnector(SourceConnector):
             start = scope.start_date.date().isoformat() if scope.start_date else "1900-01-01"
             end = scope.end_date.date().isoformat() if scope.end_date else "2999-12-31"
             scoped_query = f"({query}) AND FIRST_PDATE:[{start} TO {end}] sort_date:y"
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
             params={"query": scoped_query, "pageSize": min(limit, 100), "format": "json"},
         )
@@ -648,7 +644,7 @@ class OpenLibraryConnector(SourceConnector):
     family = SourceFamily.BOOKS_THESES
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://openlibrary.org/search.json", params={"q": query, "limit": min(limit, 100)}
         )
         response.raise_for_status()
@@ -670,7 +666,7 @@ class IetfConnector(SourceConnector):
     family = SourceFamily.PATENTS_STANDARDS
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://datatracker.ietf.org/api/v1/doc/document/",
             params={"name__contains": query.lower().replace(" ", "-"), "limit": min(limit, 100), "format": "json"},
         )
@@ -698,7 +694,7 @@ class FederalRegisterConnector(SourceConnector):
     family = SourceFamily.OFFICIAL_LEGAL
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://www.federalregister.gov/api/v1/documents.json",
             params={"conditions[term]": query, "per_page": min(limit, 100)},
         )
@@ -720,7 +716,7 @@ class GdeltConnector(SourceConnector):
     family = SourceFamily.NEWS_ARCHIVES
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://api.gdeltproject.org/api/v2/doc/doc",
             params={"query": query, "mode": "ArtList", "format": "json", "maxrecords": min(limit, 250)},
         )
@@ -742,7 +738,7 @@ class WaybackConnector(SourceConnector):
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
         domain = query.strip() if "." in query and " " not in query else "*"
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://web.archive.org/cdx/search/cdx",
             params={"url": domain, "output": "json", "filter": "statuscode:200", "limit": min(limit, 100)},
         )
@@ -772,8 +768,10 @@ class GitHubConnector(SourceConnector):
         repositories = github_repositories(query)
         if repositories:
             owner, repo = repositories[0]
-            response = await self.client.get(
-                f"https://api.github.com/repos/{owner}/{repo}", headers=headers,
+            response = await self.observed_get(
+                f"https://api.github.com/repos/{owner}/{repo}",
+                headers=headers,
+                phase="repository",
             )
             if response.status_code == 200:
                 row = response.json()
@@ -783,13 +781,34 @@ class GitHubConnector(SourceConnector):
                     metadata={**row, "exact_repository": True},
                 )
                 return [item] if item else []
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://api.github.com/search/repositories",
-            params={"q": query, "per_page": min(limit, 100)}, headers=headers,
+            params={"q": query, "per_page": min(limit, 100)},
+            headers=headers,
+            phase="search",
         )
+        if response.status_code == 422:
+            # GitHub read the query and refused it. Flattened into `[]` this is
+            # indistinguishable from a genuine no-match, which is exactly the confusion
+            # ConnectorQueryError exists to prevent.
+            try:
+                detail = str(response.json().get("message", ""))[:200]
+            except ValueError:
+                detail = response.text[:200]
+            raise ConnectorQueryError(
+                self.id, detail or "unprocessable query", query=query
+            )
         response.raise_for_status()
+        payload = response.json()
+        # `incomplete_results` with an empty `items` means GitHub's search timed out rather
+        # than finding nothing -- a different answer that used to look identical.
+        observe_connector(
+            provider_query=query,
+            provider_result_total=payload.get("total_count"),
+            provider_incomplete_results=payload.get("incomplete_results"),
+        )
         output = []
-        for row in response.json().get("items", []):
+        for row in payload.get("items", []):
             item = self.candidate(
                 title=row.get("full_name", ""), url=row.get("html_url", ""),
                 snippet=row.get("description") or "", persistent_id=f"github:{row.get('id')}", metadata=row,
@@ -804,7 +823,7 @@ class HuggingFaceConnector(SourceConnector):
     family = SourceFamily.CODE_DATA
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://huggingface.co/api/models", params={"search": query, "limit": min(limit, 100)}
         )
         response.raise_for_status()
@@ -832,7 +851,7 @@ class ZenodoConnector(SourceConnector):
             self.id = connector_id
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://zenodo.org/api/records", params={"q": query, "size": min(limit, 100)}
         )
         response.raise_for_status()
@@ -855,7 +874,7 @@ class DataCiteConnector(SourceConnector):
     family = SourceFamily.CODE_DATA
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://api.datacite.org/dois", params={"query": query, "page[size]": min(limit, 100)}
         )
         response.raise_for_status()
@@ -879,7 +898,7 @@ class SecEdgarConnector(SourceConnector):
     family = SourceFamily.COMPANY
 
     async def search(self, query: str, limit: int = 20) -> list[ConnectorCandidate]:
-        response = await self.client.get(
+        response = await self.observed_get(
             "https://efts.sec.gov/LATEST/search-index",
             params={"q": query, "from": 0, "size": min(limit, 100)},
             headers={"User-Agent": self.settings.user_agent},

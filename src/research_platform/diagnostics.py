@@ -15,22 +15,35 @@ def observe_connector(**fields: Any) -> None:
         current.update(fields)
 
 
-def observe_attempt(response: Any, attempt: int) -> None:
+def observe_attempt(response: Any, attempt: int, *, phase: str | None = None) -> None:
+    """Record one provider response. `attempt` is the caller's 0-based retry index.
+
+    `phase` names which request this is when a single search makes several distinct ones --
+    GitHub looks a repository up before searching, OpenAlex reads references and cited_by.
+    It stays absent otherwise: written unconditionally it would read every one-request
+    connector as if it had retried.
+    """
     current = CONNECTOR_OBSERVATION.get()
     if current is not None:
-        current.setdefault("attempts", []).append({
+        record: dict[str, Any] = {
             "attempt": attempt + 1, "http_status": response.status_code,
             "retry_after": response.headers.get("Retry-After"),
-        })
+        }
+        if phase is not None:
+            record["phase"] = phase
+        current.setdefault("attempts", []).append(record)
         current["http_status"] = response.status_code
 
 
-def observe_transport_error(exc: Exception, attempt: int) -> None:
+def observe_transport_error(exc: Exception, attempt: int, *, phase: str | None = None) -> None:
     current = CONNECTOR_OBSERVATION.get()
     if current is not None:
-        current.setdefault("attempts", []).append({
+        record: dict[str, Any] = {
             "attempt": attempt + 1, "http_status": None, "error_type": type(exc).__name__,
-        })
+        }
+        if phase is not None:
+            record["phase"] = phase
+        current.setdefault("attempts", []).append(record)
         current["http_status"] = None
 
 SECRET_KEY = re.compile(r"^token$|authorization|cookie|password|secret|api[-_]?key|access[-_]?token|refresh[-_]?token", re.IGNORECASE)

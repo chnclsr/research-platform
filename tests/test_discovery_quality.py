@@ -7,7 +7,11 @@ from research_platform.discovery_quality import (
 )
 from research_platform.query_compiler import compile_provider_query
 from research_platform.recovery import select_mission_balanced_candidates
-from research_platform.relevance import classify_candidate_admission, topic_terms
+from research_platform.relevance import (
+    classify_candidate_admission,
+    github_repositories,
+    topic_terms,
+)
 from research_platform.schemas import (
     ConnectorCandidate,
     ResearchProtocol,
@@ -206,3 +210,133 @@ def test_mission_balance_does_not_promote_weak_branch_candidate() -> None:
     ]
     selected = select_mission_balanced_candidates([weak, strong], missions, 1)
     assert selected == [strong]
+
+
+def chest_ct_protocol(**overrides) -> ResearchProtocol:
+    """The approved-facet shape a modern protocol has, as the incident run did."""
+    payload = {
+        "title": "Volumetric chest CT report generation",
+        "primary_question": (
+            "Investigate artificial intelligence studies in writing radiology reports "
+            "from CT images."
+        ),
+        "scope_criteria": {
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest", "thorax"]},
+                {"name": "modality", "accepted_values": ["CT", "computed tomography"]},
+                {"name": "input_form", "accepted_values": ["3D", "volumetric"]},
+                {
+                    "name": "task",
+                    "accepted_values": ["radiology report generation", "report writing"],
+                },
+            ],
+        },
+        "connectors": {"profile": "custom", "included_families": ["code_data"]},
+        "budget": {"max_wall_minutes": 30},
+    }
+    payload.update(overrides)
+    return ResearchProtocol(**payload)
+
+
+# The round-3 mission that came back HTTP 200 with zero items.
+INCIDENT_QUERY = (
+    "Investigate artificial intelligence studies in writing radiology reports from "
+    "CT images. independent recent evidence saturation probe 1 evidence"
+)
+
+
+def test_github_query_survives_github_and_semantics():
+    """Ten ANDed words including a prompt verb and `images.` could not match a repository."""
+    research_protocol = chest_ct_protocol()
+    compiled = compile_provider_query("github", INCIDENT_QUERY, research_protocol)
+
+    assert compiled.endswith("in:name,description,topics,readme")
+    free_text = compiled.rsplit(" in:", 1)[0]
+    assert free_text == '"radiology report generation" chest CT'
+    assert "images." not in compiled
+    assert "investigate" not in compiled.casefold()
+    assert "saturation" not in compiled.casefold()
+    # A stray slash would make the connector fetch a repository instead of searching.
+    assert github_repositories(compiled) == []
+
+
+def test_github_query_falls_back_to_anchors_when_no_facet_was_approved():
+    """Legacy protocols keep a subject term: position ordering drops it at three."""
+    legacy = ResearchProtocol(
+        title="Legacy",
+        primary_question=chest_ct_protocol().primary_question,
+        connectors={"profile": "custom", "included_families": ["code_data"]},
+        budget={"max_wall_minutes": 30},
+    )
+    compiled = compile_provider_query("github", INCIDENT_QUERY, legacy)
+    free_text = compiled.rsplit(" in:", 1)[0].split()
+    assert "radiology" in free_text
+    assert len(free_text) == 4
+    assert github_repositories(compiled) == []
+
+
+def test_github_query_routes_an_explicit_repository_to_the_exact_lookup():
+    """Also pins the scheme-less parse: `github.com/owner/repo` is one repository."""
+    compiled = compile_provider_query(
+        "github",
+        "What are the limitations of github.com/openai/codex?",
+        chest_ct_protocol(),
+    )
+    assert compiled == "openai/codex"
+    assert github_repositories(compiled) == [("openai", "codex")]
+
+
+def test_saturation_probe_scaffolding_never_reaches_a_provider():
+    """Recovery needs the counter for the mission signature; a provider must never see it."""
+    research_protocol = chest_ct_protocol()
+    for connector_id in ("crossref", "agentsearch_web", "github", "arxiv"):
+        compiled = compile_provider_query(connector_id, INCIDENT_QUERY, research_protocol)
+        assert "saturation" not in compiled.casefold(), connector_id
+        assert "probe" not in compiled.casefold(), connector_id
+        assert " 1" not in f" {compiled}", connector_id
+
+
+def test_arxiv_saturation_probe_keeps_its_facets_and_drops_the_bookkeeping():
+    """The probe's extra OR-group is now built from the question, not from the counter.
+
+    It does not collapse into the primary question's own query: recovery also appends the
+    `query_branch` suffix `evidence`, so the branch still differs by one word and arXiv
+    still adds a group -- but that group no longer carries `saturation probe 1`.
+    """
+    compiled = compile_provider_query("arxiv", INCIDENT_QUERY, chest_ct_protocol())
+    assert 'all:"radiology report generation" OR all:"report writing"' in compiled
+    assert "all:chest OR all:thorax" in compiled
+    for bookkeeping in ("saturation", "probe", "independent", "investigate"):
+        assert bookkeeping not in compiled.casefold()
+
+
+def test_trailing_sentence_punctuation_is_not_a_search_term():
+    """`images.` reached the academic providers as a term no index holds."""
+    compiled = compile_provider_query(
+        "crossref",
+        "Which models write radiology reports from CT images.",
+        chest_ct_protocol(),
+    )
+    assert "images." not in compiled.split()
+    assert "images" in compiled.split()
+
+
+def test_inner_punctuation_is_still_one_term():
+    """Only the edges are trimmed -- version numbers and `C++` are things people search."""
+    compiled = compile_provider_query(
+        "agentsearch_web",
+        "Does SARS-CoV-2 detection in v1.2 of the C++ toolkit hold up?",
+        chest_ct_protocol(),
+    )
+    assert "SARS-CoV-2" in compiled
+    assert "v1.2" in compiled
+    assert "C++" in compiled
+
+
+def test_english_modality_acronym_reaches_the_academic_providers():
+    """`CT` is two characters, and the literal-anchor rule used to drop it outright."""
+    compiled = compile_provider_query(
+        "openalex", "Which models write radiology reports from CT images?",
+        chest_ct_protocol(),
+    )
+    assert "ct" in compiled.split()

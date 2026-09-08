@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from ..config import Settings
+from ..diagnostics import observe_attempt, observe_transport_error
 from ..schemas import ConnectorCandidate, ConnectorHealth, ResearchScope, SourceFamily
 from ..temporal import publication_datetime
 
@@ -37,6 +38,33 @@ class SourceConnector(ABC):
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
         self.settings = settings
         self.client = client
+
+    async def observed_get(
+        self,
+        url: str,
+        *,
+        attempt: int = 0,
+        phase: str | None = None,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """One provider request, recorded. Every connector request goes through here.
+
+        Deliberately does not call `raise_for_status`: the connectors disagree about what a
+        status means. GitHub reads a 404 as "not that repository, search instead", Zotero
+        reads a failed attachment fetch as "no full text", arXiv must parse the error feed
+        in the body before it looks at the status, and most read anything non-2xx as fatal.
+        Interpreting the status stays with the caller; this only performs the request and
+        records what happened, so a panel never has to show "not recorded" again.
+
+        `httpx.InvalidURL` is not an `HTTPError` subclass and so passes through unobserved.
+        """
+        try:
+            response = await self.client.get(url, **kwargs)
+        except httpx.HTTPError as exc:
+            observe_transport_error(exc, attempt, phase=phase)
+            raise
+        observe_attempt(response, attempt, phase=phase)
+        return response
 
     def missing_credentials(self) -> list[str]:
         return [name for name in self.requires_credentials if not getattr(self.settings, name, None)]
