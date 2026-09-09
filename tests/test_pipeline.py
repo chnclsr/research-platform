@@ -186,6 +186,8 @@ def test_scope_role_requires_complete_facets_and_enforces_exclusions():
         "an exclusion applies",
     ) == SourceScopeRole.EXCLUDED
 
+    # A bare label is not evidence in either direction. Every facet is proven and no
+    # exclusion is, so an unsupported EXCLUDED label no longer parks the source in near.
     assert _validated_scope_role(
         criteria,
         SourceScopeRole.EXCLUDED,
@@ -193,6 +195,27 @@ def test_scope_role_requires_complete_facets_and_enforces_exclusions():
         clear_exclusions,
         text,
         "the model asserted exclusion without evidence",
+    ) == SourceScopeRole.PRIMARY_IN_SCOPE
+    # Run 01M203's 89-source failure: the model downgraded itself and the proof says
+    # otherwise. This is the single line that would have kept CT2Rep in the report.
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.NEAR_SCOPE,
+        facets,
+        clear_exclusions,
+        text,
+        "the model downgraded itself",
+    ) == SourceScopeRole.PRIMARY_IN_SCOPE
+    # ...but only where the proof holds. A facet the model itself declined bars promotion,
+    # and the accepted-value route may not overrule that decision even though the value
+    # ("report generation") is in the text.
+    assert _validated_scope_role(
+        criteria,
+        SourceScopeRole.EXCLUDED,
+        [*facets[:-1], {**facets[-1], "matched": False, "reason": "no report generation"}],
+        clear_exclusions,
+        text,
+        "the model declined one facet",
     ) == SourceScopeRole.NEAR_SCOPE
     assert _validated_scope_role(
         criteria,
@@ -1418,8 +1441,13 @@ def test_ambiguous_exclusion_fragment_decides_nothing():
     ) == SourceScopeRole.NEAR_SCOPE
 
 
-def test_empty_facet_evidence_still_downgrades():
-    """Fix 1 is deliberately narrow: the 16-source empty-evidence failure is untouched."""
+def test_empty_facet_evidence_downgrades_when_no_accepted_value_is_present():
+    """Supersedes run 01M1XQ's "Fix 1 is deliberately narrow" scope for this case.
+
+    An empty quote is no longer fatal on its own -- the accepted-value route can prove a
+    facet the model answered without quoting. It is fatal here because none of OrganLens's
+    accepted values ("lung", "3D") appear in the text either, so neither route reaches it.
+    """
     no_evidence = [dict(item, evidence="") for item in _ORGANLENS_FACETS]
     clean = [
         {"exclusion": signal, "matched": False, "reason": "absent", "evidence": ""}
@@ -1520,3 +1548,155 @@ async def test_scope_prompt_is_absent_without_approved_scope_criteria():
 
     assert "EVIDENCE IS MANDATORY" not in judge.system_prompts[0]
     assert "exclusion_assessments" not in judge.system_prompts[0]
+
+
+class KapsamKararliJudgeLLM:
+    """Answers the way the 4B judge did in run 01M203: reworded facet, reformatted quote."""
+
+    def __init__(self, payload: dict):
+        self.payload = payload
+
+    async def complete_json(self, system_prompt, user_prompt):
+        return self.payload
+
+
+CT2REP_ICERIK = (
+    "CT2Rep: Automated Radiology Report Generation for 3D Medical Imaging. "
+    "We introduce the first method to generate radiology reports for 3D chest CT volumes."
+)
+
+
+def _ct2rep_belge() -> AcquiredDocument:
+    return AcquiredDocument(
+        candidate=ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.ACADEMIC,
+            title="CT2Rep",
+            url="https://example.com/ct2rep",
+        ),
+        success=True,
+        content=CT2REP_ICERIK,
+        content_type="text/plain",
+        acquisition_method="fixture",
+    )
+
+
+def _ct2rep_protokol() -> ResearchProtocol:
+    return ResearchProtocol(
+        title="Scope diagnostics",
+        primary_question="Which 3D chest CT models generate radiology reports?",
+        budget={"max_wall_minutes": 30},
+        scope_criteria={
+            "required_facets": [
+                {"name": "modality", "accepted_values": ["CT"]},
+                {"name": "application_task", "accepted_values": ["report generation"]},
+            ],
+            "exclusion_signals": ["PET/CT"],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_scope_assessment_records_the_deterministic_decision_it_acted_on():
+    """The 89-source correction, end to end, with the diagnostics that would have found it.
+
+    Run 01M203 recorded neither `requested_role` nor why a facet failed, so the cause had to
+    be reconstructed offline from `source_versions`. Everything needed is now in the event.
+    """
+    document = _ct2rep_belge()
+    judge = KapsamKararliJudgeLLM(
+        {
+            "directly_relevant": True,
+            "relevance_score": 0.9,
+            "reason": "direct: generates reports from 3D chest CT",
+            # The model downgrades itself, names the facet its own way, and reformats the
+            # quote it is copying. Each of the three used to be fatal on its own.
+            "scope_role": "near_scope",
+            "facet_assessments": [
+                {
+                    "facet": "modality",
+                    "matched": True,
+                    "reason": "chest CT",
+                    "evidence": "3D chest CT volumes",
+                },
+                {
+                    "facet": "Application Task",
+                    "matched": True,
+                    "reason": "report generation",
+                    "evidence": "CT2Rep - Automated Radiology Report Generation",
+                },
+            ],
+            "exclusion_assessments": [
+                {"exclusion": "PET/CT", "matched": False, "reason": "CT only", "evidence": ""},
+            ],
+        }
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = judge
+        await pipeline._semantic_source_judgment(_ct2rep_protokol(), document)
+
+    assessment = document.candidate.metadata["scope_assessment"]
+    assert assessment["role"] == SourceScopeRole.PRIMARY_IN_SCOPE.value
+    assert document.candidate.metadata["research_scope_role"] == (
+        SourceScopeRole.PRIMARY_IN_SCOPE.value
+    )
+    assert assessment["requested_role"] == SourceScopeRole.NEAR_SCOPE.value
+    assert assessment["role_source"] == "deterministic"
+    assert assessment["proof_schema"] == 1
+    assert assessment["proven_facets"] == ["modality", "application task"]
+    assert assessment["unproven_facets"] == []
+    assert "role_promoted_from:near_scope" in assessment["role_reasons"]
+
+    # A folded name means one entry per facet: the backfill no longer writes a second,
+    # undecided copy under the canonical spelling.
+    facets = assessment["facet_assessments"]
+    assert len(facets) == 2
+    by_key = {item["facet_key"]: item for item in facets}
+    assert by_key["modality"]["proof_route"] == "verbatim"
+    assert by_key["application task"]["proof_route"] == "normalized"
+    assert by_key["application task"]["facet"] == "Application Task", "recorded as written"
+    assert by_key["modality"]["value_present"] is True
+
+    exclusion = assessment["exclusion_assessments"][0]
+    assert exclusion["exclusion_key"] == "pet ct"
+    assert exclusion["proof_route"] == "unproven"
+
+
+@pytest.mark.asyncio
+async def test_an_undecided_facet_is_backfilled_and_named_in_the_diagnostics():
+    """The other direction: what the model left out must still be visible and still bar it."""
+    document = _ct2rep_belge()
+    judge = KapsamKararliJudgeLLM(
+        {
+            "directly_relevant": True,
+            "relevance_score": 0.9,
+            "reason": "direct:",
+            "scope_role": "primary_in_scope",
+            "facet_assessments": [
+                {
+                    "facet": "modality",
+                    "matched": True,
+                    "reason": "chest CT",
+                    "evidence": "3D chest CT volumes",
+                },
+            ],
+            "exclusion_assessments": [
+                {"exclusion": "PET/CT", "matched": False, "reason": "CT only", "evidence": ""},
+            ],
+        }
+    )
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        pipeline.llm = judge
+        await pipeline._semantic_source_judgment(_ct2rep_protokol(), document)
+
+    assessment = document.candidate.metadata["scope_assessment"]
+    assert assessment["role"] == SourceScopeRole.NEAR_SCOPE.value
+    assert "facet_decision_missing:application task" in assessment["role_reasons"]
+    backfilled = next(
+        item for item in assessment["facet_assessments"] if item["matched"] is None
+    )
+    assert backfilled["facet"] == "application_task"
+    assert backfilled["reason"] == "model_decision_missing"
+    assert backfilled["proof_route"] == "unproven"

@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `12.49`
+Belge sürümü: `12.50`
 
-Son güncelleme: `2026-09-08`
+Son güncelleme: `2026-09-09`
 
 v0.24.0 panel adım/hata/karar ayrıntıları ve doğrulama: [uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
 
@@ -77,6 +77,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 60 | Araştırma derinliği ve LLM metnini koruma (kendi raporu var) | _çalışma ağacı_ |
 | 61 | Toplama bütçesi işaretçisinin graf kanalına ulaşmaması | _çalışma ağacı_ |
 | 62 | v0.23 araştırma derinliği kabul boşluklarının kapatılması | _çalışma ağacı_ |
+| 63 | Kapsam rolünün determinist hâle getirilmesi | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -4150,3 +4151,203 @@ Ruff temiz; deponun taban borcu artırılmadı. Planın bir öngörüsü tutmad�
 davranışa göre yazıldı: iskele silindikten sonra sonda arXiv'de birincil soruya birebir
 eşitlenmiyor, çünkü recovery `query_branch` sonekini (`evidence`) de ekliyor; ek OR-grubu
 duruyor ama artık `saturation probe 1` yerine soru kelimelerinden kuruluyor.
+
+## 73. Kapsam rolünü modelin biçim alışkanlığından kurtarmak
+
+`01M203HHZXZB61YF59AZZQ2YA4` koşusunun 254 kapsam kararının 121'i `near_scope` oldu ve
+`evidence_eligible: false` ile kanıt zincirinden düştü. Bunların **89'unda** zorunlu
+facet'lerin hepsi `matched: true`, dışlama kararları eksiksiz ve hiçbir dışlama
+eşleşmemişti — bütün sinyaller "kapsam içi" diyordu. Aralarında koşunun sorusunun tam
+merkezindeki **CT2Rep** de vardı.
+
+`source_decision` olayları `source_versions.content` ile birleştirilip gerçek rol yeniden
+oynatıldığında 89'un tamamı tek bir koşuldan düştü: eski `_validated_scope_role`'ün
+`evidence in haystack` yüklemi. Hiçbiri eksiklikten ya da bir dışlamadan düşmedi. Yüklem
+4B kuantize bir modelden **ham, casefold edilmiş birebir alt dize** istiyordu. 123
+ispatlanamayan facet kanıtının dökümü: 38 elidasyon (iki gerçek parça `...` ile
+birleştirilmiş), 32 yalnız noktalama/büyük-küçük harf, 5 yalnız boşluk, 1 unicode
+tırnak/tire, 39 paraphrase, 8 zayıf paraphrase veya uydurma. Yaklaşık %60'ı saf biçimsel
+yanlış-negatif; model anlamı yeniden üretiyor, noktalamayı üretmiyor.
+
+Zincirleme sonuç: 196 kaynağın yalnız 125'i kanıta uygun kaldı, `estimated_completeness`
+0,0222'de, `source_family_coverage` 0,5'te kaldı, kapsam hiç yeterli olmadı, 13 tur döndü
+ve 479 iddianın 470'i tek kaynaklı kaldığı için raporun "Ek A — Bağımsız kaynaklarla
+desteklenen atomik bulgular" bölümü boş çıktı.
+
+### Bu bölüm hangi kararı geçersiz kılıyor
+
+`01M1XQTGQEFT08K2F0S0YP3665` çalışmasının **"Fix 1 kasten dardır"** kapsamı. O düzeltme
+birleşik dışlama etiketlerini çözdü ama boş/biçimsel kanıt yolunu bilerek dışarıda
+bıraktı; `test_empty_facet_evidence_still_downgrades` bunu docstring'inde açıkça
+söylüyordu. Bu bölüm o sınırı kaldırıyor. İlgili test
+`test_empty_facet_evidence_downgrades_when_no_accepted_value_is_present` adını aldı:
+assertion aynı kaldı ama **artık farklı bir sebeple** geçiyor — boş alıntı tek başına
+öldürücü değil; OrganLens'te öldürücü, çünkü kabul edilen değerleri (`lung`, `3D`) de
+metinde yok.
+
+### Yeni modül: `scope_proof.py`
+
+`pipeline.py` 4195 satırdı ve `_scope_signal_key` ile `_exclusion_decision` dosyada başka
+hiçbir yerde kullanılmıyordu. İkisi de `src/research_platform/scope_proof.py`'ye
+`signal_key` ve `exclusion_decision` adlarıyla, docstring'leriyle birlikte taşındı; modül
+yalnız `re`, `dataclasses`, `typing` ve `.schemas`'a bağlı. `_validated_scope_role`
+`pipeline.py`'de **tek satırlık sarmalayıcı** olarak kaldı, çünkü on beş çağrı noktası ve
+test yalnız rolü okuyor. `_scope_role_allows_evidence` hiç değişmedi: tek uygunluk
+otoritesi olarak kaldığı için yedi alt gate bu değişikliği bedavaya aldı.
+
+### İspat merdiveni
+
+`evidence_route` ilk eşleşen kazanır, en sadık olan önce:
+
+1. **`verbatim`** — `evidence.strip().casefold() in haystack.raw`. Eski yüklemle **birebir
+   aynı**, yani yeni merdiven eskisinin **katı üst kümesi**; eskiden kabul edilen hiçbir
+   kanıt reddedilemez. 500 karakterlik kanıt sınırı alıntıyı kelime ortasında kestiğinde
+   de tek kurtaran rota budur, çünkü sonraki her rota token sınırında eşleşir.
+2. **`normalized`** — iki taraf `signal_key` ile katlanır, düz alt dize. 32 + 5 + 1 vaka.
+3. **`elided`** — yalnız kanıtta `...` / `…` / `[...]` varsa. Katlanmış hâli 12 karakterin
+   (kabaca iki kelime) altındaki parçalar atılır, kalanların **hepsi sırayla** bulunmalı.
+   Sıra şart: yoksa model, kaynağın hiç birleştirmediği parçalardan ispat dikebilir. 38 vaka.
+4. **`accepted_value` / `accepted_value_no_quote`** — `ScopeFacet.accepted_values`'tan biri
+   **kelime sınırlı** bulunmalı. Sınır zorunlu: `"CT"` düz alt dize olarak `reconstruction`,
+   `acted`, `reflected` içinde geçer. İkinci ad, modelin hiç alıntı vermediği durumu ayırır.
+5. **`unproven`** — paraphrase ve uydurma reddedilmeye devam eder.
+
+`matched: false` bir karardır, boşluk değil: modelin reddettiği bir facet accepted-value
+rotasıyla kurtarılmaz.
+
+### Rol artık tamamen determinist
+
+`scope_verdict` sekiz basamaklı bir merdiven; her basamak `reasons`'a makine-okunur bir
+dize yazar. İstenen rol yalnız **şerit** seçer (primary mi benchmark mı), kararı vermez.
+Üç kritik davranış:
+
+- **Dışlamada accepted-value rotası kapalıdır.** Bir dışlama etiketinin kendi kelimelerinin
+  metinde geçmesi, dışlamanın uygulandığının kanıtı değildir: reponun kendi doğruluk tablosu
+  metni `"...; PET/CT is not used."` ve PRIMARY bekliyor.
+- **Benchmark muafiyeti adı değil anlamı arar.** Eski `required.discard("task")` decompose'un
+  facet'i her zaman `task` diye adlandıracağını varsayıyordu; bu koşunun kendi round-0
+  çıktısı `application_task` demişti ve muafiyet **sessizce hiç çalışmadı**. Yeni ölçüt
+  `"task" in signal_key(facet.name).split()`. İki task-benzeri facet varsa hiçbiri muaf
+  değil — belirsiz dışlama parçasının hiçbir şeye karar vermemesiyle aynı kural. Muafiyet
+  modelin bilinçli `matched:false`+gerekçesini şart koşar, `model_decision_missing`
+  dolgusunu değil.
+- **Kendi kendini `near_scope` ya da `excluded` etiketleyen kaynak yükseltilir.** 89
+  kaynaklık düzeltmenin özü bu. Kod zaten ispatsız `excluded` etiketini reddediyordu ama
+  kaynağı `near_scope`'a park ediyordu; orada modelin sözü hâlâ kazanıyordu.
+
+Ayrıca `pipeline.py`'deki dolgu artık facet adlarını ve dışlama etiketlerini `signal_key`
+ile karşılaştırıyor. Model `"Application Task"` yazdığında hem kendi girdisi hem
+`model_decision_missing` dolgusu oluşuyordu ve dolgunun `matched: None`'ı kaynağı
+düşürüyordu: **aynı fonksiyonda ikinci bir sessiz düşürme yolu.**
+
+### Kaydedilen tanılama
+
+Bu teşhis ad-hoc replay ile yapılmak zorunda kaldı çünkü `requested_role` hiç
+kaydedilmiyordu. Artık `scope_assessment` `requested_role`, `role_source`,
+`proven_facets`, `unproven_facets`, `excused_facets`, `role_reasons` ve `proof_schema`
+taşıyor; her facet/dışlama girdisi **yerinde zenginleştiriliyor** (asla yeniden
+yazılmıyor): `facet_key`, `proof_route`, facet'lerde `value_present`. `source_decision`
+üst düzeyinde `requested_role` ve `unproven_facets` var, `normalization_summary`'de
+`requested_roles`, `role_transitions`, `facet_proof_routes`, `unproven_facets` ve
+`quote_only_facets` sayaçları. Rota hesabı `scope_proof.facet_proof` /
+`exclusion_route`'ta tek yerdedir; kaydedilenin karardan ayrışması mümkün değil. Bütün
+yeni anahtarlar eski koşularda yok, her okuyucu `.get(...)` kullanıyor; şema göçü yok.
+`control_panel_ui.py`'ye yeni anahtar ve rota adları için Türkçe etiketler eklendi.
+
+### Ölçüm: `scripts/replay_scope_roles.py`
+
+254 karar, koşunun **onaylanmış** protokol kriterleriyle (`scope_criteria_resolved` olayı
+onay öncesidir ve farklı facet adları taşır), aynı kayıtlı model çıktısı üç yüklemden
+geçirilerek:
+
+```
+stored          primary 123  near 121  excluded 8  benchmark 2
+recomputed-old  near 142  primary 102  excluded 8  benchmark 2
+recomputed-new  primary 142  near 101  excluded 9  benchmark 2
+
+  40  near_scope -> primary_in_scope     (CT2Rep dahil)
+   1  near_scope -> excluded             (gerçek dışlama artık yakalanıyor)
+   0  GERİLEME
+```
+
+Karşılaştırılan taraf `stored` değil `recomputed-old`: replay canlıdan **katıdır** çünkü
+`ConnectorCandidate.snippet` kalıcı değil ve haystack `sources.title + content[:6000]`.
+`stored → new` matrisindeki 21 `primary → near` düzeltmenin değil eksik metnin sonucudur.
+Betikteki eski yüklem **dondurulmuş kopyadır**; içe aktarılsaydı düzeltme indikten sonra
+"eski taraf" da yeni davranışı gösterir ve karşılaştırma sessizce yalan söylerdi.
+`requested_role` bu korpusta yok ama kısmen çıkarılabiliyor: eski yüklem
+`primary_in_scope`/`supporting_benchmark` rolünü yalnızca o rol istendiğinde döndürür.
+
+Planın öngörüsü **+42**'ydi, ölçülen **+40**. Fark ölçüm koşumundan geliyor (plan aşaması
+replay'inde 253 karar ve elle sabitlenmiş şerit vardı); yön ve büyüklük tuttu, gerileme
+sıfır çıktı.
+
+### Kabul kapısının tetiklediği dur işareti
+
+Planın gözle denetim adımı şunu söylüyordu: *"Genel 'AI in radiology' derlemesi, ACR blog
+yazısı veya 167 karakterlik Cloudflare kabuğu listede çıkarsa dur — yüklem çok gevşek."*
+**Çıktı.** 40 yükseltmenin (29 benzersiz kaynak; kalanı aynı kaynağın farklı turları)
+içinde `How Artificial Intelligence Is Transforming the Field of Radiology`,
+`AI in diagnostic imaging`, `Artificial Intelligence in CT Imaging: A Systematic Review`,
+`International Journal Advanced Research Publications - ijarp` ve çıplak bir
+`nature.com/ncomms/editorshighlights` URL'i var. Kapının saydığı üç tetikleyiciden yalnız
+ilki gerçekleşti: ACR blog yazısı da 167 karakterlik Cloudflare kabuğu da yükselenler
+arasında **yok** (en kısa yükseltme 573 karakter).
+
+Ama ölçüm nedeni planın tahmininden başka gösteriyor. **40 yükseltmenin 29'unda iki
+facet de gerçek alıntıyla ispatlanıyor** (`normalized+verbatim` 21, `elided+verbatim` 4,
+`normalized+normalized` 4); yalnız **2'si** tamamen `accepted_values`'a dayanıyor,
+11'inde en az bir facet o rotadan geliyor. Yani alıntılar metinde gerçekten var — yüklem
+gevşemiş değil.
+
+Gevşek olan sözleşme de değil. **Kapının önermesi yanlış çıktı.** Bu koşunun kriterleri
+iki facet ve tek bir dışlamadan ibaret: `modality ∈ {CT, computed tomography, BT}`,
+`task ∈ {radiology report generation, automated report generation, report writing}`,
+`exclusion = PET/CT unless CT-only image input is evaluated separately`. Anatomi facet'i
+yok, ama **eksik değil**: `01M203HHZXZB61YF59AZZQ2YA4`'ün sorusu *"BT görüntülerinden
+radyoloji raporu yazımında yapay zeka çalışmalarını araştır"* — göğüs BT koşusu değil. Ne
+bu koşunun ne de veritabanındaki başka bir koşunun soru metninde "göğüs" / "chest" geçiyor.
+Sözleşme, `_infer_literal_scope`'un aynı soruya verdiği çıktının **birebir aynısı**
+(doğrulandı: aynı iki facet, aynı `accepted_values`, aynı tek dışlama), yani onaylanan
+soruyu sadakatle kodluyor. Anatomi facet'i eklemek, `llm.py:_infer_literal_scope`
+docstring'inin adıyla yasakladığı şey olurdu: *"kullanıcı geniş bir soruyu onayladıktan
+sonra bunu yapmak gizli bir kapsam değişikliğidir."*
+
+Yükselen kaynaklar da cılız eşleşme değil. 40 yükseltmenin **38'i tam metin** (14.824 –
+125.905 karakter); 2000 karakterin altında yalnız 2 kayıt var, 500'ün altında hiç yok.
+Kapının adıyla andığı örnekler de tam metin:
+`How Artificial Intelligence Is Transforming the Field of Radiology` 30.549,
+`AI in diagnostic imaging` 68.126, `Artificial Intelligence in CT Imaging` 62.324 karakter.
+Genel CT + rapor üretimi sorusunu bu belgeler gerçekten karşılıyor. Geriye kalan iki
+şüpheli kayıt — çıplak `nature.com/ncomms/editorshighlights` URL'i ve `ijarp` dizin sayfası
+— birer liste sayfası; bu kapsamın değil edinim katmanının sorunudur ve replay betiği
+kaynak hijyenini ölçmediğini zaten söylüyor.
+
+**Ölçümün açığa çıkardığı asıl kusur bir üst katmanda, netleştirme kapısında.** Aynı soru
+üç kez koşulmuş ve üç farklı sözleşme doğurmuş, çünkü HITL soru üreteci kapsam konusunda
+belirlenir değil:
+
+```
+01M1XDAQ...  "...belirli bir anatomik bölgedeki BT..."       anatomy,modality,input_form,task
+01M1NT3V...  "Anatomik bölge bazında özel bir BT türüne..."  anatomy,modality,input_form,task
+01M203HH...  "...hangi alt soruya odaklanılmalı?"            modality,task
+```
+
+Kapsamın genişliğini kullanıcının cevabı değil, üretecin o turda daraltma sorusunu sormayı
+akıl edip etmemesi belirliyor; ölçülen koşuda daraltma **hiç teklif edilmemiş**. Tek bir
+sözleşmeyi elle sıkıştırmak bunu düzeltmez, üstünü örter.
+
+Sonuç: kod bu bölümde tamamlandı ve doğrulandı, **canlı koşu yapılmadı**. Kapsam
+sözleşmesine dokunulmuyor — kapı "değişiklik yok" kararıyla kapandı. Sıradaki iş HITL
+kapsam sorusunun belirlenirliğidir ve kendi plan onay kapısına aittir; `quote_only_facets`
+sayacı (bu koşuda 4) o kararın etkisini tek koşuda görünür kılar.
+
+### Doğrulama
+
+Zorunlu paket **998 passed, 3 skipped, 1 warning** (73,43 sn) — 72. bölümün 953'üne 45
+yeni test eklendi. `tests/test_scope_proof.py` (43 test) ölçülen her başarısızlık biçimi
+için bir rota testi, paraphrase reddi, elidasyon korumaları (kısa parça, ters sıra, çıplak
+`...`), accepted-value kelime sınırı ve **üst küme değişmezi** taşıyor.
+`tests/fixtures/chest_ct_scope_cases.json` ve `11/2/2/2` sayıları değişmedi — dondurulmuş
+sapma denetimi yeni merdiven altında da aynı sonucu veriyor. Değişen ve yeni dosyalarda
+Ruff temiz; `pipeline.py` ve `tests/test_pipeline.py` taban borcu 16'da sabit kaldı.

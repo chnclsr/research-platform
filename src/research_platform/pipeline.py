@@ -97,6 +97,13 @@ from .schemas import (
     new_id,
 )
 from .scholarly import candidate_dedupe_key
+from .scope_proof import (
+    ScopeHaystack,
+    exclusion_route,
+    facet_proof,
+    scope_verdict,
+    signal_key,
+)
 from .scoping import (
     LABEL_MAX_LENGTH,
     apply_planning_answers,
@@ -192,61 +199,6 @@ class PipelineHalted(RuntimeError):
     pass
 
 
-def _scope_signal_key(value: str) -> str:
-    """Fold a scope-signal label so wording differences stop deciding scope."""
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).split())
-
-
-def _exclusion_decision(
-    signal: str,
-    exclusion_assessments: list[dict[str, Any]],
-    approved_signals: list[str],
-) -> dict[str, Any] | None:
-    """Find the model's decision for one approved exclusion signal.
-
-    The prompt asks for the approved label verbatim and the model often rewords or merges
-    it. Measured on run 01M1XQTGQEFT08K2F0S0YP3665: 12 of 19 near-scope sources had every
-    exclusion recorded under a merged label -- "2D-only or single-slice input" standing for
-    two separate approved signals -- so an exact-key lookup read them as undecided and
-    downgraded papers whose own classification reason began "direct:". EXACT echoed the
-    three labels verbatim and reached primary_in_scope; OrganLens did not and did not.
-    Nothing about the sources differed, only the model's formatting.
-
-    Matching is token-subset and must be unambiguous: a fragment that fits more than one
-    approved signal ("input") decides neither. Coordination elides the shared head, so
-    "2D-only" has to reach "2D-only input" while never reaching "single-slice input".
-
-    A merged label may complete a decision but may never prove an exclusion. Accepting
-    "A or B: matched=true" for both A and B would assert a per-signal finding the model
-    never made, and EXCLUDED is the one verdict that removes a source outright.
-    """
-    wanted = _scope_signal_key(signal)
-    if not wanted:
-        return None
-    wanted_tokens = set(wanted.split())
-    approved_tokens = [
-        set(_scope_signal_key(other).split()) for other in approved_signals
-    ]
-    compound: dict[str, Any] | None = None
-    for item in exclusion_assessments:
-        label = str(item.get("exclusion") or "")
-        if not label:
-            continue
-        if _scope_signal_key(label) == wanted:
-            return item
-        if item.get("matched") is not False:
-            continue
-        for part in re.split(r"\s+or\s+|/|,", label):
-            tokens = set(_scope_signal_key(part).split())
-            if not tokens or not tokens <= wanted_tokens:
-                continue
-            if sum(tokens <= other for other in approved_tokens) != 1:
-                continue
-            compound = compound or item
-            break
-    return compound
-
-
 def _validated_scope_role(
     criteria: ResearchScopeCriteria,
     requested_role: SourceScopeRole,
@@ -255,81 +207,19 @@ def _validated_scope_role(
     assessment_text: str,
     classification_reason: str,
 ) -> SourceScopeRole:
-    """Fail uncertain scope decisions out of the main synthesis.
+    """The role alone, for callers that do not record why it was reached.
 
-    The model proposes a role, but only complete decisions with verbatim support may enter
-    the primary or benchmark lanes.  A proven exclusion is stronger than the proposed role;
-    a missing decision or an unverifiable excerpt is a near match rather than silent
-    inclusion.
+    The decision itself lives in `scope_proof.scope_verdict`; this keeps the many existing
+    call sites and tests reading a single value.
     """
-    haystack = assessment_text.casefold()
-    facet_by_name = {
-        str(item.get("facet") or ""): item
-        for item in facet_assessments
-        if str(item.get("facet") or "")
-    }
-    exclusion_by_signal = {
-        signal: _exclusion_decision(
-            signal, exclusion_assessments, criteria.exclusion_signals
-        )
-        for signal in criteria.exclusion_signals
-    }
-    if not str(classification_reason or "").strip():
-        return SourceScopeRole.NEAR_SCOPE
-
-    exclusion_decisions_complete = all(
-        (item := exclusion_by_signal.get(signal)) is not None
-        and isinstance(item.get("matched"), bool)
-        and bool(str(item.get("reason") or "").strip())
-        for signal in criteria.exclusion_signals
-    )
-    for signal in criteria.exclusion_signals:
-        item = exclusion_by_signal.get(signal)
-        if (
-            not item
-            or item.get("matched") is not True
-            or not str(item.get("reason") or "").strip()
-        ):
-            continue
-        evidence = str(item.get("evidence") or "").strip().casefold()
-        if evidence and evidence in haystack:
-            return SourceScopeRole.EXCLUDED
-        return SourceScopeRole.NEAR_SCOPE
-
-    # A bare model label is not evidence. If it requested exclusion without proving an
-    # approved exclusion signal, retain the source as near-scope for inspection.
-    if requested_role == SourceScopeRole.EXCLUDED:
-        return SourceScopeRole.NEAR_SCOPE
-
-    if requested_role not in {
-        SourceScopeRole.PRIMARY_IN_SCOPE,
-        SourceScopeRole.SUPPORTING_BENCHMARK,
-    }:
-        return requested_role
-    all_facets = {facet.name for facet in criteria.required_facets}
-    facet_decisions_complete = all(
-        name in facet_by_name
-        and isinstance(facet_by_name[name].get("matched"), bool)
-        and bool(str(facet_by_name[name].get("reason") or "").strip())
-        for name in all_facets
-    )
-    required = set(all_facets)
-    if requested_role == SourceScopeRole.SUPPORTING_BENCHMARK:
-        required.discard("task")
-    proven = {
-        name
-        for name, item in facet_by_name.items()
-        if item.get("matched") is True
-        and (evidence := str(item.get("evidence") or "").strip().casefold())
-        and evidence in haystack
-    }
-    if (
-        not facet_decisions_complete
-        or not required.issubset(proven)
-        or not exclusion_decisions_complete
-    ):
-        return SourceScopeRole.NEAR_SCOPE
-    return requested_role
+    return scope_verdict(
+        criteria,
+        requested_role,
+        facet_assessments,
+        exclusion_assessments,
+        assessment_text,
+        classification_reason,
+    ).role
 
 
 def _scope_role_allows_evidence(
@@ -2221,8 +2111,12 @@ class ResearchPipeline:
                         if isinstance(item, dict)
                         and isinstance(item.get("matched"), bool)
                     ]
+                    # Folded, because the model does not treat these as closed vocabularies.
+                    # An exact-name backfill wrote a second, undecided entry for a facet the
+                    # model had answered under its own spelling, and that filler is what the
+                    # role check then read.
                     assessed_facets = {
-                        item["facet"] for item in assessments if item["facet"]
+                        signal_key(item["facet"]) for item in assessments if item["facet"]
                     }
                     assessments.extend(
                         {
@@ -2232,10 +2126,10 @@ class ResearchPipeline:
                             "evidence": "",
                         }
                         for facet in protocol.scope_criteria.required_facets
-                        if facet.name not in assessed_facets
+                        if signal_key(facet.name) not in assessed_facets
                     )
                     assessed_exclusions = {
-                        item["exclusion"]
+                        signal_key(item["exclusion"])
                         for item in exclusion_assessments
                         if item["exclusion"]
                     }
@@ -2247,7 +2141,7 @@ class ResearchPipeline:
                             "evidence": "",
                         }
                         for exclusion in protocol.scope_criteria.exclusion_signals
-                        if exclusion not in assessed_exclusions
+                        if signal_key(exclusion) not in assessed_exclusions
                     )
                     assessment_text = " ".join(
                         [
@@ -2257,7 +2151,7 @@ class ResearchPipeline:
                         ]
                     )
                     classification_reason = str(result.get("reason") or "")[:500]
-                    role = _validated_scope_role(
+                    verdict = scope_verdict(
                         protocol.scope_criteria,
                         role,
                         assessments,
@@ -2265,12 +2159,28 @@ class ResearchPipeline:
                         assessment_text,
                         classification_reason,
                     )
+                    role = verdict.role
+                    haystack = ScopeHaystack.build(assessment_text)
+                    accepted_values = {
+                        signal_key(facet.name): facet.accepted_values
+                        for facet in protocol.scope_criteria.required_facets
+                    }
+                    # Enriched in place, never rewritten: the model's own text stays as it
+                    # was recorded, and the audit gains why it did or did not count.
+                    for item in assessments:
+                        key = signal_key(item["facet"])
+                        proof = facet_proof(item, haystack, accepted_values.get(key, ()))
+                        item.update(proof.as_audit_entry())
+                    for item in exclusion_assessments:
+                        item["exclusion_key"] = signal_key(item["exclusion"])
+                        item["proof_route"] = exclusion_route(item, haystack)
                     document.candidate.metadata["scope_assessment"] = {
-                        "role": role.value,
+                        **verdict.as_audit_entry(),
                         "facet_assessments": assessments,
                         "exclusion_assessments": exclusion_assessments,
                         "reason": classification_reason or "classification_incomplete",
                         "model": self.settings.llm_model,
+                        "proof_schema": 1,
                     }
                     document.candidate.metadata["research_scope_role"] = role.value
                 return (
@@ -2482,11 +2392,14 @@ class ResearchPipeline:
                 await self.store.put(snapshot_key, snapshot_bytes, document.content_type)
                 document.candidate.metadata["raw_snapshot_key"] = snapshot_key
             source, version = await self.repo.save_document(state["run_id"], document)
+            scope_assessment = document.candidate.metadata.get("scope_assessment", {})
             source_decisions.append({
                 "source_id": source.id, "source_version_id": version.id,
                 "url": str(source.url), "title": source.title,
                 "role": document.candidate.metadata.get("research_scope_role"),
-                "scope_assessment": document.candidate.metadata.get("scope_assessment", {}),
+                "requested_role": scope_assessment.get("requested_role"),
+                "unproven_facets": scope_assessment.get("unproven_facets", []),
+                "scope_assessment": scope_assessment,
                 "semantic_relevance": document.candidate.metadata.get("semantic_relevance_judgment"),
                 "evidence_eligible": scope_evidence_eligible,
             })
@@ -2544,10 +2457,50 @@ class ResearchPipeline:
                     )
         await self.repo.diagnostic_batch(state["run_id"], "source_decision", source_decisions)
         await self.repo.diagnostic_batch(state["run_id"], "source_rejected", content_rejected)
+        facet_proofs = [
+            facet
+            for item in source_decisions
+            for facet in item["scope_assessment"].get("facet_assessments", [])
+        ]
         await self.repo.event(state["run_id"], "normalization_summary", {
             "candidate_count": len(documents), "selected_count": len(saved_docs),
             "rejected_count": len(content_rejected),
             "roles": dict(Counter(str(item.get("role")) for item in source_decisions)),
+            "requested_roles": dict(
+                Counter(
+                    str(item["requested_role"])
+                    for item in source_decisions
+                    if item.get("requested_role")
+                )
+            ),
+            "role_transitions": dict(
+                Counter(
+                    f"{item['requested_role']}->{item['role']}"
+                    for item in source_decisions
+                    if item.get("requested_role")
+                    and item["requested_role"] != item["role"]
+                )
+            ),
+            "facet_proof_routes": dict(
+                Counter(str(facet.get("proof_route")) for facet in facet_proofs)
+            ),
+            "unproven_facets": dict(
+                Counter(
+                    facet
+                    for item in source_decisions
+                    for facet in item.get("unproven_facets", [])
+                )
+            ),
+            # Promoted on a quote alone, with no accepted value anywhere in the text. A
+            # facet that is always in this column is proving nothing.
+            "quote_only_facets": dict(
+                Counter(
+                    str(facet.get("facet_key"))
+                    for facet in facet_proofs
+                    if facet.get("proof_route") in {"verbatim", "normalized", "elided"}
+                    and facet.get("value_present") is False
+                )
+            ),
         })
         if content_rejected:
             await self.repo.event(

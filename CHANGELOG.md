@@ -2,11 +2,11 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.50`
+Belge sürümü: `6.51`
 
-Son güncelleme: `2026-09-08`
+Son güncelleme: `2026-09-09`
 
-## v0.24.0 — 2026-09-08
+## v0.24.0 — 2026-09-09
 
 - Panelde audit/coverage dahil araç çağrısı olmayan adımların karar ayrıntıları açılıyor;
   yeni koşularda tur bazlı iddia, kapsam, parser ve sentez tanılamaları saklanıyor.
@@ -30,6 +30,21 @@ Son güncelleme: `2026-09-08`
   panelde "Kaydedilmemiş" kalmıyor. GitHub'ın reddettiği sorgu (422) sıfır sonuçtan,
   zaman aşımına uğrayan arama ise "eşleşme yok"tan ayrılıyor.
 - Ayrıntılar: [Panel tanılama uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
+- Bir kaynağın kapsam rolü artık modelin etiketiyle değil ispatla belirleniyor. Anlamsal
+  yargıç bir rol önerir; kararı, zorunlu facet'lerin ve onaylanmış dışlamaların kaynak
+  metninde gerçekten kanıtlanıp kanıtlanmadığı verir. Model kendini "yakın kapsam" diye
+  işaretlese bile ispat tamsa kaynak ana kapsama alınır.
+- Kanıt eşleşmesi artık modelin noktalama alışkanlığına takılmıyor. Birebir alıntının
+  yanında biçim farkı (noktalama, boşluk, unicode tırnak), üç noktayla kısaltılmış alıntı
+  (parçalar sırayla bulunmak şartıyla) ve kabul edilen değerin metinde geçmesi de ispat
+  sayılıyor. Paraphrase ve uydurma reddedilmeye devam ediyor. Son ölçülen koşuda BT
+  görüntülerinden rapor üretimi üzerine 40 karar kanıt zincirine geri girdi, hiçbir kaynak
+  geri düşmedi.
+- Benchmark muafiyeti facet'i adına göre değil anlamına göre buluyor; `application_task`
+  gibi adlandırılan koşularda muafiyet sessizce hiç çalışmıyordu.
+- Panelde her kapsam kararı modelin istediği rolü, rolü kimin belirlediğini, hangi
+  facet'in neden ispatlandığını veya ispatlanamadığını ve kanıtın hangi yoldan
+  doğrulandığını gösteriyor. Bu alanlar eski koşularda bulunmaz.
 
 Ayrıntılı gerekçeler ve ölçümler
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) ile
