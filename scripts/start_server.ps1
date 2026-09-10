@@ -32,6 +32,14 @@ function Hata($m)  { Write-Host "[!!] $m" -ForegroundColor Red }
 # docker'in ilerleme ciktisi stderr'e gider ve PowerShell 5.1 onu ErrorRecord'a sarar;
 # ekrana hata bloklari olarak basilmasin diye kayitlar burada duz metne cevriliyor.
 # Basari/basarisizlik yalnizca cikis kodundan okunur, $? gormezden gelinir.
+#
+# BURAYA TEK HARFLI BAYRAK GECIRMEYIN -- UZUN BICIMINI KULLANIN. Bu gelismis bir
+# fonksiyon oldugu icin ortak parametreleri de alir; `-d`, `-Debug`in tek anlamli
+# kisaltmasi oldugundan binder onu parametre sanip argüman listesinden SESSIZCE
+# cikarir. Sonucu: `compose up -d` detach olmadan calisir, komut container'a
+# attach olup hic donmez ve script orada asili kalir (olculdu 2026-09-10:
+# telegram-bot adiminda tam olarak bu oldu). `--detach` boyle bir cakisma yasamaz.
+# `-f` ve `--rm` guvenli: hicbir ortak parametre "f" ile baslamiyor.
 function Docker-Calistir {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Argumanlar)
     $onceki = $ErrorActionPreference
@@ -71,7 +79,7 @@ if (-not $hazir) { Hata "Docker Desktop 5 dakika icinde hazir olmadi."; exit 1 }
 
 # ------------------------------------------------------------------- container'lar
 Bilgi "Altyapi container'lari"
-if ((Docker-Calistir compose up -d --wait --wait-timeout 300 postgres redis minio crawl4ai) -ne 0) {
+if ((Docker-Calistir compose up --detach --wait --wait-timeout 300 postgres redis minio crawl4ai) -ne 0) {
     Hata "Altyapi container'lari saglikli baslatilamadi."; exit 1
 }
 Tamam "postgres, redis, minio, crawl4ai"
@@ -89,9 +97,9 @@ Tamam "sema guncel"
 Bilgi "Uygulama servisleri"
 $uygulama = @("docling", "agentsearch-adapter", "api", "worker", "mcp-gateway", "langflow")
 if ($Build) {
-    $kod = Docker-Calistir compose up -d --build --wait --wait-timeout 600 @uygulama
+    $kod = Docker-Calistir compose up --detach --build --wait --wait-timeout 600 @uygulama
 } else {
-    $kod = Docker-Calistir compose up -d --wait --wait-timeout 600 @uygulama
+    $kod = Docker-Calistir compose up --detach --wait --wait-timeout 600 @uygulama
 }
 if ($kod -ne 0) { Hata "Uygulama servisleri saglikli baslatilamadi."; exit 1 }
 Tamam ($uygulama -join ", ")
@@ -107,9 +115,9 @@ Tamam ($uygulama -join ", ")
 # kod degistikten sonraki ilk -Build'e kadar bayat kalir.
 if (Select-String -Path "$root\.env" -Pattern '^TELEGRAM_BOT_TOKEN=.+' -Quiet) {
     if ($Build) {
-        $kod = Docker-Calistir compose --profile telegram up -d --build telegram-bot
+        $kod = Docker-Calistir compose --profile telegram up --detach --build telegram-bot
     } else {
-        $kod = Docker-Calistir compose --profile telegram up -d telegram-bot
+        $kod = Docker-Calistir compose --profile telegram up --detach telegram-bot
     }
     if ($kod -eq 0) { Tamam "telegram-bot baslatildi" } else { Hata "telegram-bot baslatilamadi"; $durum = 1 }
 }
@@ -126,7 +134,7 @@ $calisan = docker compose --env-file .env -f $searxngCompose ps --quiet 2>$null
 if ($LASTEXITCODE -eq 0 -and $calisan) {
     Tamam "zaten calisiyor"
 } else {
-    if ((Docker-Calistir compose --env-file .env -f $searxngCompose up -d) -eq 0) {
+    if ((Docker-Calistir compose --env-file .env -f $searxngCompose up --detach) -eq 0) {
         Tamam "baslatildi"
     } else { Hata "SearXNG baslatilamadi"; $durum = 1 }
 }
