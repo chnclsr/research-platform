@@ -47,6 +47,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 40 | Kanıt tabanı 18 kaynağa iniyor: 231 iddianın 230'u tek kaynaklı kalıyor | Kanıt notu tabanda, mutabakat yapısal olarak yazılamıyor | Yüksek |
 | 43 | Docker Desktop oturum açılmasını gerektiriyor | Windows sunucu reboot sonrası başsız ayağa kalkamaz | Orta |
 | 44 | Session 0'dan kimlik deposuna erişilemiyor | `docker build` ve `git push` uzak oturumdan çalışmıyor | Orta |
+| 45 | Panel testi canlı yığını gerçekten durduruyor | Sunucuda test koşmak servisleri düşürüyor | **Yüksek** |
 
 ---
 
@@ -912,6 +913,41 @@ engellediği için uzaktan erişimi tamamen kesebilir.
 kimlik döndüren bir credential helper tanımlanması — süreç kapsamında yapılırsa sistemde iz
 bırakmaz ve Docker Desktop ezemez, karşılığında özel imaj çekilemez; (b) ajanın/derlemenin
 gerçek bir masaüstü oturumunda çalıştırılması, ki bu 43. maddeyle birlikte çözülür.
+
+---
+
+## 45. Panel testi canlı yığını gerçekten durduruyor
+
+**Durum:** `tests/test_control_panel.py::test_stopping_the_stack_is_restricted_to_administrators`
+panelin `POST /api/system/stop` ucunu çağırıyor. Panel ayarlarını gerçek `.env`'den
+okuduğu için `CONTROL_PANEL_DEPLOYMENT=docker` görüyor ve komutu **gerçekten çalıştırıyor**.
+Test `{"message": "stopped"}` bekliyor; sunucu üzerinde koşturulduğunda dönen değer
+gerçek compose çıktısı oluyor:
+
+```
+Container research-platform-api-1 Stopped
+Container research-platform-worker-1 Stopped
+Container research-platform-mcp-gateway-1 Stopped
+Container research-platform-telegram-bot-1 Exited (137)
+```
+
+Yani test hem başarısız oluyor hem de `api`, `worker`, `mcp-gateway` ve `telegram-bot`'u
+düşürüyor — panelin `_compose_app_services()` hedefiyle birebir aynı küme. 2026-09-10'da
+sunucuda tam takım koşturulurken yaşandı; o sırada aktif koşu yoktu, olsaydı worker'ın
+altından çekilirdi.
+
+**Neden bulunması zor:** Geliştirme makinesinde `.env` yok ya da
+`CONTROL_PANEL_DEPLOYMENT=native` ve compose çağrısı bir yere varmıyor, test sessizce
+geçiyor. Yıkıcı hâle yalnız gerçek dağıtımın yanında çalışınca geliyor — yani tam olarak
+"sunucuda bir kez test koşayım" denen anda.
+
+**Ne gerekiyor:** Testin compose çağrısını sahte bir çalıştırıcıya bağlaması (yetki
+kontrolünü sınıyor, gerçekten durdurmayı değil), ya da test oturumunun ayarları gerçek
+`.env`'den okumasının engellenmesi. İkincisi daha genel: bu dosyayı okuyan başka testler
+de aynı riski taşıyor.
+
+**Geçici kural:** Sunucuda tam test takımı çalıştırmayın. `tests/test_control_panel.py`
+hariç tutulmalı, ya da testler geliştirme makinesinde koşturulmalı.
 
 ---
 
