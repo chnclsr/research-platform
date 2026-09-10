@@ -331,3 +331,71 @@ def test_evidence_gate_rejects_preprint_citation_instruction():
     )
     assert not valid
     assert reason == "citation_shell_text"
+
+
+def _passage(version_id: str, index: int, text: str) -> Passage:
+    return Passage(
+        source_version_id=version_id,
+        chunk_index=index,
+        section_path=f"Section {index}",
+        start_char=index * 100,
+        end_char=(index + 1) * 100,
+        text=text,
+        token_count=max(1, len(text.split())),
+        content_hash=hashlib.sha256(f"{version_id}-{index}".encode()).hexdigest(),
+        embedding=[0.0, 1.0],
+    )
+
+
+def test_competition_tells_a_capped_source_apart_from_an_irrelevant_one():
+    """Two sources take nothing; only one of them is a quota problem.
+
+    Retrieval writes `retrieval_score` onto the passages it selects and nowhere else,
+    so a source that lost reaches the panel as "skor 0.000" -- identical to one nothing
+    matched in. `best_score` against `cutoff_score` is what separates them.
+    """
+    question = "radiology report generation from chest CT"
+    ontopic = [
+        _passage("version-ontopic", index, "radiology report generation from chest CT volumes")
+        for index in range(5)
+    ]
+    rival = [
+        _passage("version-rival", index, "chest CT radiology report generation study")
+        for index in range(5)
+    ]
+    offtopic = [
+        _passage("version-offtopic", index, "quarterly accounting policy for office supplies")
+        for index in range(5)
+    ]
+
+    competition: dict[str, dict] = {}
+    selected = retrieve_passages(
+        ontopic + rival + offtopic,
+        [question],
+        per_question=2,
+        max_total=2,
+        max_per_source=2,
+        competition=competition,
+    )
+
+    assert len(selected) == 2
+    winners = {p.source_version_id for p in selected}
+    losers = {"version-ontopic", "version-rival"} - winners
+
+    off = competition["version-offtopic"]
+    assert off["selected"] == 0
+    # Nothing in it was close to buying a slot, so no quota change would rescue it.
+    assert off["best_score"] < off["cutoff_score"]
+    assert off["passages_considered"] == 5
+
+    for version_id in losers:
+        held_out = competition[version_id]
+        assert held_out["selected"] == 0
+        # On topic and comparable to what did get in: this one is about the quota.
+        assert held_out["best_score"] > off["best_score"]
+        assert held_out["passages_considered"] == 5
+
+    # The limits that produced this outcome travel with the record, so a reader does
+    # not have to guess which settings were in force for the round.
+    assert off["source_limit"] == 2
+    assert off["total_limit"] == 2

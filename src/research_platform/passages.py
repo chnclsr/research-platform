@@ -110,7 +110,19 @@ def retrieve_passages(
     per_question: int = 8,
     max_total: int | None = None,
     max_per_source: int | None = None,
+    competition: dict[str, dict[str, Any]] | None = None,
 ) -> list[Passage]:
+    """Rank passages against the questions and return the ones that win a slot.
+
+    ``competition`` is an optional out-parameter. Every passage is scored, but only the
+    selected ones keep their score -- so a source that lost is indistinguishable from a
+    source judged irrelevant, in the panel and in any later analysis. When a dict is
+    passed it is filled with one entry per source version: how many passages it had in
+    the running, the best score any of them reached, and how many were taken. Combined
+    with the round's cutoff that separates "nothing here matched" from "the per-source
+    cap or the global quota filled up first", which are different problems with
+    different fixes.
+    """
     if not passages or not questions:
         return []
     document_frequency: Counter[str] = Counter()
@@ -274,6 +286,46 @@ def retrieve_passages(
         passage.retrieval_score = round(scores[passage_id], 4)
         passage.matched_questions = sorted(matched[passage_id])
         output.append(passage)
+
+    if competition is not None:
+        # A passage is ranked once per question; its standing is its best of those.
+        best_per_passage: dict[str, float] = defaultdict(float)
+        version_of: dict[str, str] = {}
+        for ranked in ranked_by_question:
+            for score, passage in ranked:
+                best_per_passage[passage.id] = max(best_per_passage[passage.id], score)
+                version_of[passage.id] = passage.source_version_id
+        # The weakest score that still bought a slot in this round.
+        cutoff = min((scores[pid] for pid in selected_order), default=0.0)
+        # Counted from everything this round was handed, not from the ranking. The
+        # ranking drops any passage scoring <= 0 and truncates what is left, so a source
+        # nothing matched in would be absent from `competition` entirely -- and absence
+        # is exactly what the panel cannot render. Every source that put a passage in
+        # front of the questions gets a row, even if the row says zero.
+        considered: Counter[str] = Counter()
+        for passage in passages:
+            considered[passage.source_version_id] += 1
+        best: dict[str, float] = defaultdict(float)
+        for passage_id, score in best_per_passage.items():
+            version_id = version_of[passage_id]
+            best[version_id] = max(best[version_id], score)
+        # Raw facts only, no derived verdict. A tempting one -- "how many of this
+        # source's passages cleared the cutoff" -- does not mean what it looks like:
+        # the final score carries an RRF term computed from a passage's rank, so two
+        # identical passages score differently purely by their position in the order.
+        # Comparing `best_score` against `cutoff_score` is the honest question, and it
+        # is the one the mk-runner case needed: 0 selected with a best score at the
+        # cutoff is a quota to tune, 0 selected with a best score far below it is a
+        # source that simply had nothing.
+        for version_id, count in considered.items():
+            competition[version_id] = {
+                "passages_considered": count,
+                "best_score": round(best[version_id], 4),
+                "selected": source_counts[version_id],
+                "cutoff_score": round(cutoff, 4),
+                "source_limit": source_limit,
+                "total_limit": total_limit,
+            }
     return output
 
 

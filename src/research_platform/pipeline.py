@@ -2818,6 +2818,12 @@ class ResearchPipeline:
                 "embedding_metrics",
                 {"stage": "RETRIEVE_PASSAGES", "calls": metrics},
             )
+        # Filled by retrieve_passages: one row per source version that had anything in
+        # the running. Without it a source that scored well and still took nothing --
+        # because the per-source cap or the global quota filled first -- is
+        # indistinguishable from one nothing matched in, and the panel shows both as
+        # "skor 0.000".
+        competition: dict[str, dict[str, Any]] = {}
         selected = retrieve_passages(
             passages,
             questions,
@@ -2825,8 +2831,22 @@ class ResearchPipeline:
             per_question=self.settings.passages_per_question,
             max_total=self.settings.max_selected_passages,
             max_per_source=self.settings.max_passages_per_source,
+            competition=competition,
         )
         await self.repo.save_passages(selected)
+        # Per source version, so a source's own trace can answer "why did nothing of
+        # mine get through". Kept as diagnostics rather than written back onto every
+        # passage row: this run holds 3101 passages against 48 slots, and each row
+        # carries a 768-float embedding, so scoring them all in place would rewrite
+        # tens of megabytes a round to record a number the panel reads once.
+        await self.repo.diagnostic_batch(
+            state["run_id"],
+            "retrieval_competition",
+            [
+                {"source_version_id": version_id, **facts}
+                for version_id, facts in competition.items()
+            ],
+        )
         await self.repo.event(
             state["run_id"],
             "passage_retrieval",

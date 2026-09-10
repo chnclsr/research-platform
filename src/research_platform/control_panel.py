@@ -1018,6 +1018,13 @@ async def _source_trace(run_id: str, source_id: str, principal: Principal) -> di
                 "page_number": row.page_number,
                 "token_count": row.token_count,
                 "retrieval_score": _safe_float((row.metadata_json or {}).get("retrieval_score")),
+                # Whether a score was ever written, not whether it was high. Retrieval
+                # records `retrieval_score` only on the passages it selects
+                # (passages.py), so a passage that lost the round keeps no score at all
+                # and _safe_float turns that absence into 0.0. Rendering it as "skor
+                # 0.000" reads as "judged irrelevant" when the truth is "never ranked
+                # into the quota" -- the panel has to be able to tell the two apart.
+                "scored": "retrieval_score" in (row.metadata_json or {}),
                 "matched_questions": (row.metadata_json or {}).get("matched_questions", []),
             }
             for row in passage_rows
