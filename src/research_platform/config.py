@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Which dotenv file backs Settings, and whether one is read at all.
+#
+# Deployments leave this alone and get `.env`. The test suite sets it empty, which
+# resolves to None and switches the dotenv source off entirely, because settings that
+# quietly inherit a real deployment's file are not hypothetical: on a server
+# `CONTROL_PANEL_DEPLOYMENT=docker` sent the panel's system action down the compose
+# branch and the suite stopped four live containers (OPEN_ITEMS 45).
+#
+# Read at import, so it must be set before research_platform.config is first imported.
+# tests/conftest.py is loaded by pytest ahead of any test module and imports the package
+# lazily, inside functions, precisely so this ordering holds.
+_ENV_FILE = os.environ.get("RESEARCH_ENV_FILE", ".env") or None
 
 # Providers the run-preparation chain knows how to build, in no particular order; the
 # order that matters is the operator's, in PREPARATION_LLM_CHAIN. "local" is the same
@@ -20,7 +34,9 @@ PREPARATION_PROVIDERS: tuple[str, ...] = (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE, extra="ignore", case_sensitive=False
+    )
 
     database_url: str = "sqlite+aiosqlite:///./data/research.db"
     redis_url: str = "redis://localhost:6379/0"

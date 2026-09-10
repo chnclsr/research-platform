@@ -3,22 +3,40 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# FIRST, before anything can import the package: switch the dotenv source off.
+#
+# Settings otherwise read the project's real .env, so a suite run next to a live
+# deployment inherits that deployment's configuration. That is not theoretical -- on the
+# server `CONTROL_PANEL_DEPLOYMENT=docker` sent the panel's system action down the
+# compose branch and the tests stopped api, worker, mcp-gateway and telegram-bot
+# (OPEN_ITEMS 45). The same door was open for REDIS_URL and MINIO_ENDPOINT; those
+# happened to be harmless only because their values name docker-network hosts that do
+# not resolve from the host machine.
+#
+# With no dotenv, every setting is either pinned below or falls back to the model's own
+# default, so the suite configures itself and cannot be steered by whatever machine it
+# is running on.
+os.environ["RESEARCH_ENV_FILE"] = ""
+
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./.pytest-research.db"
+# Every external endpoint is pinned at a closed port, deliberately.
+#
+# Turning the dotenv off is not enough on its own: the model defaults are
+# `redis://localhost:6379` and `localhost:9000`, and compose publishes MinIO on exactly
+# 127.0.0.1:9000. So the switch that stopped tests inheriting a deployment's config
+# would have handed them that deployment's object store instead. Tests mock the store
+# they use; anything that forgets to should fail loudly on connect rather than quietly
+# write into real buckets.
+os.environ["REDIS_URL"] = "redis://127.0.0.1:64999/0"
+os.environ["MINIO_ENDPOINT"] = "127.0.0.1:64998"
 os.environ["TESTING"] = "true"
 os.environ["LLM_PROVIDER"] = "deterministic"
 os.environ["DOMAIN_DELAY_S"] = "0"
-# NOT cosmetic: this one keeps the suite from stopping a real deployment.
-#
-# Settings fall back to the project's .env, and on a server that file says
-# `CONTROL_PANEL_DEPLOYMENT=docker`. The panel's system actions then take the compose
-# branch (control_panel.py, `system_action`) instead of the PowerShell one, and
-# `docker compose` runs on the host against whatever stack is actually up. Running the
-# suite next to a live deployment stopped api, worker, mcp-gateway and telegram-bot --
-# measured 2026-09-10, OPEN_ITEMS 45.
-#
-# Environment variables outrank the dotenv file in pydantic-settings, so pinning it here
-# closes the branch for every test at once. A test that wants the docker path asserts it
-# the way test_control_panel.py already does: a fake settings object plus a mocked
+# Belt and braces. The model's own default is already "native", so with the dotenv off
+# this line changes nothing today -- it is here so that the branch that runs
+# `docker compose` against a live stack stays shut even if the dotenv switch above is
+# ever weakened. A test that wants the docker path asserts it the way
+# test_control_panel.py already does: a fake settings object plus a mocked
 # create_subprocess_exec, so nothing reaches a real daemon.
 os.environ["CONTROL_PANEL_DEPLOYMENT"] = "native"
 

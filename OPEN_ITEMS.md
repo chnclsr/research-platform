@@ -47,7 +47,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 40 | Kanıt tabanı 18 kaynağa iniyor: 231 iddianın 230'u tek kaynaklı kalıyor | Kanıt notu tabanda, mutabakat yapısal olarak yazılamıyor | Yüksek |
 | 43 | Docker Desktop oturum açılmasını gerektiriyor | Windows sunucu reboot sonrası başsız ayağa kalkamaz | Orta |
 | 44 | Session 0'dan kimlik deposuna erişilemiyor | `docker build` ve `git push` uzak oturumdan çalışmıyor | Orta |
-| 45 | Testler gerçek `.env`'i okuyor | Yıkıcı panel yolu kapatıldı; genel sızıntı duruyor | Düşük |
+| 45 | Testler gerçek `.env`'i okuyordu | Süit artık hermetik; dotenv kapatıldı | Çözüldü |
 
 ---
 
@@ -955,11 +955,19 @@ docker modu eklenince genişletilmemiş.
 Doğrulama: takım sunucuda yeniden koşturuldu, `docker ps` çıktısı öncesi ve sonrası
 birebir aynı; 901 geçti (önceki 900 + düzelen bu test).
 
-**Açık kalan, daha küçük hâli:** Testler hâlâ projenin gerçek `.env`'ini okuyor.
-`REDIS_URL` ve `MINIO_ENDPOINT` gibi anahtarlar bugün zarar vermiyor, ama tasarım gereği
-değil, tesadüfen: değerleri docker ağı içi adlar (`redis:6379`, `minio:9000`) ve host'tan
-çözülmüyor. Biri onları host'tan erişilebilir bir adrese çevirirse testler gerçek veriye
-yazar. Kalıcı çözüm, test oturumunun dotenv'i hiç okumaması olurdu.
+**Kökten kapatıldı.** `Settings.model_config` artık dotenv yolunu `RESEARCH_ENV_FILE`
+ortam değişkeninden alıyor; boş verilirse dotenv kaynağı tamamen kapanıyor. Dağıtımlar
+değişkeni tanımlamaz ve eskisi gibi `.env` okur — ölçüldü, üretim davranışı aynı.
+`tests/conftest.py` değişkeni boş bırakıyor, yani süit kendi yapılandırmasını kuruyor ve
+üzerinde çalıştığı makine tarafından yönlendirilemiyor.
+
+**Bu düzeltmenin kendi tuzağı, kapatıldı:** Dotenv kapanınca model varsayılanları
+devreye giriyor ve onlar `redis://localhost:6379` ile `localhost:9000`. Compose MinIO'yu
+tam olarak `127.0.0.1:9000`'de yayınlıyor, dolayısıyla "testler dağıtımın yapılandırmasını
+miras almasın" düzeltmesi az kalsın onlara dağıtımın nesne deposunu verecekti. Önceki
+`minio:9000` yalnızca çözülemediği için zararsızdı — tasarım değil tesadüf. conftest artık
+her dış ucu kapalı bir porta sabitliyor: mock'u unutan bir test bağlantıda gürültüyle
+düşer, sessizce gerçek bucket'a yazmaz.
 
 ---
 
