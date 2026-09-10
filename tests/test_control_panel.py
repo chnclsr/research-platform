@@ -209,8 +209,17 @@ async def test_stopping_the_stack_is_restricted_to_administrators(monkeypatch):
         assert script == "stop_native.ps1"
         return 0, "stopped"
 
+    async def fail_compose(*args, **kwargs):
+        # This test is about who may press the button, not about stopping anything.
+        # Without this guard the docker branch runs a real `docker compose stop` against
+        # whatever is up on the host -- it did, on the server, OPEN_ITEMS 45. conftest
+        # pins the deployment to native so the branch is closed; this makes the test say
+        # so itself instead of depending on that pin staying in place.
+        raise AssertionError(f"compose must not run in this test: {args}")
+
     monkeypatch.setattr(control_panel, "build_status", fake_status)
     monkeypatch.setattr(control_panel, "_run_powershell", fake_powershell)
+    monkeypatch.setattr(control_panel, "_run_compose", fail_compose)
 
     await _account("panel-user@example.test", "user")
     await _account("panel-admin@example.test", "admin")

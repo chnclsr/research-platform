@@ -47,7 +47,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 40 | Kanıt tabanı 18 kaynağa iniyor: 231 iddianın 230'u tek kaynaklı kalıyor | Kanıt notu tabanda, mutabakat yapısal olarak yazılamıyor | Yüksek |
 | 43 | Docker Desktop oturum açılmasını gerektiriyor | Windows sunucu reboot sonrası başsız ayağa kalkamaz | Orta |
 | 44 | Session 0'dan kimlik deposuna erişilemiyor | `docker build` ve `git push` uzak oturumdan çalışmıyor | Orta |
-| 45 | Panel testi canlı yığını gerçekten durduruyor | Sunucuda test koşmak servisleri düşürüyor | **Yüksek** |
+| 45 | Testler gerçek `.env`'i okuyor | Yıkıcı panel yolu kapatıldı; genel sızıntı duruyor | Düşük |
 
 ---
 
@@ -941,13 +941,25 @@ altından çekilirdi.
 geçiyor. Yıkıcı hâle yalnız gerçek dağıtımın yanında çalışınca geliyor — yani tam olarak
 "sunucuda bir kez test koşayım" denen anda.
 
-**Ne gerekiyor:** Testin compose çağrısını sahte bir çalıştırıcıya bağlaması (yetki
-kontrolünü sınıyor, gerçekten durdurmayı değil), ya da test oturumunun ayarları gerçek
-`.env`'den okumasının engellenmesi. İkincisi daha genel: bu dosyayı okuyan başka testler
-de aynı riski taşıyor.
+**Kök sebep:** Test `_run_powershell`'i zaten sahteliyordu — ama yalnız onu. Panel
+`system_action` içinde ikiye ayrılıyor ([control_panel.py:1579](src/research_platform/control_panel.py#L1579))
+ve docker modunda `_run_compose_action`'a gidiyor. Sahteleme natif dönemde yazılmış,
+docker modu eklenince genişletilmemiş.
 
-**Geçici kural:** Sunucuda tam test takımı çalıştırmayın. `tests/test_control_panel.py`
-hariç tutulmalı, ya da testler geliştirme makinesinde koşturulmalı.
+**Durum: çözüldü.** İki katman:
+- `tests/conftest.py` `CONTROL_PANEL_DEPLOYMENT=native` sabitliyor. Ortam değişkenleri
+  pydantic-settings'te dotenv'i ezer, dolayısıyla dalı bütün testler için birden kapatır.
+- Testin kendisi `_run_compose`'u yükselen bir sahteyle bağlıyor, yani sabitleme ileride
+  kalksa da gerçek komut çalışmıyor. Mevcut `fail_powershell` korumasının simetriği.
+
+Doğrulama: takım sunucuda yeniden koşturuldu, `docker ps` çıktısı öncesi ve sonrası
+birebir aynı; 901 geçti (önceki 900 + düzelen bu test).
+
+**Açık kalan, daha küçük hâli:** Testler hâlâ projenin gerçek `.env`'ini okuyor.
+`REDIS_URL` ve `MINIO_ENDPOINT` gibi anahtarlar bugün zarar vermiyor, ama tasarım gereği
+değil, tesadüfen: değerleri docker ağı içi adlar (`redis:6379`, `minio:9000`) ve host'tan
+çözülmüyor. Biri onları host'tan erişilebilir bir adrese çevirirse testler gerçek veriye
+yazar. Kalıcı çözüm, test oturumunun dotenv'i hiç okumaması olurdu.
 
 ---
 
