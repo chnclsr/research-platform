@@ -46,6 +46,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 39 | Duraklatılan koşunun bekleme süresi toplama bütçesine yazılıyor | Preempt edilen koşu bütçesini uyurken tüketir | Orta |
 | 40 | Kanıt tabanı 18 kaynağa iniyor: 231 iddianın 230'u tek kaynaklı kalıyor | Kanıt notu tabanda, mutabakat yapısal olarak yazılamıyor | Yüksek |
 | 43 | Docker Desktop oturum açılmasını gerektiriyor | Windows sunucu reboot sonrası başsız ayağa kalkamaz | Orta |
+| 44 | Session 0'dan kimlik deposuna erişilemiyor | `docker build` ve `git push` uzak oturumdan çalışmıyor | Orta |
 
 ---
 
@@ -877,6 +878,40 @@ görev `start_server.ps1`'i çalıştırır → panel.
 **Kalıcı çözümü yok**, Docker Desktop'ın mimarisinden geliyor. Gerçekten başsız bir sunucu
 isteniyorsa alternatif, daemon'ın gerçek bir servis olduğu Linux'ta Docker Engine'dir —
 Ubuntu kurulumunda bu sorun hiç yoktu.
+
+---
+
+## 44. Session 0'dan kimlik deposuna erişilemiyor — uzak oturumda `docker build` ve `git push` düşüyor
+
+**Durum:** Windows sunucusuna SSH ile bağlanan süreçler **Session 0**'da ve **LogonType 3
+(ağ oturumu)** altında çalışıyor. Bu oturum türüne şifre materyali hiç ulaşmadığı için
+Credential Manager'ı koruyan DPAPI ana anahtarı açılamıyor. Sonuç, iki ayrı yerde aynı hata:
+
+```
+docker: error getting credentials -- err: exit status 1,
+        out: `Belirtilen oturum yok. Daha önce kapatılmış olabilir.`   (ERROR_NO_SUCH_LOGON_SESSION, 1312)
+git:    fatal: Unable to persist credentials with the 'wincredman' credential store.
+```
+
+**Kapsamı:** Yazma ya da kimlik arama gerektiren her işlem. `docker pull`, `docker build`
+(BuildKit **ve** klasik builder — ikisi de deneniyor), `git push`. Okuma tarafı etkilenmiyor:
+`git fetch` çalışıyor çünkü depo anonim okunabiliyor. Aynı kök sebep GUI/tray uygulamalarını
+da öldürüyor (`ollama app.exe`); `ollama serve` headless olarak sorunsuz.
+
+**Yanıltıcı olan:** Hiçbir kimlik doğrulaması aslında yapılmıyor. `~/.docker/config.json`
+içinde `auths` boş ve kullanılan imajların hepsi genel. Docker yine de her çekme/derlemeden
+önce depoyu yokluyor ve yoklama patlıyor. `credsStore` satırını silmek de kalıcı değil:
+**Docker Desktop her açılışta dosyayı geri yazıyor** (ölçüldü 2026-09-10).
+
+**Çalışan geçici çözüm:** Derlemeyi makinenin kendi masaüstündeki bir oturumdan (Session 1)
+çalıştırmak. Şifreyi kaldırmak **çözüm değildir** — sorun şifrenin yokluğu değil oturum
+türü, üstelik `LimitBlankPasswordUse` varsayılanı boş şifreli hesapların ağ/RDP oturumlarını
+engellediği için uzaktan erişimi tamamen kesebilir.
+
+**Kalıcı seçenekler:** (a) `DOCKER_CONFIG` ayrı bir dizini gösterecek şekilde ayarlanıp boş
+kimlik döndüren bir credential helper tanımlanması — süreç kapsamında yapılırsa sistemde iz
+bırakmaz ve Docker Desktop ezemez, karşılığında özel imaj çekilemez; (b) ajanın/derlemenin
+gerçek bir masaüstü oturumunda çalıştırılması, ki bu 43. maddeyle birlikte çözülür.
 
 ---
 
