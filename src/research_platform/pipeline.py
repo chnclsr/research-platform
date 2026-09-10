@@ -178,6 +178,9 @@ class PipelineState(TypedDict, total=False):
     # `probe_strategies_exhausted`.
     probe_exhausted_reason: str
     budget_started_at: str
+    # Pinned once, on the run's first entry, and carried through every checkpoint.
+    # See Settings.admission_policy_version for why it must not be re-read mid-run.
+    admission_policy_version: int
     # Only SEARCH+ACQUIRE time spends the external collection budget.  The active marker
     # survives checkpoints so a worker restart cannot reset an in-flight round.
     collection_elapsed_seconds: float
@@ -672,6 +675,12 @@ class ResearchPipeline:
             state["protocol"] = row.protocol
             state["started_monotonic"] = time.monotonic()
         state.setdefault("budget_started_at", datetime.now(timezone.utc).isoformat())
+        # After the checkpoint restore, so a resumed run keeps the policy it started
+        # with even if the setting changed in between. setdefault is the whole
+        # mechanism: the checkpointed value is already in `state` and wins.
+        state.setdefault(
+            "admission_policy_version", self.settings.admission_policy_version
+        )
         try:
             protocol = ResearchProtocol.model_validate(row.protocol)
             # A literature scan can intentionally keep expanding until its
@@ -2247,6 +2256,12 @@ class ResearchPipeline:
         branch_counts: dict[str, int] = defaultdict(int)
         content_rejected: list[dict[str, Any]] = []
         source_decisions: list[dict[str, Any]] = []
+        # What the documents this stage drops were pointing at. See the block that
+        # fills it, just above the two `continue`s in the loop below.
+        discovery_shadow: list[dict[str, Any]] = []
+        admission_policy = int(
+            state.get("admission_policy_version", self.settings.admission_policy_version)
+        )
         for document in documents:
             if not document.success:
                 continue
@@ -2402,7 +2417,48 @@ class ResearchPipeline:
                 "scope_assessment": scope_assessment,
                 "semantic_relevance": document.candidate.metadata.get("semantic_relevance_judgment"),
                 "evidence_eligible": scope_evidence_eligible,
+                # Which admission rules decided this source. Without it a run that was
+                # resumed across a policy change cannot be read back honestly.
+                "admission_policy_version": admission_policy,
             })
+            # ---- discovery contribution of a document this stage is about to drop ----
+            # A document can be useless as evidence and still be the best map in the
+            # room: a review the scope gate only admits as near_scope may point at forty
+            # primary studies, and a duplicate version still carries its outgoing links.
+            # Both used to be dropped by the `continue`s below before anything looked at
+            # them, so that discovery was lost with no trace it had ever existed.
+            #
+            # Under policy 1 nothing is written -- the links are counted through the
+            # identical code path and thrown away -- so this measures what policy 2
+            # would admit without any live run paying for it. The document still stays
+            # out of chunking, claims and the evidence quota either way; only its links
+            # are at stake.
+            dropped_as = (
+                "duplicate_version"
+                if version.id in existing_version_ids
+                else ("" if scope_evidence_eligible else "scope_ineligible")
+            )
+            if dropped_as and document.outgoing_links:
+                harvest_now = admission_policy >= 2
+                shadow_added = await self.repo.add_frontier_links(
+                    state["run_id"],
+                    document.final_url or str(document.candidate.url),
+                    document.outgoing_links,
+                    max_links=self.settings.frontier_max_links_per_document,
+                    dry_run=not harvest_now,
+                )
+                discovery_shadow.append({
+                    "source_id": source.id,
+                    "source_version_id": version.id,
+                    "url": document.final_url or str(document.candidate.url),
+                    "dropped_as": dropped_as,
+                    "role": document.candidate.metadata.get("research_scope_role"),
+                    "outgoing_links": len(document.outgoing_links),
+                    # New to this run's frontier, after canonicalisation and dedupe.
+                    "frontier_links": shadow_added,
+                    "harvested": harvest_now,
+                    "admission_policy_version": admission_policy,
+                })
             if version.id in existing_version_ids:
                 await self.repo.event(
                     state["run_id"],
@@ -2457,6 +2513,9 @@ class ResearchPipeline:
                     )
         await self.repo.diagnostic_batch(state["run_id"], "source_decision", source_decisions)
         await self.repo.diagnostic_batch(state["run_id"], "source_rejected", content_rejected)
+        await self.repo.diagnostic_batch(
+            state["run_id"], "discovery_shadow", discovery_shadow
+        )
         facet_proofs = [
             facet
             for item in source_decisions

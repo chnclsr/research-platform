@@ -1289,7 +1289,17 @@ class Repository(metaclass=_OwnershipEnforced):
         links: list[str],
         *,
         max_links: int,
+        dry_run: bool = False,
     ) -> int:
+        """Add newly discovered links to the frontier; return how many were new.
+
+        ``dry_run`` walks the identical path -- same canonicalisation, same hostless
+        skip, same per-run duplicate check, same cap -- and returns the same number
+        without writing a row or committing. It exists so the shadow measurement of a
+        policy that is not switched on yet reports what that policy *would* admit,
+        exactly, instead of an estimate that quietly counts links already in the
+        frontier.
+        """
         source_host = urlsplit(canonicalize_url(source_url)).hostname or ""
         added = 0
         for link in list(dict.fromkeys(links))[:max_links]:
@@ -1308,19 +1318,21 @@ class Repository(metaclass=_OwnershipEnforced):
             if existing:
                 continue
             same_domain = link_host == source_host
-            self.session.add(
-                FrontierRow(
-                    id=new_id(),
-                    run_id=run_id,
-                    canonical_url=canonical,
-                    discovered_from=source_url,
-                    depth=1,
-                    priority=1.0 if same_domain else 0.35,
-                    metadata_json={"same_domain": same_domain},
+            if not dry_run:
+                self.session.add(
+                    FrontierRow(
+                        id=new_id(),
+                        run_id=run_id,
+                        canonical_url=canonical,
+                        discovered_from=source_url,
+                        depth=1,
+                        priority=1.0 if same_domain else 0.35,
+                        metadata_json={"same_domain": same_domain},
+                    )
                 )
-            )
             added += 1
-        await self.session.commit()
+        if not dry_run:
+            await self.session.commit()
         return added
 
     async def pop_frontier_candidates(self, run_id: str, limit: int) -> list[dict[str, Any]]:

@@ -13,9 +13,12 @@ import pytest
 from conftest import acting_principal
 
 from research_platform.config import get_settings
+from sqlalchemy import select
+
 from research_platform.db import (
     ClaimRow,
     EvidenceRow,
+    FrontierRow,
     SessionLocal,
     SourceRow,
     SourceVersionRow,
@@ -1700,3 +1703,192 @@ async def test_an_undecided_facet_is_backfilled_and_named_in_the_diagnostics():
     assert backfilled["facet"] == "application_task"
     assert backfilled["reason"] == "model_decision_missing"
     assert backfilled["proof_route"] == "unproven"
+
+
+async def _normalize_ineligible_document(*, settings_policy: int, state_policy: int | None):
+    """NORMALIZE one excluded document that points at two external links.
+
+    Returns (frontier_rows, discovery_shadow_payloads). The document is excluded by an
+    explicit scope signal, so it never enters chunking or the evidence quota either way;
+    the only thing under test is what happens to the links it points at.
+    """
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Discovery contribution of an excluded source",
+        primary_question="Which systems generate reports from volumetric chest CT?",
+        research_mode="literature_scan",
+        scope_criteria={
+            "required_facets": [
+                {"name": "anatomy", "accepted_values": ["chest"]},
+                {"name": "modality", "accepted_values": ["CT"]},
+            ],
+            "exclusion_signals": ["PET/CT"],
+        },
+        budget={"max_wall_minutes": 30},
+        hitl={"source_review": False},
+    )
+    content = (
+        "This survey of whole-body PET/CT report generation indexes the primary "
+        "volumetric chest CT studies it compares. "
+    ) * 8
+    document = AcquiredDocument(
+        candidate=ConnectorCandidate(
+            connector_id="fixture",
+            family=SourceFamily.ACADEMIC,
+            title="A survey that is excluded but indexes the field",
+            url="https://survey.example/review",
+        ),
+        success=True,
+        access_status="open",
+        content=content,
+        content_hash=hashlib.sha256(content.encode()).hexdigest(),
+        acquisition_method="fixture",
+        outgoing_links=[
+            "https://primary.example/study-one",
+            "https://primary.example/study-two",
+        ],
+    )
+
+    class MemoryStore:
+        async def put(self, *_args, **_kwargs):
+            return None
+
+    async def classify(_protocol, acquired):
+        acquired.candidate.metadata["research_scope_role"] = "excluded"
+        acquired.candidate.metadata["scope_assessment"] = {
+            "role": "excluded",
+            "reason": "PET/CT exclusion is explicit",
+        }
+        return True, 0.95, "direct: relevant but excluded by scope"
+
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        settings = get_settings().model_copy(
+            update={"testing": False, "admission_policy_version": settings_policy}
+        )
+        pipeline = ResearchPipeline(settings, session, client)
+        pipeline.store = MemoryStore()
+        pipeline._semantic_source_judgment = classify
+
+        state = {
+            "run_id": row.id,
+            "protocol": protocol.model_dump(mode="json"),
+            "documents": [document.model_dump(mode="json")],
+            "sub_questions": [],
+        }
+        if state_policy is not None:
+            state["admission_policy_version"] = state_policy
+        result = await pipeline.normalize(state)
+
+        frontier = list(
+            await session.scalars(
+                select(FrontierRow).where(FrontierRow.run_id == row.id)
+            )
+        )
+        shadow = [
+            event.payload
+            for event in await repo.events_by_types(row.id, {"discovery_shadow"})
+        ]
+    # The document is excluded either way: it must never reach chunking.
+    assert result["documents"] == []
+    return frontier, shadow
+
+
+@pytest.mark.asyncio
+async def test_excluded_source_discovery_is_measured_but_not_harvested_under_policy_1():
+    """Policy 1 is today's behaviour, and the shadow record is how we price policy 2.
+
+    The links are walked through the identical code path -- canonicalised, deduped,
+    checked against this run's frontier -- and then thrown away. Nothing is written, so
+    a live run costs exactly what it costs today, but `frontier_links` says precisely
+    what switching the policy on would have admitted.
+    """
+    frontier, shadow = await _normalize_ineligible_document(
+        settings_policy=1, state_policy=None
+    )
+    assert frontier == []
+    assert len(shadow) == 1
+    record = shadow[0]
+    assert record["dropped_as"] == "scope_ineligible"
+    assert record["role"] == "excluded"
+    assert record["outgoing_links"] == 2
+    assert record["frontier_links"] == 2
+    assert record["harvested"] is False
+    assert record["admission_policy_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_excluded_source_links_are_harvested_under_policy_2():
+    """Policy 2 keeps the document out of evidence but takes the map it was holding."""
+    frontier, shadow = await _normalize_ineligible_document(
+        settings_policy=2, state_policy=None
+    )
+    assert {row.canonical_url for row in frontier} == {
+        "https://primary.example/study-one",
+        "https://primary.example/study-two",
+    }
+    assert shadow[0]["harvested"] is True
+    assert shadow[0]["frontier_links"] == 2
+    assert shadow[0]["admission_policy_version"] == 2
+
+
+@pytest.mark.asyncio
+async def test_pinned_policy_in_state_beats_the_current_setting():
+    """The resume guarantee.
+
+    A run pinned to policy 1 and preempted keeps admitting sources by policy 1 when it
+    resumes, even though the operator has since switched the setting to 2. Without this
+    half a run's sources would be admitted under one rule and half under another, and
+    the recorded provenance would not say which.
+    """
+    frontier, shadow = await _normalize_ineligible_document(
+        settings_policy=2, state_policy=1
+    )
+    assert frontier == []
+    assert shadow[0]["harvested"] is False
+    assert shadow[0]["admission_policy_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_frontier_dry_run_counts_exactly_what_a_real_call_would_add():
+    """The shadow measurement is only worth having if it is exact.
+
+    dry_run must walk the same path -- hostless links skipped, duplicates collapsed,
+    cap applied, links already in this run's frontier not counted twice -- and write
+    nothing. If it ever diverges, every shadow number we use to price a policy change
+    silently becomes fiction.
+    """
+    await create_schema()
+    links = [
+        "mailto:someone@example.org",
+        "https://example.org/next",
+        "https://example.org/next",
+        "https://other.example/page",
+    ]
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        run = await repo.create_run(ResearchProtocol(
+            title="Frontier dry run",
+            primary_question="Does a dry run count what a real call would add?",
+            budget={"max_wall_minutes": 30},
+        ))
+
+        predicted = await repo.add_frontier_links(
+            run.id, "https://example.org/article", links, max_links=10, dry_run=True
+        )
+        after_dry = list(
+            await session.scalars(select(FrontierRow).where(FrontierRow.run_id == run.id))
+        )
+        assert after_dry == [], "dry_run wrote rows"
+
+        actual = await repo.add_frontier_links(
+            run.id, "https://example.org/article", links, max_links=10
+        )
+        assert predicted == actual == 2
+
+        # And once they are really there, a second dry run must predict zero rather
+        # than re-counting links the frontier already holds.
+        assert await repo.add_frontier_links(
+            run.id, "https://example.org/article", links, max_links=10, dry_run=True
+        ) == 0

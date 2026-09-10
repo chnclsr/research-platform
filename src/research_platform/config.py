@@ -80,6 +80,19 @@ class Settings(BaseSettings):
     max_passages_per_source: int = Field(2, ge=1, le=10)
     frontier_max_links_per_document: int = Field(50, ge=0, le=500)
     frontier_max_depth: int = Field(2, ge=0, le=5)
+    # Which admission rules a run plays by. Pinned into the run's state on first entry
+    # (pipeline.py), never re-read from here afterwards: a run that is preempted and
+    # resumed days later must finish under the policy it started with, or half its
+    # sources were admitted by one rule and half by another and the provenance lies.
+    #
+    #   1  today's behaviour. A document that is a duplicate version, or that scope
+    #      admits only as near_scope/excluded, contributes NOTHING -- its outgoing links
+    #      are dropped before they are ever harvested.
+    #   2  the same document still stays out of chunking, claims and the evidence quota,
+    #      but the links it points at are harvested. Not enabled yet: raising frontier
+    #      volume without Frontier V2's budget contract can spend the round on low-value
+    #      links. Until then version 1 runs and version 2 is measured in shadow.
+    admission_policy_version: int = Field(1, ge=1, le=2)
     local_corpus_results: int = Field(8, ge=0, le=50)
     enable_github_repository_handler: bool = True
     github_clone_timeout_s: float = Field(90.0, ge=10.0, le=300.0)
