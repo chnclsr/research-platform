@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-09-04`
+Son güncelleme: `2026-09-10`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -45,6 +45,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 35 | Free-threaded Docling production pinleri `cp314t` zincirinde engelli | Kabul kriteri passed değil, upstream wheel bekliyor | Belgelendi |
 | 39 | Duraklatılan koşunun bekleme süresi toplama bütçesine yazılıyor | Preempt edilen koşu bütçesini uyurken tüketir | Orta |
 | 40 | Kanıt tabanı 18 kaynağa iniyor: 231 iddianın 230'u tek kaynaklı kalıyor | Kanıt notu tabanda, mutabakat yapısal olarak yazılamıyor | Yüksek |
+| 43 | Docker Desktop oturum açılmasını gerektiriyor | Windows sunucu reboot sonrası başsız ayağa kalkamaz | Orta |
 
 ---
 
@@ -853,6 +854,31 @@ yönlendirme döngüsü, orada `attempt` "redirect hop" demek olurdu ve bu bilgi
 **Ne zaman gerekir:** Edinim tarafında "neden bu belge alınamadı" sorusu panelden
 cevaplanamadığında. Kendi gözlem sözlüğünü hak ediyor — deneme yerine strateji/hop
 ekseninde, `acquisition_call` tanılamasının içine.
+
+## 43. Docker Desktop oturum açılmasını gerektiriyor — Windows sunucu başsız kalkamıyor
+
+**Durum:** Windows sunucusunda (10.0.10.223) Docker Desktop bir Windows servisi değil.
+Daemon `HKCU\...\Run` altındaki `Docker Desktop.exe` ile, yani **kullanıcı oturumu
+açıldığında** başlıyor; `com.docker.service` yalnızca yardımcı servis (Manual/Stopped).
+GUI uygulaması olduğu için Session 0'dan başlatılamıyor — sistem açılışında tetiklenen bir
+görev daemon'ı bulamaz. Ölçüldü 2026-09-10, Docker Desktop 29.7.2.
+
+**Etkisi:** Otomatik oturum açma kapalıyken sunucu yeniden başlatmadan sonra kendiliğinden
+ayağa kalkmıyor; birinin makineye giriş yapması gerekiyor. `scripts/register_autostart.ps1`
+görevi bu yüzden bilinçli olarak `ONSTART` değil `AtLogOn` tetikleyicisiyle kuruluyor.
+Ollama istisna: natif ve Docker'a bağlı olmadığı için gerçek bir `ONSTART` görevi olarak
+oturumsuz da çalışıyor.
+
+**Geçici çözüm:** Otomatik oturum açma — tercihen Sysinternals Autologon, parolayı LSA
+secret'ta tutar ve kayıt defterinde açık metin bırakmaz. Açıldığında zincir tamamlanıyor:
+açılış → oturum → Docker Desktop → `restart: unless-stopped` container'lar geri gelir →
+görev `start_server.ps1`'i çalıştırır → panel.
+
+**Kalıcı çözümü yok**, Docker Desktop'ın mimarisinden geliyor. Gerçekten başsız bir sunucu
+isteniyorsa alternatif, daemon'ın gerçek bir servis olduğu Linux'ta Docker Engine'dir —
+Ubuntu kurulumunda bu sorun hiç yoktu.
+
+---
 
 ## Kapsam dışı bırakılanlar
 
