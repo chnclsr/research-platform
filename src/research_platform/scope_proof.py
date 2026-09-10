@@ -59,6 +59,125 @@ def signal_key(value: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).split())
 
 
+# The opening of a paper carries its central claim, so it is always kept.
+SCOPE_EXCERPT_HEAD_CHARS = 2000
+# Enough either side of a hit for the sentence around it to survive, so the judge can
+# tell "we image the chest" from "unlike chest imaging, we".
+SCOPE_EXCERPT_WINDOW_CHARS = 500
+SCOPE_EXCERPT_GAP = "\n[...]\n"
+
+
+def _signal_pattern(value: str) -> re.Pattern[str] | None:
+    """Whole-token matcher for one accepted value, or None if it carries no signal."""
+    tokens = signal_key(value).split()
+    # Same floor as accepted_value_present: one character matches far too much.
+    if not tokens or len("".join(tokens)) < 2:
+        return None
+    body = r"\W+".join(re.escape(token) for token in tokens)
+    return re.compile(rf"(?<!\w){body}(?!\w)", re.IGNORECASE)
+
+
+def scope_excerpt(
+    content: str,
+    criteria: ResearchScopeCriteria | None,
+    *,
+    budget: int = 6000,
+    head: int = SCOPE_EXCERPT_HEAD_CHARS,
+    window: int = SCOPE_EXCERPT_WINDOW_CHARS,
+) -> str:
+    """Build the text the scope judge reads, from wherever the evidence actually is.
+
+    THE PROBLEM THIS REPLACES. Both the judge's prompt and the proof haystack used
+    ``content[:6000]``. Documents in a real run average 74k characters and reach 1.8M, so
+    the window covered about 8% of the average source -- and a facet stated on page 12
+    could not be proven at any price. Measured on run 01M25MS209TX4AV9DGK4K43K4J: of 41
+    near_scope sources, 31 had every unproven facet's accepted value present in the
+    document, only past the cutoff. For the anatomy facet not one source was missing the
+    term; all 16 had it, outside the window.
+
+    Widening the haystack alone would not have helped. The judge quotes what it read, so
+    if it never sees the sentence it cannot cite it, and the quote-based proof routes stay
+    empty no matter how much text the verifier is given. Prompt and haystack have to move
+    together, which is why this returns one excerpt used for both.
+
+    WHAT IT DOES. Keeps the opening, then adds a window around occurrences of each
+    required facet's accepted values -- and each approved exclusion signal -- found
+    anywhere in the document. Signals take turns rather than being served in order: a
+    facet with forty hits must not spend the budget a facet with one hit needs, and that
+    single hit is exactly the one deciding the role. Cost is unchanged: the excerpt is
+    capped at the same budget the truncation used.
+
+    Exclusions are included deliberately. Leaving them out would widen the evidence for
+    admitting a source without widening the evidence for excluding it, which is not a
+    neutral change to a gate.
+    """
+    text = str(content or "")
+    if criteria is None or len(text) <= budget:
+        return text[:budget]
+
+    opening_len = min(head, budget)
+    opening = text[:opening_len]
+    remaining = budget - len(opening)
+    if remaining <= len(SCOPE_EXCERPT_GAP):
+        return opening
+
+    hits_by_signal: list[list[int]] = []
+    for values in (
+        *(facet.accepted_values for facet in criteria.required_facets),
+        *([signal] for signal in criteria.exclusion_signals),
+    ):
+        positions: list[int] = []
+        for value in values:
+            pattern = _signal_pattern(value)
+            if pattern is None:
+                continue
+            positions.extend(
+                match.start() for match in pattern.finditer(text, opening_len)
+            )
+        if positions:
+            hits_by_signal.append(sorted(positions))
+
+    spans: list[tuple[int, int]] = []
+    consumed = 0
+    cursors = [0] * len(hits_by_signal)
+    progressed = True
+    while progressed and consumed + len(SCOPE_EXCERPT_GAP) < remaining:
+        progressed = False
+        for index, positions in enumerate(hits_by_signal):
+            if cursors[index] >= len(positions):
+                continue
+            position = positions[cursors[index]]
+            cursors[index] += 1
+            progressed = True
+            start = max(opening_len, position - window // 2)
+            end = min(len(text), position + window // 2)
+            # A hit already inside a span costs nothing and must not end the round.
+            if any(start >= low and end <= high for low, high in spans):
+                continue
+            cost = (end - start) + len(SCOPE_EXCERPT_GAP)
+            if consumed + cost > remaining:
+                progressed = False
+                break
+            spans.append((start, end))
+            consumed += cost
+
+    if not spans:
+        return opening
+
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    parts = [opening]
+    for start, end in merged:
+        parts.append(SCOPE_EXCERPT_GAP)
+        parts.append(text[start:end])
+    return "".join(parts)
+
+
 def exclusion_decision(
     signal: str,
     exclusion_assessments: list[dict[str, Any]],

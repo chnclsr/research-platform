@@ -14,9 +14,12 @@ import pytest
 from research_platform.schemas import ResearchScopeCriteria, SourceScopeRole
 from research_platform.scope_proof import (
     MIN_QUOTE_SEGMENT_CHARS,
+    SCOPE_EXCERPT_HEAD_CHARS,
     ScopeHaystack,
+    accepted_value_present,
     evidence_route,
     exclusion_decision,
+    scope_excerpt,
     scope_verdict,
     signal_key,
 )
@@ -458,3 +461,85 @@ def test_a_quote_only_promotion_stays_countable():
     proof = result.facet_proofs[0]
     assert proof.route == "verbatim"
     assert proof.value_present is False
+
+
+def _criteria() -> ResearchScopeCriteria:
+    return ResearchScopeCriteria.model_validate({
+        "required_facets": [
+            {"name": "anatomy", "accepted_values": ["chest", "thorax", "pulmonary"]},
+            {"name": "modality", "accepted_values": ["CT", "computed tomography"]},
+        ],
+        "exclusion_signals": ["PET/CT"],
+    })
+
+
+def test_short_documents_are_untouched_by_the_excerpt_builder():
+    """Anything inside the budget is the document itself, byte for byte."""
+    content = "A short paper about pulmonary CT reporting."
+    assert scope_excerpt(content, _criteria()) == content
+
+
+def test_no_scope_criteria_falls_back_to_plain_truncation():
+    """With nothing to look for there is nothing to look around; behaviour is unchanged."""
+    content = "x" * 20_000
+    assert scope_excerpt(content, None) == content[:6000]
+
+
+def test_a_facet_stated_past_the_old_window_reaches_the_judge():
+    """The whole point. Measured shape: 74k-character sources stating anatomy on page 12.
+
+    Under `content[:6000]` the accepted value was not in the text the judge read, so the
+    facet could not be proven at any price and the source stayed near_scope.
+    """
+    filler = "Unrelated background about historical imaging practice. " * 900
+    sentence = "All studies in this cohort are pulmonary examinations of the chest."
+    content = f"# Introduction\n{filler}\n{sentence}\n"
+    assert content.index(sentence) > 6000
+
+    old = ScopeHaystack.build(content[:6000])
+    new = ScopeHaystack.build(scope_excerpt(content, _criteria()))
+
+    assert accepted_value_present(["chest", "thorax", "pulmonary"], old) is False
+    assert accepted_value_present(["chest", "thorax", "pulmonary"], new) is True
+    assert sentence in scope_excerpt(content, _criteria())
+
+
+def test_excerpt_never_exceeds_the_budget_it_replaces():
+    """Cost is not allowed to grow: the judge's prompt keeps the old ceiling."""
+    content = ("chest CT computed tomography pulmonary thorax PET/CT " * 4000)
+    excerpt = scope_excerpt(content, _criteria(), budget=6000)
+    assert len(excerpt) <= 6000
+
+
+def test_a_crowded_facet_cannot_starve_the_one_hit_that_decides_the_role():
+    """Signals take turns, they are not served in document order.
+
+    A modality term appearing hundreds of times must not spend the whole budget before
+    the single anatomy sentence -- which is the one deciding the role -- is reached.
+    """
+    noisy = "This CT computed tomography section discusses CT reconstruction. " * 300
+    decisive = "The imaged region is the thorax in every case."
+    content = "# Title\n" + noisy + decisive + "\n" + noisy
+    assert content.index(decisive) > SCOPE_EXCERPT_HEAD_CHARS
+
+    excerpt = scope_excerpt(content, _criteria())
+    assert accepted_value_present(["chest", "thorax", "pulmonary"], ScopeHaystack.build(excerpt))
+
+
+def test_exclusion_evidence_is_widened_too():
+    """Widening only the admitting evidence would tilt a gate that decides both ways."""
+    filler = "Routine methodology description without decisive terms. " * 900
+    excluded = "Every scan in the comparison arm is a PET/CT acquisition."
+    content = f"# Title\n{filler}\n{excluded}\n"
+    assert content.index(excluded) > 6000
+
+    excerpt = scope_excerpt(content, _criteria())
+    assert "PET/CT" in excerpt
+
+
+def test_the_opening_is_always_kept():
+    """The abstract carries the central claim; a hit later in the paper never replaces it."""
+    opening = "This paper introduces a chest CT report generator. "
+    content = opening + ("later material mentioning thorax repeatedly. " * 2000)
+    excerpt = scope_excerpt(content, _criteria())
+    assert excerpt.startswith(opening)

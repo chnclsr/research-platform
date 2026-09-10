@@ -101,6 +101,7 @@ from .scope_proof import (
     ScopeHaystack,
     exclusion_route,
     facet_proof,
+    scope_excerpt,
     scope_verdict,
     signal_key,
 )
@@ -2014,6 +2015,10 @@ class ResearchPipeline:
         document: AcquiredDocument,
     ) -> tuple[bool, float, str]:
         """Use the local model only after deterministic gates pass."""
+        # Built once and used twice, for the prompt and for the proof haystack. They have
+        # to be the same text: the judge can only quote what it read, and the verifier can
+        # only confirm a quote it can find.
+        excerpt = scope_excerpt(document.content, protocol.scope_criteria)
         scope_instruction = ""
         if protocol.scope_criteria is not None:
             # The two format rules below are load-bearing, not style. Measured on run
@@ -2075,7 +2080,7 @@ class ResearchPipeline:
             f"{json.dumps(protocol.scope_criteria.model_dump(mode='json'), ensure_ascii=False) if protocol.scope_criteria else '(none)'}\n"
             f"TITLE: {document.candidate.title}\n"
             f"DISCOVERY_SNIPPET: {document.candidate.snippet[:1500]}\n"
-            f"DOCUMENT_EXCERPT: {document.content[:6000]}"
+            f"DOCUMENT_EXCERPT: {excerpt}"
         )
         last_error = "invalid_response"
         for _attempt in range(self.settings.relevance_retry_attempts):
@@ -2152,11 +2157,14 @@ class ResearchPipeline:
                         for exclusion in protocol.scope_criteria.exclusion_signals
                         if signal_key(exclusion) not in assessed_exclusions
                     )
+                    # The same excerpt the judge read. A haystack wider than the prompt
+                    # would verify quotes the model had no way to produce; a narrower one
+                    # would reject quotes it took faithfully from what it was given.
                     assessment_text = " ".join(
                         [
                             document.candidate.title,
                             document.candidate.snippet,
-                            document.content[:6000],
+                            excerpt,
                         ]
                     )
                     classification_reason = str(result.get("reason") or "")[:500]
