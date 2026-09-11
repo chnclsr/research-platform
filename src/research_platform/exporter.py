@@ -16,6 +16,7 @@ from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
+from .presentation_report import PRESENTATION_REPORT_FALLBACK, build_presentation_report
 from .report_synthesis import SynthesisPackage, build_synthesis_package
 from .repository import Repository
 from .schemas import CoverageMetrics, ResearchProtocol
@@ -175,6 +176,14 @@ def word_report_name(label: str | None) -> str:
     return f"16_{handle}_report.docx" if handle else WORD_REPORT_FALLBACK
 
 
+def presentation_report_name(label: str | None) -> str:
+    """The PowerPoint report's file name, derived from the run's topic handle."""
+    handle = (label or "").strip()
+    if not _SAFE_LABEL.fullmatch(handle):
+        handle = slugify(handle, max_length=LABEL_MAX_LENGTH)
+    return f"16_{handle}_report.pptx" if handle else PRESENTATION_REPORT_FALLBACK
+
+
 def _is_reportable(claim: Any) -> bool:
     """The single reportability gate.
 
@@ -213,9 +222,17 @@ def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
     so a single-extractor source stays a three-line record.
     """
     kept = (
-        "parser_profile", "engine_counts", "engine_devices", "engine_build",
-        "engine_version", "router_version", "esik_version", "degraded",
-        "duration_ms", "gate_duration_ms", "engine_durations_ms",
+        "parser_profile",
+        "engine_counts",
+        "engine_devices",
+        "engine_build",
+        "engine_version",
+        "router_version",
+        "esik_version",
+        "degraded",
+        "duration_ms",
+        "gate_duration_ms",
+        "engine_durations_ms",
     )
     records: list[dict[str, Any]] = []
     for source, version in versions:
@@ -232,18 +249,14 @@ def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
     return records
 
 
-def _synthesis_manifest_payload(
-    package: SynthesisPackage, sources: list[Any]
-) -> dict[str, Any]:
+def _synthesis_manifest_payload(package: SynthesisPackage, sources: list[Any]) -> dict[str, Any]:
     """The JSON surface for the exact prose, warnings, and scope roles readers receive."""
     return {
         "synthesis": package.as_dict(),
         "source_roles": [
             {
                 "source_id": source.id,
-                "role": (source.metadata_json or {}).get(
-                    "research_scope_role", "primary_in_scope"
-                ),
+                "role": (source.metadata_json or {}).get("research_scope_role", "primary_in_scope"),
                 "assessment": (source.metadata_json or {}).get("scope_assessment", {}),
             }
             for source in sources
@@ -270,10 +283,8 @@ async def sweep_synthesis_package(
     mismatches = [
         key
         for key, value in prose.items()
-        if value and (
-            not language_matches(value, language)
-            or bool(foreign_sentences(value, language))
-        )
+        if value
+        and (not language_matches(value, language) or bool(foreign_sentences(value, language)))
     ]
     return package, {
         "mode": "diagnostic_only",
@@ -320,9 +331,8 @@ async def build_exports(
     claim_texts, claim_language_diagnostics = await localize_claim_texts(
         llm, ordered_reportable, protocol.report_language
     )
-    await repo.event(
-        run_id, "claim_localization", claim_language_diagnostics
-    )
+    await repo.event(run_id, "claim_localization", claim_language_diagnostics)
+
     def claim_display(claim: Any) -> str:
         """The statement as the reader should see it.
 
@@ -365,12 +375,20 @@ async def build_exports(
             "quality": synthesis_package.quality_diagnostics,
         },
     )
-    await repo.diagnostic_batch(run_id, "synthesis_section", [
-        {"title": section.title, "source_ids": section.source_ids,
-         "claim_ids": section.claim_ids, "generation_note": section.generation_note,
-         "validation_warnings": section.validation_warnings}
-        for section in synthesis_package.sections
-    ])
+    await repo.diagnostic_batch(
+        run_id,
+        "synthesis_section",
+        [
+            {
+                "title": section.title,
+                "source_ids": section.source_ids,
+                "claim_ids": section.claim_ids,
+                "generation_note": section.generation_note,
+                "validation_warnings": section.validation_warnings,
+            }
+            for section in synthesis_package.sections
+        ],
+    )
     figure_result = FigurePipelineResult()
     if protocol.output_mode != "raw":
         figure_result = await analyze_run_figures(
@@ -488,8 +506,7 @@ async def build_exports(
                 continue
             seen_claims.add(claim.id)
             unique_findings.append(
-                f"- `{claim.status}` — {claim_display(claim)}  \n"
-                f"  Kanıt: “{link.quote[:350]}”"
+                f"- `{claim.status}` — {claim_display(claim)}  \n  Kanıt: “{link.quote[:350]}”"
             )
         finding_text = "\n".join(unique_findings)
         if not finding_text:
@@ -516,8 +533,7 @@ async def build_exports(
         "`contextual` kaynaklar kesin kanıt sayılmadan literatür haritasında korunur.\n\n"
         + (
             "\n\n".join(
-                source_inventory_card(index, source)
-                for index, source in enumerate(sources, 1)
+                source_inventory_card(index, source) for index, source in enumerate(sources, 1)
             )
             or "Kabul edilen kaynak bulunamadı."
         )
@@ -566,15 +582,12 @@ async def build_exports(
             + "\n\n"
         )
 
-    summary_validation_note = validation_note_for(
-        "executive_summary", "overview", "overlap"
-    )
+    summary_validation_note = validation_note_for("executive_summary", "overview", "overlap")
     uncertainty_validation_note = validation_note_for("uncertainty")
     near_scope_sources = [
         source
         for source in sources
-        if (source.metadata_json or {}).get("research_scope_role")
-        in {"near_scope", "excluded"}
+        if (source.metadata_json or {}).get("research_scope_role") in {"near_scope", "excluded"}
     ]
     near_scope_block = ""
     if near_scope_sources:
@@ -688,9 +701,19 @@ async def build_exports(
         "text/csv",
         _csv_bytes(
             [
-                "source_id", "family", "connector", "title", "url", "persistent_id",
-                "literature_role", "scope_role", "published_at", "discovery_relevance",
-                "content_relevance", "evidence_claims", "reportable_claims",
+                "source_id",
+                "family",
+                "connector",
+                "title",
+                "url",
+                "persistent_id",
+                "literature_role",
+                "scope_role",
+                "published_at",
+                "discovery_relevance",
+                "content_relevance",
+                "evidence_claims",
+                "reportable_claims",
             ],
             [
                 [
@@ -706,11 +729,13 @@ async def build_exports(
                     (s.metadata_json or {}).get("relevance_score", 0),
                     (s.metadata_json or {}).get("content_relevance_score", 0),
                     len({claim.id for claim, _ in evidence_by_source.get(s.id, [])}),
-                    len({
-                        claim.id
-                        for claim, _ in evidence_by_source.get(s.id, [])
-                        if _is_reportable(claim)
-                    }),
+                    len(
+                        {
+                            claim.id
+                            for claim, _ in evidence_by_source.get(s.id, [])
+                            if _is_reportable(claim)
+                        }
+                    ),
                 ]
                 for s in sources
             ],
@@ -777,22 +802,23 @@ async def build_exports(
     unaudited = [claim for claim in claims if not claim.audit]
     irrelevant = [claim for claim in claims if claim.status == "irrelevant"]
     appraisals = [
-        (claim.audit or {}).get("appraisal") for claim in claims if (claim.audit or {}).get("appraisal")
+        (claim.audit or {}).get("appraisal")
+        for claim in claims
+        if (claim.audit or {}).get("appraisal")
     ]
     grade_counts = Counter(str(item.get("grade", "")) for item in appraisals)
     tiers = {str(item.get("tier", "")) for item in appraisals} - {""}
-    reason_counts = Counter(
-        reason for item in appraisals for reason in (item.get("reasons") or [])
-    )
+    reason_counts = Counter(reason for item in appraisals for reason in (item.get("reasons") or []))
     appraisal_md = ""
     if appraisals:
         grades = "".join(
             f"- {grade}: {count}\n"
             for grade, count in sorted(grade_counts.items(), key=lambda row: -row[1])
         )
-        reasons = "".join(
-            f"- {reason}: {count}\n" for reason, count in reason_counts.most_common(10)
-        ) or "- Not düşüren gerekçe yok.\n"
+        reasons = (
+            "".join(f"- {reason}: {count}\n" for reason, count in reason_counts.most_common(10))
+            or "- Not düşüren gerekçe yok.\n"
+        )
         appraisal_md = (
             "\n## Kanıt değerlendirmesi\n\n"
             f"Katman: `{', '.join(sorted(tiers)) or 'bilinmiyor'}`\n\n"
@@ -918,13 +944,36 @@ async def build_exports(
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         word_report.document,
     )
+    presentation_report = build_presentation_report(
+        run_id=run_id,
+        title=protocol.title_for_report(),
+        question=protocol.question_for_report(),
+        language=protocol.report_language,
+        coverage=coverage.model_dump(),
+        sources=sources,
+        claims=claims,
+        reportable_claims=ordered_reportable,
+        evidence_by_claim=evidence_by_claim,
+        executive_summary=str(synthesis.get("executive_summary", "")),
+        narrative=_markdown(synthesis.get("report")),
+        uncertainty=_markdown(synthesis.get("uncertainty")),
+        scope=protocol.scope.model_dump(mode="json"),
+        sub_questions=protocol.sub_questions_for_report(),
+        connector_ids=protocol.connectors.included_connectors,
+        research_mode=protocol.research_mode,
+        synthesis_package=synthesis_package,
+        figure_observations=figure_result.observations,
+        research_figures=figure_result.generated_figures,
+    )
+    files[presentation_report_name(protocol.label)] = (
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        presentation_report.document,
+    )
     # Written before the artifacts, so an export that fails while uploading leaves no
     # citation record describing a document nobody received.
     await repo.replace_report_citations(run_id, word_report.citations)
     dropped = Counter(
-        str(citation.drop_reason)
-        for citation in word_report.citations
-        if not citation.cited
+        str(citation.drop_reason) for citation in word_report.citations if not citation.cited
     )
     await repo.event(
         run_id,
@@ -942,10 +991,10 @@ async def build_exports(
 
     existing_artifacts = await repo.list_artifacts(run_id)
     # Artifacts whose name depends on the run itself: a source figure is numbered by how
-    # many were selected, and the Word report now carries the topic handle. Exporting a run
+    # many were selected, and the Word and PPTX reports now carry the topic handle. Exporting a run
     # twice would otherwise leave the previous export's copy behind, and both would land in
     # the bundles.
-    run_named = re.compile(r"17[a-z]_source_figure_.*\.png|16_.*\.docx")
+    run_named = re.compile(r"17[a-z]_source_figure_.*\.png|16_.*\.docx|16_.*\.pptx")
     stale = [
         artifact
         for artifact in existing_artifacts

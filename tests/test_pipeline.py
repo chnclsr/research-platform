@@ -5,16 +5,15 @@ import hashlib
 import io
 import json
 import zipfile
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 import pytest
 from conftest import acting_principal
-
-from research_platform.config import get_settings
 from sqlalchemy import select
 
+from research_platform.config import get_settings
 from research_platform.db import (
     ClaimRow,
     EvidenceRow,
@@ -876,7 +875,7 @@ async def test_acquisition_metrics_name_the_parser_that_produced_the_text():
             "run_id": row.id,
             "protocol": protocol.model_dump(mode="json"),
             "candidates": [item.model_dump(mode="json") for item in candidates],
-            "budget_started_at": datetime.now(timezone.utc).isoformat(),
+            "budget_started_at": datetime.now(UTC).isoformat(),
         })
         events = await repo.events_after(row.id)
 
@@ -1036,7 +1035,7 @@ async def test_pipeline_resumes_to_auditable_export():
         assert all(event.payload["visit_id"] and event.payload["schema_version"] == 1
                    for event in diagnostics)
         artifacts = await repo.list_artifacts(row.id)
-        assert len(artifacts) == 21
+        assert len(artifacts) == 22
         # The report's name now carries the run's topic handle, so it is looked up by the
         # prefix the naming rule guarantees rather than by a fixed string.
         word_artifact = next(
@@ -1046,6 +1045,12 @@ async def test_pipeline_resumes_to_auditable_export():
         with zipfile.ZipFile(io.BytesIO(word_report)) as archive:
             assert "word/document.xml" in archive.namelist()
             assert any(name.startswith("word/media/") for name in archive.namelist())
+        pptx_artifact = next(
+            a for a in artifacts if a.name.startswith("16_") and a.name.endswith(".pptx")
+        )
+        pptx_report = await ObjectStore(get_settings()).get(pptx_artifact.object_key)
+        with zipfile.ZipFile(io.BytesIO(pptx_report)) as archive:
+            assert "ppt/presentation.xml" in archive.namelist()
         # The chain's last link is written with the document, not derived afterwards: the
         # label and the sections citing it exist only while the report is being rendered.
         citations = await repo.list_report_citations(row.id)
