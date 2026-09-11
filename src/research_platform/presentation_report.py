@@ -21,7 +21,7 @@ from PIL import Image
 from pptx.util import Pt
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
-from .report_synthesis import SynthesisPackage
+from .report_synthesis import SynthesisPackage, citation_tokens
 from .schemas import ReportCitation
 from .word_report import _collect_citations
 
@@ -202,7 +202,13 @@ def _populate_figure_slide(
 
 
 def _extract_source_citations(text: str) -> list[str]:
-    return sorted(set(re.findall(r"\[S\d{2}\]", text)))
+    """The labels a slide's citation box should show.
+
+    Reads grouped citations too, and three-digit labels: the pattern here was `\\[S\\d{2}\\]`,
+    which silently skipped every label past S99. Run 01M27RKQFHR80WNHEQVF2AF2DS carried 209
+    sources, so the boxes would have dropped most of what the prose actually cited.
+    """
+    return sorted(set(citation_tokens(text)))
 
 
 def build_presentation_report(

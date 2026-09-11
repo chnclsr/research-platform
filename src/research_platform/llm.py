@@ -31,7 +31,23 @@ UNRECOVERABLE_STATUSES: frozenset[int] = frozenset({401, 403, 404})
 MAX_COOLDOWN_S = 900.0
 
 
-def _json_from_text(text: str) -> Any:
+class OutputTruncated(ValueError):
+    """The answer ran into the output token ceiling before it finished its JSON.
+
+    A subclass of ValueError on purpose: `FallbackProvider` and the reasoning-to-formatting
+    fallback both branch on ValueError to mean "this model's answer was unusable", and that
+    reading is still correct here. The subclass only adds which way it was unusable.
+
+    Worth separating because the two failures want opposite responses. A transport error is
+    worth retrying; a truncation is not -- temperature is 0.0, so greedy decoding stops at
+    the same place, and the second attempt burns a full generation to fail identically. Run
+    01M27RKQFHR80WNHEQVF2AF2DS stopped six calls on `length` and reported every one of them
+    as a bare ValueError, which is how a whole theme and the overview layer disappeared
+    without anything naming the reason.
+    """
+
+
+def _json_from_text(text: str, *, truncated: bool = False) -> Any:
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(
@@ -43,11 +59,16 @@ def _json_from_text(text: str) -> Any:
     start_candidates = [p for p in (text.find("{"), text.find("[")) if p >= 0]
     if start_candidates:
         text = text[min(start_candidates):]
+    # The shrinking tail is still tried when the answer was truncated: under `format: "json"`
+    # a model can close valid JSON and then run into the ceiling on trailing whitespace, and
+    # that call is recoverable. Only the failure is named differently.
     for end in range(len(text), 0, -1):
         try:
             return json.loads(text[:end])
         except json.JSONDecodeError:
             continue
+    if truncated:
+        raise OutputTruncated("LLM output hit the token limit before valid JSON")
     raise ValueError("LLM did not return valid JSON")
 
 
@@ -159,7 +180,10 @@ class OllamaProvider(LLMProvider):
             "generation_seconds": round(payload.get("eval_duration", 0) / 1e9, 4),
             "done_reason": payload.get("done_reason"),
         })
-        return _json_from_text(payload["message"]["content"])
+        return _json_from_text(
+            payload["message"]["content"],
+            truncated=payload.get("done_reason") == "length",
+        )
 
     async def _reason_then_format(self, system: str, user: str) -> Any:
         reasoning_started = time.perf_counter()
@@ -215,7 +239,9 @@ class OllamaProvider(LLMProvider):
         })
         if candidate:
             try:
-                return _json_from_text(candidate)
+                return _json_from_text(
+                    candidate, truncated=payload.get("done_reason") == "length"
+                )
             except ValueError:
                 pass
         with_reasoning_tail = candidate or thinking[-12000:]
@@ -259,7 +285,10 @@ class OllamaProvider(LLMProvider):
             "generation_seconds": round(format_payload.get("eval_duration", 0) / 1e9, 4),
             "done_reason": format_payload.get("done_reason"),
         })
-        return _json_from_text(format_payload["message"]["content"])
+        return _json_from_text(
+            format_payload["message"]["content"],
+            truncated=format_payload.get("done_reason") == "length",
+        )
 
 
 class OpenAICompatibleProvider(LLMProvider):

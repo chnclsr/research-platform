@@ -11,6 +11,8 @@ from research_platform.report_synthesis import (
     _claim_evidence_block,
     _consolidation_fan_in,
     _grounded_excerpt,
+    _prompt_char_budget,
+    citation_counts,
     _language_directive,
     _draft_overview,
     _evidence_packets,
@@ -1549,3 +1551,124 @@ async def test_a_single_round_reduce_keeps_the_note_it_always_had() -> None:
     note = package.generation_diagnostics["theme_1"]
     assert note.startswith("consolidated_visible")
     assert ":r" not in note.split("(")[0], "one round must not be labelled as several"
+
+
+# --------------------------------------------------------------------------------------
+# Packet density against citation density.
+#
+# Measured directly against the live model on one theme's real evidence from run
+# 01M27RKQFHR80WNHEQVF2AF2DS: 60 claims in a single 28.8k-character packet produced prose
+# with ZERO citations; the same claims at 17 per packet produced 14. Same model, same
+# prompt, same output ceiling -- only the packet differed. Widening the context window had
+# tripled packet size, and the report's citations fell from 27 labels to 13.
+# --------------------------------------------------------------------------------------
+
+
+def _llm_at(context_tokens: int) -> SimpleNamespace:
+    return SimpleNamespace(
+        settings=SimpleNamespace(
+            llm_context_tokens=context_tokens, llm_max_output_tokens=2048
+        )
+    )
+
+
+def test_a_wider_context_does_not_make_the_drafting_packet_bigger() -> None:
+    """The regression: the window set the packet size, so packets grew with the window."""
+    room = {"question": "Q" * 90, "title": "T" * 60, "scope_context": "S" * 300}
+    assert _section_packet_budget(_llm_at(16384), **room) == _section_packet_budget(
+        _llm_at(8192), **room
+    )
+
+
+def test_a_narrow_context_still_shrinks_the_drafting_packet() -> None:
+    """The cap only stops the packet growing; a small window must still bind."""
+    room = {"question": "Q" * 90, "title": "T" * 60, "scope_context": "S" * 300}
+    assert _section_packet_budget(_llm_at(2048), **room) < _section_packet_budget(
+        _llm_at(8192), **room
+    )
+
+
+def test_the_merge_budget_still_follows_the_context() -> None:
+    """Capping the packet must not cap the layer the wider window was raised for.
+
+    The merge prompt reads many drafts at once, and its fan-in is what keeps each of them
+    wide enough to show its citations.
+    """
+    assert _consolidation_fan_in(_prompt_char_budget(_llm_at(8192))) < _consolidation_fan_in(
+        _prompt_char_budget(_llm_at(16384))
+    )
+
+
+def test_packet_density_is_the_same_at_every_context() -> None:
+    """The property the measurement is about: claims per packet, not characters."""
+    _sources, claims, evidence, labels = _packet_fixture(60)
+    room = {"question": "Q" * 90, "title": "T" * 60, "scope_context": "S" * 300}
+    densities = set()
+    for context_tokens in (8192, 16384, 24576):
+        packets, _ = _evidence_packets(
+            claims,
+            evidence,
+            labels,
+            char_budget=_section_packet_budget(_llm_at(context_tokens), **room),
+        )
+        densities.add(max(len(packet.claim_ids) for packet in packets))
+    assert len(densities) == 1, f"packet density drifted with the window: {densities}"
+
+
+class OutputBoundedLLM(MultiPassLLM):
+    """Encodes a measured model behaviour: a dense packet comes back without citations.
+
+    This does not prove anything about the model -- a fake cannot. It records what was
+    measured against the live one (60 claims -> 0 citations, 17 claims -> 14) so the packet
+    cap has something to fail against. The threshold is an observation, not a law; if the
+    measurement changes, this number changes with it.
+    """
+
+    _CITATION_BUDGET_CLAIMS = 20
+
+    async def complete_json(self, system: str, user: str):
+        if "evidence-grounded thematic section" in system:
+            self.drafts += 1
+            claims = user.count("claim=")
+            if claims > self._CITATION_BUDGET_CLAIMS:
+                return {
+                    "synthesis": "The studies converge on the measured outcome.",
+                    "consensus": "",
+                    "disagreements": "",
+                    "implications": "",
+                }
+            offered = re.search(r"ALLOWED_SOURCE_IDS: ([^\n]*)", user)
+            label = offered.group(1).split(",")[0].strip() if offered else "S01"
+            return {
+                "synthesis": f"The measured outcome moved under the condition [{label}].",
+                "consensus": f"The direction is favourable [{label}].",
+                "disagreements": "",
+                "implications": f"Validation remains necessary [{label}].",
+            }
+        return await super().complete_json(system, user)
+
+
+async def test_a_dense_packet_reaches_the_reader_without_citations() -> None:
+    """Pins the fake itself, so the test below cannot pass for the wrong reason."""
+    llm = OutputBoundedLLM(context_tokens=16384)
+    _sources, claims, evidence, labels = _packet_fixture(60)
+    packets, _ = _evidence_packets(claims, evidence, labels, char_budget=200_000)
+    assert len(packets) == 1 and len(packets[0].claim_ids) == 60
+    data = await llm.complete_json(
+        "You are writing one evidence-grounded thematic section of a research report.",
+        f"ALLOWED_SOURCE_IDS: S01\n\nEVIDENCE_PACKET:\n{packets[0].text}",
+    )
+    assert not citation_counts(data["synthesis"])
+
+
+async def test_the_packet_cap_keeps_the_drafts_citing() -> None:
+    """The measured failure, end to end: prose that presents claims and attributes none."""
+    llm = OutputBoundedLLM(context_tokens=16384)
+    package = await _multi_pass_package(llm, claims_count=60)
+
+    section = package.sections[0]
+    density = package.quality_diagnostics["theme_coverage"][0]["claims_per_packet"]
+    assert density <= OutputBoundedLLM._CITATION_BUDGET_CLAIMS, (
+        f"the cap did not bind: {density} claims per packet"
+    )
+    assert cited_labels(section), "the section reached the reader with no provenance"

@@ -26,7 +26,14 @@ from docx.shared import Inches, Pt, RGBColor
 from PIL import Image, ImageDraw, ImageFont
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
-from .report_synthesis import SynthesisPackage, citation_counts, cited_labels
+from .report_synthesis import (
+    _CITATION_RE,
+    _LABEL_RE,
+    _TOKEN_RE,
+    SynthesisPackage,
+    citation_counts,
+    cited_labels,
+)
 from .schemas import CitationDrop, ReportCitation
 
 INK = "0B132B"
@@ -745,20 +752,43 @@ def _add_cited_paragraph(
     A citation only becomes a link when the label exists in `linkable`. A link to a missing
     bookmark is silently inert in Word — the reader clicks and nothing happens, which reads
     worse than plain text.
+
+    `[S142, S209]` is linked label by label, with the brackets and comma written as plain
+    text around them. The visible characters are exactly the model's; only where the links
+    begin and end differs from the single-label case.
     """
     linkable = linkable or set()
     paragraph = document.add_paragraph()
-    for piece in re.split(r"(\[S\d{2,3}\])", _model_text(text)):
+
+    def write(piece: str, *, citation: bool) -> None:
+        if not piece:
+            return
+        if not citation:
+            _set_run_font(paragraph.add_run(piece), size=10.5, color=INK)
+            return
+        label = piece.strip("[]")
+        if label in linkable:
+            _add_internal_link(paragraph, piece, source_anchor(label))
+            return
+        _set_run_font(paragraph.add_run(piece), size=10.5, color=BLUE, bold=True)
+
+    # Wrapped in a group so `split` hands back the citations along with the prose between
+    # them; `_CITATION_RE` itself is non-capturing and would drop them.
+    for piece in re.split(f"({_CITATION_RE.pattern})", _model_text(text)):
         if not piece:
             continue
-        if re.fullmatch(r"\[S\d{2,3}\]", piece):
-            label = piece.strip("[]")
-            if label in linkable:
-                _add_internal_link(paragraph, piece, source_anchor(label))
-                continue
-            _set_run_font(paragraph.add_run(piece), size=10.5, color=BLUE, bold=True)
-        else:
-            _set_run_font(paragraph.add_run(piece), size=10.5, color=INK)
+        if not _CITATION_RE.fullmatch(piece):
+            write(piece, citation=False)
+            continue
+        if _TOKEN_RE.fullmatch(piece):
+            write(piece, citation=True)
+            continue
+        cursor = 0
+        for match in _LABEL_RE.finditer(piece):
+            write(piece[cursor : match.start()], citation=False)
+            write(match.group(0), citation=True)
+            cursor = match.end()
+        write(piece[cursor:], citation=False)
 
 
 def _add_validation_warning(

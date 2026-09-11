@@ -117,7 +117,17 @@ class SynthesisPackage:
         return "\n\n".join(parts)
 
 
+#: The canonical citation: exactly one label in its own brackets. Stays single-label --
+#: the cut points and sentence boundaries below are defined in terms of it.
 _TOKEN_RE = re.compile(r"\[S\d{2,3}\]")
+#: One label, with or without brackets around it.
+_LABEL_RE = re.compile(r"S\d{2,3}")
+#: A citation as models actually write it: canonical, or several labels sharing one pair of
+#: brackets. Measured on run 01M27RKQFHR80WNHEQVF2AF2DS, the model wrote `[S142, S209]` four
+#: times; every one of them counted as zero citations and as a malformed bracket, and one of
+#: them made `_grounded_excerpt` drop the sentence carrying it while reporting the excerpt as
+#: still grounded. Recognising the form is what makes the citation counters mean anything.
+_CITATION_RE = re.compile(r"\[S\d{2,3}(?:\s*,\s*S\d{2,3})*\]")
 _BRACKET_RE = re.compile(r"\[([^\]]{1,80})\]")
 _WORD_RE = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
 _SENTENCE_END_RE = re.compile(
@@ -163,6 +173,20 @@ def _question_relevance(claim: Any) -> float:
         return 0.0
 
 
+def citation_tokens(text: str) -> list[str]:
+    """Every source label the prose cites, each written back as its own `[Sxx]`.
+
+    `[S142, S209]` yields two tokens. Every consumer that counts, validates or re-attaches a
+    citation needs labels; none of them can do anything with the raw grouped string, which is
+    why the group form is normalised here once rather than handled at each call site.
+    """
+    return [
+        f"[{label}]"
+        for match in _CITATION_RE.finditer(text or "")
+        for label in _LABEL_RE.findall(match.group(0))
+    ]
+
+
 def citation_counts(*texts: str) -> Counter[str]:
     """How many times each `Sxx` label is cited across the given prose.
 
@@ -171,7 +195,7 @@ def citation_counts(*texts: str) -> Counter[str]:
     """
     counts: Counter[str] = Counter()
     for text in texts:
-        for token in _TOKEN_RE.findall(text or ""):
+        for token in citation_tokens(text):
             counts[token.strip("[]")] += 1
     return counts
 
@@ -208,7 +232,10 @@ def _sentences(text: str) -> list[str]:
             sentences.append(sentence)
         start = match.end()
     tail = cleaned[start:].strip()
-    tail_citations = _TOKEN_RE.findall(tail)
+    # A trailing clause is kept only when it ends on its citation, so a fragment never
+    # arrives stripped of the source behind it. Grouped form counts here too -- a tail ending
+    # `[S142, S209]` is as attributed as one ending `[S142]`.
+    tail_citations = _CITATION_RE.findall(tail)
     if tail_citations and tail.endswith(tail_citations[-1]):
         sentences.append(tail)
     return sentences
@@ -222,9 +249,11 @@ def _ground_sentence(sentence: str, source_text: str) -> str:
     it -- to a neighbouring field, or to the tail a budget just cut away -- would be claiming
     support that was never given, which is a different thing from keeping support intact.
     """
-    if _TOKEN_RE.search(sentence):
+    if _CITATION_RE.search(sentence):
         return sentence
-    citations = list(dict.fromkeys(_TOKEN_RE.findall(source_text)))[:3]
+    # Written back canonically, one label per pair of brackets: a sentence that is being
+    # repaired should not inherit the grouped form that made the repair necessary.
+    citations = list(dict.fromkeys(citation_tokens(source_text)))[:3]
     if not citations:
         return sentence
     punctuation = sentence[-1] if sentence[-1:] in ".!?" else "."
@@ -267,23 +296,36 @@ def _grounded_excerpt(value: str, max_chars: int) -> tuple[str, bool]:
 
     The flag is the measurement that was missing: a caller can count the fields whose
     citations did not survive instead of discovering it in the finished report.
+
+    Grouped citations count as citations throughout. Reading them with the single-label
+    pattern was worse than not counting them: `had_citation` came out False, so prose whose
+    only attribution was `[S142, S209]` could be cut away wholesale and still be reported as
+    grounded -- the flag said the budget had cost nothing precisely where it had cost
+    everything.
     """
     cleaned = " ".join(value.split())
-    had_citation = bool(_TOKEN_RE.search(cleaned))
+    had_citation = bool(_CITATION_RE.search(cleaned))
 
     def result(text: str) -> tuple[str, bool]:
-        return text, (not had_citation) or bool(_TOKEN_RE.search(text))
+        return text, (not had_citation) or bool(_CITATION_RE.search(text))
 
     if len(cleaned) <= max_chars:
         return result(cleaned)
     complete = _bounded_grounded_join([cleaned], max_chars)
     if complete:
         return result(complete)
-    fitting = [match for match in _TOKEN_RE.finditer(cleaned) if match.end() <= max_chars]
+    fitting = [match for match in _CITATION_RE.finditer(cleaned) if match.end() <= max_chars]
     if fitting:
         return result(cleaned[: fitting[-1].end()])
     boundary = cleaned.rfind(" ", 0, max_chars)
-    return result(cleaned[: boundary if boundary > 0 else max_chars].rstrip())
+    cut = cleaned[: boundary if boundary > 0 else max_chars].rstrip()
+    # A grouped citation is wide enough that a word boundary can fall inside it, leaving
+    # `[S142,` at the end. That half-bracket is not a citation and reads like one, so a model
+    # shown the excerpt could copy the broken shape. Drop the opener and whatever follows it.
+    opener = cut.rfind("[")
+    if opener >= 0 and "]" not in cut[opener:]:
+        cut = cut[:opener].rstrip()
+    return result(cut)
 
 
 def _prompt_excerpt(value: str, max_chars: int) -> str:
@@ -392,12 +434,22 @@ def _prompt_char_budget(llm: LLMProvider) -> int:
     The 24000 ceiling saturates at `llm_context_tokens == 15584`, so raising the setting
     past 16384 buys nothing here and only enlarges the KV cache. If a bigger window is ever
     genuinely needed, this ceiling is the thing to revisit -- not the setting.
+
+    What the full budget is FOR is the merge and overview layers, which read many drafts at
+    once. The drafting layer takes its evidence share from `_PACKET_TARGET_CHARS` instead --
+    see `_section_packet_budget`.
     """
     settings = getattr(llm, "settings", None)
     context_tokens = int(getattr(settings, "llm_context_tokens", 8192))
     output_tokens = int(getattr(settings, "llm_max_output_tokens", 2048))
     available_tokens = max(2048, context_tokens - output_tokens - 1536)
     return max(6000, min(24000, available_tokens * 2))
+
+
+#: The most evidence one drafting prompt may carry, whatever the context window allows.
+#: This is the budget run 01M25XYS6ETQVXMPY24HXVKNXG drafted under, at roughly 15 claims per
+#: packet.
+_PACKET_TARGET_CHARS = 9216
 
 
 def _section_packet_budget(
@@ -408,10 +460,26 @@ def _section_packet_budget(
     The system prompt sits inside the fixed reserve `_prompt_char_budget` already holds
     back; what is subtracted here is the part that varies per run and per theme, plus room
     for the `[Sxx]` allow-list.
+
+    Capped independently of the context window, because packet size and citation density
+    turned out to trade against each other. Measured directly against the live model on one
+    theme's real evidence: 60 claims in a single 28.8k-character packet produced prose with
+    ZERO citations, while the same claims at 17 per packet produced 14. The model has the
+    same 2048 output tokens either way, so a denser packet buys abstraction, and abstraction
+    drops the attributions first.
+
+    A window smaller than the cap still shrinks the packet -- `min` only stops it growing.
+    Raising `llm_context_tokens` therefore widens the merge and overview prompts, which is
+    what lifts `_consolidation_fan_in` from 2 to 8, without touching what a draft is asked
+    to read.
     """
     return max(
         2000,
-        _prompt_char_budget(llm) - len(question) - len(title) - len(scope_context) - 600,
+        min(_prompt_char_budget(llm), _PACKET_TARGET_CHARS)
+        - len(question)
+        - len(title)
+        - len(scope_context)
+        - 600,
     )
 
 
@@ -915,15 +983,30 @@ def _text_warnings(
     if not value:
         return [f"{field_name}:missing"]
     warnings: list[str] = []
-    citations = set(_TOKEN_RE.findall(value))
+    citations = set(citation_tokens(value))
     unknown = sorted(citations - allowed)
     if unknown:
         warnings.append(f"{field_name}:unknown_citations:{','.join(unknown)}")
+    # Sharing one pair of brackets is a format the model reaches for, not a broken citation:
+    # the labels are real and the source is named. It gets its own code so `missing_citation`
+    # stops firing on attributed prose, while the preference for one label per pair stays
+    # visible -- this counter is what says whether the prompt rule is landing.
+    grouped = sorted(
+        {
+            match.group(0)
+            for match in _CITATION_RE.finditer(value)
+            if not _TOKEN_RE.fullmatch(match.group(0))
+        }
+    )
+    if grouped:
+        warnings.append(f"{field_name}:grouped_citations:{','.join(grouped)}")
     malformed = sorted(
         {
             match.group(0)
             for match in _BRACKET_RE.finditer(value)
-            if "S" in match.group(1).upper() and not _TOKEN_RE.fullmatch(match.group(0))
+            if "S" in match.group(1).upper()
+            and not _TOKEN_RE.fullmatch(match.group(0))
+            and not _CITATION_RE.fullmatch(match.group(0))
         }
     )
     if malformed:
@@ -1064,7 +1147,9 @@ async def _draft_section(
         "You are writing one evidence-grounded thematic section of a research report. "
         "Return one JSON object with keys synthesis, consensus, disagreements, implications. "
         "SYNTHESIS must integrate studies instead of listing them one by one. Use only facts "
-        "in EVIDENCE_PACKET and attach supplied [Sxx] citations to factual sentences. Never "
+        "in EVIDENCE_PACKET. Keep at least one supplied [Sxx] citation on every factual "
+        "sentence, and write each citation in its own brackets: [S12] [S27], never "
+        "[S12, S27]. Never "
         "invent a source, number, method, population, result, or URL. Treat status=qualified "
         "and evidence=limited|insufficient as tentative single-study findings. Write consensus "
         "only from claims marked consensus_eligible=true; otherwise leave it empty. Do not "
@@ -1175,7 +1260,8 @@ async def _reduce_group(
                 "diverge. Use only facts present in the passes. Never invent a source, number, "
                 "method, population, result, or URL, and never add a citation that is not "
                 "already in the passes. Keep at least one supplied [Sxx] citation on every "
-                "factual sentence. Do not mention passes, drafts, prompts, or an evidence "
+                "factual sentence, and write each citation in its own brackets: [S12] [S27], "
+                "never [S12, S27]. Do not mention passes, drafts, prompts, or an evidence "
                 "packet. " + _language_directive(language),
                 f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
                 f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
@@ -1391,7 +1477,8 @@ async def _draft_overview(
     system = (
             "Write the integrative layer of a research report as one JSON object with keys "
             "executive_summary, cross_study_assessment, conclusion, uncertainty. Synthesize themes; "
-            "do not repeat a source-by-source inventory. Preserve the supplied [Sxx] citations and "
+            "do not repeat a source-by-source inventory. Preserve the supplied [Sxx] citations, "
+            "each in its own brackets ([S12] [S27], never [S12, S27]), and "
             "attach citations to factual statements. Use only the section drafts below. Never add "
             "new facts, numbers, sources, URLs, or platform/retrieval metrics. Make uncertainty "
             "specific to comparability, study design, validation, and evidence gaps. "
@@ -1632,6 +1719,12 @@ async def build_synthesis_package(
                 "claims_shown": len(set(drafted_claim_ids)) if succeeded else 0,
                 "claims_without_evidence": len(unbacked),
                 "passes": len(packets),
+                # The variable that decides whether a draft cites at all. Derivable from the
+                # two numbers above, but not derivable while the run is still going, which is
+                # exactly when it is worth knowing.
+                "claims_per_packet": round(
+                    sum(len(packet.claim_ids) for packet in packets) / max(1, len(packets)), 1
+                ),
                 "passes_drafted": len(drafts),
                 "passes_used": len(drafts) if succeeded else 0,
                 # `passes*` above stay leaf counts; the reduce record describes the tree that
@@ -1785,6 +1878,13 @@ async def build_synthesis_package(
             "collapsed_sections": collapsed_sections,
             "field_overlaps": overlap_rows,
             "scope_anchors": anchors,
+            # Layers lost to the output ceiling rather than to anything about the evidence.
+            # A non-zero count means the packets are still asking for more prose than the
+            # model has room to write, and no retry can recover it at temperature 0.
+            "output_truncated_layers": sum(
+                1 for note in generation_diagnostics.values()
+                if "OutputTruncated" in str(note)
+            ),
             # What the model was actually shown. "Every claim reached the prompt" is a
             # claim about the run, so the run has to carry the numbers that settle it:
             # `evidence_claims_shown` must equal `unique_claim_count` minus the claims

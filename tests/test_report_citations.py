@@ -13,7 +13,11 @@ from types import SimpleNamespace
 from research_platform.report_synthesis import (
     SynthesisPackage,
     SynthesisSection,
+    _grounded_excerpt,
+    _ground_sentence,
+    _text_warnings,
     citation_counts,
+    citation_tokens,
     cited_labels,
 )
 from research_platform.schemas import CitationDrop
@@ -202,3 +206,95 @@ def test_labels_follow_the_catalogue_numbering():
     assert [c.number for c in citations.values()] == [1, 2, 3]
     assert sorted(citations) == ["S01", "S02", "S03"]
     assert all(c.in_bibliography for c in citations.values())
+
+
+# --------------------------------------------------------------------------------------
+# The grouped citation form.
+#
+# Run 01M27RKQFHR80WNHEQVF2AF2DS wrote `[S142, S209]` four times. Every one counted as zero
+# citations, was reported as a malformed bracket AND as a missing citation, never became a
+# hyperlink, and -- worst -- made `_grounded_excerpt` drop the sentence carrying it while
+# still reporting the excerpt as grounded. The counters said the budget had cost nothing
+# exactly where it had cost everything.
+# --------------------------------------------------------------------------------------
+
+GROUPED = "The effect held across both cohorts [S142, S209]. A second clause follows here."
+
+
+def test_a_grouped_citation_counts_every_label_it_carries() -> None:
+    assert dict(citation_counts(GROUPED)) == {"S142": 1, "S209": 1}
+
+
+def test_citation_tokens_rewrites_a_group_one_label_per_bracket() -> None:
+    """Consumers need labels; none of them can do anything with the raw group string."""
+    assert citation_tokens(GROUPED) == ["[S142]", "[S209]"]
+    assert citation_tokens("plain prose") == []
+
+
+def test_a_grouped_citation_is_reported_as_grouped_not_as_missing() -> None:
+    """The labels are real and the sources are named -- that is not a missing citation."""
+    warnings = _text_warnings(
+        GROUPED, field_name="synthesis", allowed={"[S142]", "[S209]"}, language="en"
+    )
+    assert "synthesis:grouped_citations:[S142, S209]" in warnings
+    assert "synthesis:missing_citation" not in warnings
+    assert not [w for w in warnings if "malformed_citations" in w]
+
+
+def test_a_bracket_that_is_not_a_citation_is_still_malformed() -> None:
+    """Splitting the codes must not stop the real format check from firing."""
+    warnings = _text_warnings(
+        "A claim [S 14] and another [Sxx].",
+        field_name="synthesis",
+        allowed={"[S14]"},
+        language="en",
+    )
+    assert [w for w in warnings if "malformed_citations" in w]
+
+
+def test_an_excerpt_does_not_drop_a_grouped_citation_and_call_itself_grounded() -> None:
+    """The measured defect: `had_citation` missed the group, so losing it looked free.
+
+    What the excerpt keeps is the attribution, not any particular sentence -- the sentence
+    layer may well pick a different clause and re-ground it canonically. The claim under
+    test is only that the labels survive, and that `grounded` tells the truth when they do
+    not.
+    """
+    kept, grounded = _grounded_excerpt(GROUPED, 48)
+    assert {"S142", "S209"} <= set(citation_counts(kept))
+    assert grounded
+
+    lost, grounded = _grounded_excerpt(GROUPED, 24)
+    assert not citation_counts(lost)
+    assert not grounded, "losing the only attribution must not be reported as grounded"
+
+
+def test_an_excerpt_never_ends_inside_a_grouped_citation() -> None:
+    """A trailing `[S142,` is not a citation and reads like one; a model would copy it."""
+    for max_chars in range(10, len(GROUPED) + 4):
+        kept, _ = _grounded_excerpt(GROUPED, max_chars)
+        assert kept.count("[") == kept.count("]"), (max_chars, kept)
+        assert len(kept) <= max_chars
+
+
+def test_a_re_attached_citation_is_written_one_label_per_bracket() -> None:
+    """A sentence being repaired should not inherit the form that needed repairing."""
+    assert _ground_sentence("A bare clause.", GROUPED) == "A bare clause [S142] [S209]."
+
+
+def test_a_grouped_citation_reaches_the_citation_ledger() -> None:
+    """End to end: this ledger is where `offered_not_cited` is read from.
+
+    Both labels were offered and both are cited, in one pair of brackets. Before this, the
+    run recorded them as offered and never cited -- a source credited in the prose filed as
+    one the report passed over.
+    """
+    s1, s2 = source("src-1"), source("src-2")
+    claims = {"c1": [(link("e1", s1), s1)], "c2": [(link("e2", s2), s2)]}
+    prose = "The effect held across both cohorts [S01, S02]."
+    pkg = package([section("Tema A", prose, offered=["S01", "S02"])])
+    rows = collect([s1, s2], claims, [claim("c1"), claim("c2")], pkg)
+    for label in ("S01", "S02"):
+        assert rows[label].drop_reason == CitationDrop.CITED, label
+        assert rows[label].citation_count == 1
+        assert rows[label].cited_sections == ["Tema A"]

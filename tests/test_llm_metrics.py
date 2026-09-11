@@ -6,7 +6,12 @@ import httpx
 import pytest
 
 from research_platform.config import Settings
-from research_platform.llm import LLMProvider, OllamaProvider, extract_claims
+from research_platform.llm import (
+    LLMProvider,
+    OllamaProvider,
+    OutputTruncated,
+    extract_claims,
+)
 from research_platform.schemas import AcquiredDocument, ConnectorCandidate, SourceFamily
 
 
@@ -40,9 +45,10 @@ async def test_ollama_metrics_capture_tokens_and_durations():
     assert metrics[0]["prompt_seconds"] == 0.5
     assert metrics[0]["generation_seconds"] == 1.0
     assert captured["think"] is False
-    # Tracks the Settings default, raised from 8192 so that the synthesis prompt budget
-    # reaches its 24000-character ceiling. Below that a many-packet theme divided the budget
-    # down to card fields too narrow to carry an [Sxx], and the report lost its citations.
+    # Tracks the Settings default, raised from 8192 so the MERGE and OVERVIEW prompts reach
+    # the 24000-character ceiling: below that a many-packet theme divided their budget down
+    # to card fields too narrow to carry an [Sxx]. Drafting prompts are capped separately by
+    # `_PACKET_TARGET_CHARS` and do not follow this setting upward.
     assert captured["options"]["num_ctx"] == 16384
     assert captured["options"]["num_predict"] == 2048
     assert captured["options"]["temperature"] == 0.5
@@ -163,3 +169,73 @@ async def test_extract_claims_accepts_top_level_array():
     claims = await extract_claims(ArrayClaimsProvider(), document)
     assert len(claims) == 1
     assert claims[0].direction == "supports"
+
+
+# --------------------------------------------------------------------------------------
+# Telling a truncated answer apart from a broken one.
+#
+# Run 01M27RKQFHR80WNHEQVF2AF2DS stopped six of 114 calls on `done_reason="length"`. Every
+# one surfaced as a bare ValueError, indistinguishable from a transport failure, and a whole
+# theme plus the overview layer disappeared reported only as "ValueError+ValueError".
+# --------------------------------------------------------------------------------------
+
+
+def _ollama(handler) -> tuple[httpx.AsyncClient, OllamaProvider]:
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return client, OllamaProvider(Settings(_env_file=None), client)
+
+
+def _answer(content: str, done_reason: str) -> httpx.Response:
+    return httpx.Response(200, json={
+        "message": {"content": content},
+        "done_reason": done_reason,
+        "prompt_eval_count": 10,
+        "eval_count": 2048,
+    })
+
+
+def test_output_truncated_is_a_value_error() -> None:
+    """`FallbackProvider` and the reasoning fallback both branch on ValueError.
+
+    One line, but if the base class ever changes both of those paths stop catching this and
+    do so silently.
+    """
+    assert issubclass(OutputTruncated, ValueError)
+
+
+@pytest.mark.asyncio
+async def test_an_answer_cut_off_mid_json_names_itself_truncated() -> None:
+    client, provider = _ollama(lambda request: _answer('{"synthesis": "half a sen', "length"))
+    async with client:
+        with pytest.raises(OutputTruncated):
+            await provider.complete_json("system", "user")
+
+
+@pytest.mark.asyncio
+async def test_an_answer_that_is_merely_invalid_stays_a_plain_value_error() -> None:
+    """A model that answered with prose failed differently, and retrying it is reasonable."""
+    client, provider = _ollama(lambda request: _answer("not json at all", "stop"))
+    async with client:
+        with pytest.raises(ValueError) as caught:
+            await provider.complete_json("system", "user")
+    assert not isinstance(caught.value, OutputTruncated)
+
+
+@pytest.mark.asyncio
+async def test_a_length_stop_that_still_parsed_is_not_an_error() -> None:
+    """Under `format: "json"` a model can close its JSON and then hit the ceiling on
+    trailing whitespace. That call is usable, which is why the parse still runs first."""
+    client, provider = _ollama(lambda request: _answer('{"ok": true}   ', "length"))
+    async with client:
+        assert await provider.complete_json("system", "user") == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_a_truncated_call_still_records_its_metric() -> None:
+    """The metric is written before the parse, and `done_reason` is how a run is audited."""
+    client, provider = _ollama(lambda request: _answer('{"synthesis": "half', "length"))
+    async with client:
+        with pytest.raises(OutputTruncated):
+            await provider.complete_json("system", "user")
+    metrics = provider.drain_metrics()
+    assert metrics and metrics[0]["done_reason"] == "length"

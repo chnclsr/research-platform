@@ -55,10 +55,17 @@ class Settings(BaseSettings):
     llm_think: bool = False
     llm_reason_then_format: bool = False
     # 16384 is the smallest window that saturates the 24000-character ceiling in
-    # report_synthesis._prompt_char_budget; anything larger only grows the KV cache. At the
-    # old 8192 the synthesis budget was 9216, which a 17-packet theme divided down to
-    # 90-character card fields -- run 01M25XYS6ETQVXMPY24HXVKNXG lost the citations of four
-    # of its five report sections that way.
+    # report_synthesis._prompt_char_budget; anything larger only grows the KV cache.
+    #
+    # What the wider window buys is the MERGE and OVERVIEW layers, which read many drafts in
+    # one prompt: at 8192 their budget was 9216, a 17-packet theme divided it down to
+    # 90-character card fields, and run 01M25XYS6ETQVXMPY24HXVKNXG lost the citations of four
+    # of its five sections that way. It also lifts the merge fan-in from 2 to 8, so the
+    # reduction tree finishes in two rounds instead of five.
+    #
+    # It does NOT widen a drafting prompt -- `_PACKET_TARGET_CHARS` caps that separately.
+    # Run 01M27RKQFHR80WNHEQVF2AF2DS let the window set the packet size too, packets tripled,
+    # and citations fell further than before the change.
     llm_context_tokens: int = Field(16384, ge=2048, le=262144)
     llm_max_output_tokens: int = Field(2048, ge=128, le=32768)
     llm_reasoning_output_tokens: int = Field(20480, ge=512, le=131072)
