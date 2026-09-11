@@ -25,6 +25,7 @@ from .db import (
     EventRow,
     EvidenceRow,
     FigureObservationRow,
+    FormulaObservationRow,
     FrontierRow,
     PassageRow,
     ReportCitationRow,
@@ -1498,6 +1499,67 @@ class Repository(metaclass=_OwnershipEnforced):
         await self.session.commit()
         return row
 
+    async def get_formula_observation(
+        self, source_version_id: str, image_hash: str, vision_model: str
+    ) -> FormulaObservationRow | None:
+        return await self.session.scalar(
+            select(FormulaObservationRow).where(
+                FormulaObservationRow.source_version_id == source_version_id,
+                FormulaObservationRow.image_hash == image_hash,
+                FormulaObservationRow.vision_model == vision_model,
+            )
+        )
+
+    async def save_formula_observation(
+        self,
+        *,
+        run_id: str,
+        source_version_id: str,
+        formula_no: int,
+        page_number: int | None,
+        image_hash: str,
+        image_key: str,
+        vision_model: str,
+        latex: str,
+        status: str,
+    ) -> FormulaObservationRow:
+        row = await self.get_formula_observation(source_version_id, image_hash, vision_model)
+        if row is None:
+            row = FormulaObservationRow(
+                id=new_id(),
+                run_id=run_id,
+                source_version_id=source_version_id,
+                formula_no=formula_no,
+                page_number=page_number,
+                image_hash=image_hash,
+                image_key=image_key,
+                vision_model=vision_model,
+                latex=latex,
+                status=status,
+            )
+            self.session.add(row)
+        else:
+            row.formula_no = formula_no
+            row.page_number = page_number
+            row.image_key = image_key
+            row.latex = latex
+            row.status = status
+        await self.session.commit()
+        return row
+
+    async def list_formula_observations(
+        self, source_version_ids: Sequence[str]
+    ) -> list[FormulaObservationRow]:
+        if not source_version_ids:
+            return []
+        return list(
+            await self.session.scalars(
+                select(FormulaObservationRow)
+                .where(FormulaObservationRow.source_version_id.in_(list(source_version_ids)))
+                .order_by(FormulaObservationRow.created_at, FormulaObservationRow.id)
+            )
+        )
+
     async def list_figure_observations(self, run_id: str) -> list[FigureObservationRow]:
         return list(
             await self.session.scalars(
@@ -1571,6 +1633,9 @@ class Repository(metaclass=_OwnershipEnforced):
             )),
             ("figure_observations", delete(FigureObservationRow).where(
                 FigureObservationRow.run_id == run_id
+            )),
+            ("formula_observations", delete(FormulaObservationRow).where(
+                FormulaObservationRow.run_id == run_id
             )),
             ("frontier", delete(FrontierRow).where(FrontierRow.run_id == run_id)),
             ("report_citations", delete(ReportCitationRow).where(

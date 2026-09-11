@@ -971,6 +971,55 @@ düşer, sessizce gerçek bucket'a yazmaz.
 
 ---
 
+## 46. Formül, görsel ve HTML kaçışı — kod hazır, canlıya geçiş bekliyor
+
+**Durum (2026-09-11):** `developments-supplementer` üzerinde kod ve testler tamam
+(`1115 passed, 4 skipped`, dalın en güncel haliyle birleşmiş kod); canlı yığına **kurulmadı**. Ayrıntılı ölçümler:
+`research/pdf-parser/out/karantina_2026-09-11/FORMUL_HTML_RAPORU.md` ve
+`UYGULAMA_ILERLEME.md` (gitignore'lu).
+
+**Ne değişti:**
+- Docling sayfaları HTML varlığı taşımıyor (`escape_html=False`, üç yol ortak
+  `sayfa_markdown`). `pH &lt; 5.8` artık `pH < 5.8`.
+- Passage'a HTML yorumu girmiyor: `<!-- formula-not-decoded -->` → `[formül N]`,
+  `<!-- image -->` → `[görsel N]` (20×20 pt altı ikonlar düşer). Kutular
+  `parse_provenance.bolgeler`'de. 211 sayfalık doğrulamada işaret = bölge, 211/211.
+- Docling'in formül modeli **kapalı kalıyor** (+0,6 GB kalıcı, 3–5 GB anlık VRAM).
+  Formüller, ayar açıksa, iddia çıkarmadan önce `qwen3.5:4b` ile kırpıntıdan okunuyor
+  (`formula_resolution.py`, önbellek `formula_observations`, göç `0011`) ve `FORMULAS`
+  bloğu olarak `TARGET_CONTENT`'in yanında LLM'e gidiyor. Okuma passage metnine ve
+  `content_hash`'e girmez.
+- Raporda: markdown alıntılarda `$LaTeX$`; Word'de yerel denklem (OMML) — klasik yolda
+  alıntı içinde, sentez yolunda "Ek F. Formül okuma kaydı". Denklem kurulamayan ya da
+  satıra sığmayan formül kaynak kırpıntısıyla basılır.
+- Ayar: `FORMULA_RESOLUTION_ENABLED` (varsayılan **kapalı**), `FORMULA_RESOLUTION_TIMEOUT_S`,
+  `FORMULA_MAX_PER_RUN` (80). Kapalıyken yeni tabloya hiç dokunulmaz.
+
+**Canlıya geçiş adımları:** (1) canlı kopya `/home/cezeri/research-platform`
+bu branch'in gerisinde — önce güncellenmeli; (2) docling imajı yeniden kurulur
+(`regions` + `escape_html`); (3) worker/api imajı yeniden kurulur (`latex2mathml`,
+`mathml2omml`); (4) `migrate` servisi `0011`'i uygular; (5) ayar kapalı açılır, bir
+koşu izlenir, sonra açılır. Docling ve worker değişikliği Docling'in işlediği
+belgelerin `content_hash`'ini **bir kez** kaydırır; yeniden edinilen belge yeni
+SourceVersion olur (kabul edildi).
+
+**Açık kalanlar:**
+- Word'ün kendisinde görsel doğrulama yapılmadı; basım yalnız LibreOffice ile ölçüldü.
+- `mathml2omml` 0.0.2 karekökü şemaya aykırı yazıyor (`<m:rad>` içinde `<m:deg>` yok);
+  `formula_render._omml_onar` onarıyor. Paket güncellenirse onarım ve sıkı basım testi
+  (`test_every_approved_reading_prints_whole_through_libreoffice`) yeniden koşulmalı.
+- Model alıntıyı formülden önceki cümlede kesiyor; Ek F bu yüzden alıntıya değil
+  kanıtın passage'ına bakıyor. Bir formülün yanlış okunması (24'te 1) raporda kaynak
+  kırpıntısı olmadan fark edilmez.
+- pdf-inspector 1.14.1 → 1.19.0 ayrı görev: tüm PDF'lerin fast metni ve yönlendirme
+  girdileri değişir; resmi değerlendiriciyle 380 sayfalık korpusta ölçülmeli.
+- `figure_analysis` Docling'in görsel bölgelerini (`bolgeler`, `tur=gorsel`, başlıklı)
+  aday olarak kullanabilir — PyMuPDF sezgisinin kaçırdıklarını yakalar; sonraki görev.
+- Deney imajları `research-platform-docling:gcc-deney` ve `:formul-bolge`, durdurulmuş
+  `docling-formul-deney` konteyneri silinebilir.
+
+---
+
 ## Kapsam dışı bırakılanlar
 
 **Otomatik retention** — provenance/reproducibility vaadiyle çelişiyor (1. maddeye bakınız).

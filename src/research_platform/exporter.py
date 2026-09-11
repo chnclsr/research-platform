@@ -14,6 +14,7 @@ import yaml
 from .claim_localization import localize_claim_texts
 from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
+from .formula_render import load_formula_displays, markdown_formulas
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
 from .presentation_report import PRESENTATION_REPORT_FALLBACK, build_presentation_report
@@ -389,6 +390,27 @@ async def build_exports(
             for section in synthesis_package.sections
         ],
     )
+    # Readings for the formulas behind the evidence -- in each quote and in the passage
+    # it came from; empty unless FORMULA_RESOLUTION_ENABLED
+    # (formula_render.load_formula_displays).
+    llm_settings = getattr(llm, "settings", None)
+    passage_texts: dict[str, str] = {}
+    if llm_settings is not None and getattr(llm_settings, "formula_resolution_enabled", False):
+        evidence_versions = sorted({str(link.source_version_id) for _, link, _ in evidence})
+        passage_texts = {
+            passage.id: passage.text
+            for passage in await repo.list_passages(run_id, evidence_versions)
+        }
+    formula_displays = await load_formula_displays(
+        repo=repo, store=store, links=[link for _, link, _ in evidence],
+        settings=llm_settings, passage_texts=passage_texts,
+    )
+
+    def quote_md(link: Any, limit: int) -> str:
+        return markdown_formulas(
+            link.quote[:limit], formula_displays.get(str(link.source_version_id), {})
+        )
+
     figure_result = FigurePipelineResult()
     if protocol.output_mode != "raw":
         figure_result = await analyze_run_figures(
@@ -451,7 +473,7 @@ async def build_exports(
                 "\n".join(
                     f"- [{source.title}]({source.url}) — {link.location.get('section_path') or 'Document'}, "
                     f"chars {link.location.get('start_char')}–{link.location.get('end_char')} — "
-                    f"“{link.quote[:400]}” (entailment={link.entailment_score:.2f})"
+                    f"“{quote_md(link, 400)}” (entailment={link.entailment_score:.2f})"
                     for link, source in links
                 )
                 or "- Kaynak pasajı bulunamadı."
@@ -506,7 +528,7 @@ async def build_exports(
                 continue
             seen_claims.add(claim.id)
             unique_findings.append(
-                f"- `{claim.status}` — {claim_display(claim)}  \n  Kanıt: “{link.quote[:350]}”"
+                f"- `{claim.status}` — {claim_display(claim)}  \n  Kanıt: “{quote_md(link, 350)}”"
             )
         finding_text = "\n".join(unique_findings)
         if not finding_text:
@@ -939,6 +961,7 @@ async def build_exports(
         synthesis_package=synthesis_package,
         figure_observations=figure_result.observations,
         research_figures=figure_result.generated_figures,
+        formula_displays=formula_displays,
     )
     files[word_report_name(protocol.label)] = (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

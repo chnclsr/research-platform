@@ -1,0 +1,125 @@
+{
+ "aciklama": "2026-09-11 karantina incelemesindeki 24 formül kırpıntısı ve qwen3.5:4b okumaları. formul: kaynak görüntüyle karşılaştırılıp onaylanan okuma; numara: kutu yalnız denklem numarasını yakalamış, reddedilmesi beklenir; bilinen_hata: modelin makul görünen ama yanlış okuduğu tek formül.",
+ "kirpintilar": [
+  {
+   "dosya": "01030000000109_0.png",
+   "tur": "formul",
+   "beklenen": "x = v . t \\qquad ( 7 )"
+  },
+  {
+   "dosya": "01030000000109_1.png",
+   "tur": "formul",
+   "beklenen": "y = { \\frac { 1 } { 2 } } g t ^ { 2 } \\qquad ( 8 )"
+  },
+  {
+   "dosya": "01030000000109_2.png",
+   "tur": "formul",
+   "beklenen": "t = ( { \\frac { 2 y } { g } } ) ^ { 0 . 5 } \\qquad ( 9 )"
+  },
+  {
+   "dosya": "01030000000109_3.png",
+   "tur": "formul",
+   "beklenen": "x = C _ { v } { \\sqrt { 2 g h } } \\left( { \\frac { 2 y } { g } } \\right) ^ { 0 . 5 } \\, \\ \\ \\ \\ \\ \\ ( 1 0 )"
+  },
+  {
+   "dosya": "01030000000109_4.png",
+   "tur": "formul",
+   "beklenen": "C _ { v } = { \\frac { x } { 2 { \\sqrt { y h } } } } \\qquad ( 1 1 )"
+  },
+  {
+   "dosya": "01030000000109_5.png",
+   "tur": "formul",
+   "beklenen": "s = C _ { d } A _ { o } { \\sqrt { 2 g } } \\qquad ( 1 2 )"
+  },
+  {
+   "dosya": "01030000000111_0.png",
+   "tur": "formul",
+   "beklenen": "v = { \\frac { k } { r } } \\qquad ( 1 )"
+  },
+  {
+   "dosya": "01030000000111_1.png",
+   "tur": "formul",
+   "beklenen": "{ \\frac { v ^ { 2 } } { 2 g } } + z = C \\qquad ( 2 )"
+  },
+  {
+   "dosya": "01030000000111_2.png",
+   "tur": "formul",
+   "beklenen": "{ \\frac { k ^ { 2 } } { 2 g r ^ { 2 } } } + z = C \\qquad ( 3 )"
+  },
+  {
+   "dosya": "01030000000129_0.png",
+   "tur": "numara",
+   "beklenen": "(15.19)"
+  },
+  {
+   "dosya": "01030000000129_1.png",
+   "tur": "numara",
+   "beklenen": "(15.20)"
+  },
+  {
+   "dosya": "01030000000129_2.png",
+   "tur": "numara",
+   "beklenen": "(15.21)"
+  },
+  {
+   "dosya": "01030000000129_3.png",
+   "tur": "numara",
+   "beklenen": "(15.22)"
+  },
+  {
+   "dosya": "01030000000165_0.png",
+   "tur": "formul",
+   "beklenen": "\\text{NaOH} + \\text{H}^+ \\rightarrow \\text{Na}^+ + \\text{H}_2\\text{O}"
+  },
+  {
+   "dosya": "01030000000165_1.png",
+   "tur": "formul",
+   "beklenen": "\\text{cmol}_c\\text{ of NaOH} = 2.5\\text{ mL NaOH} \\times \\frac{1\\text{ L}}{1000\\text{ mL}} \\times \\frac{0.01\\text{ mol NaOH}}{1\\text{ L}} \\times \\frac{1\\text{ mol}_c}{1\\text{ mol NaOH}} \\times \\frac{100\\text{ cmol}_c}{1\\text{ mol}_c} = 0.0025\\text{ mol}_c\\text{ NaOH}"
+  },
+  {
+   "dosya": "01030000000165_2.png",
+   "tur": "formul",
+   "beklenen": "\\frac { \\mathrm { c m o l _ { c } } } { \\mathrm { k g ~ s o i l } } = \\frac { 0 . 0 0 2 5 \\mathrm { ~ c m o l _ { c } } } { 1 \\mathrm { ~ g ~ s o i l } } \\times \\frac { 1 0 0 0 \\mathrm { ~ g ~ s o i l } } { 1 \\mathrm { ~ k g ~ s o i l } } = \\frac { 2 . 5 c m o l _ { c } } { \\mathrm { k g ~ s o i l } }"
+  },
+  {
+   "dosya": "01030000000166_0.png",
+   "tur": "formul",
+   "beklenen": "\\text{Total CEC of the soil} = \\frac{10\\text{ cmol}_c}{\\text{kg clay}} \\times \\frac{10\\text{ kg clay}}{100\\text{ kg soil}} = \\frac{1.0\\text{ cmol}_c}{\\text{kg soil}}"
+  },
+  {
+   "dosya": "data_116_0.png",
+   "tur": "formul",
+   "beklenen": "F = { \\frac { G M _ { 1 } M _ { 2 } } { r ^ { 2 } } }"
+  },
+  {
+   "dosya": "data_116_1.png",
+   "tur": "formul",
+   "beklenen": "[ M L T ^ { - 2 } ] = [ G ] [ M ] [ M ] / [ L ^ { 2 } ]"
+  },
+  {
+   "dosya": "data_116_2.png",
+   "tur": "formul",
+   "beklenen": "[ G ] = [ M ^ { - 1 } L ^ { 3 } T ^ { - 2 } ]"
+  },
+  {
+   "dosya": "data_12_0.png",
+   "tur": "formul",
+   "beklenen": "\\varepsilon _ { r } ( \\omega ) = \\varepsilon _ { \\infty } + { \\frac { \\varepsilon _ { s } } { 1 + ( \\omega \\tau ) ^ { 2 } } } \\qquad \\qquad ( 2 )"
+  },
+  {
+   "dosya": "data_12_1.png",
+   "tur": "formul",
+   "beklenen": "\\sigma ( \\omega ) = \\omega ^ { 2 } \\tau \\varepsilon _ { 0 } { \\frac { \\varepsilon _ { s } - \\varepsilon _ { \\infty } } { 1 + ( \\omega \\tau ) ^ { 2 } } } + \\sigma _ { s } \\qquad \\qquad { \\mathrm { ( 3 ) } }"
+  },
+  {
+   "dosya": "data_12_2.png",
+   "tur": "bilinen_hata",
+   "beklenen": "\\varepsilon ( \\omega ) = \\varepsilon _ { r } ( \\omega ) + i { \\frac { \\sigma ( \\omega ) } { \\omega \\varepsilon _ { 0 } } } = \\varepsilon _ { \\infty } + { \\frac { \\varepsilon _ { s } - \\varepsilon _ { \\infty } } { 1 - i { \\frac { \\sigma _ { s } } { \\omega \\varepsilon _ { 0 } } } } }"
+  },
+  {
+   "dosya": "data_70_0.png",
+   "tur": "formul",
+   "beklenen": "\\eta ( n ) = { \\frac { \\eta _ { 0 } } { 1 + { \\frac { n } { \\tau } } } } \\qquad \\qquad { \\mathrm { ( 4 ) } }"
+  }
+ ]
+}

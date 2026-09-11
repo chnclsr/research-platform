@@ -281,6 +281,9 @@ class SmartPdfParser(DocumentParser):
             "engine_durations_ms": merged.engine_durations_ms,
             "fallback_pages": merged.fallback_pages,
             "quarantined_pages": merged.quarantined_pages,
+            # Formula/picture boxes behind the "[formül N]" / "[görsel N]" placeholders
+            # in the text. Not part of content_hash; read back to crop a formula.
+            "bolgeler": merged.bolgeler,
             "lexical_normalization": decision.get("lexical_normalization") or {},
             "pages": [
                 {"page": page.page_no, "engine": page.engine,

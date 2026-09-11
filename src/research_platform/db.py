@@ -147,6 +147,36 @@ class FigureObservationRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class FormulaObservationRow(Base):
+    """A "[formül N]" placeholder read off the page image (formula_resolution.py).
+
+    Kept out of the passage text on purpose -- see migration 0011. `latex` is empty
+    when the reading was rejected; `status` says why ("ok", "reddedildi:<neden>").
+    """
+
+    __tablename__ = "formula_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_version_id",
+            "image_hash",
+            "vision_model",
+            name="uq_formula_observation_identity",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    source_version_id: Mapped[str] = mapped_column(String(26), index=True)
+    formula_no: Mapped[int] = mapped_column(Integer)
+    page_number: Mapped[int | None] = mapped_column(Integer)
+    image_hash: Mapped[str] = mapped_column(String(64))
+    image_key: Mapped[str] = mapped_column(Text, default="")
+    vision_model: Mapped[str] = mapped_column(String(160))
+    latex: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SourceRelationRow(Base):
     __tablename__ = "source_relations"
     __table_args__ = (

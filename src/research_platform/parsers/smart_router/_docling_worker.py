@@ -58,6 +58,86 @@ def _table_grid(table) -> dict | None:
     }
 
 
+def sayfa_markdown(document, page_no: int) -> str:
+    """
+    One page of a converted document as markdown, the way every Docling path renders it.
+
+    `escape_html=False` because the default HTML-escapes body text: "pH < 5.8" reached
+    passages as "pH &lt; 5.8", in 68 of 114 live PDFs, and nothing downstream unescapes
+    it. Measured 2026-09-11 on 12 PDFs: the unescaped output equals `html.unescape` of
+    the escaped one, byte for byte -- the entities are the only difference. Code and
+    formula items were never escaped by Docling in the first place.
+
+    The service, the bridged worker and the in-process path all call this, so the three
+    cannot drift apart: they produce content_hash-bearing text for the same document.
+    """
+    return document.export_to_markdown(page_no=page_no, escape_html=False)
+
+
+#: A picture smaller than this on both sides, in PDF points, is an icon or a bullet glyph
+#: rather than content. Measured 2026-09-11: 01030000000165 carries two 20x20 pt pictures
+#: with no caption and nothing a reader would call a figure. merge.py drops their marker
+#: instead of numbering it, so "[görsel N]" only ever points at something worth a look.
+IKON_KENAR_PT = 40.0
+
+
+def sayfa_bolgeleri(document, page_no: int) -> list[dict]:
+    """
+    Where the undecoded formulas and the pictures on one page are, in the order
+    `sayfa_markdown` prints their markers.
+
+    Docling's layout model finds a formula even with formula enrichment off -- it has
+    the box, it just does not read it -- and the serializer prints
+    `<!-- formula-not-decoded -->` for exactly those items (empty text, non-empty
+    orig), `<!-- image -->` for each picture. merge.py maps the n-th marker of a kind on
+    a page to the n-th region of that kind, which is only sound if this walks the same
+    items in the same order as the serializer: body layer, document order. A decoded
+    formula is already LaTeX in the text and has no marker, so it is not listed.
+
+    Boxes are in PDF points with a top-left origin, the convention PyMuPDF crops with.
+    Duck-typed on purpose: the platform image imports this module without docling.
+    """
+    try:
+        from docling_core.types.doc import ContentLayer
+
+        katmanlar = {ContentLayer.BODY}
+    except Exception:  # pragma: no cover - only absent where docling is absent
+        katmanlar = None
+    sayfa = (getattr(document, "pages", None) or {}).get(page_no)
+    yukseklik = float(getattr(getattr(sayfa, "size", None), "height", 0.0) or 0.0)
+
+    bolgeler: list[dict] = []
+    for item, _level in document.iterate_items(page_no=page_no,
+                                               included_content_layers=katmanlar):
+        etiket = getattr(item, "label", "")
+        etiket = str(getattr(etiket, "value", etiket))
+        if etiket == "formula":
+            if getattr(item, "text", "") or not getattr(item, "orig", ""):
+                continue
+            tur = "formul"
+        elif etiket in ("picture", "chart"):
+            tur = "gorsel"
+        else:
+            continue
+        prov = next((p for p in getattr(item, "prov", None) or [] if p.page_no == page_no),
+                    None)
+        if prov is None:
+            continue
+        kutu = prov.bbox.to_top_left_origin(page_height=yukseklik)
+        sol, ust, sag, alt = kutu.l, kutu.t, kutu.r, kutu.b
+        bolge = {"tur": tur, "page": page_no,
+                 "bbox": [round(float(v), 1) for v in (sol, ust, sag, alt)]}
+        if tur == "gorsel":
+            try:
+                baslik = item.caption_text(document) or ""
+            except Exception:
+                baslik = ""
+            bolge["caption"] = " ".join(str(baslik).split())[:300]
+            bolge["ikon"] = (sag - sol) < IKON_KENAR_PT and (alt - ust) < IKON_KENAR_PT
+        bolgeler.append(bolge)
+    return bolgeler
+
+
 def cihaz() -> str:
     """Which accelerator Docling actually resolved to -- asked, not guessed.
 
@@ -106,17 +186,24 @@ def run(pdf_path: str, blocks: list[list[int]]) -> dict:
     converter = DocumentConverter()
     pages: dict[int, str] = {}
     tables: list[dict] = []
+    regions: list[dict] = []
     for first, last in blocks:
         # Consecutive pages go in one call: the same 12 pages cost 18.56s grouped
         # against 29.28s one call at a time.
         result = converter.convert(pdf_path, page_range=(first, last))
         for page_no in range(first, last + 1):
             try:
-                pages[page_no] = result.document.export_to_markdown(page_no=page_no)
+                pages[page_no] = sayfa_markdown(result.document, page_no)
             except Exception as exc:
                 # One unreadable page should not cost us the rest of the block.
                 pages[page_no] = ""
                 print(f"page {page_no} failed: {exc}", file=sys.stderr)
+            try:
+                regions.extend(sayfa_bolgeleri(result.document, page_no))
+            except Exception as exc:
+                # Without regions the page still merges; its markers just stay
+                # unnumbered (merge.py). Not worth losing the text over.
+                print(f"regions for page {page_no} skipped: {exc}", file=sys.stderr)
         for table in getattr(result.document, "tables", None) or []:
             try:
                 flattened = _table_grid(table)
@@ -125,7 +212,8 @@ def run(pdf_path: str, blocks: list[list[int]]) -> dict:
                 continue
             if flattened:
                 tables.append(flattened)
-    return {"pages": pages, "tables": tables, "device": cihaz(), "build": yapi()}
+    return {"pages": pages, "tables": tables, "regions": regions,
+            "device": cihaz(), "build": yapi()}
 
 
 def main(argv: list[str]) -> int:

@@ -26,6 +26,7 @@ from docx.shared import Inches, Pt, RGBColor
 from PIL import Image, ImageDraw, ImageFont
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
+from .formula_render import FormulaDisplay, add_formula, add_quote
 from .report_synthesis import (
     _CITATION_RE,
     _LABEL_RE,
@@ -950,6 +951,7 @@ def _build_synthesis_word_report(
     research_mode: str,
     figure_observations: list[FigureObservation],
     research_figures: list[GeneratedResearchFigure],
+    formula_displays: dict[str, dict[int, FormulaDisplay]] | None = None,
 ) -> WordReportResult:
     """Render the synthesis-first report; retrieval diagnostics stay in appendices."""
     turkish = _is_turkish(language)
@@ -1542,6 +1544,64 @@ def _build_synthesis_word_report(
             font_size=7.5,
         )
 
+    # Formulas behind the evidence this report rests on. The synthesis report prints no
+    # verbatim quotes, so without this register a formula the extraction read would never
+    # be seen by the person reading the report. Which formulas count is decided upstream
+    # (formula_render.load_formula_displays: the quote and the passage it came from);
+    # here every one of them is listed once, per cited source version.
+    formula_rows: list[tuple[str, int, FormulaDisplay]] = []
+    seen_versions: set[str] = set()
+    for claim in reportable_claims:
+        for link, source in evidence_by_claim.get(claim.id, []):
+            version_id = str(getattr(link, "source_version_id", ""))
+            if version_id in seen_versions:
+                continue
+            seen_versions.add(version_id)
+            displays = (formula_displays or {}).get(version_id, {})
+            source_number = source_numbers.get(source.id, "?")
+            label = (
+                f"S{int(source_number):02d}" if isinstance(source_number, int)
+                else f"S{source_number}"
+            )
+            formula_rows.extend((label, number, displays[number]) for number in sorted(displays))
+    if formula_rows:
+        document.add_section(WD_SECTION.NEW_PAGE)
+        document.add_heading(
+            "Ek F. Formül okuma kaydı" if turkish else "Appendix F. Formula reading register",
+            level=1,
+        )
+        document.add_paragraph(
+            (
+                "Kanıt metinlerindeki [formül N] işaretleri, ayrıştırıcının formül olarak "
+                "tanıyıp metne dökemediği bölgelerdir. Aşağıdaki formüller bu bölgelerin kaynak "
+                "sayfa görüntüsünden görsel modelle okunmuştur; denkleme dönüştürülemeyenler "
+                "kaynaktaki görüntüsüyle gösterilir. Model okuması kaynakla karşılaştırılarak "
+                "kullanılmalıdır."
+            )
+            if turkish
+            else (
+                "The [formül N] marks in evidence text are regions the parser recognised as "
+                "formulas but could not transcribe. The formulas below were read from the source "
+                "page image by a vision model; those that could not be built into an equation are "
+                "shown as the source image. Check a model reading against the source before "
+                "relying on it."
+            )
+        )
+        formula_table = document.add_table(rows=1, cols=3)
+        headers = ("Kaynak", "İşaret", "Formül") if turkish else ("Source", "Mark", "Formula")
+        for cell, header in zip(formula_table.rows[0].cells, headers):
+            cell.text = header
+        for label, number, display in formula_rows:
+            row = formula_table.add_row().cells
+            if label in linkable_labels:
+                _add_internal_link(row[0].paragraphs[0], label, source_anchor(label))
+            else:
+                row[0].text = label
+            row[1].text = f"[formül {number}]"
+            if not add_formula(row[2].paragraphs[0], display):
+                row[2].text = "—"
+        _style_table(formula_table, [0.6, 1.0, 4.9], font_size=8)
+
     output = io.BytesIO()
     document.save(output)
     return WordReportResult(
@@ -1570,6 +1630,7 @@ def build_word_report(
     synthesis_package: SynthesisPackage | None = None,
     figure_observations: list[FigureObservation] | None = None,
     research_figures: list[GeneratedResearchFigure] | None = None,
+    formula_displays: dict[str, dict[int, FormulaDisplay]] | None = None,
 ) -> WordReportResult:
     """Build a publication-style report from audited run state.
 
@@ -1595,6 +1656,7 @@ def build_word_report(
             research_mode=research_mode,
             figure_observations=figure_observations or [],
             research_figures=research_figures or [],
+            formula_displays=formula_displays,
         )
     family_counts = Counter(str(source.family) for source in sources)
     status_counts = Counter(str(claim.status) for claim in claims)
@@ -1880,8 +1942,12 @@ def build_word_report(
                 paragraph.paragraph_format.first_line_indent = Inches(-0.18)
                 marker = paragraph.add_run("KANIT  ")
                 _set_run_font(marker, size=8.5, color=BLUE, bold=True)
-                quotation = paragraph.add_run(f"“{quote}” ")
-                _set_run_font(quotation, size=9.5, color=INK)
+                add_quote(
+                    paragraph,
+                    quote,
+                    (formula_displays or {}).get(str(getattr(link, "source_version_id", "")), {}),
+                    lambda run: _set_run_font(run, size=9.5, color=INK),
+                )
                 source_number = source_numbers.get(source.id, "?")
                 reference = paragraph.add_run(
                     f"[S{int(source_number):02d}] "

@@ -28,6 +28,8 @@ from .discovery_quality import estimated_completeness, relation_to_candidate, se
 from .embeddings import EmbeddingClient
 from .evidence_quality import evidence_quality_gate, is_non_evidence_section
 from .exporter import build_exports
+from .formula_resolution import FormulaReader, formula_numbers
+from .formula_resolution import formula_notes as formula_notes_block
 from .hardware_telemetry import TelemetryHub
 from .llm import (
     FallbackProvider,
@@ -2968,6 +2970,72 @@ class ResearchPipeline:
             }
         return rebuilt
 
+    async def _read_formulas(
+        self, run_id: str, passages: list[Passage], documents_by_version: dict[str, Any],
+    ) -> dict[str, str]:
+        """
+        Read the "[formül N]" placeholders of the passages evidence extraction is about
+        to see; passage id -> FORMULAS block for extract_claims.
+
+        Off unless FORMULA_RESOLUTION_ENABLED, and then nothing here touches the
+        database -- a deployment that has not run migration 0011 is unaffected.
+        Sequential, before extraction fans out (see formula_resolution.FormulaReader),
+        and under extraction's own eligibility rules, so the budget is not spent on
+        passages that are about to be skipped.
+
+        The PDF and its regions come from the stored source version, not the passage's
+        document payload: NORMALIZE empties raw_content from the checkpointed payload,
+        and a document rebuilt for a recovered passage does not carry parse_provenance.
+        """
+        if not self.settings.formula_resolution_enabled:
+            return {}
+        adaylar: list[tuple[Passage, list[int]]] = []
+        for passage in passages:
+            numbers = formula_numbers(passage.text)
+            payload = documents_by_version.get(passage.source_version_id)
+            if not numbers or payload is None or is_non_evidence_section(passage.section_path):
+                continue
+            metadata = (payload.get("candidate") or {}).get("metadata") or {}
+            if metadata.get("evidence_eligible") is False:
+                continue
+            adaylar.append((passage, numbers))
+        if not adaylar:
+            return {}
+
+        gerekli = {passage.source_version_id for passage, _ in adaylar}
+        surumler: dict[str, tuple[bytes, dict]] = {}
+        for _source, version in await self.repo.list_source_versions(run_id):
+            if version.id not in gerekli:
+                continue
+            try:
+                pdf = base64.b64decode(version.raw_content or "", validate=True)
+            except ValueError:
+                pdf = b""
+            surumler[version.id] = (
+                pdf, (version.provenance or {}).get("parse_provenance") or {}
+            )
+
+        notlar: dict[str, str] = {}
+        baslangic = time.perf_counter()
+        async with httpx.AsyncClient() as client:
+            reader = FormulaReader(client=client, settings=self.settings, repo=self.repo,
+                                   store=self.store, run_id=run_id)
+            for passage, numbers in adaylar:
+                pdf, parse_provenance = surumler.get(passage.source_version_id, (b"", {}))
+                readings = await reader.read(
+                    source_version_id=passage.source_version_id, pdf=pdf,
+                    parse_provenance=parse_provenance, numbers=numbers,
+                )
+                if blok := formula_notes_block(readings):
+                    notlar[passage.id] = blok
+        await self.repo.event(run_id, "formula_resolution", {
+            **reader.ozet(),
+            "passage_count": len(adaylar),
+            "passages_with_notes": len(notlar),
+            "duration_s": round(time.perf_counter() - baslangic, 2),
+        })
+        return notlar
+
     async def extract_evidence(self, state: PipelineState) -> dict:
         await self._boundary(state, "EXTRACT_EVIDENCE")
         protocol = ResearchProtocol.model_validate(state["protocol"])
@@ -3003,6 +3071,9 @@ class ResearchPipeline:
         semaphore = asyncio.Semaphore(self.settings.evidence_extraction_concurrency)
         extraction_errors: list[dict[str, str]] = []
         extraction_rejections: Counter[str] = Counter()
+        formula_notes_by_passage = await self._read_formulas(
+            state["run_id"], passages, documents_by_version
+        )
 
         async def one(passage: Passage):
             async with semaphore:
@@ -3026,6 +3097,7 @@ class ResearchPipeline:
                         page_number=passage.page_number,
                         original_offset=passage.start_char,
                         retrieval_score=passage.retrieval_score,
+                        formula_notes=formula_notes_by_passage.get(passage.id, ""),
                     )
                     deterministic_claims = relevant_sentence_claims(
                         passage,

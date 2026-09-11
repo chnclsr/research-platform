@@ -848,7 +848,7 @@ def test_a_failed_service_call_keeps_the_page_instead_of_losing_it(monkeypatch):
     )
     monkeypatch.setattr(
         engines.HttpDoclingEngine, "_istek",
-        lambda self, path, blocks: ({}, [], "ConnectError: connection refused", "", ""),
+        lambda self, path, blocks: ({}, [], "ConnectError: connection refused", "", "", []),
     )
 
     engine = engines.HttpDoclingEngine()

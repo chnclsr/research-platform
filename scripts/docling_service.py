@@ -39,7 +39,7 @@ from docling.datamodel.pipeline_options import (
 )
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
-from _docling_worker import _table_grid
+from _docling_worker import _table_grid, sayfa_bolgeleri, sayfa_markdown
 
 PORT = int(os.environ.get("DOCLING_PORT", "3941"))
 DEVICE = (os.environ.get("DOCLING_DEVICE") or "cpu").strip().lower()
@@ -185,15 +185,21 @@ def _donustur(yol: str, bloklar: list[tuple[int, int]]) -> dict:
     started = time.perf_counter()
     pages: dict[int, str] = {}
     tables: list[dict] = []
+    regions: list[dict] = []
     for first, last in bloklar:
         result = CONVERTER.convert(yol, page_range=(first, last))
         for page_no in range(first, last + 1):
             try:
-                pages[page_no] = result.document.export_to_markdown(page_no=page_no)
+                pages[page_no] = sayfa_markdown(result.document, page_no)
             except Exception:
                 # One unreadable page must not cost the rest of the block. The client
                 # keeps its fast-path text for whatever does not come back.
                 pages[page_no] = ""
+            try:
+                regions.extend(sayfa_bolgeleri(result.document, page_no))
+            except Exception:
+                # No regions only means the page's markers stay unnumbered.
+                pass
         for table in getattr(result.document, "tables", None) or []:
             try:
                 flattened = _table_grid(table)
@@ -204,6 +210,7 @@ def _donustur(yol: str, bloklar: list[tuple[int, int]]) -> dict:
     return {
         "pages": pages,
         "tables": tables,
+        "regions": regions,
         "device": _cihaz_adi(),
         "build": BUILD,
         "duration_ms": (time.perf_counter() - started) * 1000,

@@ -85,6 +85,10 @@ class MergedDocument:
     #: Pages where the heavy engine produced text but scored no better than the
     #: fast path, so the fast text was kept.
     quarantined_pages: List[int] = field(default_factory=list)
+    #: Undecoded formulas and pictures on the pages a heavy engine won, each carrying
+    #: the `sira` its placeholder in the text reads ("[formül 3]" -> tur=formul,
+    #: sira=3). This is what lets a later stage crop the right box off the page.
+    bolgeler: List[dict] = field(default_factory=list)
     degraded: bool = False
     notes: List[str] = field(default_factory=list)
 
@@ -120,6 +124,64 @@ FORMUL_COZULEMEDI_ISARETI = "<!-- formula-not-decoded -->"
 #: not because it is proven -- entegrasyon_plani.md Bölüm 17 tracks this as
 #: open.
 FORMUL_KATASTROFIK_UZUNLUK_ESIGI = 0.5
+
+#: Docling's marker for a picture. Like the formula marker it is an HTML comment, and
+#: an HTML comment in a passage is noise to every reader of it -- the LLM, the lexical
+#: search, a human. 506 live passages carried it on 2026-09-11.
+GORSEL_ISARETI = "<!-- image -->"
+
+#: What each marker becomes in the merged text: numbered when it could be tied to a
+#: region (so the region can be found again), bare when it could not.
+_YER_TUTUCU = {
+    "formul": (FORMUL_COZULEMEDI_ISARETI, "[formül {n}]", "[formül]"),
+    "gorsel": (GORSEL_ISARETI, "[görsel {n}]", "[görsel]"),
+}
+
+
+def _yer_tutuculari_koy(
+    text: str, bolgeler: Sequence[dict], sayac: Dict[str, int],
+) -> tuple[str, List[dict], List[str]]:
+    """
+    Replace one page's markers with visible placeholders, numbered document-wide.
+
+    The n-th marker of a kind is the n-th region of that kind: `sayfa_bolgeleri` walks
+    the same items in the same order the serializer prints them. When the counts
+    disagree that premise is broken for this page, so nothing is numbered -- a number
+    pointing at the wrong box is worse than none -- and the caller records it.
+
+    Icon-sized pictures lose their marker entirely: there is nothing in them for a
+    reader to look at. Runs AFTER the quarantine decision, so `_karar_ver` keeps seeing
+    the raw formula marker it keys on.
+
+    Returns the new text, the regions that got a number, and the kinds that could not
+    be numbered.
+    """
+    numarali: List[dict] = []
+    eslesmeyen: List[str] = []
+    for tur, (isaret, numarali_bicim, yalin) in _YER_TUTUCU.items():
+        adet = text.count(isaret)
+        if not adet:
+            continue
+        turdekiler = [b for b in bolgeler if b.get("tur") == tur]
+        if len(turdekiler) != adet:
+            text = text.replace(isaret, yalin)
+            eslesmeyen.append(tur)
+            continue
+        parcalar = text.split(isaret)
+        yeni = [parcalar[0]]
+        for bolge, sonraki in zip(turdekiler, parcalar[1:]):
+            if tur == "gorsel" and bolge.get("ikon"):
+                # Drop the marker and the blank line it stood on.
+                if yeni[-1].endswith("\n") and sonraki.startswith("\n"):
+                    sonraki = sonraki.lstrip("\n")
+                yeni.append(sonraki)
+                continue
+            sayac[tur] = sayac.get(tur, 0) + 1
+            numarali.append({**bolge, "sira": sayac[tur]})
+            yeni.append(numarali_bicim.format(n=sayac[tur]))
+            yeni.append(sonraki)
+        text = "".join(yeni)
+    return text, numarali, eslesmeyen
 
 
 @dataclass
@@ -290,6 +352,7 @@ def birlestir(
     winner: Dict[int, tuple[str, str]] = {}
     counts: Dict[str, int] = {}
     table_candidates: List[tuple[str, dict]] = []
+    region_candidates: Dict[tuple[str, int], List[dict]] = {}
     notes: List[str] = []
     degraded = False
 
@@ -310,6 +373,11 @@ def birlestir(
         if getattr(result, "build", ""):
             builds[result.engine] = result.build
         table_candidates.extend((result.engine, table) for table in result.tables)
+        for region in getattr(result, "regions", None) or []:
+            if region.get("page") is not None:
+                region_candidates.setdefault(
+                    (result.engine, int(region["page"])), []
+                ).append(region)
         if result.degraded or not result.ok:
             degraded = True
             if result.error:
@@ -373,10 +441,22 @@ def birlestir(
 
     merged: List[MergedPage] = []
     fallbacks: List[int] = []
+    bolgeler: List[dict] = []
+    sayac: Dict[str, int] = {}
+    numarasiz_sayfalar: List[int] = []
     for page_no in sorted(fast_pages):
         if page_no in winner:
             text, engine = winner[page_no]
             fell_back = False
+            # Only the winning engine's regions: a quarantined attempt's boxes would
+            # number placeholders that are not in the text (same rule as tables below).
+            text, numarali, eslesmeyen = _yer_tutuculari_koy(
+                text, region_candidates.get((engine, page_no), []), sayac
+            )
+            bolgeler.extend(numarali)
+            if eslesmeyen:
+                numarasiz_sayfalar.append(page_no)
+            winner[page_no] = (text, engine)
         else:
             text, engine = fast_pages[page_no], fast_engine
             # A quarantined page is not a miss: the engine answered and we chose
@@ -385,6 +465,9 @@ def birlestir(
             fell_back = page_no in asked_about and page_no not in quarantined
             if fell_back:
                 fallbacks.append(page_no)
+            # The fast path prints no markers today (380-page corpus, 2026-09-11); this
+            # only keeps an HTML comment from ever reaching a passage if one does.
+            text, _, _ = _yer_tutuculari_koy(text or "", [], {})
         counts[engine] = counts.get(engine, 0) + 1
         karar = kararlar.get(page_no)
         merged.append(MergedPage(
@@ -398,6 +481,13 @@ def birlestir(
     if fallbacks:
         degraded = True
         notes.append(f"{len(fallbacks)} pages kept fast-path text after a heavy-engine miss")
+
+    if numarasiz_sayfalar:
+        # Not degraded: the text is whole, only the link back to the box is missing.
+        notes.append(
+            f"{len(numarasiz_sayfalar)} pages had formula/picture markers that did not "
+            f"match their regions; placeholders left unnumbered ({numarasiz_sayfalar})"
+        )
 
     # CODEX-2026-08-18: A quarantined heavy page must not leak that engine's
     # table objects into an otherwise fast-path page.
@@ -414,6 +504,7 @@ def birlestir(
         tables=sorted(tables, key=lambda t: (t.get("page") or 0)),
         quarantined_pages=sorted(quarantined),
         degraded=degraded, notes=notes,
+        bolgeler=bolgeler,
     )
 
 

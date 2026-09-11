@@ -6,6 +6,20 @@ Belge sürümü: `6.52`
 
 Son güncelleme: `2026-09-11`
 
+## Yayınlanmamış — 2026-09-11
+
+- Docling sayfalarında HTML varlıkları kalktı (`escape_html=False`); canlı 114 PDF'in 68'inde
+  `&lt;`/`&amp;` passage'a giriyordu.
+- Passage'lara HTML yorumu girmiyor: çözülemeyen formül `[formül N]`, görsel `[görsel N]`
+  olarak görünür; Docling'in kutuları `parse_provenance.bolgeler`'de tutuluyor.
+- Formüller, `FORMULA_RESOLUTION_ENABLED` açıkken, iddia çıkarmadan önce görsel modelle
+  (`qwen3.5:4b`) sayfa kırpıntısından okunuyor ve LLM'e ayrı bir blok olarak veriliyor;
+  metne ve `content_hash`'e yazılmıyor. Yeni tablo `formula_observations` (göç `0011`).
+- Raporda formüller: markdown'da `$LaTeX$`, Word'de yerel denklem (sentez raporunda
+  "Ek F. Formül okuma kaydı"); kurulamayan veya satıra sığmayan formül kaynak kırpıntısıyla.
+- Yeni bağımlılıklar: `latex2mathml==3.81.1`, `mathml2omml==0.0.2`. Ayrıntı ve canlıya
+  geçiş adımları: `OPEN_ITEMS.md` 46. madde.
+
 ## v0.24.0 — 2026-09-09
 
 - Word kapağı ve tam Markdown raporu, yeni koşularda LLM'in hazırladığı kısa konu

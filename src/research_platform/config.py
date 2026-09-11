@@ -86,6 +86,17 @@ class Settings(BaseSettings):
     figure_source_embedding_enabled: bool = True
     figure_source_max_exports: int = Field(5, ge=0, le=12)
     figure_source_min_confidence: float = Field(0.70, ge=0.0, le=1.0)
+    # Formulas Docling found but did not decode ("[formül N]" in the text) are read off
+    # the page image by `vision_model` -- only for passages a run actually extracts
+    # evidence from. Off by default: it adds a vision call per formula, and the
+    # formula_observations table (migration 0011) has to exist before it is turned on.
+    # Measured 2026-09-11 on 24 formulas: ~1.45 s each on a warm qwen3.5:4b, 23/24
+    # read correctly; the LaTeX never enters passages or content_hash.
+    formula_resolution_enabled: bool = False
+    formula_resolution_timeout_s: float = Field(60.0, ge=5.0, le=600.0)
+    # Upper bound per run, so a formula-dense corpus cannot stretch a run unbounded:
+    # 80 is about two minutes of vision calls and covers the worst run seen (77).
+    formula_max_per_run: int = Field(80, ge=0, le=1000)
     # Which PDF page goes to the heavy engine. The file is the unit of change: its
     # contents are hashed into `esik_version` and written to provenance, so a
     # threshold cannot move without the version moving with it. Read once at import

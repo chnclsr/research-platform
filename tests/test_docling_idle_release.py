@@ -59,7 +59,11 @@ def _sahte_moduller(sayac: dict) -> dict:
         ),
         "docling.datamodel.pipeline_options": pipeline_options,
         "docling.document_converter": converter,
-        "_docling_worker": SimpleNamespace(_table_grid=lambda t: {}),
+        "_docling_worker": SimpleNamespace(
+            _table_grid=lambda t: {},
+            sayfa_markdown=lambda d, p: "",
+            sayfa_bolgeleri=lambda d, p: [],
+        ),
     }
 
 

@@ -33,6 +33,10 @@ dependencies = [
   "pillow>=10,<12",
   "python-docx>=1.1,<2",
   "python-pptx>=1.0,<2",
+  # Formula readings printed as Word equations (formula_render.py). Pinned: the pair
+  # was measured on the 24 formulas of 2026-09-11, and mathml2omml is a young package.
+  "latex2mathml==3.81.1",
+  "mathml2omml==0.0.2",
   "psutil>=6.1,<8",
   "python-multipart>=0.0.20,<1",
   "pyyaml>=6.0,<7",

@@ -107,6 +107,9 @@ class EngineResult:
     pages: Dict[int, str] = field(default_factory=dict)
     #: Tables recovered as a grid, not as prose: {"page", "headers", "rows"}.
     tables: List[dict] = field(default_factory=list)
+    #: Undecoded formulas and pictures, in marker order per page: {"tur", "page",
+    #: "bbox", ...} -- see _docling_worker.sayfa_bolgeleri. merge.py numbers them.
+    regions: List[dict] = field(default_factory=list)
     ok: bool = True
     error: Optional[str] = None
     degraded: bool = False
@@ -217,10 +220,11 @@ class DoclingEngine:
         mode = self._mode()
         runner = self._in_process if mode == "in-process" else self._bridged
         try:
-            produced, tables, error, device, build = runner(pdf_path, blocks)
+            produced, tables, error, device, build, regions = runner(pdf_path, blocks)
         except Exception as exc:
             produced, tables, error = {}, [], f"{type(exc).__name__}: {exc}"
             device = build = ""
+            regions = []
         finally:
             _AGIR_KAPI.release()
 
@@ -229,6 +233,7 @@ class DoclingEngine:
             engine=self.name,
             pages=produced,
             tables=tables,
+            regions=regions,
             ok=error is None and not missing,
             error=error or (f"{len(missing)} pages not produced" if missing else None),
             degraded=bool(error) or bool(missing),
@@ -244,16 +249,21 @@ class DoclingEngine:
         os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
         from docling.document_converter import DocumentConverter
 
-        from ._docling_worker import _table_grid, cihaz, yapi
+        from ._docling_worker import _table_grid, cihaz, sayfa_bolgeleri, sayfa_markdown, yapi
 
         converter = DocumentConverter()
         pages: Dict[int, str] = {}
         tables: List[dict] = []
+        regions: List[dict] = []
         for first, last in blocks:
             result = converter.convert(pdf_path, page_range=(first, last))
             for page_no in range(first, last + 1):
                 try:
-                    pages[page_no] = result.document.export_to_markdown(page_no=page_no)
+                    pages[page_no] = sayfa_markdown(result.document, page_no)
+                except Exception:
+                    pass
+                try:
+                    regions.extend(sayfa_bolgeleri(result.document, page_no))
                 except Exception:
                     pass
             for table in getattr(result.document, "tables", None) or []:
@@ -263,7 +273,7 @@ class DoclingEngine:
                     continue
                 if flattened:
                     tables.append(flattened)
-        return pages, tables, None, cihaz(), yapi()
+        return pages, tables, None, cihaz(), yapi(), regions
 
     def _bridged(
         self, pdf_path: str, blocks: List[Tuple[int, int]]
@@ -287,18 +297,21 @@ class DoclingEngine:
         except subprocess.TimeoutExpired:
             # The process is killed by the time this raises -- that is the whole
             # reason the bridged mode exists.
-            return {}, [], f"timeout after {self.timeout_s:.0f}s", "", ""
+            return {}, [], f"timeout after {self.timeout_s:.0f}s", "", "", []
 
         payload = _son_isaretli_satir(completed.stdout)
         if payload is None:
             tail = (completed.stderr or completed.stdout or "").strip()[-400:]
             return ({}, [],
-                    f"worker produced no result (exit {completed.returncode}): {tail}", "", "")
+                    f"worker produced no result (exit {completed.returncode}): {tail}", "", "",
+                    [])
         if "error" in payload:
-            return {}, [], str(payload["error"]), "", ""
+            return {}, [], str(payload["error"]), "", "", []
         return ({int(k): v for k, v in (payload.get("pages") or {}).items()},
                 list(payload.get("tables") or []), None,
-                str(payload.get("device") or ""), str(payload.get("build") or ""))
+                str(payload.get("device") or ""), str(payload.get("build") or ""),
+                # An older service build sends no regions: markers stay unnumbered.
+                list(payload.get("regions") or []))
 
 
 #: How long a service /health answer is reused. Probing per document would spend a
@@ -395,10 +408,11 @@ class HttpDoclingEngine:
 
         blocks = [docling_page_range(b) for b in ardisik_bloklar(wanted)]
         try:
-            produced, tables, error, device, build = self._istek(pdf_path, blocks)
+            produced, tables, error, device, build, regions = self._istek(pdf_path, blocks)
         except Exception as exc:
             produced, tables, error = {}, [], f"{type(exc).__name__}: {exc}"
             device = build = ""
+            regions = []
         finally:
             _AGIR_KAPI.release()
 
@@ -407,6 +421,7 @@ class HttpDoclingEngine:
             engine=self.name,
             pages=produced,
             tables=tables,
+            regions=regions,
             ok=error is None and not missing,
             error=error or (f"{len(missing)} pages not produced" if missing else None),
             degraded=bool(error) or bool(missing),
@@ -435,15 +450,18 @@ class HttpDoclingEngine:
             response.raise_for_status()
             payload = response.json()
         except Exception as exc:
-            return {}, [], f"{type(exc).__name__}: {exc}", "", ""
+            return {}, [], f"{type(exc).__name__}: {exc}", "", "", []
 
         if not isinstance(payload, dict):
-            return {}, [], f"service returned {type(payload).__name__}, expected an object", "", ""
+            return ({}, [], f"service returned {type(payload).__name__}, expected an object",
+                    "", "", [])
         if "error" in payload:
-            return {}, [], str(payload["error"]), "", ""
+            return {}, [], str(payload["error"]), "", "", []
         return ({int(k): v for k, v in (payload.get("pages") or {}).items()},
                 list(payload.get("tables") or []), None,
-                str(payload.get("device") or ""), str(payload.get("build") or ""))
+                str(payload.get("device") or ""), str(payload.get("build") or ""),
+                # An older service build sends no regions: markers stay unnumbered.
+                list(payload.get("regions") or []))
 
 
 class MinerUEngine:
