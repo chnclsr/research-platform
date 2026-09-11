@@ -8,6 +8,7 @@ evidence packet and may cite only stable source labels such as ``[S03]``.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field, replace
@@ -214,7 +215,13 @@ def _sentences(text: str) -> list[str]:
 
 
 def _ground_sentence(sentence: str, source_text: str) -> str:
-    """Keep a selected fallback sentence tied to the citations of its source field."""
+    """Keep a selected fallback sentence tied to the citations of its source field.
+
+    Re-attaching stays deliberately WITHIN one field: the labels come from the very text the
+    sentence was taken out of, so the source is already standing behind this prose. Widening
+    it -- to a neighbouring field, or to the tail a budget just cut away -- would be claiming
+    support that was never given, which is a different thing from keeping support intact.
+    """
     if _TOKEN_RE.search(sentence):
         return sentence
     citations = list(dict.fromkeys(_TOKEN_RE.findall(source_text)))[:3]
@@ -226,7 +233,12 @@ def _ground_sentence(sentence: str, source_text: str) -> str:
 
 
 def _bounded_grounded_join(values: list[str], max_chars: int) -> str:
-    """Join only complete, grounded sentences without slicing a visible report field."""
+    """Join only complete, grounded sentences, dropping any that will not fit.
+
+    Greedy packing: a sentence too long for the remaining room is skipped and the next one
+    tried. Returning "" when nothing fits is expected -- `_grounded_excerpt` carries the
+    tighter budgets from there, and it is the one that must not drop the provenance.
+    """
     selected: list[str] = []
     size = 0
     for value in values:
@@ -240,16 +252,86 @@ def _bounded_grounded_join(values: list[str], max_chars: int) -> str:
     return " ".join(selected)
 
 
-def _prompt_excerpt(value: str, max_chars: int) -> str:
-    """Make a compact internal-only excerpt, preferring complete sentences."""
+def _grounded_excerpt(value: str, max_chars: int) -> tuple[str, bool]:
+    """A compact internal excerpt, and whether it kept the source's provenance.
+
+    The last layer cuts at the last `[Sxx]` that fits rather than at the last space. It only
+    ever REMOVES a tail: every citation that survives was attached by the model to the prose
+    that survives with it. Nothing is moved, copied or re-attached -- a citation lifted out
+    of the deleted tail would be asserting that a source backs a clause it never saw.
+
+    Measured on run 01M25XYS6ETQVXMPY24HXVKNXG: a 17-packet theme gave each card field 90
+    characters, no whole sentence fit, and the plain word-boundary slice handed the merge
+    model citation-free fragments. Its own prompt then forbids inventing a citation, so four
+    of five report sections reached the reader with no provenance at all.
+
+    The flag is the measurement that was missing: a caller can count the fields whose
+    citations did not survive instead of discovering it in the finished report.
+    """
     cleaned = " ".join(value.split())
+    had_citation = bool(_TOKEN_RE.search(cleaned))
+
+    def result(text: str) -> tuple[str, bool]:
+        return text, (not had_citation) or bool(_TOKEN_RE.search(text))
+
     if len(cleaned) <= max_chars:
-        return cleaned
+        return result(cleaned)
     complete = _bounded_grounded_join([cleaned], max_chars)
     if complete:
-        return complete
+        return result(complete)
+    fitting = [match for match in _TOKEN_RE.finditer(cleaned) if match.end() <= max_chars]
+    if fitting:
+        return result(cleaned[: fitting[-1].end()])
     boundary = cleaned.rfind(" ", 0, max_chars)
-    return cleaned[: boundary if boundary > 0 else max_chars].rstrip()
+    return result(cleaned[: boundary if boundary > 0 else max_chars].rstrip())
+
+
+def _prompt_excerpt(value: str, max_chars: int) -> str:
+    """Make a compact internal-only excerpt, preferring complete sentences."""
+    return _grounded_excerpt(value, max_chars)[0]
+
+
+#: How a consolidation card divides its room between the four prose fields.
+_CARD_FIELD_WEIGHTS = {
+    "synthesis": 0.55,
+    "consensus": 0.15,
+    "disagreements": 0.15,
+    "implications": 0.15,
+}
+#: Measured on run 01M25XYS6ETQVXMPY24HXVKNXG: a 407-character secondary field kept every
+#: citation, a 237-character one kept none. The floor sits just under the width that worked.
+#: Being too high costs one more reduction round; being too low costs the report's entire
+#: provenance, which is what happened.
+_CARD_MIN_SECONDARY_CHARS = 400
+#: "PASS n" plus the four field labels.
+_CARD_LABEL_CHARS = 60
+#: Derived from the weights so that changing them moves the floor with them.
+_CONSOLIDATION_PASS_FLOOR = int(_CARD_MIN_SECONDARY_CHARS / min(_CARD_FIELD_WEIGHTS.values()))
+
+
+def _consolidation_fan_in(budget: int) -> int:
+    """How many drafts one merge call may carry and still show each its citations.
+
+    A fan-in of 1 would never reduce anything, so two is the floor: the tree always makes
+    progress, even on a budget too small to honour `_CONSOLIDATION_PASS_FLOOR`.
+    """
+    return max(2, budget // (_CONSOLIDATION_PASS_FLOOR + _CARD_LABEL_CHARS))
+
+
+def _balanced_chunks(count: int, fan_in: int) -> list[int]:
+    """Split `count` items into near-equal groups of at most `fan_in`.
+
+    Balanced rather than greedy on purpose. Greedy packing of 17 at a fan-in of 8 gives
+    [8, 8, 1], and that lone draft then competes in the next round against nodes that each
+    compressed eight -- a real asymmetry in how much of the evidence survived. [6, 6, 5]
+    keeps the passes comparable, and never produces a one-member group that would have to
+    be carried rather than merged.
+    """
+    if count <= 0:
+        return []
+    groups = math.ceil(count / fan_in)
+    base, extra = divmod(count, groups)
+    return [base + 1] * extra + [base] * (groups - extra)
 
 
 #: report_language is Literal["tr", "en"], so this stays a closed map rather than a
@@ -306,6 +388,10 @@ def _prompt_char_budget(llm: LLMProvider) -> int:
     Measured on a live run, this content runs about 2.9 characters per token; the two used
     here is deliberately below that, because being wrong in this direction only wastes a
     little context and being wrong in the other truncates a section.
+
+    The 24000 ceiling saturates at `llm_context_tokens == 15584`, so raising the setting
+    past 16384 buys nothing here and only enlarges the KV cache. If a bigger window is ever
+    genuinely needed, this ceiling is the thing to revisit -- not the setting.
     """
     settings = getattr(llm, "settings", None)
     context_tokens = int(getattr(settings, "llm_context_tokens", 8192))
@@ -329,28 +415,38 @@ def _section_packet_budget(
     )
 
 
-def _overview_digest(sections: list[SynthesisSection], max_chars: int) -> str:
-    """Create balanced theme cards instead of truncating one monolithic digest."""
+def _overview_digest(sections: list[SynthesisSection], max_chars: int) -> tuple[str, int]:
+    """Create balanced theme cards instead of truncating one monolithic digest.
+
+    Returns the digest and the number of card fields whose citations the budget cut away.
+    This divides one budget by the theme count exactly the way `_consolidate_passes` does,
+    so it fails the same way at scale: with five themes and 205 sources the secondary fields
+    come to roughly 220 characters, under the 400 that was measured to keep a citation.
+    """
     if not sections:
-        return ""
+        return "", 0
     per_theme = max(900, max_chars // len(sections))
     cards: list[str] = []
+    ungrounded = 0
     for section in sections:
         synthesis_budget = max(360, int(per_theme * 0.46))
         secondary_budget = max(140, int(per_theme * 0.16))
-        rows = [
-            f"THEME: {_prompt_excerpt(section.title, 240)}",
-            f"SYNTHESIS: {_prompt_excerpt(section.synthesis, synthesis_budget)}",
-            f"CONSENSUS: {_prompt_excerpt(section.consensus, secondary_budget)}",
-            f"DISAGREEMENTS: {_prompt_excerpt(section.disagreements, secondary_budget)}",
-            f"IMPLICATIONS: {_prompt_excerpt(section.implications, secondary_budget)}",
-        ]
+        rows = [f"THEME: {_prompt_excerpt(section.title, 240)}"]
+        for label, value, budget in (
+            ("SYNTHESIS", section.synthesis, synthesis_budget),
+            ("CONSENSUS", section.consensus, secondary_budget),
+            ("DISAGREEMENTS", section.disagreements, secondary_budget),
+            ("IMPLICATIONS", section.implications, secondary_budget),
+        ):
+            excerpt, grounded = _grounded_excerpt(value, budget)
+            ungrounded += int(not grounded)
+            rows.append(f"{label}: {excerpt}")
         cards.append("\n".join(rows))
     digest = "\n\n".join(cards)
     if len(digest) <= max_chars:
-        return digest
+        return digest, ungrounded
     boundary = digest.rfind("\n\n", 0, max_chars)
-    return digest[: boundary if boundary > 0 else max_chars].rstrip()
+    return digest[: boundary if boundary > 0 else max_chars].rstrip(), ungrounded
 
 
 def _metadata(source: Any) -> dict[str, Any]:
@@ -1015,45 +1111,58 @@ async def _draft_section(
     return failed, False, f"unavailable:{'+'.join(errors) or 'unknown'}"
 
 
-async def _consolidate_passes(
+def _pass_cards(passes: list[SynthesisSection], budget: int) -> tuple[str, int]:
+    """Render one merge prompt's PASSES block, and count the fields that lost citations.
+
+    The floor is `_CONSOLIDATION_PASS_FLOOR` rather than the old 600: below it the card
+    fields are too narrow to carry an `[Sxx]`, and a merge model that is shown no citation
+    is forbidden by its own prompt from writing one. `_consolidation_fan_in` normally keeps
+    the division above the floor, so this only binds on a context too small to honour it --
+    and there, overflowing the budget by a little beats handing over unattributable prose.
+    """
+    per_pass = max(_CONSOLIDATION_PASS_FLOOR, budget // max(1, len(passes)))
+    cards: list[str] = []
+    ungrounded = 0
+    for number, section in enumerate(passes, 1):
+        rows = [f"PASS {number}"]
+        for label, value in (
+            ("SYNTHESIS", section.synthesis),
+            ("CONSENSUS", section.consensus),
+            ("DISAGREEMENTS", section.disagreements),
+            ("IMPLICATIONS", section.implications),
+        ):
+            excerpt, grounded = _grounded_excerpt(
+                value, int(per_pass * _CARD_FIELD_WEIGHTS[label.lower()])
+            )
+            ungrounded += int(not grounded)
+            rows.append(f"{label}: {excerpt}")
+        cards.append("\n".join(rows))
+    return "\n\n".join(cards), ungrounded
+
+
+async def _reduce_group(
     llm: LLMProvider,
     *,
     question: str,
     title: str,
-    passes: list[SynthesisSection],
+    group: list[SynthesisSection],
+    budget: int,
     language: str,
-    turkish: bool,
-    scope_context: str = "",
-) -> tuple[SynthesisSection, bool, str]:
-    """Integrate multiple model passes, retrying only unusable/transport failures."""
+    scope_context: str,
+) -> tuple[SynthesisSection | None, str, list[str], int]:
+    """Merge one group of drafts, retrying only unusable/transport failures.
+
+    A node's `source_ids` is its own group's union, not the theme's: it was only ever shown
+    its group's cards, so a label from another group appearing in its prose really would be
+    invented, and `unknown_citations` should say so.
+    """
     allowed_ids = list(
-        dict.fromkeys(source_id for section in passes for source_id in section.source_ids)
+        dict.fromkeys(source_id for section in group for source_id in section.source_ids)
     )
     claim_ids = list(
-        dict.fromkeys(claim_id for section in passes for claim_id in section.claim_ids)
+        dict.fromkeys(claim_id for section in group for claim_id in section.claim_ids)
     )
-    budget = max(
-        1500,
-        _prompt_char_budget(llm)
-        - len(question)
-        - len(title)
-        - len(scope_context)
-        - (len(allowed_ids) * 8)
-        - 500,
-    )
-    per_pass = max(600, budget // max(1, len(passes)))
-    cards = "\n\n".join(
-        "\n".join(
-            [
-                f"PASS {number}",
-                f"SYNTHESIS: {_prompt_excerpt(section.synthesis, int(per_pass * 0.55))}",
-                f"CONSENSUS: {_prompt_excerpt(section.consensus, int(per_pass * 0.15))}",
-                f"DISAGREEMENTS: {_prompt_excerpt(section.disagreements, int(per_pass * 0.15))}",
-                f"IMPLICATIONS: {_prompt_excerpt(section.implications, int(per_pass * 0.15))}",
-            ]
-        )
-        for number, section in enumerate(passes, 1)
-    )
+    cards, ungrounded = _pass_cards(group, budget)
     errors: list[str] = []
     for attempt in range(2):
         try:
@@ -1082,10 +1191,10 @@ async def _consolidate_passes(
             claim_ids=claim_ids,
             language=language,
             consensus_allowed=any(
-                section.consensus
+                item.consensus
                 and "consensus:no_multi_source_moderate_evidence"
-                not in section.validation_warnings
-                for section in passes
+                not in item.validation_warnings
+                for item in group
             ),
         )
         if section is None:
@@ -1094,16 +1203,70 @@ async def _consolidate_passes(
         warnings = list(
             dict.fromkeys(
                 [
-                    *(warning for item in passes for warning in item.validation_warnings),
+                    *(warning for item in group for warning in item.validation_warnings),
                     *section.validation_warnings,
                 ]
             )
         )
-        note = "consolidated_visible" if attempt == 0 else "consolidated_retry_visible"
-        if warnings:
-            note += ":warnings"
-        return replace(section, validation_warnings=warnings), True, note
+        return (
+            replace(section, validation_warnings=warnings),
+            "initial" if attempt == 0 else "retry",
+            errors,
+            ungrounded,
+        )
+    return None, "unavailable", errors, ungrounded
 
+
+async def _consolidate_passes(
+    llm: LLMProvider,
+    *,
+    question: str,
+    title: str,
+    passes: list[SynthesisSection],
+    language: str,
+    turkish: bool,
+    scope_context: str = "",
+) -> tuple[SynthesisSection, bool, str, dict[str, Any]]:
+    """Integrate multiple model passes, reducing in rounds when there are too many.
+
+    One prompt budget used to be divided by however many drafts a theme produced, with only
+    a 600-character floor under it. Measured on run 01M25XYS6ETQVXMPY24HXVKNXG: a 17-packet
+    theme drove each card field to 90 characters, the citations were cut off, and four of
+    the report's five sections reached the reader carrying no `[Sxx]` at all. The one theme
+    that stayed under the fan-in cited every source it was offered.
+
+    So the division is bounded instead of floored: at most `_consolidation_fan_in(budget)`
+    drafts per merge, reduced round by round until one section remains. That makes
+    "every pass is shown its citations" an invariant of the tree rather than a property of
+    how big the theme happened to be.
+    """
+    allowed_ids = list(
+        dict.fromkeys(source_id for section in passes for source_id in section.source_ids)
+    )
+    claim_ids = list(
+        dict.fromkeys(claim_id for section in passes for claim_id in section.claim_ids)
+    )
+    budget = max(
+        1500,
+        _prompt_char_budget(llm)
+        - len(question)
+        - len(title)
+        - len(scope_context)
+        - (len(allowed_ids) * 8)
+        - 500,
+    )
+    # Sized once from the whole theme's label list, so every level shares one fan-in and the
+    # shape of the tree is predictable. Intermediate nodes carry shorter lists, which only
+    # makes the estimate conservative.
+    fan_in = _consolidation_fan_in(budget)
+    topology: dict[str, Any] = {
+        "fan_in": fan_in,
+        "rounds": 0,
+        "group_sizes": [],
+        "calls": 0,
+        "pass_cards_ungrounded": 0,
+        "trace": "",
+    }
     unavailable = SynthesisSection(
         title=title,
         synthesis=(
@@ -1113,12 +1276,81 @@ async def _consolidate_passes(
         ),
         source_ids=allowed_ids,
         claim_ids=claim_ids,
-        validation_warnings=[
-            "llm_synthesis_unavailable",
-            *[f"consolidation:{error}" for error in errors],
-        ],
     )
-    return unavailable, False, f"consolidation_unavailable:{'+'.join(errors) or 'unknown'}"
+
+    current = list(passes)
+    round_traces: list[str] = []
+    any_retry = False
+    while True:
+        sizes = _balanced_chunks(len(current), fan_in)
+        topology["rounds"] += 1
+        topology["group_sizes"].append(sizes)
+        merged: list[SynthesisSection] = []
+        notes: list[str] = []
+        offset = 0
+        for size in sizes:
+            group = current[offset : offset + size]
+            offset += size
+            if size == 1:
+                # An odd count at a small fan-in leaves one draft over. Merging it with
+                # itself would spend a call to rewrite prose that is already final, and
+                # every rewrite is another chance to drop a citation. Carry it instead.
+                merged.append(group[0])
+                notes.append("1=carried")
+                continue
+            section, note, errors, ungrounded = await _reduce_group(
+                llm,
+                question=question,
+                title=title,
+                group=group,
+                budget=budget,
+                language=language,
+                scope_context=scope_context,
+            )
+            topology["calls"] += 1
+            topology["pass_cards_ungrounded"] += ungrounded
+            notes.append(f"{size}={note}")
+            if section is None:
+                # A failure at any level fails the theme. Carrying the surviving branches
+                # forward would publish part of a theme as if it were the whole, which is
+                # the defect `llm_synthesis_partial_packet_failure` exists to prevent.
+                round_traces.append("+".join(notes))
+                topology["trace"] = "|".join(
+                    f"r{index}:{trace}" for index, trace in enumerate(round_traces, 1)
+                )
+                return (
+                    replace(
+                        unavailable,
+                        validation_warnings=[
+                            "llm_synthesis_unavailable",
+                            *[f"consolidation:{error}" for error in errors],
+                        ],
+                    ),
+                    False,
+                    f"consolidation_unavailable:{'+'.join(errors) or 'unknown'}",
+                    topology,
+                )
+            any_retry = any_retry or note == "retry"
+            merged.append(section)
+        round_traces.append("+".join(notes))
+        current = merged
+        if len(current) == 1:
+            break
+
+    topology["trace"] = "|".join(
+        f"r{index}:{trace}" for index, trace in enumerate(round_traces, 1)
+    )
+    # The theme's full union is forced onto the root: `source_ids` means "offered to the
+    # model" (see SynthesisSection), and every packet's sources were offered even where a
+    # branch cited none of them. Warnings reach the root transitively, each node having
+    # merged its group's.
+    root = replace(current[0], source_ids=allowed_ids, claim_ids=claim_ids)
+    note = "consolidated_retry_visible" if any_retry else "consolidated_visible"
+    if topology["rounds"] > 1:
+        note += f":r{topology['rounds']}"
+    if root.validation_warnings:
+        note += ":warnings"
+    return root, True, note, topology
 
 
 async def _draft_overview(
@@ -1144,7 +1376,7 @@ async def _draft_overview(
         3000,
         _prompt_char_budget(llm) - len(question) - (len(allowed) * 8) - 500,
     )
-    section_digest = _overview_digest(sections, digest_budget)
+    section_digest, digest_ungrounded = _overview_digest(sections, digest_budget)
     if not section_digest or not allowed:
         values = {
             "executive_summary": unavailable,
@@ -1208,6 +1440,11 @@ async def _draft_overview(
                 f"{overlap['left']}:overlap_with_{overlap['right']}"
             )
         note = "initial_visible" if attempt == 0 else "retry_visible"
+        # Before `:warnings`, so the suffix that consumers already look for stays last.
+        # A non-zero count means the digest handed this layer prose whose citations the
+        # budget had cut off -- the overview can then only be as grounded as what it saw.
+        if digest_ungrounded:
+            note += f":ungrounded={digest_ungrounded}"
         if warnings:
             note += ":warnings"
         return values, complete, note, warnings
@@ -1316,6 +1553,10 @@ async def build_synthesis_package(
         drafts: list[SynthesisSection] = []
         pass_notes: list[str] = []
         drafted_claim_ids: list[str] = []
+        # Stays None for a theme that never reached consolidation -- one packet, or a packet
+        # failure. Absent rather than zeroed, so "no reduce happened" and "a reduce happened
+        # in one round" stay distinguishable in the record.
+        reduce_topology: dict[str, Any] | None = None
         attempted_packets = packets or [EvidencePacket("", [], [])]
         for packet in attempted_packets:
             drafted, drafted_ok, note = await _draft_section(
@@ -1362,7 +1603,7 @@ async def build_synthesis_package(
         elif len(drafts) == 1:
             section, succeeded, diagnostic = drafts[0], True, pass_notes[0]
         else:
-            section, succeeded, note = await _consolidate_passes(
+            section, succeeded, note, reduce_topology = await _consolidate_passes(
                 llm,
                 question=question,
                 title=title,
@@ -1393,6 +1634,10 @@ async def build_synthesis_package(
                 "passes": len(packets),
                 "passes_drafted": len(drafts),
                 "passes_used": len(drafts) if succeeded else 0,
+                # `passes*` above stay leaf counts; the reduce record describes the tree that
+                # merged them. `pass_cards_ungrounded > 0` means a card field still lost its
+                # citations, which is the signal that the fan-in floor is mis-derived.
+                **({"reduce": reduce_topology} if reduce_topology else {}),
             }
         )
         # The diagnostic travels with the section as well as in the run-level map. Reading
@@ -1402,6 +1647,10 @@ async def build_synthesis_package(
         sections.append(replace(section, generation_note=diagnostic))
         llm_successes += int(succeeded)
         generation_diagnostics[f"theme_{index}"] = diagnostic
+        # A separate key: `theme_{index}` has readers that parse its shape, and the reduce
+        # trace is a different question ("how was it merged", not "did it come out").
+        if reduce_topology:
+            generation_diagnostics[f"theme_{index}_reduce"] = reduce_topology["trace"]
     # Overlap remains observable below, but it no longer deletes model-written sections.
     collapsed_sections: list[dict[str, Any]] = []
     if report_mode == "standard" and len(sections) < 2:

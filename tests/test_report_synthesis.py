@@ -7,7 +7,10 @@ from typing import Any
 from research_platform.llm import LLMProvider
 from research_platform.report_synthesis import (
     SynthesisSection,
+    _balanced_chunks,
     _claim_evidence_block,
+    _consolidation_fan_in,
+    _grounded_excerpt,
     _language_directive,
     _draft_overview,
     _evidence_packets,
@@ -16,6 +19,7 @@ from research_platform.report_synthesis import (
     _scope_anchors,
     _section_packet_budget,
     build_synthesis_package,
+    cited_labels,
 )
 from research_platform.text_similarity import prose_overlaps
 
@@ -1041,10 +1045,23 @@ class MultiPassLLM(LLMProvider):
     second pass onward and would exercise the repair ladder instead of consolidation.
     """
 
-    def __init__(self, *, consolidation_valid: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        consolidation_valid: bool = True,
+        context_tokens: int = 8192,
+        max_output_tokens: int = 2048,
+    ) -> None:
         self.consolidation_valid = consolidation_valid
         self.drafts = 0
         self.consolidations = 0
+        # `_prompt_char_budget` reads these off the provider. Without them it falls back to
+        # its own defaults and a test cannot size the packet or card budgets at all, which
+        # is why the many-packet scale went unexercised.
+        self.settings = SimpleNamespace(
+            llm_context_tokens=context_tokens,
+            llm_max_output_tokens=max_output_tokens,
+        )
 
     async def complete_json(self, system: str, user: str):
         if "integrative layer" in system:
@@ -1076,8 +1093,8 @@ class MultiPassLLM(LLMProvider):
         }
 
 
-async def _multi_pass_package(llm: LLMProvider):
-    sources, claims, evidence, _labels = _packet_fixture(24)
+async def _multi_pass_package(llm: LLMProvider, *, claims_count: int = 24):
+    sources, claims, evidence, _labels = _packet_fixture(claims_count)
     return await build_synthesis_package(
         llm=llm,
         question="Does the method improve the measured outcome?",
@@ -1336,3 +1353,199 @@ async def test_language_directive_does_not_displace_the_invention_guards() -> No
     drafting = next(s for s in llm.systems if "evidence-grounded thematic section" in s)
     assert "Never invent a source, number, method, population, result, or URL." in drafting
     assert "consensus_eligible=true" in drafting
+
+
+# --------------------------------------------------------------------------------------
+# Citation survival through truncation and consolidation.
+#
+# Run 01M25XYS6ETQVXMPY24HXVKNXG shipped a report whose body prose carried 25 [Sxx] markers
+# across 205 sources, and four of its five sections carried none at all. The theme that
+# needed only three packets cited every source it was offered; the ones needing five and
+# seventeen cited nothing. These tests pin the two mechanisms behind that split.
+# --------------------------------------------------------------------------------------
+
+
+def test_an_excerpt_that_fits_is_returned_whole() -> None:
+    text = "A single grounded sentence [S03]."
+    assert _grounded_excerpt(text, 200) == (text, True)
+
+
+def test_an_excerpt_prefers_a_complete_grounded_sentence() -> None:
+    text = "First finding holds [S03]. Second finding is far longer and will not fit [S04]."
+    excerpt, grounded = _grounded_excerpt(text, 40)
+    assert excerpt == "First finding holds [S03]."
+    assert grounded
+
+
+def test_an_excerpt_cuts_at_the_last_citation_that_fits_not_the_last_space() -> None:
+    """The defect in miniature: the plain word-boundary slice dropped the citation.
+
+    No whole sentence fits here, so this is the layer that used to hand the merge model a
+    citation-free fragment -- and its prompt then forbids it from citing anything.
+    """
+    text = "The method improved recall [S07] under the stated conditions of the cohort."
+    excerpt, grounded = _grounded_excerpt(text, 40)
+    assert excerpt == "The method improved recall [S07]"
+    assert grounded
+
+
+def test_an_excerpt_never_borrows_a_citation_from_the_deleted_tail() -> None:
+    """Keeping provenance means not moving it: the tail's source never saw this clause."""
+    text = "The opening clause runs on for a while before any attribution appears [S09]."
+    excerpt, grounded = _grounded_excerpt(text, 30)
+    assert "[S09]" not in excerpt
+    assert not grounded
+
+
+def test_an_excerpt_reports_grounded_for_prose_that_never_had_a_citation() -> None:
+    """Nothing was lost, so nothing should be reported as lost."""
+    excerpt, grounded = _grounded_excerpt("Plain prose with no attribution at all.", 12)
+    assert grounded
+    assert len(excerpt) <= 12
+
+
+def test_no_excerpt_layer_exceeds_the_room_it_was_given() -> None:
+    text = "First finding holds [S03]. Second is longer and also holds [S04]. Third [S05]."
+    for max_chars in range(8, len(text) + 4):
+        excerpt, _ = _grounded_excerpt(text, max_chars)
+        assert len(excerpt) <= max_chars, (max_chars, excerpt)
+
+
+def test_the_fan_in_follows_the_budget_and_never_reaches_one() -> None:
+    """One would never reduce anything; two guarantees the tree makes progress."""
+    assert _consolidation_fan_in(22380) == 8
+    assert _consolidation_fan_in(7596) == 2
+    assert _consolidation_fan_in(1000) == 2
+
+
+def test_groups_are_balanced_rather_than_greedily_packed() -> None:
+    """A greedy [8, 8, 1] makes the lone draft compete with nodes that compressed eight."""
+    assert _balanced_chunks(17, 8) == [6, 6, 5]
+    assert _balanced_chunks(3, 8) == [3]
+    assert _balanced_chunks(0, 8) == []
+    for count in range(1, 40):
+        sizes = _balanced_chunks(count, 8)
+        assert sum(sizes) == count
+        assert max(sizes) <= 8
+        assert max(sizes) - min(sizes) <= 1
+
+
+class EchoingConsolidationLLM(MultiPassLLM):
+    """Cites only what the PASSES block actually shows it.
+
+    The real model is obedient: the merge prompt forbids adding a citation that is not
+    already in the passes, so cards arriving citation-free produce citation-free prose. A
+    fake that reads ALLOWED_SOURCE_IDS instead -- as MultiPassLLM does -- cites happily even
+    when every card was truncated, and so cannot see this defect at all.
+    """
+
+    #: Paragraph-length drafts with the citation at the end, as a real pass produces. Short
+    #: fixture prose would fit inside even a 90-character card and hide the defect entirely.
+    _BODY = (
+        "The measured outcome moved under the described condition, and the direction held "
+        "across the sensitivity analyses reported by the authors, who further note that the "
+        "cohort was assembled retrospectively and that the comparison arm differed in "
+        "several respects from the population enrolled in the earlier work, a difference "
+        "the discussion attributes to referral patterns at the participating centres rather "
+        "than to the intervention itself, while acknowledging that the available follow-up "
+        "was too short to separate the two explanations and that the registry used for "
+        "ascertainment changed its coding practice partway through the study window "
+    )
+    #: The shorter fields, as a real pass writes them: one sentence, citation at the end.
+    #: Still long enough that a 90-character card cuts the attribution off, and short enough
+    #: that the floor this change guarantees keeps it.
+    _SECONDARY = (
+        "The passes agree on the direction of the effect while differing on its magnitude, "
+        "and none of them reports a comparison that would settle the difference outright "
+    )
+
+    async def complete_json(self, system: str, user: str):
+        if "merging several partial drafts" in system:
+            self.consolidations += 1
+            block = user.split("PASSES:", 1)[1]
+            found = list(dict.fromkeys(re.findall(r"\[S\d{2,3}\]", block)))[:3]
+            if not found:
+                return {
+                    "synthesis": "Integrated with nothing available to cite.",
+                    "consensus": "",
+                    "disagreements": "",
+                    "implications": "",
+                }
+            joined = " ".join(found)
+            return {
+                "synthesis": f"{self._BODY}{joined}.",
+                "consensus": f"{self._SECONDARY}{found[0]}.",
+                "disagreements": "",
+                "implications": f"{self._SECONDARY}{found[0]}.",
+            }
+        offered = re.search(r"ALLOWED_SOURCE_IDS: ([^\n]*)", user)
+        label = offered.group(1).split(",")[0].strip() if offered else "S01"
+        self.drafts += 1
+        return {
+            "synthesis": f"{self._BODY}[{label}].",
+            "consensus": f"{self._SECONDARY}[{label}].",
+            "disagreements": "",
+            "implications": f"{self._SECONDARY}[{label}].",
+        }
+
+
+async def test_a_many_packet_theme_still_reaches_the_reader_with_citations() -> None:
+    """The measured failure: prose that presents every claim and attributes none of it."""
+    llm = EchoingConsolidationLLM(context_tokens=2048)
+    package = await _multi_pass_package(llm, claims_count=120)
+
+    assert llm.drafts >= 10, "the fixture must reproduce a many-packet theme"
+    assert llm.consolidations >= 1
+    section = package.sections[0]
+    # Read the prose, never the warning list: _consolidate_passes merges the warnings of
+    # every leaf draft into the root, so missing_citation says nothing about the text that
+    # actually shipped. In the measured run the one section that cited all 19 of its sources
+    # still carried missing_citation on all four of its fields.
+    assert cited_labels(section), "the section reached the reader with no provenance"
+
+
+async def test_every_merge_call_stays_within_the_fan_in_and_shows_its_citations() -> None:
+    """The invariant, checked where it has to hold: inside the prompt itself."""
+    seen: list[int] = []
+
+    class FanInAssertingLLM(EchoingConsolidationLLM):
+        async def complete_json(self, system: str, user: str):
+            if "merging several partial drafts" in system:
+                block = user.split("PASSES:", 1)[1]
+                seen.append(block.count("PASS "))
+                assert re.search(r"\[S\d{2,3}\]", block), "a card lost its citations"
+            return await super().complete_json(system, user)
+
+    llm = FanInAssertingLLM(context_tokens=2048)
+    package = await _multi_pass_package(llm, claims_count=120)
+
+    assert seen, "the theme must have reached consolidation"
+    topology = package.quality_diagnostics["theme_coverage"][0]["reduce"]
+    assert max(seen) <= topology["fan_in"]
+    assert topology["pass_cards_ungrounded"] == 0
+    assert topology["calls"] == len(seen)
+
+
+async def test_a_reduce_keeps_the_full_source_union_at_the_root() -> None:
+    """source_ids means offered, not cited -- a branch citing none still had them."""
+    llm = EchoingConsolidationLLM(context_tokens=2048)
+    package = await _multi_pass_package(llm, claims_count=120)
+
+    section = package.sections[0]
+    topology = package.quality_diagnostics["theme_coverage"][0]["reduce"]
+    assert topology["rounds"] >= 1
+    assert len(section.source_ids) == len(set(section.source_ids))
+    # Every source the packets offered survives to the root, however deep the tree went.
+    assert len(section.source_ids) >= topology["fan_in"]
+    assert section.claim_ids
+
+
+async def test_a_single_round_reduce_keeps_the_note_it_always_had() -> None:
+    """word_report and the diagnostics read this prefix; the topology is only a suffix."""
+    llm = MultiPassLLM()
+    package = await _multi_pass_package(llm)
+
+    assert llm.consolidations == 1
+    note = package.generation_diagnostics["theme_1"]
+    assert note.startswith("consolidated_visible")
+    assert ":r" not in note.split("(")[0], "one round must not be labelled as several"

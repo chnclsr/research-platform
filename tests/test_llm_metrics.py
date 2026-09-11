@@ -40,7 +40,10 @@ async def test_ollama_metrics_capture_tokens_and_durations():
     assert metrics[0]["prompt_seconds"] == 0.5
     assert metrics[0]["generation_seconds"] == 1.0
     assert captured["think"] is False
-    assert captured["options"]["num_ctx"] == 8192
+    # Tracks the Settings default, raised from 8192 so that the synthesis prompt budget
+    # reaches its 24000-character ceiling. Below that a many-packet theme divided the budget
+    # down to card fields too narrow to carry an [Sxx], and the report lost its citations.
+    assert captured["options"]["num_ctx"] == 16384
     assert captured["options"]["num_predict"] == 2048
     assert captured["options"]["temperature"] == 0.5
     assert captured["options"]["top_p"] == 0.95

@@ -54,7 +54,12 @@ class Settings(BaseSettings):
     llm_model: str = "qwen3:4b-instruct-2507-q4_K_M"
     llm_think: bool = False
     llm_reason_then_format: bool = False
-    llm_context_tokens: int = Field(8192, ge=2048, le=262144)
+    # 16384 is the smallest window that saturates the 24000-character ceiling in
+    # report_synthesis._prompt_char_budget; anything larger only grows the KV cache. At the
+    # old 8192 the synthesis budget was 9216, which a 17-packet theme divided down to
+    # 90-character card fields -- run 01M25XYS6ETQVXMPY24HXVKNXG lost the citations of four
+    # of its five report sections that way.
+    llm_context_tokens: int = Field(16384, ge=2048, le=262144)
     llm_max_output_tokens: int = Field(2048, ge=128, le=32768)
     llm_reasoning_output_tokens: int = Field(20480, ge=512, le=131072)
     llm_timeout_s: float = Field(180.0, ge=10.0, le=3600.0)
