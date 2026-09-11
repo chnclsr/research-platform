@@ -139,6 +139,23 @@ def retrieve_passages(
     # would send the remaining 16 slots into the global score fill and weaken balance.
     per_branch_target = math.ceil(total_limit / len(questions))
     ranked_by_question: list[list[tuple[float, Passage]]] = []
+    # The full scored ranking per question, kept only when diagnostics were asked for.
+    # `ranked_by_question` holds the SHORTLIST, which is truncated at
+    # `max(per_branch_target * 4, per_question)` entries and thinned further by the
+    # per-section cap and the content-hash dedupe. Reading `best_score` off it reports
+    # 0.0 for every source whose passages fall outside that shortlist -- the same number
+    # a source nothing matched in reports, which is the one distinction this diagnostic
+    # exists to draw.
+    #
+    # Measured on run 01M25XYS6ETQVXMPY24HXVKNXG, round 1: 3287 candidates, five
+    # questions, a shortlist capped at 40 each. 36 of 82 sources reported exactly 0.0
+    # -- among them four `awesome-*` indexes carrying 8 to 91 passages of open content
+    # -- while the other 46 scored between 0.5459 and 0.9232 with nothing in between.
+    # A real relevance ranking is not bimodal like that; the gap was the truncation.
+    #
+    # Scoring is not repeated for this: `ranked` below already holds the final score of
+    # every passage, so the diagnostic costs one list reference per question.
+    scored_by_question: list[list[tuple[float, Passage]]] = []
 
     for question_index, question in enumerate(questions):
         query_terms = expanded_terms(question)
@@ -185,6 +202,8 @@ def retrieve_passages(
             reranked = 0.50 * rrf + 0.30 * hybrid + 0.15 * query_coverage + 0.05 * prose_quality
             ranked.append((reranked, passage))
         ranked.sort(key=lambda item: item[0], reverse=True)
+        if competition is not None:
+            scored_by_question.append(ranked)
         kept: list[tuple[float, Passage]] = []
         per_section: Counter[str] = Counter()
         seen_content: set[str] = set()
@@ -289,19 +308,22 @@ def retrieve_passages(
 
     if competition is not None:
         # A passage is ranked once per question; its standing is its best of those.
+        # Read off the FULL ranking, never the shortlist: a passage that scored well and
+        # was truncated away still scored well, and saying 0.0 about it hides the very
+        # thing the caller is trying to see.
         best_per_passage: dict[str, float] = defaultdict(float)
         version_of: dict[str, str] = {}
-        for ranked in ranked_by_question:
+        for ranked in scored_by_question:
             for score, passage in ranked:
                 best_per_passage[passage.id] = max(best_per_passage[passage.id], score)
                 version_of[passage.id] = passage.source_version_id
         # The weakest score that still bought a slot in this round.
         cutoff = min((scores[pid] for pid in selected_order), default=0.0)
-        # Counted from everything this round was handed, not from the ranking. The
-        # ranking drops any passage scoring <= 0 and truncates what is left, so a source
-        # nothing matched in would be absent from `competition` entirely -- and absence
-        # is exactly what the panel cannot render. Every source that put a passage in
-        # front of the questions gets a row, even if the row says zero.
+        # Counted from everything this round was handed, not from the ranking. A round
+        # with no questions builds no ranking at all, and a source would then be absent
+        # from `competition` entirely -- and absence is exactly what the panel cannot
+        # render. Every source that put a passage in front of the questions gets a row,
+        # even if the row says zero.
         considered: Counter[str] = Counter()
         for passage in passages:
             considered[passage.source_version_id] += 1

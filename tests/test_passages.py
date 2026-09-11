@@ -399,3 +399,57 @@ def test_competition_tells_a_capped_source_apart_from_an_irrelevant_one():
     # not have to guess which settings were in force for the round.
     assert off["source_limit"] == 2
     assert off["total_limit"] == 2
+
+
+def test_a_source_truncated_out_of_the_shortlist_still_reports_its_real_score():
+    """Falling outside the shortlist is not the same as matching nothing.
+
+    The per-question shortlist is capped at `max(per_branch_target * 4, per_question)`
+    entries. `best_score` used to be read off that shortlist, so every source below the
+    cut reported exactly 0.0 -- the number that means "nothing here matched". Measured
+    on run 01M25XYS6ETQVXMPY24HXVKNXG, that collapsed 36 of 82 sources onto 0.0 while
+    the other 46 sat between 0.5459 and 0.9232, a gap no real ranking produces.
+    """
+    question = "radiology report generation from chest CT"
+    # Enough strong passages to fill the shortlist by themselves.
+    crowd = [
+        _passage("version-crowd", index, "radiology report generation from chest CT volumes")
+        for index in range(20)
+    ]
+    # On topic, but outranked by the crowd and pushed past the cut.
+    starved = [
+        _passage("version-starved", index, "chest CT imaging workflow in practice")
+        for index in range(3)
+    ]
+    offtopic = [
+        _passage("version-offtopic", index, "quarterly accounting policy for office supplies")
+        for index in range(3)
+    ]
+
+    competition: dict[str, dict] = {}
+    selected = retrieve_passages(
+        crowd + starved + offtopic,
+        [question],
+        per_question=2,
+        max_total=2,
+        max_per_source=2,
+        competition=competition,
+    )
+
+    # The crowd took the whole allowance; neither other source placed a passage.
+    assert {p.source_version_id for p in selected} == {"version-crowd"}
+    starved_row = competition["version-starved"]
+    offtopic_row = competition["version-offtopic"]
+    assert starved_row["selected"] == 0
+    assert offtopic_row["selected"] == 0
+
+    # The claim under test: a truncated source keeps a real score. This read 0.0 before.
+    assert starved_row["best_score"] > 0
+    assert offtopic_row["best_score"] > 0
+    # And the scores still rank honestly, which is what makes the number worth reading:
+    # the on-topic source that lost outscores the one that was never relevant.
+    assert starved_row["best_score"] > offtopic_row["best_score"]
+
+    # Both stayed below the price of a slot, so neither is a quota to tune.
+    assert starved_row["best_score"] < starved_row["cutoff_score"]
+    assert starved_row["passages_considered"] == 3
