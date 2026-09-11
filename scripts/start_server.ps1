@@ -18,7 +18,11 @@ param(
     # Boot'ta varsayilan olarak derleme YOK: imajlar zaten kurulu ve --build her
     # aciliste dakikalar ekler. Kod degistikten sonraki ilk kalkista -Build verin.
     [switch]$Build,
-    [switch]$SkipPanel
+    [switch]$SkipPanel,
+    # Panel kodu surecten yeni degilse bile paneli zorla dondurur. Tazelik kontrolu
+    # dosya zaman damgasina bakar; damga guvenilmez oldugunda (checkout, kopyalama)
+    # elle zorlamak icin.
+    [switch]$RestartPanel
 )
 
 $ErrorActionPreference = "Continue"
@@ -144,6 +148,66 @@ if ($LASTEXITCODE -eq 0 -and $calisan) {
 # okur (start_control_panel.ps1). Ana .env'i okumaz.
 if (-not $SkipPanel) {
     Bilgi "Kontrol paneli"
+
+    # Panel kodu imajda DEGIL: .venv'in editable kurulumu uzerinden src/ agacindan
+    # okunur. Python modulleri import aninda bellege alir ve kendiliginden tazelemez,
+    # yani kod degistiginde surec DONDURULMEDIKCE panel eski kodu sunmaya devam eder.
+    # -Build yalnizca compose imajlarini tazeler, panele hic ugramaz.
+    #
+    # Olculdu 2026-09-10: panel 10:18'de basladi, control_panel.py 16:18'de degisti,
+    # start_server.ps1 -Build calistirildi; konteynerler yeni kodu aldi, panel almadi
+    # ve "skor 0.000" duzeltmesi canlida gorunmedi.
+    #
+    # start_control_panel.ps1 yasayan bir PID gorurse hicbir sey yapmadan cikar (ayni
+    # portu iki kez almayi onler), bu yuzden bayat sureci BURADA durdurmak gerekiyor.
+    $pidDosyasi = "$root\logs\control-panel.pid"
+    $panelPid = $null
+    if (Test-Path $pidDosyasi) {
+        try { $panelPid = [int](Get-Content $pidDosyasi) } catch {}
+    }
+    $panelSureci = if ($panelPid) { Get-Process -Id $panelPid -ErrorAction SilentlyContinue } else { $null }
+
+    if ($panelSureci) {
+        $enYeni = Get-ChildItem "$root\src\research_platform" -Filter *.py -Recurse -ErrorAction SilentlyContinue |
+                  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $sebep = $null
+        if ($RestartPanel) {
+            $sebep = "-RestartPanel verildi"
+        } elseif ($enYeni -and $enYeni.LastWriteTime -gt $panelSureci.StartTime) {
+            $sebep = "$($enYeni.Name) surecten yeni"
+        }
+
+        if ($sebep) {
+            Bilgi "Panel bayat, donduruluyor ($sebep)"
+            # Portu tutan surec pid dosyasindakinden BASKA olabilir: Start-Process ana
+            # sureci yazar, soket uvicorn'un cocugunda durur (olculdu 2026-09-10: pid
+            # dosyasi 23548, 8020'yi dinleyen 18928). Yalniz ana sureci oldurmek portu
+            # serbest birakmaz ve yeni panel baglanamaz.
+            $portSahipleri = @(
+                Get-NetTCPConnection -LocalPort ([int]$panelPort) -State Listen -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty OwningProcess
+            )
+            $hedefler = @($panelPid) + $portSahipleri | Where-Object { $_ } | Select-Object -Unique
+            foreach ($hedef in $hedefler) {
+                Stop-Process -Id $hedef -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item $pidDosyasi -Force -ErrorAction SilentlyContinue
+
+            # Port gercekten birakilana kadar bekle, yoksa yeni panel "address in use"
+            # ile oler ve start_control_panel.ps1 bunu basari sayar.
+            $serbest = $false
+            for ($i = 1; $i -le 15; $i++) {
+                $hala = Get-NetTCPConnection -LocalPort ([int]$panelPort) -State Listen -ErrorAction SilentlyContinue
+                if (-not $hala) { $serbest = $true; break }
+                Start-Sleep -Seconds 1
+            }
+            if ($serbest) { Tamam "eski panel durduruldu" }
+            else { Hata "panel portu $panelPort 15 saniyede birakilmadi"; $durum = 1 }
+        } else {
+            Tamam "panel kodu guncel (surec $($panelSureci.Id))"
+        }
+    }
+
     & "$PSScriptRoot\start_control_panel.ps1" -NoBrowser -SkipInstall
     if ($LASTEXITCODE -eq 0) { Tamam "panel ayakta" } else { Hata "panel baslatilamadi"; $durum = 1 }
 }
