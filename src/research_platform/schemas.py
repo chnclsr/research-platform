@@ -9,6 +9,7 @@ import ulid
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from .config import get_settings
+from .report_titles import clean_report_titles
 from .temporal import infer_relative_date_range
 
 
@@ -256,6 +257,8 @@ class ResearchProtocol(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=3, max_length=300)
+    # Both translations survive report-language choices made after VALIDATE_PROTOCOL.
+    report_titles: dict[Literal["tr", "en"], str] = Field(default_factory=dict)
     # A short snake_case handle for the topic, filled in at VALIDATE_PROTOCOL. Chat clients
     # print it where a ULID would otherwise say nothing about which run is meant. Display
     # only: two runs on one topic share a label, so it never replaces the id.
@@ -365,6 +368,10 @@ class ResearchProtocol(BaseModel):
         if self.interaction_language:
             return self.interaction_language
         return self.original_language if self.original_language in {"tr", "en"} else "tr"
+
+    def title_for_report(self) -> str:
+        """Select the generated display title; old runs retain their original title."""
+        return clean_report_titles(self.report_titles).get(self.report_language) or self.title
 
     def question_for_report(self) -> str:
         """The question as the report should print it.

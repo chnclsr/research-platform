@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `12.50`
+Belge sürümü: `12.51`
 
-Son güncelleme: `2026-09-09`
+Son güncelleme: `2026-09-11`
 
 v0.24.0 panel adım/hata/karar ayrıntıları ve doğrulama: [uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
 
@@ -78,6 +78,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 61 | Toplama bütçesi işaretçisinin graf kanalına ulaşmaması | _çalışma ağacı_ |
 | 62 | v0.23 araştırma derinliği kabul boşluklarının kapatılması | _çalışma ağacı_ |
 | 63 | Kapsam rolünün determinist hâle getirilmesi | _çalışma ağacı_ |
+| 74 | Rapor kapağı için iki dilli LLM konu başlığı | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -4351,3 +4352,31 @@ için bir rota testi, paraphrase reddi, elidasyon korumaları (kısa parça, ter
 `tests/fixtures/chest_ct_scope_cases.json` ve `11/2/2/2` sayıları değişmedi — dondurulmuş
 sapma denetimi yeni merdiven altında da aynı sonucu veriyor. Değişen ve yeni dosyalarda
 Ruff temiz; `pipeline.py` ve `tests/test_pipeline.py` taban borcu 16'da sabit kaldı.
+
+---
+
+## 74. Rapor kapağı için iki dilli LLM konu başlığı
+
+Word kapağı ve tam Markdown raporu `protocol.title` kullanıyordu; Telegram bu alanı
+sorunun ilk 120 karakterinden doldurduğu için uzun istekler kesilmiş soru başlığına
+dönüşüyordu. Mevcut çeviri/konu adlandırma yanıtı artık `report_titles.tr` ve
+`report_titles.en` alanlarını da üretir. İki dil aynı çağrıda istenir; hazırlıktan sonra
+rapor dili değişirse yeniden çağrı yapmadan doğru karşılık seçilir. Başlık yalnız konuyu
+özetler, bulgu veya sonuç üretmez.
+
+Hedef 5–12 kelime, üst sınır 120 karakterdir. Başlıklar doğal dilde ve boşlukludur;
+alt çizgiler temizlenir, hatalı tür, aşırı uzunluk, soru biçimi ve mevcut dil denetiminin
+yabancı bulduğu yanıtlar kabul edilmez. Kısa metinlerde dil denetimi sezgiseldir. Geçerli
+başlık yoksa ve eski koşularda mevcut `title` korunur. Asıl soru, arama girdileri ve
+dosya adı etiketi değişmez. İstemcinin verdiği etiket de korunur; başlığı olmayan böyle
+bir koşuda konu adlandırma çağrısı başlıkları tamamlar.
+
+47. bölümdeki `label` ile dosya adlandırma kararı korunur; bu bölüm yalnız okuyucuya
+gösterilen kapak başlığını ve tam Markdown başlığını değiştirir. Şema göçü yoktur:
+isteğe bağlı alan protokol JSON'unda saklanır. Başarılı adlandırma yeniden kullanılır.
+
+**Doğrulama:** `tests/test_report_titles.py` hedefli paketi **9 passed**. Zorunlu tam
+paket Linux uygulama imajından geçici test konteynerinde `TESTING=true` ile
+**1032 passed, 3 skipped, 1 warning** (53,82 sn) sonucuyla ve sıfır çıkış koduyla geçti.
+Yeni modül ile test dosyasında Ruff temiz; değişen mevcut Python dosyalarında Ruff bulgu
+sayısı HEAD'e göre artmadı. `git diff --check` temiz.

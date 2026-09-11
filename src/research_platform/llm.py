@@ -13,6 +13,7 @@ import httpx
 
 from .capacity import model_lease
 from .config import PREPARATION_PROVIDERS, Settings
+from .report_titles import TITLE_PROMPT, clean_report_titles
 from .schemas import (
     AcquiredDocument,
     ExtractedClaim,
@@ -608,6 +609,8 @@ async def translate_research_request(
     llm: LLMProvider,
     question: str,
     sub_questions: list[str],
+    *,
+    report_titles: dict[str, str] | None = None,
 ) -> tuple[str, list[str], str, str]:
     """Render the request in English so the whole research side speaks one language.
 
@@ -633,7 +636,7 @@ async def translate_research_request(
         "ISO 639-1 code of the language the request was written in) and label (a "
         "snake_case English handle for the topic, at most 4 words, ASCII letters digits "
         "and underscores only; name the subject itself, never the act of researching it, "
-        "so no research, study, analysis or review). No prose.",
+        "so no research, study, analysis or review). No prose." + TITLE_PROMPT,
         f"QUESTION:\n{question}\nSUB_QUESTIONS:\n"
         f"{json.dumps(sub_questions, ensure_ascii=False)}",
     )
@@ -641,6 +644,8 @@ async def translate_research_request(
     items = [str(item).strip() for item in data.get("sub_questions", []) if str(item).strip()]
     if not translated:
         raise ValueError("translation returned no question")
+    if report_titles is not None:
+        report_titles.update(clean_report_titles(data.get("report_titles")))
     source = str(data.get("source_language", "")).strip().lower()[:2]
     return translated, items, source, str(data.get("label") or "").strip()
 
@@ -670,7 +675,9 @@ async def planning_choices(
     return _choice_questions(data)
 
 
-async def research_label(llm: LLMProvider, question: str) -> str:
+async def research_label(
+    llm: LLMProvider, question: str, *, report_titles: dict[str, str] | None = None
+) -> str:
     """A short English handle for the topic, for chat clients to say instead of a ULID.
 
     Asked outright rather than piggybacked on the translation call: that call is skipped
@@ -682,10 +689,12 @@ async def research_label(llm: LLMProvider, question: str) -> str:
         "the topic, at most 4 words, ASCII letters digits and underscores only. Name the "
         "subject itself, never the act of researching it: no research, study, studies, "
         "analysis, review, investigation. No dates, no articles. Example: ai_in_lung_ct. "
-        "No prose.",
+        "No prose." + TITLE_PROMPT,
         f"QUESTION: {question}",
     )
     if isinstance(data, dict):
+        if report_titles is not None:
+            report_titles.update(clean_report_titles(data.get("report_titles")))
         return str(data.get("label") or "")
     return str(data or "")
 

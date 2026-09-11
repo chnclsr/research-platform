@@ -2,12 +2,16 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.51`
+Belge sürümü: `6.52`
 
-Son güncelleme: `2026-09-09`
+Son güncelleme: `2026-09-11`
 
 ## v0.24.0 — 2026-09-09
 
+- Word kapağı ve tam Markdown raporu, yeni koşularda LLM'in hazırladığı kısa konu
+  başlığını rapor dilinde kullanır. Türkçe/İngilizce başlıklar mevcut hazırlık çağrısında
+  birlikte üretilir; uzun kullanıcı sorusu kapak başlığına taşınmaz. Başlık üretilemezse
+  veya eski koşuda bulunmazsa mevcut başlık korunur. Dosya adları değişmez.
 - Panelde audit/coverage dahil araç çağrısı olmayan adımların karar ayrıntıları açılıyor;
   yeni koşularda tur bazlı iddia, kapsam, parser ve sentez tanılamaları saklanıyor.
 - Connector hataları çağrı kimliğiyle izleniyor; HTTP/hata sınıfı, sorgu ve kayıtlı retry

@@ -795,13 +795,15 @@ class ResearchPipeline:
         unreachable or answers with something unusable, the question itself is slugified and
         the run carries on.
         """
-        if protocol.label:
+        if protocol.label and protocol.report_titles:
             return protocol
+        report_titles = dict(protocol.report_titles)
         answer = suggested
-        if not answer:
+        if not answer and not report_titles:
             try:
                 answer = await research_label(
-                    self._preparation_provider(), protocol.primary_question
+                    self._preparation_provider(), protocol.primary_question,
+                    report_titles=report_titles,
                 )
             except Exception:
                 answer = ""
@@ -813,10 +815,9 @@ class ResearchPipeline:
             protocol.primary_question, max_length=LABEL_MAX_LENGTH
         )
         label += date_suffix(protocol)
-        if not label:
-            return protocol
         payload = protocol.model_dump(mode="json")
-        payload["label"] = label[:64]
+        payload["label"] = protocol.label or label[:64] or None
+        payload["report_titles"] = report_titles
         await self.repo.update_run(run_id, protocol=payload)
         return ResearchProtocol.model_validate(payload)
 
@@ -856,11 +857,13 @@ class ResearchPipeline:
         detected = detect_language(protocol.primary_question)
         if detected == "en":
             return await self._record_request_language(run_id, protocol, "en"), ""
+        report_titles = dict(protocol.report_titles)
         try:
             question, sub_questions, source, label = await translate_research_request(
                 self._preparation_provider(),
                 protocol.primary_question,
                 list(protocol.sub_questions),
+                report_titles=report_titles,
             )
         except Exception as exc:
             # Researching in the user's language is worse than researching in English, but
@@ -878,6 +881,9 @@ class ResearchPipeline:
         # The model reports the language it translated from; detect_language() only gets a
         # vote when the model declines to, because it answers "und" for anything short.
         language = source if source in {"tr", "en"} else detected
+        if report_titles != protocol.report_titles:
+            protocol = protocol.model_copy(update={"report_titles": report_titles})
+            await self.repo.update_run(run_id, protocol=protocol.model_dump(mode="json"))
         if question.strip().casefold() == protocol.primary_question.strip().casefold():
             # Short English questions come back "und" from detect_language() and reach the
             # model anyway. When it hands the text back unchanged nothing was translated,

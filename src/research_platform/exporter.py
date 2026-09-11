@@ -590,7 +590,7 @@ async def build_exports(
         )
         near_scope_block = f"{heading}\n\n{rows}\n\n"
     report_md = (
-        f"# {protocol.title}\n\n"
+        f"# {protocol.title_for_report()}\n\n"
         f"{corpus_note}"
         f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
         f"{near_scope_block}"
@@ -893,7 +893,7 @@ async def build_exports(
     # the fallback when a safe crop is unavailable.
     word_report = build_word_report(
         run_id=run_id,
-        title=protocol.title,
+        title=protocol.title_for_report(),
         # Printed in the document, so it follows the report language rather than the
         # English wording the research side used.
         question=protocol.question_for_report(),
