@@ -121,6 +121,21 @@ def _metadata(source: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _format_date(d_str: Any) -> str:
+    """Format ISO datetime strings into DD.MM.YYYY."""
+    if not d_str or str(d_str).strip() in ("—", "-", ""):
+        return "—"
+    s = str(d_str).strip()
+    try:
+        clean = s.split("T")[0]
+        parts = clean.split("-")
+        if len(parts) == 3 and len(parts[0]) == 4:
+            return f"{parts[2]}.{parts[1]}.{parts[0]}"
+    except Exception:
+        pass
+    return s
+
+
 def _publication_year(source: Any) -> str:
     metadata = _metadata(source)
     for key in ("publication_year", "year", "published_at", "publication_date", "date"):
@@ -954,7 +969,10 @@ def _build_synthesis_word_report(
         turkish=turkish,
     )
     evidence_counts, _ = _source_evidence_counts(sources, evidence_by_claim)
-    contribution_counts = Counter(profile.contribution for profile in package.study_profiles)
+    contribution_counts = Counter(
+        getattr(profile, "contribution", profile.get("contribution") if isinstance(profile, dict) else "")
+        for profile in package.study_profiles
+    )
     figures = {
         "16a_research_contribution_landscape.png": _bar_chart(
             "Literatürde araştırılan katkı türleri"
@@ -1032,7 +1050,16 @@ def _build_synthesis_word_report(
         level=1,
     )
     lead = document.add_table(rows=1, cols=1)
-    lead.rows[0].cells[0].text = _model_text(package.executive_summary)
+    summary_text = _model_text(package.executive_summary).strip()
+    if not summary_text:
+        summary_text = (
+            "Bu araştırma raporu için yönetici özeti doğrudan sentez bölümlerinde derlenmiştir. "
+            "Ayrıntılı kanıt değerlendirmesi ve bulgular takip eden tematik bölümlerde ve denetim eklerinde sunulmaktadır."
+            if turkish
+            else "An executive summary was compiled across the synthesis sections. "
+            "Detailed findings and audited evidence are presented in the following thematic sections and appendices."
+        )
+    lead.rows[0].cells[0].text = summary_text
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
     _style_table(lead, [6.5], header_fill=PALE_BLUE, font_size=10.5)
     document.add_heading(
@@ -1050,22 +1077,19 @@ def _build_synthesis_word_report(
             value = paragraph.add_run(_text(sub_question, 1000))
             _set_run_font(value, size=10.5, color=INK)
     scope = scope or {}
+    start_fmt = _format_date(scope.get("start_date"))
+    end_fmt = _format_date(scope.get("end_date"))
+    date_range_val = f"{start_fmt} – {end_fmt}"
     frame = document.add_table(rows=0, cols=2)
     frame_rows = (
         (
             ("Araştırma modu", research_mode),
-            (
-                "Tarih aralığı",
-                f"{_text(scope.get('start_date') or '—')} – {_text(scope.get('end_date') or '—')}",
-            ),
+            ("Tarih aralığı", date_range_val),
         )
         if turkish
         else (
             ("Research mode", research_mode),
-            (
-                "Date range",
-                f"{_text(scope.get('start_date') or '—')} – {_text(scope.get('end_date') or '—')}",
-            ),
+            ("Date range", date_range_val),
         )
     )
     for label, value in frame_rows:
@@ -1086,7 +1110,7 @@ def _build_synthesis_word_report(
             else "Near-scope but excluded studies",
             level=2,
         )
-        for source in near_scope_sources:
+        for source in near_scope_sources[:10]:
             paragraph = document.add_paragraph(style="List Bullet")
             _add_hyperlink(
                 paragraph,
@@ -1096,6 +1120,16 @@ def _build_synthesis_word_report(
             paragraph.add_run(
                 f" — {_metadata(source).get('research_scope_role')}"
             )
+        if len(near_scope_sources) > 10:
+            rem = len(near_scope_sources) - 10
+            more_p = document.add_paragraph()
+            more_p.paragraph_format.left_indent = Inches(0.22)
+            more_run = more_p.add_run(
+                f"… ve kapsam dışı bırakılan {rem} diğer çalışma (tam liste Ek C'de yer almaktadır)."
+                if turkish
+                else f"… and {rem} other excluded studies (complete inventory in Appendix C)."
+            )
+            _set_run_font(more_run, size=9.5, italic=True, color=MUTED)
 
     if package.report_mode != "compact":
         document.add_heading(
@@ -1781,8 +1815,8 @@ def build_word_report(
 
     frame = document.add_table(rows=0, cols=2)
     scope = scope or {}
-    scope_start = _text(scope.get("start_date") or "—", 35)
-    scope_end = _text(scope.get("end_date") or "—", 35)
+    scope_start = _format_date(scope.get("start_date"))
+    scope_end = _format_date(scope.get("end_date"))
     frame_rows = (
         (
             ("Araştırma modu", research_mode),
