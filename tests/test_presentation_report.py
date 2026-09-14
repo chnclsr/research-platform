@@ -342,3 +342,56 @@ def test_presentation_report_long_synthesis_autofit_and_no_overlap():
     assert shp_dis.top.inches + shp_dis.height.inches <= shp_imp.top.inches
     assert shp_imp.top.inches + shp_imp.height.inches <= 7.0
 
+
+def test_presentation_asserts_nothing_the_run_did_not_establish():
+    """Empty sections used to become verdicts on the slides.
+
+    "Çalışmalar arasında genel tutarlılık saptanmıştır", "Araştırma sorusu doğrulanmış
+    kanıtlarla yanıtlanmıştır", "Açık bir belirsizlik veya veri boşluğu bildirilmedi", a
+    conclusion box that always called the conclusion supported by audited evidence, and a
+    coverage table reading 100% / "Tamamlandı" / 0 whenever the numbers were missing.
+    """
+    inputs = _minimal_report_inputs()
+    inputs["coverage"] = {}
+    inputs["synthesis_package"] = SynthesisPackage(
+        executive_summary="Özet cümlesi [S01].",
+        sections=[
+            SynthesisSection(
+                title="Tema bir",
+                synthesis="Birinci taslak [S01].",
+                source_ids=["src-1"],
+                claim_ids=["claim-1"],
+                reader_note="Bu tema tek bir metinde birleştirilemedi.",
+            ),
+            SynthesisSection(
+                title="Tema iki", synthesis="İkinci tema [S01].", source_ids=["src-1"]
+            ),
+        ],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        study_profiles=[],
+        generated_by_llm=False,
+        generation_status="partial",
+    )
+    prs = pptx.Presentation(io.BytesIO(build_presentation_report(**inputs).document))
+
+    texts = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                texts.append(shape.text_frame.text)
+            if shape.has_table:
+                texts.extend(cell.text for row in shape.table.rows for cell in row.cells)
+    deck = "\n".join(texts)
+
+    for verdict in (
+        "genel tutarlılık saptanmıştır",
+        "doğrulanmış kanıtlarla yanıtlanmıştır",
+        "belirsizlik veya veri boşluğu bildirilmedi",
+        "doğrulanmış kanıt kaydıyla desteklenmiştir",
+        "Tamamlandı",
+        "100%",
+    ):
+        assert verdict not in deck, verdict
+    assert "Bu tema tek bir metinde birleştirilemedi." in deck
