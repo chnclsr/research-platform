@@ -55,6 +55,9 @@ _SYSTEM_CLINICAL = _SYSTEM_UNIVERSAL + (
 )
 
 
+_NOTE_CHARS = 240
+
+
 class AppraisalSignal(BaseModel):
     claim_id: str
     single_source_dependence: bool = False
@@ -64,7 +67,7 @@ class AppraisalSignal(BaseModel):
     design_ceiling: str | None = None
     underpowered: bool = False
     multiplicity_risk: bool = False
-    note: str = Field("", max_length=240)
+    note: str = Field("", max_length=_NOTE_CHARS)
 
 
 class AppraisalBundle(BaseModel):
@@ -150,36 +153,105 @@ def _user_prompt(
     )
 
 
+#: The claims a run offers for appraisal at all -- the cap `_user_prompt` always applied.
+_APPRAISAL_LIMIT = 60
+#: Claims per call. One answer carries a signal for every claim it was shown, and sixty of
+#: them do not fit a 4096-token answer: measured 2026-09-14 on run
+#: 01M2FGWHWKW1GCRXVWTC97B94H, the single appraisal call stopped on `length` at 4096 tokens,
+#: with and without a repeat penalty and with no repetition in the text. All six earlier runs
+#: that had claims to appraise had fallen back to the deterministic grade as well.
+_APPRAISAL_BATCH = 20
+
+
 async def propose_appraisal(
     llm: LLMProvider,
     tier: Tier,
     protocol: ResearchProtocol,
     summaries: list[dict[str, Any]],
+    *,
+    batch_report: list[str] | None = None,
 ) -> AppraisalBundle | None:
     """A thin proposal, or None so the caller falls back to the deterministic grade.
 
     `llm` is the run's own provider, never the preparation chain: the prompt carries claim
     text drawn from the corpus and must stay inside the deployment's data boundary -- the
     same rationale as probe_factory.generate_probe_bundle.
+
+    Asked `_APPRAISAL_BATCH` claims at a time. A batch that fails costs only its own claims
+    their proposal: they keep the deterministic grade, which a signal could only ever have
+    lowered. None only when no batch produced a usable answer. `batch_report`, when given,
+    receives "ok" or the failure of each batch in order.
     """
     if not summaries:
         return None
     system = _SYSTEM_CLINICAL if tier == "clinical" else _SYSTEM_UNIVERSAL
-    try:
-        answer = await llm.complete_json(system, _user_prompt(tier, protocol, summaries))
-    except Exception:  # noqa: BLE001 - a model outage falls back, it does not fail the run
+    offered = summaries[:_APPRAISAL_LIMIT]
+    signals: list[AppraisalSignal] = []
+    answered = False
+    for start in range(0, len(offered), _APPRAISAL_BATCH):
+        outcome = await _propose_batch(
+            llm, system, tier, protocol, offered[start:start + _APPRAISAL_BATCH]
+        )
+        if isinstance(outcome, str):
+            if batch_report is not None:
+                batch_report.append(outcome)
+            continue
+        bundle, dropped = outcome
+        if batch_report is not None:
+            batch_report.append(f"ok:dropped={dropped}" if dropped else "ok")
+        answered = True
+        signals.extend(bundle.signals)
+    if not answered:
         return None
+    # Each batch was validated against the per-answer cap on its own; the union is the
+    # run's proposal, not one answer, and is not held to that cap again.
+    return AppraisalBundle.model_construct(signals=signals)
+
+
+async def _propose_batch(
+    llm: LLMProvider,
+    system: str,
+    tier: Tier,
+    protocol: ResearchProtocol,
+    batch: list[dict[str, Any]],
+) -> tuple[AppraisalBundle, int] | str:
+    """One call's usable signals and how many were dropped, or why the call was unusable.
+
+    Signal by signal, not the answer as a whole. Measured 2026-09-14 on run
+    01M2FGWHWKW1GCRXVWTC97B94H: in a 20-claim batch 19 signals validated and one `note` ran
+    to 256 characters, and validating the answer as one bundle threw the other 19 away with
+    it -- in all three batches. The note is the model's own gloss and nothing grades on it,
+    so it is cut to its limit rather than costing the signal; a signal invalid in any other
+    way is dropped alone.
+    """
+    try:
+        answer = await llm.complete_json(system, _user_prompt(tier, protocol, batch))
+    except Exception as exc:  # noqa: BLE001 - a model outage falls back, it does not fail the run
+        return f"failed:{type(exc).__name__}"
     if isinstance(answer, str):
         try:
             answer = json.loads(answer)
         except (TypeError, ValueError):
-            return None
+            return "failed:unparseable"
     if not isinstance(answer, dict):
-        return None
-    try:
-        return AppraisalBundle.model_validate({"signals": answer.get("signals") or []})
-    except ValueError:
-        return None
+        return "failed:not_an_object"
+    raw_signals = answer.get("signals") or []
+    if not isinstance(raw_signals, list):
+        return "failed:invalid_bundle"
+    signals: list[AppraisalSignal] = []
+    for raw in raw_signals:
+        if isinstance(raw, dict) and isinstance(raw.get("note"), str):
+            raw = {**raw, "note": raw["note"][:_NOTE_CHARS]}
+        try:
+            signals.append(AppraisalSignal.model_validate(raw))
+        except ValueError:
+            continue
+    if raw_signals and not signals:
+        return "failed:invalid_bundle"
+    return (
+        AppraisalBundle.model_construct(signals=signals[:_APPRAISAL_LIMIT]),
+        len(raw_signals) - len(signals),
+    )
 
 
 def _design_rank(label: str) -> int:

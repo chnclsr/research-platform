@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -283,6 +284,94 @@ async def test_appraisal_rejects_a_malformed_bundle():
 @pytest.mark.asyncio
 async def test_appraisal_is_not_requested_without_claims():
     assert await propose_appraisal(BrokenLLM(), "universal", protocol(), []) is None
+
+
+class BatchRecordingLLM(LLMProvider):
+    """Answers a signal for every claim it was shown; can fail one numbered call."""
+
+    def __init__(self, fail_call: int | None = None):
+        self.batches: list[list[str]] = []
+        self.fail_call = fail_call
+
+    async def complete_json(self, system: str, user: str):
+        shown = json.loads(user.split("Claims and what supports them:\n", 1)[1])["claims"]
+        ids = [item["claim_id"] for item in shown]
+        self.batches.append(ids)
+        if len(self.batches) == self.fail_call:
+            raise RuntimeError("provider down")
+        return {
+            "signals": [{"claim_id": claim_id, "single_source_dependence": True} for claim_id in ids]
+        }
+
+
+def summaries(count):
+    return [{"claim_id": f"c{index}"} for index in range(count)]
+
+
+@pytest.mark.asyncio
+async def test_appraisal_is_asked_in_batches_one_answer_can_hold():
+    """Run 01M2FGWHWKW1GCRXVWTC97B94H: 65 claims in one call stopped at 4096 tokens."""
+    llm = BatchRecordingLLM()
+    report: list[str] = []
+
+    proposal = await propose_appraisal(
+        llm, "universal", protocol(), summaries(45), batch_report=report
+    )
+
+    assert [len(batch) for batch in llm.batches] == [20, 20, 5]
+    assert proposal is not None and len(proposal.signals) == 45
+    assert report == ["ok", "ok", "ok"]
+
+
+@pytest.mark.asyncio
+async def test_one_failed_batch_keeps_the_signals_of_the_others():
+    llm = BatchRecordingLLM(fail_call=2)
+    report: list[str] = []
+
+    proposal = await propose_appraisal(
+        llm, "universal", protocol(), summaries(45), batch_report=report
+    )
+
+    assert proposal is not None
+    assert {signal.claim_id for signal in proposal.signals} == {
+        f"c{index}" for index in (*range(20), *range(40, 45))
+    }
+    assert report == ["ok", "failed:RuntimeError", "ok"]
+
+
+@pytest.mark.asyncio
+async def test_batching_does_not_widen_what_a_run_offers_for_appraisal():
+    llm = BatchRecordingLLM()
+
+    await propose_appraisal(llm, "universal", protocol(), summaries(70))
+
+    assert sum(len(batch) for batch in llm.batches) == 60
+
+
+class OneOverlongNoteLLM(LLMProvider):
+    async def complete_json(self, system: str, user: str):
+        return {
+            "signals": [
+                {"claim_id": "c0", "single_source_dependence": True, "note": "x" * 256},
+                {"claim_id": "c1", "contradicted": True},
+                {"no_claim_id": True},
+            ]
+        }
+
+
+@pytest.mark.asyncio
+async def test_one_bad_signal_no_longer_costs_the_whole_batch():
+    """Run 01M2FGWHWKW1GCRXVWTC97B94H: 19 valid signals discarded over one 256-char note."""
+    report: list[str] = []
+
+    proposal = await propose_appraisal(
+        OneOverlongNoteLLM(), "universal", protocol(), summaries(2), batch_report=report
+    )
+
+    assert proposal is not None
+    assert [signal.claim_id for signal in proposal.signals] == ["c0", "c1"]
+    assert len(proposal.signals[0].note) == 240
+    assert report == ["ok:dropped=1"]
 
 
 def test_grades_are_still_produced_when_no_proposal_arrived():

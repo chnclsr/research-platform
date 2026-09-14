@@ -4225,7 +4225,10 @@ class ResearchPipeline:
         ]
 
         started = time.monotonic()
-        proposal = await propose_appraisal(self.llm, tier, protocol, summaries)
+        appraisal_batches: list[str] = []
+        proposal = await propose_appraisal(
+            self.llm, tier, protocol, summaries, batch_report=appraisal_batches
+        )
         await self._emit_llm_metrics(run_id, "ADVERSARIAL_REVIEW")
         appraisals, rejected = appraise_claims(
             claims,
@@ -4267,6 +4270,7 @@ class ResearchPipeline:
                 "grades": dict(grades),
                 "downgraded_claim_ids": downgraded,
                 "generated_by": "model" if proposal is not None else "fallback",
+                "batches": appraisal_batches,
                 "latency_ms": int((time.monotonic() - started) * 1000),
                 "rejected": rejected,
             },
