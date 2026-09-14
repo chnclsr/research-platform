@@ -1,0 +1,45 @@
+# DNS overlay. Points the services that reach the internet at named resolvers instead of
+# Docker Desktop's forwarder.
+#
+# WHY. Containers resolve through Docker's embedded DNS (127.0.0.11), which on Docker
+# Desktop forwards to the host at 192.168.65.7. That forwarder times out under a run's
+# fetch load: measured 2026-09-14 on run 01M2FGWHWKW1GCRXVWTC97B94H, 100 of 258 candidates
+# were lost to "[Errno -2] Name or service not known" -- round 2's 27 all inside three
+# seconds -- and the VM log recorded `[resolver] failed to query external DNS server ...
+# 192.168.65.7:53: i/o timeout`. The same containers reached the office resolver and
+# 1.1.1.1 directly. With `dns:` set, the embedded DNS forwards to these servers instead;
+# service names (postgres, worker, ...) still resolve as before.
+#
+# HOW TO TURN IT ON. Per machine, in .env:
+#
+#   COMPOSE_PATH_SEPARATOR=:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.dns.yml
+#   CONTAINER_DNS_PRIMARY=<a resolver the containers can reach>
+#   CONTAINER_DNS_SECONDARY=1.1.1.1
+#
+# (Add it after docker-compose.gpu.yml on a GPU machine.) CONTAINER_DNS_PRIMARY has no
+# default on purpose: the right resolver is a property of the network the machine sits in,
+# and a wrong guess would fail the same way this overlay exists to prevent.
+#
+# Only services that fetch from the internet are listed. docling, postgres, redis, minio and
+# langflow do not, and are left on Docker's default.
+
+x-dns: &dns
+  - ${CONTAINER_DNS_PRIMARY:?set CONTAINER_DNS_PRIMARY in .env, or drop docker-compose.dns.yml from COMPOSE_FILE}
+  - ${CONTAINER_DNS_SECONDARY:-1.1.1.1}
+
+services:
+  worker:
+    dns: *dns
+  api:
+    dns: *dns
+  migrate:
+    dns: *dns
+  mcp-gateway:
+    dns: *dns
+  telegram-bot:
+    dns: *dns
+  crawl4ai:
+    dns: *dns
+  agentsearch-adapter:
+    dns: *dns

@@ -105,7 +105,38 @@ ACQUISITION_STRATEGY_ORDER = (
 )
 
 
-async def validate_public_url(url: str, allow_private: bool = False) -> None:
+# getaddrinfo answers that mean "no answer right now" as often as "no such name". Measured
+# 2026-09-14, run 01M2FGWHWKW1GCRXVWTC97B94H: 100 of 258 candidates failed with "[Errno -2]
+# Name or service not known" -- all 27 of round 2 inside three seconds, none of round 3 thirty
+# seconds later, every connector alike. Docker Desktop's resolver had timed out upstream; the
+# names were fine. A name that really does not exist now costs the delays below before it
+# fails, which is cheap next to losing a round to a resolver hiccup.
+_TRANSIENT_DNS_ERRORS = frozenset(
+    code
+    for code in (
+        getattr(socket, "EAI_AGAIN", None),
+        getattr(socket, "EAI_NONAME", None),
+        getattr(socket, "EAI_NODATA", None),
+    )
+    if code is not None
+)
+_DNS_RETRY_DELAYS_S: tuple[float, ...] = (1.0, 4.0)
+
+
+async def _resolve(hostname: str) -> tuple[list, int]:
+    """getaddrinfo, retried through a resolver outage. Returns the answer and the retries."""
+    for retries, delay in enumerate((*_DNS_RETRY_DELAYS_S, None)):
+        try:
+            return await asyncio.to_thread(socket.getaddrinfo, hostname, None), retries
+        except socket.gaierror as exc:
+            if delay is None or exc.errno not in _TRANSIENT_DNS_ERRORS:
+                raise
+            await asyncio.sleep(delay)
+    raise AssertionError("unreachable: the last delay is None")
+
+
+async def validate_public_url(url: str, allow_private: bool = False) -> int:
+    """Refuse a URL that is not public HTTP(S). Returns how many DNS retries resolving it took."""
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise UnsafeUrlError("Only absolute HTTP/HTTPS URLs are allowed")
@@ -113,17 +144,19 @@ async def validate_public_url(url: str, allow_private: bool = False) -> None:
         raise UnsafeUrlError("Credentials in URLs are not allowed")
     if parsed.port and parsed.port not in {80, 443}:
         raise UnsafeUrlError("Non-standard URL ports are not allowed")
+    retries = 0
     try:
         literal = ipaddress.ip_address(parsed.hostname)
         addresses = [literal]
     except ValueError:
-        infos = await asyncio.to_thread(socket.getaddrinfo, parsed.hostname, None)
+        infos, retries = await _resolve(parsed.hostname)
         addresses = list({ipaddress.ip_address(info[4][0]) for info in infos})
     if allow_private:
-        return
+        return retries
     for address in addresses:
         if not address.is_global:
             raise UnsafeUrlError(f"Non-public destination is blocked: {address}")
+    return retries
 
 
 class AcquisitionService:
@@ -167,9 +200,13 @@ class AcquisitionService:
                 document_type="text", final_url=url,
             )
         try:
-            await validate_public_url(url, self.settings.allow_private_networks)
+            dns_retries = await validate_public_url(url, self.settings.allow_private_networks)
         except Exception as exc:
             return AcquiredDocument(candidate=candidate, success=False, error=str(exc), strategies_tried=tried)
+        if dns_retries:
+            # Where acquisition_metrics already reads, so a run shows the resolver outages it
+            # rode out as well as the ones it lost to.
+            tried.append(f"dns_retry:{dns_retries}")
 
         github = await self._github_repository(url, candidate, tried)
         if github and github.success:
