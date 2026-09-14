@@ -289,6 +289,88 @@ class ArtifactRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class DocumentRevisionRow(Base):
+    """An immutable report-model revision with an explicit publication state."""
+
+    __tablename__ = "document_revisions"
+    __table_args__ = (
+        UniqueConstraint("run_id", "revision_number", name="uq_document_revision_number"),
+        UniqueConstraint(
+            "run_id",
+            "requested_by",
+            "idempotency_key",
+            name="uq_document_revision_idempotency",
+        ),
+        Index("ix_document_revisions_status_channel", "status", "channel"),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    parent_revision_id: Mapped[str | None] = mapped_column(String(26), index=True, nullable=True)
+    base_revision_id: Mapped[str | None] = mapped_column(String(26), index=True, nullable=True)
+    target_artifact_name: Mapped[str] = mapped_column(String(255))
+    revision_number: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    feedback: Mapped[str] = mapped_column(Text, default="")
+    edit_plan: Mapped[dict | None] = mapped_column(json_type(), nullable=True)
+    report_model: Mapped[dict] = mapped_column(json_type(), default=dict)
+    format_overrides: Mapped[dict] = mapped_column(json_type(), default=dict)
+    requested_by: Mapped[str] = mapped_column(String(26), index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    channel: Mapped[str] = mapped_column(String(20), default="api", index=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
+    channel_state: Mapped[dict] = mapped_column(json_type(), default=dict)
+    model_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    usage: Mapped[dict] = mapped_column(json_type(), default=dict)
+    validation: Mapped[dict] = mapped_column(json_type(), default=dict)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ArtifactVersionRow(Base):
+    """A stored Office or bundle artifact that is never overwritten."""
+
+    __tablename__ = "artifact_versions"
+    __table_args__ = (
+        UniqueConstraint("revision_id", "logical_name", name="uq_artifact_version_revision_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    revision_id: Mapped[str] = mapped_column(String(26), index=True)
+    logical_name: Mapped[str] = mapped_column(String(255))
+    revision_number: Mapped[int] = mapped_column(Integer)
+    parent_version_id: Mapped[str | None] = mapped_column(String(26), index=True, nullable=True)
+    media_type: Mapped[str] = mapped_column(String(120))
+    object_key: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RevisionCitationRow(Base):
+    """The report-citation snapshot belonging to one immutable revision."""
+
+    __tablename__ = "revision_citations"
+    __table_args__ = (
+        UniqueConstraint(
+            "revision_id", "source_id", name="uq_revision_citation_revision_source"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    revision_id: Mapped[str] = mapped_column(String(26), index=True)
+    source_id: Mapped[str] = mapped_column(String(26), index=True)
+    payload: Mapped[dict] = mapped_column(json_type())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ReportCitationRow(Base):
     """Where each source ended up in the Word report -- the chain's last link.
 

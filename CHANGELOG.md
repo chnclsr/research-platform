@@ -2,12 +2,21 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.52`
+Belge sürümü: `6.53`
 
 Son güncelleme: `2026-09-14`
 
 ## Yayınlanmamış — 2026-09-14
 
+- Tamamlanmış araştırmaların Word ve PowerPoint çıktıları artık ajanla revize edilebilir.
+  Her düzenleme değişmez bir sürüm olarak saklanır; kullanıcı planı onaylamadan dosya
+  üretilmez ve kabul edilmemiş taslaklar mevcut indirme bağlantılarını değiştirmez.
+- Telegram ve kontrol paneline geri bildirim, netleştirme, plan onayı, taslak indirme,
+  kabul, iptal, sürüm geçmişi, metin farkı ve eski sürümden yeni taslak oluşturma akışları
+  eklendi. Bot oturumu veritabanında tutulduğu için yeniden başlatmadan sonra devam eder.
+- Düzenleme motoru kaynak etiketlerini, atıf sayısını, sayısal bulguları ve doğrudan
+  alıntıları kilitler. Kabul işlemi Word, PowerPoint ve iki ZIP paketini aynı revizyona
+  atomik olarak taşır. Ayrıntılar: `DOCUMENT_REVISION_IMPLEMENTATION_REPORT.md`.
 - pdf-inspector `1.14.1` → `1.19.0`. 380 belgelik korpusta resmi değerlendiriciyle ölçüldü:
   nihai çıktı overall +0,0023, hızlı yol +0,0086 (tablo +0,0345); Docling'e giden belge
   160 → 154. Rapor: `PDF_INSPECTOR_1.19_YUKSELTME_RAPORU.md`, `OPEN_ITEMS.md` 47. madde.

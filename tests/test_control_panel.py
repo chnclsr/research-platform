@@ -41,6 +41,16 @@ def test_run_drawer_uses_turkish_title_case_and_collapsible_sources():
     assert "h('details','drawer-section collapsible-section')" in CONTROL_PANEL_HTML
 
 
+def test_panel_exposes_versioned_agent_revision_controls():
+    assert "Belge Revizyonları ve Sürüm Geçmişi" in CONTROL_PANEL_HTML
+    assert "Ajanla güncelle" in CONTROL_PANEL_HTML
+    assert "Planı uygula" in CONTROL_PANEL_HTML
+    assert "Güncel sürüm yap" in CONTROL_PANEL_HTML
+    assert "Bu sürümü geri yükle" in CONTROL_PANEL_HTML
+    assert "/artifact-versions/${version.id}" in CONTROL_PANEL_HTML
+    assert "/revisions/${revision.id}/diff" in CONTROL_PANEL_HTML
+
+
 def test_trace_row_draws_the_seven_chain_steps_and_opens_the_vertical_trace():
     # Cell order is the order data travels, and it has to match the server's CHAIN_STEPS --
     # a strip drawn in a different order would label the wrong failure.

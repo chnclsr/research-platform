@@ -143,6 +143,58 @@ async def list_research_artifacts(run_id: str) -> list[dict]:
 
 
 @mcp.tool()
+async def revise_research_artifact(
+    run_id: str,
+    artifact_name: str,
+    feedback: str,
+    base_revision_id: str | None = None,
+) -> dict:
+    """Start a versioned DOCX/PPTX revision; rendering waits for plan approval."""
+    return await _client().create_revision(
+        run_id,
+        artifact_name,
+        feedback=feedback,
+        base_revision_id=base_revision_id,
+        channel="mcp",
+    )
+
+
+@mcp.tool()
+async def research_revision_status(revision_id: str) -> dict:
+    """Read the durable plan, state, validation and files for one revision."""
+    return await _client().revision(revision_id)
+
+
+@mcp.tool()
+async def respond_to_revision_question(revision_id: str, answer: str) -> dict:
+    """Answer the revision planner's one pending clarification question."""
+    revision = await _client().revision(revision_id)
+    return await _client().add_revision_feedback(
+        revision["run_id"], revision_id, answer
+    )
+
+
+@mcp.tool()
+async def approve_revision_plan(revision_id: str) -> dict:
+    """Approve a proposed document edit plan and queue rendering."""
+    revision = await _client().revision(revision_id)
+    return await _client().approve_revision_plan(revision["run_id"], revision_id)
+
+
+@mcp.tool()
+async def accept_research_revision(revision_id: str) -> dict:
+    """Publish a validated draft as the run's current report version."""
+    revision = await _client().revision(revision_id)
+    return await _client().accept_revision(revision["run_id"], revision_id)
+
+
+@mcp.tool()
+async def list_artifact_versions(run_id: str) -> list[dict]:
+    """List immutable Office and delivery-bundle versions for a completed run."""
+    return await _client().artifact_versions(run_id)
+
+
+@mcp.tool()
 async def read_research_report(
     run_id: str,
     report: Literal[

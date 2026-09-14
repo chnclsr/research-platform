@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,103 @@ class ResearchGatewayClient:
             response.raise_for_status()
             return response.json()
 
+    async def revisions(self, run_id: str) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/research-runs/{run_id}/revisions"
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def revision(self, revision_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/document-revisions/{revision_id}"
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def active_revision(
+        self, *, channel: str, conversation_id: str
+    ) -> dict[str, Any] | None:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/document-revisions/active",
+                params={"channel": channel, "conversation_id": conversation_id},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def artifact_versions(self, run_id: str) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/research-runs/{run_id}/artifact-versions"
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def create_revision(
+        self,
+        run_id: str,
+        artifact_name: str,
+        *,
+        feedback: str = "",
+        base_revision_id: str | None = None,
+        parent_revision_id: str | None = None,
+        channel: str = "api",
+        conversation_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        body = {
+            "feedback": feedback,
+            "base_revision_id": base_revision_id,
+            "parent_revision_id": parent_revision_id,
+            "channel": channel,
+            "conversation_id": conversation_id,
+        }
+        headers = dict(self.headers)
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=headers) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/research-runs/{run_id}/artifacts/{artifact_name}/revisions",
+                json=body,
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def add_revision_feedback(
+        self, run_id: str, revision_id: str, feedback: str
+    ) -> dict[str, Any]:
+        return await self._revision_action(
+            run_id, revision_id, "feedback", body={"feedback": feedback}
+        )
+
+    async def approve_revision_plan(self, run_id: str, revision_id: str) -> dict[str, Any]:
+        return await self._revision_action(run_id, revision_id, "approve-plan")
+
+    async def accept_revision(self, run_id: str, revision_id: str) -> dict[str, Any]:
+        return await self._revision_action(run_id, revision_id, "accept")
+
+    async def cancel_revision(self, run_id: str, revision_id: str) -> dict[str, Any]:
+        return await self._revision_action(run_id, revision_id, "cancel")
+
+    async def _revision_action(
+        self,
+        run_id: str,
+        revision_id: str,
+        action: str,
+        *,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.post(
+                f"{self.base_url}/v1/research-runs/{run_id}/revisions/{revision_id}/{action}",
+                json=body,
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def read_artifact(
         self,
         run_id: str,
@@ -152,7 +250,10 @@ class ResearchGatewayClient:
         destination: Path,
     ) -> Path:
         destination.mkdir(parents=True, exist_ok=True)
-        target = destination / f"{run_id}_{mode.value}.zip"
+        revisions = await self.revisions(run_id)
+        accepted = next((item for item in revisions if item.get("status") == "accepted"), None)
+        revision_id = str((accepted or {}).get("id") or "unversioned")
+        target = destination / f"{run_id}_{mode.value}_{revision_id}.zip"
         if target.exists() and target.stat().st_size > 0:
             return target.resolve()
         async with httpx.AsyncClient(timeout=None, headers=self.headers) as client:
@@ -162,3 +263,28 @@ class ResearchGatewayClient:
             response.raise_for_status()
             target.write_bytes(response.content)
         return target.resolve()
+
+    async def download_artifact_version(
+        self, version_id: str, destination: Path
+    ) -> tuple[Path, str, dict[str, str]]:
+        destination.mkdir(parents=True, exist_ok=True)
+        async with httpx.AsyncClient(timeout=None, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/artifact-versions/{version_id}"
+            )
+            response.raise_for_status()
+        disposition = response.headers.get("Content-Disposition", "")
+        match = re.search(r'filename="([^"]+)"', disposition)
+        filename = Path(match.group(1)).name if match else f"{version_id}.bin"
+        target = destination / f"{version_id}_{filename}"
+        if not target.exists() or target.stat().st_size == 0:
+            target.write_bytes(response.content)
+        media_type = response.headers.get("Content-Type", "application/octet-stream")
+        metadata = {
+            "run_id": response.headers.get("X-Run-Id", ""),
+            "revision_id": response.headers.get("X-Revision-Id", ""),
+            "revision_number": response.headers.get("X-Revision-Number", ""),
+            "version_id": response.headers.get("X-Artifact-Version-Id", version_id),
+            "logical_name": filename,
+        }
+        return target.resolve(), media_type, metadata

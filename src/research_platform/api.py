@@ -20,20 +20,40 @@ from .capacity import measure, plan_capacity
 from .config import Settings, get_settings
 from .connectors import build_registry
 from .db import SessionLocal, create_schema, get_session
+from .document_revision import DocumentRevisionService, editable_targets
 from .embeddings import EmbeddingClient
 from .identity import principal_from_api_key, principal_from_user_id
 from .paperqa_adapter import paperqa2_health
 from .parsers import build_parser_registry
 from .passages import retrieve_passages
-from .queueing import discard_run_jobs, enqueue_run, normalize_priority, rescore_run
-from .repository import ActorRequired, Repository, RunAccessDenied
+from .queueing import (
+    cancel_queued_revision_job,
+    discard_run_jobs,
+    enqueue_revision,
+    enqueue_run,
+    normalize_priority,
+    rescore_run,
+)
+from .repository import (
+    ActorRequired,
+    Repository,
+    RevisionConflict,
+    RevisionNotFound,
+    RunAccessDenied,
+)
 from .scheduler import preempt_for
 from .schemas import (
+    ArtifactVersionView,
     ArtifactView,
     CorpusSearchRequest,
     DeliveryMode,
+    DocumentRevisionCreate,
+    DocumentRevisionView,
     HitlRespondRequest,
     ResearchRunCreate,
+    RevisionFeedbackRequest,
+    RevisionPlan,
+    RevisionStatus,
     RunPriorityRequest,
     RunStatus,
     RunView,
@@ -281,6 +301,16 @@ async def _handle_actor_required(_: Request, exc: ActorRequired) -> JSONResponse
     """A repository reached a run-scoped read with no actor -- our bug, not the caller's."""
     logger.error("Repository used without an actor: %s", exc)
     return JSONResponse(status_code=500, content={"detail": "Internal authorization error"})
+
+
+@app.exception_handler(RevisionNotFound)
+async def _handle_revision_not_found(_: Request, exc: RevisionNotFound) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(RevisionConflict)
+async def _handle_revision_conflict(_: Request, exc: RevisionConflict) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.get("/health")
@@ -696,6 +726,385 @@ async def list_claims(run_id: str, repo: Repository = Depends(repository)) -> li
 @app.get("/v1/research-runs/{run_id}/coverage", dependencies=[Depends(resolve_principal)])
 async def get_coverage(run_id: str, repo: Repository = Depends(repository)) -> dict:
     return (await _required_run(run_id, repo)).coverage
+
+
+def _artifact_version_view(row) -> ArtifactVersionView:
+    return ArtifactVersionView(
+        id=row.id,
+        run_id=row.run_id,
+        revision_id=row.revision_id,
+        logical_name=row.logical_name,
+        revision_number=row.revision_number,
+        parent_version_id=row.parent_version_id,
+        media_type=row.media_type,
+        sha256=row.sha256,
+        size_bytes=row.size_bytes,
+        download_url=(
+            f"/v1/research-runs/{row.run_id}/artifact-versions/{row.id}"
+        ),
+        created_at=row.created_at,
+    )
+
+
+async def _document_revision_view(repo: Repository, row) -> DocumentRevisionView:
+    versions = await repo.list_artifact_versions(row.run_id, revision_id=row.id)
+    return DocumentRevisionView(
+        id=row.id,
+        run_id=row.run_id,
+        parent_revision_id=row.parent_revision_id,
+        base_revision_id=row.base_revision_id,
+        target_artifact_name=row.target_artifact_name,
+        revision_number=row.revision_number,
+        status=row.status,
+        feedback=row.feedback,
+        edit_plan=row.edit_plan,
+        format_overrides=row.format_overrides or {},
+        requested_by=row.requested_by,
+        channel=row.channel,
+        conversation_id=row.conversation_id,
+        model_id=row.model_id,
+        prompt_version=row.prompt_version,
+        usage=row.usage or {},
+        validation=row.validation or {},
+        error=row.error,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        accepted_at=row.accepted_at,
+        artifacts=[_artifact_version_view(item) for item in versions],
+    )
+
+
+async def _ensure_initial_document_revision(run_id: str, repo: Repository):
+    return await DocumentRevisionService(
+        repo, ObjectStore(get_settings()), settings=get_settings()
+    ).ensure_initial_revision(run_id)
+
+
+async def _enqueue_document_revision(request: Request, repo: Repository, row) -> None:
+    settings = get_settings()
+    redis = await _connect_redis(request.app, attempts=settings.redis_operation_connect_attempts)
+    if redis is None:
+        if settings.testing:
+            return
+        await repo.update_document_revision(
+            row.run_id,
+            row.id,
+            status=RevisionStatus.FAILED.value,
+            error="Redis queue unavailable; document revision was not started",
+        )
+        raise HTTPException(status_code=503, detail="Redis revision queue unavailable")
+    run = await _required_run(row.run_id, repo)
+    queued = await enqueue_revision(redis, row.id, run.priority)
+    if queued is None:
+        raise HTTPException(status_code=409, detail="Document revision is already running")
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/artifacts/{name}/revisions",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def create_document_revision(
+    run_id: str,
+    name: str,
+    body: DocumentRevisionCreate,
+    request: Request,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    repo: Repository = Depends(repository),
+) -> DocumentRevisionView:
+    current = await _ensure_initial_document_revision(run_id, repo)
+    current_versions = await repo.list_artifact_versions(run_id, revision_id=current.id)
+    editable_names = {
+        version.logical_name
+        for version in current_versions
+        if version.media_type
+        in {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        }
+    }
+    if name not in editable_names:
+        raise HTTPException(status_code=404, detail="Editable artifact not found")
+    if idempotency_key is not None and not 1 <= len(idempotency_key) <= 120:
+        raise HTTPException(status_code=400, detail="Idempotency-Key must be 1-120 characters")
+    row = await repo.create_document_revision(
+        run_id,
+        target_artifact_name=name,
+        feedback=body.feedback,
+        base_revision_id=body.base_revision_id or current.id,
+        parent_revision_id=body.parent_revision_id,
+        idempotency_key=idempotency_key,
+        channel=body.channel,
+        conversation_id=body.conversation_id,
+    )
+    if row.status == RevisionStatus.QUEUED.value:
+        await _enqueue_document_revision(request, repo, row)
+    return await _document_revision_view(repo, row)
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/revisions",
+    response_model=list[DocumentRevisionView],
+    dependencies=[Depends(resolve_principal)],
+)
+async def list_document_revisions(
+    run_id: str, repo: Repository = Depends(repository)
+) -> list[DocumentRevisionView]:
+    await _ensure_initial_document_revision(run_id, repo)
+    return [
+        await _document_revision_view(repo, row)
+        for row in await repo.list_document_revisions(run_id)
+    ]
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def get_document_revision(
+    run_id: str, revision_id: str, repo: Repository = Depends(repository)
+) -> DocumentRevisionView:
+    return await _document_revision_view(
+        repo, await repo.get_document_revision(run_id, revision_id)
+    )
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}/diff",
+    dependencies=[Depends(resolve_principal)],
+)
+async def get_document_revision_diff(
+    run_id: str, revision_id: str, repo: Repository = Depends(repository)
+) -> dict:
+    row = await repo.get_document_revision(run_id, revision_id)
+    if row.parent_revision_id is None:
+        return {"revision_id": row.id, "changes": [], "format_overrides": {}}
+    parent = await repo.get_document_revision(run_id, row.parent_revision_id)
+    before = editable_targets(parent.report_model)
+    after = editable_targets(row.report_model) if row.report_model else dict(before)
+    operations = (row.edit_plan or {}).get("operations") or []
+    if not row.report_model:
+        for operation in operations:
+            target = str(operation.get("target") or "")
+            if target in after and operation.get("replacement") is not None:
+                after[target] = str(operation["replacement"])
+    targets = list(dict.fromkeys(str(item.get("target") or "") for item in operations))
+    if row.report_model:
+        targets.extend(target for target in before if before.get(target) != after.get(target))
+    changes = [
+        {
+            "target": target,
+            "before": before.get(target),
+            "after": after.get(target),
+        }
+        for target in dict.fromkeys(targets)
+        if target and before.get(target) != after.get(target)
+    ]
+    return {
+        "revision_id": row.id,
+        "parent_revision_id": parent.id,
+        "changes": changes,
+        "format_overrides": row.format_overrides or {},
+    }
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}/feedback",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def add_document_revision_feedback(
+    run_id: str,
+    revision_id: str,
+    body: RevisionFeedbackRequest,
+    request: Request,
+    repo: Repository = Depends(repository),
+) -> DocumentRevisionView:
+    row = await repo.get_document_revision(run_id, revision_id)
+    if row.status not in {
+        RevisionStatus.AWAITING_FEEDBACK.value,
+        RevisionStatus.CLARIFYING.value,
+        RevisionStatus.AWAITING_PLAN_APPROVAL.value,
+    }:
+        raise RevisionConflict(f"Revision is not awaiting feedback: {row.status}")
+    feedback = body.feedback.strip()
+    if row.feedback:
+        feedback = f"{row.feedback}\n\nClarification: {feedback}"
+    row = await repo.update_document_revision(
+        run_id,
+        revision_id,
+        feedback=feedback,
+        edit_plan=None,
+        status=RevisionStatus.QUEUED.value,
+        channel_state={},
+        error=None,
+    )
+    await _enqueue_document_revision(request, repo, row)
+    return await _document_revision_view(repo, row)
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}/approve-plan",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def approve_document_revision_plan(
+    run_id: str,
+    revision_id: str,
+    request: Request,
+    repo: Repository = Depends(repository),
+) -> DocumentRevisionView:
+    row = await repo.get_document_revision(run_id, revision_id)
+    if row.status != RevisionStatus.AWAITING_PLAN_APPROVAL.value or not row.edit_plan:
+        raise RevisionConflict(f"Revision plan cannot be approved in {row.status}")
+    plan = RevisionPlan.model_validate(row.edit_plan)
+    if plan.classification == "research_extension_required":
+        raise RevisionConflict("Feedback requires a new research run")
+    row = await repo.update_document_revision(
+        run_id,
+        revision_id,
+        status=RevisionStatus.QUEUED.value,
+        channel_state={},
+        error=None,
+    )
+    await _enqueue_document_revision(request, repo, row)
+    return await _document_revision_view(repo, row)
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}/accept",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def accept_document_revision(
+    run_id: str, revision_id: str, repo: Repository = Depends(repository)
+) -> DocumentRevisionView:
+    row = await repo.accept_document_revision(run_id, revision_id)
+    await repo.event(
+        run_id,
+        "document_revision_accepted",
+        {"revision_id": revision_id, "revision_number": row.revision_number},
+    )
+    return await _document_revision_view(repo, row)
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}/restore",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def restore_document_revision(
+    run_id: str, revision_id: str, repo: Repository = Depends(repository)
+) -> DocumentRevisionView:
+    row = await repo.restore_document_revision(run_id, revision_id)
+    await repo.event(
+        run_id,
+        "document_revision_restore_prepared",
+        {"revision_id": row.id, "source_revision_id": revision_id},
+    )
+    return await _document_revision_view(repo, row)
+
+
+@app.post(
+    "/v1/research-runs/{run_id}/revisions/{revision_id}/cancel",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def cancel_document_revision(
+    run_id: str,
+    revision_id: str,
+    request: Request,
+    repo: Repository = Depends(repository),
+) -> DocumentRevisionView:
+    row = await repo.get_document_revision(run_id, revision_id)
+    if row.status in {
+        RevisionStatus.ACCEPTED.value,
+        RevisionStatus.SUPERSEDED.value,
+        RevisionStatus.CANCELLED.value,
+        RevisionStatus.FAILED.value,
+    }:
+        raise RevisionConflict(f"Revision cannot be cancelled in {row.status}")
+    row = await repo.update_document_revision(
+        run_id, revision_id, status=RevisionStatus.CANCELLED.value
+    )
+    redis = request.app.state.redis
+    if redis is not None:
+        await cancel_queued_revision_job(redis, revision_id)
+    return await _document_revision_view(repo, row)
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/artifact-versions",
+    response_model=list[ArtifactVersionView],
+    dependencies=[Depends(resolve_principal)],
+)
+async def list_artifact_versions(
+    run_id: str, repo: Repository = Depends(repository)
+) -> list[ArtifactVersionView]:
+    await _ensure_initial_document_revision(run_id, repo)
+    return [_artifact_version_view(row) for row in await repo.list_artifact_versions(run_id)]
+
+
+async def _artifact_version_response(row) -> Response:
+    data = await ObjectStore(get_settings()).get(row.object_key)
+    return Response(
+        data,
+        media_type=row.media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{row.logical_name}"',
+            "X-Run-Id": row.run_id,
+            "X-Revision-Id": row.revision_id,
+            "X-Revision-Number": str(row.revision_number),
+            "X-Artifact-Version-Id": row.id,
+        },
+    )
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/artifact-versions/{version_id}",
+    dependencies=[Depends(resolve_principal)],
+)
+async def download_artifact_version(
+    run_id: str, version_id: str, repo: Repository = Depends(repository)
+) -> Response:
+    return await _artifact_version_response(await repo.get_artifact_version(run_id, version_id))
+
+
+@app.get(
+    "/v1/document-revisions/active",
+    response_model=DocumentRevisionView | None,
+    dependencies=[Depends(resolve_principal)],
+)
+async def active_document_revision(
+    channel: str,
+    conversation_id: str,
+    repo: Repository = Depends(repository),
+) -> DocumentRevisionView | None:
+    row = await repo.active_document_revision(
+        channel=channel, conversation_id=conversation_id
+    )
+    return await _document_revision_view(repo, row) if row else None
+
+
+@app.get(
+    "/v1/document-revisions/{revision_id}",
+    response_model=DocumentRevisionView,
+    dependencies=[Depends(resolve_principal)],
+)
+async def get_document_revision_by_id(
+    revision_id: str, repo: Repository = Depends(repository)
+) -> DocumentRevisionView:
+    return await _document_revision_view(
+        repo, await repo.get_document_revision_by_id(revision_id)
+    )
+
+
+@app.get("/v1/artifact-versions/{version_id}", dependencies=[Depends(resolve_principal)])
+async def download_artifact_version_by_id(
+    version_id: str, repo: Repository = Depends(repository)
+) -> Response:
+    return await _artifact_version_response(await repo.get_artifact_version_by_id(version_id))
 
 
 @app.get(
