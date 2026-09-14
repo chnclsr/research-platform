@@ -705,3 +705,64 @@ def test_the_docx_body_comes_from_the_package_sections_not_a_derived_string() ->
     assert "Paketten gelen bölüm metni" in text
     assert "Paketten gelen belirsizlik" in text
     assert "Argümandan gelen" not in text
+
+
+
+def test_the_word_report_carries_no_diagnostic_codes_and_shows_the_reader_note() -> None:
+    """Codes like `synthesis:missing_citation` belong to the audit trail, not to the reader.
+
+    They used to open the summary and every section ("LLM metni değiştirilmeden korunmuştur.
+    Doğrulama uyarıları: ..."), and the method appendix printed the raw layer record.
+    """
+    package = SynthesisPackage(
+        executive_summary="The evidence supports a measured improvement [S01].",
+        sections=[
+            SynthesisSection(
+                title="Theme one",
+                synthesis="Draft one reports an improvement [S01].\n\nDraft two agrees [S01].",
+                source_ids=["S01"],
+                claim_ids=["claim-1"],
+                generation_note="unmerged_drafts_visible:consolidation_unavailable:OutputTruncated",
+                validation_warnings=[
+                    "synthesis:missing_citation",
+                    "consensus:no_multi_source_moderate_evidence",
+                    "llm_synthesis_unmerged",
+                ],
+                reader_note="This theme could not be merged into a single text.",
+            ),
+            SynthesisSection(
+                title="Theme two", synthesis="A second theme [S01].", source_ids=["S01"]
+            ),
+        ],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        study_profiles=[],
+        generated_by_llm=False,
+        generation_status="partial",
+        generation_diagnostics={
+            "theme_1": "consolidation_unavailable:OutputTruncated+OutputTruncated"
+        },
+        validation_warnings={
+            "theme_1": ["synthesis:missing_citation"],
+            "overview": ["llm:OutputTruncated"],
+        },
+    )
+    report = build_word_report(**_minimal_report_inputs(), synthesis_package=package)
+    text = _body_text_in_order(Document(io.BytesIO(report.document)))
+
+    for code in (
+        "missing_citation",
+        "no_multi_source",
+        "OutputTruncated",
+        "llm_synthesis",
+        "consolidation_unavailable",
+        "Doğrulama uyarıları",
+        "Validation warnings",
+        "Katman kaydı",
+        "Layer record",
+        "üretilemedi",
+        "could not be produced",
+    ):
+        assert code not in text, code
+    assert "This theme could not be merged into a single text." in text

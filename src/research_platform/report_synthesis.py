@@ -55,6 +55,10 @@ class SynthesisSection:
     # Validation is advisory for reader-facing LLM prose. The original text above is never
     # rewritten or discarded because one of these diagnostics fired.
     validation_warnings: list[str] = field(default_factory=list)
+    # A plain-language line shown to the reader above this section when how it was produced
+    # changes how it should be read -- drafts presented unmerged, for one. Never a diagnostic
+    # code: those stay in `validation_warnings` and never reach Word or PowerPoint.
+    reader_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -85,13 +89,12 @@ class SynthesisPackage:
         # would recreate the exact defect this mode is designed to avoid.
         if self.report_mode == "compact":
             return ""
+        # No validation codes in the reader's text. `synthesis:missing_citation` and its kind
+        # are diagnostics for whoever audits the run: they stay on the section records, in the
+        # synthesis events and in the export manifest, where they can be queried. Printed
+        # above every section they read as a broken document to the person it was written for.
         parts: list[str] = []
         for section in self.sections:
-            if section.validation_warnings:
-                parts.append(
-                    "> ⚠ Sentez doğrulama uyarısı: "
-                    + ", ".join(section.validation_warnings)
-                )
             parts.append(f"## {section.title}\n\n{section.synthesis}")
             for label, value in (
                 ("Ortak yön", section.consensus),
@@ -101,18 +104,8 @@ class SynthesisPackage:
                 if value:
                     parts.append(f"**{label}:** {value}")
         if self.cross_study_assessment:
-            warnings = self.validation_warnings.get("cross_study_assessment", [])
-            if warnings:
-                parts.append(
-                    "> ⚠ Sentez doğrulama uyarısı: " + ", ".join(warnings)
-                )
             parts.append(f"## Çalışmalar arası değerlendirme\n\n{self.cross_study_assessment}")
         if self.conclusion:
-            warnings = self.validation_warnings.get("conclusion", [])
-            if warnings:
-                parts.append(
-                    "> ⚠ Sentez doğrulama uyarısı: " + ", ".join(warnings)
-                )
             parts.append(f"## Sonuç\n\n{self.conclusion}")
         return "\n\n".join(parts)
 
@@ -1099,6 +1092,21 @@ def _overview_overlap_rows(
     return overlaps
 
 
+#: What a reader sees for a theme that has no usable draft at all. Plain language, no mention
+#: of a model, and it says where the findings are: the audited claim register, which every
+#: report format carries under a different appendix number, so no letter is named.
+_THEME_WITHOUT_NARRATIVE = {
+    True: (
+        "Bu tema için özet anlatı oluşturulamadı; ilgili denetlenmiş bulgular rapor "
+        "eklerindeki iddia kaydında yer alıyor."
+    ),
+    False: (
+        "No narrative summary could be produced for this theme; the related audited findings "
+        "are listed in the claim register in the report appendices."
+    ),
+}
+
+
 def _fallback_section(
     title: str,
     claims: list[Any],
@@ -1118,11 +1126,7 @@ def _fallback_section(
         claim_ids.append(str(claim.id))
     return SynthesisSection(
         title=title,
-        synthesis=(
-            "LLM sentezi üretilemedi; kanıt kayıtları denetim eklerinde korunmuştur."
-            if turkish
-            else "LLM synthesis could not be produced; evidence records remain in the audit appendices."
-        ),
+        synthesis=_THEME_WITHOUT_NARRATIVE[turkish],
         source_ids=sources,
         claim_ids=claim_ids,
         validation_warnings=["llm_synthesis_unavailable"],
@@ -1194,6 +1198,99 @@ async def _draft_section(
         ),
     )
     return failed, False, f"unavailable:{'+'.join(errors) or 'unknown'}"
+
+
+#: Shown above a theme whose drafts all succeeded but could not be merged into one text.
+_UNMERGED_THEME_NOTE = {
+    True: (
+        "Bu tema tek bir metinde birleştirilemedi; bulgular, kanıt paketlerinden üretilen "
+        "bölümler hâlinde ve değiştirilmeden sunulmuştur."
+    ),
+    False: (
+        "This theme could not be merged into a single text; its findings are presented "
+        "unchanged, in the parts drafted from each evidence packet."
+    ),
+}
+
+
+#: Shown above a theme some of whose evidence packets produced no draft.
+_PARTIAL_THEME_NOTE = {
+    True: (
+        "Bu temanın bazı bulguları bu metne dahil edilemedi; bu bulgular yalnız rapor "
+        "eklerindeki iddia kaydında yer alıyor."
+    ),
+    False: (
+        "Some of this theme's findings could not be included in this text; they appear only "
+        "in the claim register in the report appendices."
+    ),
+}
+
+
+def _unmerged_section(
+    title: str, drafts: list[SynthesisSection], *, turkish: bool
+) -> SynthesisSection:
+    """Every successful draft of a theme, shown as written, when the merge failed.
+
+    Measured on run 01M289BAGG7CDC34HQF3GYK5ZZ: four of four drafts of "Bulgular ve
+    karşılaştırmalı sonuçlar" succeeded, the merge ran into the output ceiling twice, and the
+    report printed "LLM sentezi üretilemedi" over cited prose it already had. When some
+    packets failed as well, `_partial_theme_section` puts its own note in front of this one.
+
+    Fields are joined, never edited, so the verbatim-prose contract holds.
+    """
+
+    def joined(name: str) -> str:
+        return "\n\n".join(
+            value
+            for draft in drafts
+            if (value := str(getattr(draft, name) or "")).strip()
+        )
+
+    return SynthesisSection(
+        title=title,
+        synthesis=joined("synthesis"),
+        consensus=joined("consensus"),
+        disagreements=joined("disagreements"),
+        implications=joined("implications"),
+        source_ids=list(
+            dict.fromkeys(source_id for draft in drafts for source_id in draft.source_ids)
+        ),
+        claim_ids=list(dict.fromkeys(claim_id for draft in drafts for claim_id in draft.claim_ids)),
+        validation_warnings=list(
+            dict.fromkeys(
+                [
+                    *(warning for draft in drafts for warning in draft.validation_warnings),
+                    "llm_synthesis_unmerged",
+                ]
+            )
+        ),
+        reader_note=_UNMERGED_THEME_NOTE[turkish],
+    )
+
+
+def _partial_theme_section(
+    section: SynthesisSection, pass_notes: list[str], *, turkish: bool
+) -> SynthesisSection:
+    """A theme built from the packets that drafted, saying that the rest are missing.
+
+    One failed call out of sixteen used to discard the other fifteen drafts and leave the
+    theme empty. Showing the surviving prose is only honest with the note: without it the
+    reader would take part of a theme for all of it. The claims of the failed packets stay in
+    the claim register, and the run status keeps reporting the theme as partial.
+    """
+    return replace(
+        section,
+        validation_warnings=list(
+            dict.fromkeys(
+                [
+                    *section.validation_warnings,
+                    "llm_synthesis_partial_packet_failure",
+                    *[f"packet:{note}" for note in pass_notes if note.startswith("unavailable:")],
+                ]
+            )
+        ),
+        reader_note=f"{_PARTIAL_THEME_NOTE[turkish]} {section.reader_note}".strip(),
+    )
 
 
 def _pass_cards(passes: list[SynthesisSection], budget: int) -> tuple[str, int]:
@@ -1397,9 +1494,9 @@ async def _consolidate_passes(
             topology["pass_cards_ungrounded"] += ungrounded
             notes.append(f"{size}={note}")
             if section is None:
-                # A failure at any level fails the theme. Carrying the surviving branches
-                # forward would publish part of a theme as if it were the whole, which is
-                # the defect `llm_synthesis_partial_packet_failure` exists to prevent.
+                # A failure at any level fails the merge, and the caller shows every draft
+                # unmerged. Carrying only the surviving branches forward would publish part
+                # of the theme's merge as if it were the whole.
                 round_traces.append("+".join(notes))
                 topology["trace"] = "|".join(
                     f"r{index}:{trace}" for index, trace in enumerate(round_traces, 1)
@@ -1439,6 +1536,74 @@ async def _consolidate_passes(
     return root, True, note, topology
 
 
+#: What `_draft_overview` puts in a field it could not produce. The build step compares
+#: against it to find the fields it has to compile from the themes instead; it is never
+#: meant to reach a reader.
+_OVERVIEW_UNAVAILABLE = {
+    True: "LLM sentezi üretilemedi; kanıt kayıtları denetim eklerinde korunmuştur.",
+    False: (
+        "LLM synthesis could not be produced; evidence records remain in the audit appendices."
+    ),
+}
+#: Shown in place of a summary when there is no model prose anywhere to compile one from.
+_REPORT_WITHOUT_SUMMARY = {
+    True: (
+        "Bu rapor için özet oluşturulamadı; ilgili denetlenmiş bulgular rapor eklerindeki "
+        "iddia kaydında yer alıyor."
+    ),
+    False: (
+        "No summary could be produced for this report; the related audited findings are "
+        "listed in the claim register in the report appendices."
+    ),
+}
+#: Heads every overview field compiled from the themes, so the reader knows it is a selection
+#: of the theme sections' own sentences and not an integration written for this slot.
+_COMPILED_FROM_THEMES = {
+    True: "Bu bölüm, tema bölümlerindeki bulgulardan derlenmiştir.",
+    False: "This section is compiled from the findings in the theme sections.",
+}
+
+
+def _compiled_overview(sections: list[SynthesisSection], *, turkish: bool) -> dict[str, str]:
+    """Overview fields assembled from the themes' own sentences, for when the layer failed.
+
+    Each field takes the first complete sentence of one field of every theme that has model
+    prose -- synthesis for the summary, implications for the conclusion, disagreements for
+    the uncertainty -- word for word, citations included. Nothing reaches the reader that a
+    theme section did not already say, and the label says the text is a compilation.
+
+    Measured on run 01M289BAGG7CDC34HQF3GYK5ZZ: the overview call ran into the output ceiling
+    twice, and the executive summary, conclusion and uncertainty all read "LLM sentezi
+    üretilemedi" -- the first thing in the report -- over four themes of cited prose.
+    """
+    written = [
+        section
+        for section in sections
+        if "llm_synthesis_unavailable" not in section.validation_warnings
+        and str(section.synthesis or "").strip()
+    ]
+
+    def first_sentences(name: str) -> str:
+        picked: list[str] = []
+        for section in written:
+            value = str(getattr(section, name) or "")
+            if not value.strip():
+                continue
+            sentences = _sentences(value)
+            picked.append(sentences[0] if sentences else " ".join(value.split()))
+        return " ".join(picked)
+
+    def labelled(text: str) -> str:
+        return f"{_COMPILED_FROM_THEMES[turkish]}\n\n{text}" if text else ""
+
+    return {
+        "executive_summary": labelled(first_sentences("synthesis"))
+        or _REPORT_WITHOUT_SUMMARY[turkish],
+        "conclusion": labelled(first_sentences("implications")),
+        "uncertainty": labelled(first_sentences("disagreements")),
+    }
+
+
 async def _draft_overview(
     llm: LLMProvider,
     *,
@@ -1453,11 +1618,7 @@ async def _draft_overview(
         for section in sections
         for source_id in section.source_ids
     }
-    unavailable = (
-        "LLM sentezi üretilemedi; kanıt kayıtları denetim eklerinde korunmuştur."
-        if turkish
-        else "LLM synthesis could not be produced; evidence records remain in the audit appendices."
-    )
+    unavailable = _OVERVIEW_UNAVAILABLE[turkish]
     digest_budget = max(
         3000,
         _prompt_char_budget(llm) - len(question) - (len(allowed) * 8) - 500,
@@ -1664,42 +1825,30 @@ async def build_synthesis_package(
         if not drafts:
             section, succeeded = fallback, False
             diagnostic = f"all_passes_unavailable:{'+'.join(pass_notes)}"
-        elif len(drafts) != len(attempted_packets):
-            # Showing only the successful slice would silently omit the failed packet's
-            # claims while describing the whole theme as complete. Preserve no partial
-            # slice as the final theme: expose an explicit failure and keep every claim in
-            # the audit appendices.
-            section = replace(
-                fallback,
-                validation_warnings=list(
-                    dict.fromkeys(
-                        [
-                            *fallback.validation_warnings,
-                            "llm_synthesis_partial_packet_failure",
-                            *[
-                                f"packet:{note}"
-                                for note in pass_notes
-                                if note.startswith("unavailable:")
-                            ],
-                        ]
-                    )
-                ),
-            )
-            succeeded = False
-            diagnostic = f"partial_packet_failure:{'+'.join(pass_notes)}"
-        elif len(drafts) == 1:
-            section, succeeded, diagnostic = drafts[0], True, pass_notes[0]
         else:
-            section, succeeded, note, reduce_topology = await _consolidate_passes(
-                llm,
-                question=question,
-                title=title,
-                passes=drafts,
-                language=language,
-                turkish=turkish,
-                scope_context=scope_context,
-            )
-            diagnostic = f"{note}({'+'.join(pass_notes)})"
+            if len(drafts) == 1:
+                section, succeeded, diagnostic = drafts[0], True, "+".join(pass_notes)
+            else:
+                section, succeeded, note, reduce_topology = await _consolidate_passes(
+                    llm,
+                    question=question,
+                    title=title,
+                    passes=drafts,
+                    language=language,
+                    turkish=turkish,
+                    scope_context=scope_context,
+                )
+                diagnostic = f"{note}({'+'.join(pass_notes)})"
+                if not succeeded:
+                    # The merge failed. Show the drafts rather than a failure line -- see
+                    # `_unmerged_section`. `succeeded` stays False: the integration layer
+                    # did fail, and the run status keeps saying so.
+                    section = _unmerged_section(title, drafts, turkish=turkish)
+                    diagnostic = f"unmerged_drafts_visible:{diagnostic}"
+            if len(drafts) != len(attempted_packets):
+                section = _partial_theme_section(section, pass_notes, turkish=turkish)
+                succeeded = False
+                diagnostic = f"partial_packet_failure:{diagnostic}"
         if any(str(getattr(claim, "status", "")) == "qualified" for claim in theme_claims):
             section = replace(
                 section,
@@ -1714,9 +1863,9 @@ async def build_synthesis_package(
                 "theme": title,
                 "claims_total": len(theme_claims),
                 "claims_offered": sum(len(packet.claim_ids) for packet in packets),
-                # A failed packet or reduce produces an explicit unavailable section, so
-                # none of the packet claims may be reported as present in final prose.
-                "claims_shown": len(set(drafted_claim_ids)) if succeeded else 0,
+                # Every draft that came out is shown -- merged, unmerged, or under the
+                # partial note -- and a failed packet's claims never are.
+                "claims_shown": len(set(drafted_claim_ids)),
                 "claims_without_evidence": len(unbacked),
                 "passes": len(packets),
                 # The variable that decides whether a draft cites at all. Derivable from the
@@ -1726,7 +1875,7 @@ async def build_synthesis_package(
                     sum(len(packet.claim_ids) for packet in packets) / max(1, len(packets)), 1
                 ),
                 "passes_drafted": len(drafts),
-                "passes_used": len(drafts) if succeeded else 0,
+                "passes_used": len(drafts),
                 # `passes*` above stay leaf counts; the reduce record describes the tree that
                 # merged them. `pass_cards_ungrounded > 0` means a card field still lost its
                 # citations, which is the signal that the fan-in floor is mis-derived.
@@ -1750,9 +1899,18 @@ async def build_synthesis_package(
         report_mode = "compact"
         mode_reasons.append("fewer_than_2_viable_themes")
 
+    compiled_fields: list[str] = []
     if report_mode == "compact":
+        if not sections:
+            compact_summary = ""
+        elif "llm_synthesis_unavailable" in sections[0].validation_warnings:
+            # The one theme has no model prose, so there is no summary to show; its own
+            # theme-level note ("for this theme") would read wrong in the summary slot.
+            compact_summary = _REPORT_WITHOUT_SUMMARY[turkish]
+        else:
+            compact_summary = sections[0].synthesis
         overview = {
-            "executive_summary": sections[0].synthesis if sections else "",
+            "executive_summary": compact_summary,
             "cross_study_assessment": "",
             "conclusion": "",
             "uncertainty": sections[0].disagreements if sections else "",
@@ -1773,6 +1931,21 @@ async def build_synthesis_package(
             turkish=turkish,
             scope_context=scope_context,
         )
+        # A field the overview layer could not produce is compiled from the themes' own
+        # sentences rather than shown as a failure line (see `_compiled_overview`). This is
+        # not the section-excerpt replacement ruled out below: that would overwrite model
+        # prose because it overlapped; here there is no model prose in the field to keep.
+        compiled_fields = [
+            key
+            for key in ("executive_summary", "conclusion", "uncertainty")
+            if not str(overview.get(key) or "").strip()
+            or overview.get(key) == _OVERVIEW_UNAVAILABLE[turkish]
+        ]
+        if compiled_fields:
+            compiled = _compiled_overview(sections, turkish=turkish)
+            overview = {**overview, **{key: compiled[key] for key in compiled_fields}}
+            overview_diagnostic = f"{overview_diagnostic}:compiled={'+'.join(compiled_fields)}"
+            overview_warnings.setdefault("overview", []).append("overview:compiled_from_themes")
     if any(str(getattr(claim, "status", "")) == "qualified" for claim in unique_claims):
         overview_warnings.setdefault("executive_summary", []).append(
             "qualified:single_study_findings"
@@ -1780,8 +1953,15 @@ async def build_synthesis_package(
         overview_warnings["executive_summary"] = list(
             dict.fromkeys(overview_warnings["executive_summary"])
         )
+    # Compiled fields are theme sentences by construction; comparing them with the themes would
+    # report the compilation itself as duplicated prose.
     overlap_rows = (
-        [] if report_mode == "compact" else _overview_overlap_rows(overview, sections)
+        []
+        if report_mode == "compact"
+        else _overview_overlap_rows(
+            {key: ("" if key in compiled_fields else value) for key, value in overview.items()},
+            sections,
+        )
     )
     # Duplicate or overlapping prose is diagnostic only. It must never trigger a rewrite,
     # deletion, compact-mode transition, or replacement with section excerpts.
@@ -1847,7 +2027,12 @@ async def build_synthesis_package(
         and llm_successes == len(sections)
         and overview_succeeded
     )
-    if not sections or (llm_successes == 0 and not overview_succeeded):
+    # "failed" means the reader has no model prose at all. A theme shown unmerged or under the
+    # partial note is not a success, but it is not nothing either.
+    themes_with_prose = sum(
+        1 for section in sections if "llm_synthesis_unavailable" not in section.validation_warnings
+    )
+    if not sections or (themes_with_prose == 0 and not overview_succeeded):
         generation_status = "failed"
     elif not all_model_layers_succeeded:
         generation_status = "partial"

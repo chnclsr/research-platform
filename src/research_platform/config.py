@@ -4,7 +4,7 @@ import os
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Which dotenv file backs Settings, and whether one is read at all.
@@ -67,7 +67,12 @@ class Settings(BaseSettings):
     # Run 01M27RKQFHR80WNHEQVF2AF2DS let the window set the packet size too, packets tripled,
     # and citations fell further than before the change.
     llm_context_tokens: int = Field(16384, ge=2048, le=262144)
-    llm_max_output_tokens: int = Field(2048, ge=128, le=32768)
+    # A ceiling, not a target: a call stops when its JSON is done, so ordinary calls are not
+    # made longer by it. 2048 was too tight for the four-field Turkish merge and overview
+    # prompts -- successful ones already used 50-86% of it, and run 01M289BAGG7CDC34HQF3GYK5ZZ
+    # lost one theme and the whole overview to `done_reason=length`. The largest prompt seen,
+    # 6170 tokens, plus 4096 still fits the 16384 window; see `_output_leaves_prompt_room`.
+    llm_max_output_tokens: int = Field(4096, ge=128, le=32768)
     llm_reasoning_output_tokens: int = Field(20480, ge=512, le=131072)
     llm_timeout_s: float = Field(180.0, ge=10.0, le=3600.0)
     llm_temperature: float = Field(0.0, ge=0.0, le=2.0)
@@ -391,6 +396,21 @@ class Settings(BaseSettings):
                 f"(got {value!r})"
             )
         return value
+
+    @model_validator(mode="after")
+    def _output_leaves_prompt_room(self) -> Settings:
+        # Ollama counts the answer inside `num_ctx`. A ceiling that crowds the window does not
+        # fail: the PROMPT is cut from the left, and the evidence packet is what goes. At least
+        # 4096 tokens are kept for the prompt -- the system prompt plus the 6000-character
+        # floor `report_synthesis._prompt_char_budget` never goes below.
+        room = self.llm_context_tokens - self.llm_max_output_tokens
+        if room < 4096:
+            raise ValueError(
+                f"LLM_MAX_OUTPUT_TOKENS={self.llm_max_output_tokens} leaves {room} tokens of "
+                f"LLM_CONTEXT_TOKENS={self.llm_context_tokens} for the prompt; at least 4096 "
+                "are needed, or the evidence packet is truncated without an error"
+            )
+        return self
 
     @property
     def preparation_chain(self) -> tuple[str, ...]:

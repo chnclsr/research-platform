@@ -584,28 +584,9 @@ async def build_exports(
         else ""
     )
 
-    def validation_note_for(*fields: str) -> str:
-        warning_codes = list(
-            dict.fromkeys(
-                warning
-                for field in fields
-                for warning in synthesis_package.validation_warnings.get(field, [])
-            )
-        )
-        if not warning_codes:
-            return ""
-        return (
-            (
-                "> ⚠ LLM metni doğrulama uyarılarıyla birlikte özgün biçimde korunmuştur: "
-                if language_is_turkish
-                else "> ⚠ The original LLM text is preserved with validation warnings: "
-            )
-            + ", ".join(warning_codes)
-            + "\n\n"
-        )
-
-    summary_validation_note = validation_note_for("executive_summary", "overview", "overlap")
-    uncertainty_validation_note = validation_note_for("uncertainty")
+    # Validation codes stay out of the reader's markdown, as they stay out of Word and
+    # PowerPoint. They remain queryable in the synthesis events and the export manifest,
+    # which is where an audit reads them.
     near_scope_sources = [
         source
         for source in sources
@@ -629,10 +610,10 @@ async def build_exports(
         f"{corpus_note}"
         f"## {labels['question']}\n\n{protocol.question_for_report()}\n\n"
         f"{near_scope_block}"
-        f"## {summary_heading}\n\n{summary_validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"## {summary_heading}\n\n{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{thematic_block}"
         f"## {labels['uncertainty']}\n\n"
-        f"{uncertainty_validation_note}{_markdown(synthesis.get('uncertainty'))}\n\n"
+        f"{_markdown(synthesis.get('uncertainty'))}\n\n"
         f"## {labels['appendix_a']}\n\n{answerability_appendix_note}{findings_md}\n\n"
         f"## {labels['appendix_b']}\n\n{answerability_appendix_note}{qualified_md}\n\n"
         f"## {labels['appendix_c']}\n\n"
@@ -641,7 +622,7 @@ async def build_exports(
     executive_md = (
         f"# {summary_heading}\n\n"
         f"{corpus_note}"
-        f"{summary_validation_note}{_markdown(synthesis.get('executive_summary'))}\n\n"
+        f"{_markdown(synthesis.get('executive_summary'))}\n\n"
         f"{labels['summary_note']}\n"
     )
 

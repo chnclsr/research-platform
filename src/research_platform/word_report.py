@@ -792,23 +792,9 @@ def _add_cited_paragraph(
         write(piece[cursor:], citation=False)
 
 
-def _add_validation_warning(
-    document: Document,
-    warnings: list[str],
-    *,
-    turkish: bool,
-) -> None:
-    if not warnings:
-        return
-    table = document.add_table(rows=1, cols=1)
-    prefix = (
-        "LLM metni değiştirilmeden korunmuştur. Doğrulama uyarıları: "
-        if turkish
-        else "The LLM text is preserved unchanged. Validation warnings: "
-    )
-    table.rows[0].cells[0].text = prefix + ", ".join(warnings)
-    _set_cell_shading(table.rows[0].cells[0], PALE_GOLD)
-    _style_table(table, [6.5], header_fill=PALE_GOLD, font_size=9)
+# There is deliberately no helper that prints validation codes into the document. Codes such
+# as `synthesis:missing_citation` are diagnostics: they live on the section records, in the
+# synthesis events and in the export manifest, and never in a document written for a reader.
 
 
 def _figure_matches_section(target: str, section_title: str) -> bool:
@@ -1045,15 +1031,6 @@ def _build_synthesis_word_report(
         "1. Özet" if turkish else "1. Summary",
         level=1,
     )
-    summary_warnings = list(
-        dict.fromkeys(
-            [
-                *package.validation_warnings.get("overview", []),
-                *package.validation_warnings.get("executive_summary", []),
-            ]
-        )
-    )
-    _add_validation_warning(document, summary_warnings, turkish=turkish)
     lead = document.add_table(rows=1, cols=1)
     lead.rows[0].cells[0].text = _model_text(package.executive_summary)
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
@@ -1134,11 +1111,11 @@ def _build_synthesis_word_report(
     visible_sections = package.sections if package.report_mode != "compact" else []
     for index, section in enumerate(visible_sections, 1):
         document.add_heading(f"3.{index} {_text(section.title, 240)}", level=2)
-        _add_validation_warning(
-            document,
-            section.validation_warnings,
-            turkish=turkish,
-        )
+        if section.reader_note:
+            note = document.add_paragraph()
+            note_run = note.add_run(_model_text(section.reader_note))
+            _set_run_font(note_run, size=9.5, color=MUTED)
+            note_run.italic = True
         _add_cited_paragraph(document, section.synthesis, linkable_labels)
         comparison_rows = [
             (
@@ -1241,21 +1218,11 @@ def _build_synthesis_word_report(
             level=1,
         )
         if package.cross_study_assessment:
-            _add_validation_warning(
-                document,
-                package.validation_warnings.get("cross_study_assessment", []),
-                turkish=turkish,
-            )
             _add_cited_paragraph(
                 document, package.cross_study_assessment, linkable_labels
             )
         if package.conclusion:
             document.add_heading("Sonuç" if turkish else "Conclusion", level=2)
-            _add_validation_warning(
-                document,
-                package.validation_warnings.get("conclusion", []),
-                turkish=turkish,
-            )
             _add_cited_paragraph(document, package.conclusion, linkable_labels)
     document.add_heading(
         (
@@ -1272,12 +1239,11 @@ def _build_synthesis_word_report(
         level=1 if package.report_mode == "compact" else 2,
     )
     uncertainty_box = document.add_table(rows=1, cols=1)
-    _add_validation_warning(
-        document,
-        package.validation_warnings.get("uncertainty", []),
-        turkish=turkish,
+    uncertainty_box.rows[0].cells[0].text = _model_text(package.uncertainty) or (
+        "Belirsizlik bölümü bu raporda ayrıca yer almıyor."
+        if turkish
+        else "No separate uncertainty section is included in this report."
     )
-    uncertainty_box.rows[0].cells[0].text = _model_text(package.uncertainty)
     _set_cell_shading(uncertainty_box.rows[0].cells[0], PALE_GOLD)
     _style_table(uncertainty_box, [6.5], header_fill=PALE_GOLD, font_size=10)
 
@@ -1336,23 +1302,28 @@ def _build_synthesis_word_report(
         marker = paragraph.add_run(f"{index}. ")
         _set_run_font(marker, size=10.5, color=BLUE, bold=True)
         _set_run_font(paragraph.add_run(point), size=10.5, color=INK)
-    diagnostic_text = ", ".join(
-        f"{layer}={status}"
-        for layer, status in package.generation_diagnostics.items()
-    )
+    # Plain language only. The layer-by-layer record (`theme_5=consolidation_unavailable:
+    # OutputTruncated+...`) and the raw status code belong to the audit trail -- the synthesis
+    # events and the export manifest -- not to a document written for a reader.
     document.add_paragraph(
         (
-            f"LLM sentez durumu: {package.generation_status}; "
-            f"özgün model metni {'tam' if package.generated_by_llm else 'kısmi veya üretilemedi'}. "
-            f"Katman kaydı: {diagnostic_text or 'mevcut değil'}. "
-            f"Connector kapsamı: {', '.join(connector_ids or []) or 'protokol varsayılanları'}."
+            (
+                "Sentez: tüm bölümler model tarafından yazılmış ve birleştirilmiştir. "
+                if package.generated_by_llm
+                else "Sentez: bazı bölümler birleştirilmeden ya da tema bölümlerinden "
+                "derlenerek sunulmuştur. "
+            )
+            + f"Connector kapsamı: {', '.join(connector_ids or []) or 'protokol varsayılanları'}."
         )
         if turkish
         else (
-            f"LLM synthesis status: {package.generation_status}; original model prose "
-            f"{'complete' if package.generated_by_llm else 'partial or unavailable'}. "
-            f"Layer record: {diagnostic_text or 'not available'}. "
-            f"Connector scope: {', '.join(connector_ids or []) or 'protocol defaults'}."
+            (
+                "Synthesis: every section was written and integrated by the model. "
+                if package.generated_by_llm
+                else "Synthesis: some sections are presented unmerged or compiled from the "
+                "theme sections. "
+            )
+            + f"Connector scope: {', '.join(connector_ids or []) or 'protocol defaults'}."
         )
     )
     mode_reasons = package.quality_diagnostics.get("mode_reasons", [])
@@ -1784,9 +1755,9 @@ def build_word_report(
 
     lead = document.add_table(rows=1, cols=1)
     lead.rows[0].cells[0].text = _text(executive_summary, 5000) or (
-        "Model sentezi üretilemedi; denetlenmiş bulgular aşağıdaki bölümlerde sunulmuştur."
+        "Bu rapor için özet oluşturulamadı; denetlenmiş bulgular aşağıdaki bölümlerde yer alıyor."
         if turkish
-        else "Model synthesis was unavailable; audited findings follow below."
+        else "No summary could be produced for this report; the audited findings follow below."
     )
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
     _style_table(lead, [6.5], header_fill=PALE_BLUE)

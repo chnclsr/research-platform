@@ -335,7 +335,8 @@ async def test_complete_provider_failure_never_turns_claims_into_narrative():
 
     assert package.generated_by_llm is False
     assert package.generation_status == "failed"
-    assert package.executive_summary.startswith("LLM synthesis could not be produced")
+    assert package.executive_summary.startswith("No summary could be produced for this report")
+    assert "LLM" not in package.executive_summary
     assert claim.text not in package.executive_summary
     assert all("fallback:" not in value for value in package.generation_diagnostics.values())
 
@@ -813,11 +814,62 @@ async def test_overview_fallback_does_not_collapse_a_standard_report() -> None:
     assert len(package.sections) >= 2
     assert package.narrative
     assert package.executive_summary
-    assert not prose_overlaps(
-        package.executive_summary, package.sections[0].synthesis
-    )
     assert package.generation_diagnostics["overview"].startswith("unavailable:")
     assert package.generation_status == "partial"
+
+
+async def test_a_failed_overview_is_compiled_from_the_themes_not_shown_as_a_failure() -> None:
+    """Run 01M289BAGG7CDC34HQF3GYK5ZZ opened its report on "LLM sentezi üretilemedi".
+
+    The overview call failed; the themes were fine. Summary, conclusion and uncertainty are
+    now the themes' own first sentences under a compilation label -- and the overlap check
+    does not report that compilation as duplicated prose.
+    """
+    from research_platform.report_synthesis import (
+        _COMPILED_FROM_THEMES,
+        _OVERVIEW_UNAVAILABLE,
+        _sentences,
+    )
+
+    package = await _standard_package(FailingOverviewLLM())
+
+    assert package.executive_summary.startswith(tuple(_COMPILED_FROM_THEMES.values()))
+    for value in (package.executive_summary, package.conclusion, package.uncertainty):
+        assert value not in _OVERVIEW_UNAVAILABLE.values()
+        assert "could not be produced" not in value and "üretilemedi" not in value
+    assert _sentences(package.sections[0].synthesis)[0] in package.executive_summary
+    assert ":compiled=" in package.generation_diagnostics["overview"]
+    assert "overview:compiled_from_themes" in package.validation_warnings["overview"]
+    assert not any(
+        row["left"] == "executive_summary"
+        for row in package.quality_diagnostics["field_overlaps"]
+    )
+
+
+def test_the_markdown_narrative_carries_no_validation_codes() -> None:
+    """The codes stay on the records and in the manifest; the reader's text has none."""
+    from research_platform.report_synthesis import SynthesisPackage
+
+    package = SynthesisPackage(
+        executive_summary="Summary [S01].",
+        sections=[
+            SynthesisSection(
+                title="Theme",
+                synthesis="Prose [S01].",
+                source_ids=["S01"],
+                validation_warnings=["synthesis:missing_citation"],
+            )
+        ],
+        cross_study_assessment="Assessment [S01].",
+        conclusion="Conclusion [S01].",
+        uncertainty="",
+        study_profiles=[],
+        generated_by_llm=True,
+        validation_warnings={"conclusion": ["conclusion:missing_citation"]},
+    )
+    assert "missing_citation" not in package.narrative
+    assert "⚠" not in package.narrative
+    assert "Prose [S01]." in package.narrative
 
 
 def test_collapsed_completeness_estimate_no_longer_forces_a_compact_report() -> None:
@@ -1158,46 +1210,115 @@ class UnusableConsolidationLLM(MultiPassLLM):
         return await super().complete_json(system, user)
 
 
-async def test_unusable_consolidation_retries_then_shows_only_explicit_failure() -> None:
+async def test_a_failed_merge_shows_every_draft_instead_of_a_failure_line() -> None:
+    """Every packet drafted; only the merge failed. The reader gets the drafts, unchanged.
+
+    Run 01M289BAGG7CDC34HQF3GYK5ZZ printed "LLM sentezi üretilemedi" over a theme whose four
+    drafts had all succeeded. That is not the partial slice the packet-failure rule refuses to
+    publish -- every claim is covered -- so the drafts are shown under a plain note.
+    """
     llm = UnusableConsolidationLLM()
 
     package = await _multi_pass_package(llm)
 
     assert llm.consolidations == 2
-    assert package.generation_status == "failed"
+    section = package.sections[0]
+    assert "Pass alpha" in section.synthesis and "Pass beta" in section.synthesis
+    assert section.reader_note and "LLM" not in section.reader_note
+    # The integration layer did fail, and the run's status and record keep saying so.
     assert package.generated_by_llm is False
-    assert package.sections[0].synthesis == (
-        "LLM synthesis could not be produced; evidence records remain in the audit appendices."
-    )
-    assert "Pass alpha" not in package.sections[0].synthesis
+    assert package.generation_status != "complete"
+    assert "llm_synthesis_unmerged" in section.validation_warnings
+    assert section.generation_note.startswith("unmerged_drafts_visible:")
     coverage = package.quality_diagnostics["theme_coverage"][0]
-    assert coverage["claims_shown"] == 0
+    assert coverage["claims_shown"] == coverage["claims_total"]
     assert coverage["passes_drafted"] == coverage["passes"]
-    assert coverage["passes_used"] == 0
+    assert coverage["passes_used"] == coverage["passes"]
 
 
 class UnusableLaterPacketLLM(MultiPassLLM):
+    """Only the packet carrying the first finding drafts."""
+
     async def complete_json(self, system: str, user: str):
-        if "merging several partial drafts" in system:
-            raise AssertionError("a partial packet set must not be consolidated")
-        if "claim=Finding 0:" not in user:
+        if "merging several partial drafts" not in system and "claim=Finding 0:" not in user:
             self.drafts += 1
             return {}
         return await super().complete_json(system, user)
 
 
-async def test_one_unusable_packet_cannot_be_silently_omitted_from_a_complete_theme() -> None:
+async def test_one_unusable_packet_shows_the_drafted_rest_under_a_note() -> None:
+    """One failed packet used to discard every other draft and leave the theme empty.
+
+    The surviving prose is shown, but never as the whole theme: the note says some findings
+    are only in the claim register, and coverage counts exactly the claims that reached it.
+    """
+    from research_platform.report_synthesis import _PARTIAL_THEME_NOTE
+
     package = await _multi_pass_package(UnusableLaterPacketLLM())
 
-    assert package.generation_status == "failed"
+    section = package.sections[0]
+    assert section.synthesis
+    assert not section.synthesis.startswith("No narrative summary could be produced")
+    assert section.reader_note == _PARTIAL_THEME_NOTE[False]
+    assert "llm_synthesis_partial_packet_failure" in section.validation_warnings
+    assert "llm_synthesis_unavailable" not in section.validation_warnings
+    assert section.generation_note.startswith("partial_packet_failure:")
     assert package.generated_by_llm is False
-    assert package.sections[0].synthesis.startswith("LLM synthesis could not be produced")
-    assert "llm_synthesis_partial_packet_failure" in package.sections[0].validation_warnings
+    assert package.generation_status == "partial"
     coverage = package.quality_diagnostics["theme_coverage"][0]
     assert coverage["claims_offered"] == coverage["claims_total"]
-    assert coverage["claims_shown"] == 0
+    assert 0 < coverage["claims_shown"] < coverage["claims_total"]
     assert coverage["passes_drafted"] < coverage["passes"]
-    assert coverage["passes_used"] == 0
+    assert coverage["passes_used"] == coverage["passes_drafted"]
+
+
+class UnusableLastPacketLLM(MultiPassLLM):
+    """Every packet drafts except the one carrying the last finding of a 36-claim theme."""
+
+    async def complete_json(self, system: str, user: str):
+        if "merging several partial drafts" not in system and "claim=Finding 35:" in user:
+            self.drafts += 1
+            return {}
+        return await super().complete_json(system, user)
+
+
+async def test_the_drafted_packets_of_a_partial_theme_are_still_merged() -> None:
+    from research_platform.report_synthesis import _PARTIAL_THEME_NOTE
+
+    llm = UnusableLastPacketLLM()
+    package = await _multi_pass_package(llm, claims_count=36)
+
+    coverage = package.quality_diagnostics["theme_coverage"][0]
+    assert coverage["passes"] >= 3, "fixture must leave at least two drafts to merge"
+    assert coverage["passes_drafted"] == coverage["passes"] - 1
+    assert llm.consolidations == 1
+    section = package.sections[0]
+    assert "Integrated across every pass" in section.synthesis
+    assert section.reader_note == _PARTIAL_THEME_NOTE[False]
+    assert section.generation_note.startswith("partial_packet_failure:consolidated")
+    assert package.generation_status == "partial"
+
+
+class UnusableLastPacketAndMergeLLM(UnusableLastPacketLLM):
+    async def complete_json(self, system: str, user: str):
+        if "merging several partial drafts" in system:
+            self.consolidations += 1
+            return {}
+        return await super().complete_json(system, user)
+
+
+async def test_a_partial_theme_whose_merge_fails_carries_both_notes() -> None:
+    from research_platform.report_synthesis import _PARTIAL_THEME_NOTE, _UNMERGED_THEME_NOTE
+
+    package = await _multi_pass_package(UnusableLastPacketAndMergeLLM(), claims_count=36)
+
+    section = package.sections[0]
+    assert section.reader_note == f"{_PARTIAL_THEME_NOTE[False]} {_UNMERGED_THEME_NOTE[False]}"
+    assert "llm_synthesis_unmerged" in section.validation_warnings
+    assert "llm_synthesis_partial_packet_failure" in section.validation_warnings
+    assert section.generation_note.startswith("partial_packet_failure:unmerged_drafts_visible:")
+    assert "\n\n" in section.synthesis
+    assert package.generation_status == "partial"
 
 
 class OnePassFailsLLM(LLMProvider):
@@ -1672,3 +1793,74 @@ async def test_the_packet_cap_keeps_the_drafts_citing() -> None:
         f"the cap did not bind: {density} claims per packet"
     )
     assert cited_labels(section), "the section reached the reader with no provenance"
+
+
+
+# --------------------------------------------------------------------------------------
+# What the reader sees when a synthesis layer fails.
+#
+# Run 01M289BAGG7CDC34HQF3GYK5ZZ printed "LLM sentezi üretilemedi" four times: over a theme
+# whose drafts had all succeeded, and in the executive summary, conclusion and uncertainty
+# after the overview call ran into the output ceiling. The report held cited prose for every
+# one of those places.
+# --------------------------------------------------------------------------------------
+
+
+def _written_section(title: str, synthesis: str, **fields) -> SynthesisSection:
+    return SynthesisSection(title=title, synthesis=synthesis, source_ids=["S01"], **fields)
+
+
+def test_a_compiled_overview_uses_each_themes_own_first_sentence_verbatim() -> None:
+    from research_platform.report_synthesis import _COMPILED_FROM_THEMES, _compiled_overview
+
+    sections = [
+        _written_section(
+            "Alpha",
+            "Alpha improved recall [S01]. A second alpha sentence [S02].",
+            implications="Alpha needs external validation [S01]. More.",
+            disagreements="Alpha cohorts differed [S02]. More.",
+        ),
+        _written_section("Beta", "Beta reduced reading time [S03]. Another beta sentence."),
+    ]
+    compiled = _compiled_overview(sections, turkish=False)
+
+    summary = compiled["executive_summary"]
+    assert summary.startswith(_COMPILED_FROM_THEMES[False])
+    assert "Alpha improved recall [S01]." in summary
+    assert "Beta reduced reading time [S03]." in summary
+    assert "A second alpha sentence" not in summary
+    assert "Alpha needs external validation [S01]." in compiled["conclusion"]
+    assert "Alpha cohorts differed [S02]." in compiled["uncertainty"]
+    assert all("LLM" not in value for value in compiled.values())
+
+
+def test_a_theme_without_model_prose_is_left_out_of_the_compilation() -> None:
+    from research_platform.report_synthesis import _REPORT_WITHOUT_SUMMARY, _compiled_overview
+
+    failed = _written_section(
+        "Failed",
+        "No narrative summary could be produced for this theme.",
+        validation_warnings=["llm_synthesis_unavailable"],
+    )
+    assert _compiled_overview([failed], turkish=False) == {
+        "executive_summary": _REPORT_WITHOUT_SUMMARY[False],
+        "conclusion": "",
+        "uncertainty": "",
+    }
+
+
+def test_unmerged_drafts_are_joined_without_touching_their_text() -> None:
+    """The verbatim contract: surrounding whitespace survives, nothing is trimmed or edited."""
+    from research_platform.report_synthesis import _unmerged_section
+
+    first = _written_section("T", "  First draft keeps its spacing [S01].\n", claim_ids=["c1"])
+    second = _written_section(
+        "T", "Second draft [S02].", claim_ids=["c2"], consensus="Agree [S02]."
+    )
+    section = _unmerged_section("T", [first, second], turkish=True)
+
+    assert section.synthesis == "  First draft keeps its spacing [S01].\n\n\nSecond draft [S02]."
+    assert section.consensus == "Agree [S02]."
+    assert section.claim_ids == ["c1", "c2"]
+    assert section.reader_note and "LLM" not in section.reader_note
+    assert "llm_synthesis_unmerged" in section.validation_warnings

@@ -50,7 +50,7 @@ async def test_ollama_metrics_capture_tokens_and_durations():
     # to card fields too narrow to carry an [Sxx]. Drafting prompts are capped separately by
     # `_PACKET_TARGET_CHARS` and do not follow this setting upward.
     assert captured["options"]["num_ctx"] == 16384
-    assert captured["options"]["num_predict"] == 2048
+    assert captured["options"]["num_predict"] == 4096
     assert captured["options"]["temperature"] == 0.5
     assert captured["options"]["top_p"] == 0.95
     assert captured["options"]["top_k"] == 20
@@ -239,3 +239,27 @@ async def test_a_truncated_call_still_records_its_metric() -> None:
             await provider.complete_json("system", "user")
     metrics = provider.drain_metrics()
     assert metrics and metrics[0]["done_reason"] == "length"
+
+
+
+# --------------------------------------------------------------------------------------
+# The output ceiling.
+# --------------------------------------------------------------------------------------
+
+
+def test_the_output_ceiling_leaves_room_for_the_merge_and_overview_answers() -> None:
+    """2048 cut run 01M289BAGG7CDC34HQF3GYK5ZZ's theme merge and overview mid-JSON."""
+    assert Settings(_env_file=None).llm_max_output_tokens == 4096
+
+
+def test_an_output_ceiling_that_crowds_the_prompt_is_refused() -> None:
+    """Ollama would not fail on it: it would drop the start of the prompt without a word."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="evidence packet is truncated"):
+        Settings(_env_file=None, llm_context_tokens=8192, llm_max_output_tokens=6144)
+    assert (
+        Settings(_env_file=None, llm_context_tokens=8192, llm_max_output_tokens=4096)
+        .llm_max_output_tokens
+        == 4096
+    )

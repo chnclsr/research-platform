@@ -200,7 +200,8 @@ def test_the_failed_section_reports_unavailability_in_the_report_language():
         turkish=True,
         claim_texts={"C1": TURKISH},
     )
-    assert section.synthesis.startswith("LLM sentezi üretilemedi")
+    assert section.synthesis.startswith("Bu tema için özet anlatı oluşturulamadı")
+    assert "LLM" not in section.synthesis
     assert "The study reports" not in section.synthesis
     assert "[S01]" not in section.synthesis
 
@@ -214,7 +215,8 @@ def test_the_failed_section_never_turns_claims_into_english_narrative():
         {"SRC1": "S01"},
         turkish=False,
     )
-    assert section.synthesis.startswith("LLM synthesis could not be produced")
+    assert section.synthesis.startswith("No narrative summary could be produced")
+    assert "LLM" not in section.synthesis
     assert ENGLISH not in section.synthesis
 
 
