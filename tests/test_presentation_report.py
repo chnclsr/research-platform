@@ -252,3 +252,93 @@ def test_standard_presentation_report_renders_multiple_figures():
     # Both figures must be present as distinct slides
     fig_headings = [h for h in all_headings if "Figür" in h]
     assert len(fig_headings) == 2
+
+
+def test_presentation_report_long_synthesis_autofit_and_no_overlap():
+    long_synthesis = (
+        "Akciğer bilgisayarlı tomografi taramalarında yapay zeka modellerinin tanısal doğruluğu, derin evrişimli sinir ağları "
+        "ve transformatör tabanlı mimarilerle belirgin biçimde artmıştır. Çok merkezli kohortlarda 3 mm altındaki nodüllerin "
+        "yakalanma hassasiyeti %95 üzerine çıkmış ve radyologların gözden kaçırma oranı önemli ölçüde düşürülmüştür [S01]. "
+        "Malignite derecelendirmesinde radyomik özniteliklerin entegrasyonu benign lezyonları malign tümörlerden ayırt etmede "
+        "ROC-AUC skorunu 0.93 seviyesine yükseltmiştir. Bu sayede invaziv biyopsi ihtiyacı olan hastalar daha güvenilir şekilde "
+        "tabakalandırılabilmektedir. Bununla birlikte DICOM standartlarındaki farklılıklar ve rekonstrüksiyon filtreleri "
+        "modellerin genellenebilirliğinde sapmalara yol açabilmektedir."
+    )
+    package = SynthesisPackage(
+        executive_summary="Özet [S01].",
+        sections=[
+            SynthesisSection(
+                title="Klinik Doğruluk ve Hassasiyet",
+                synthesis=long_synthesis,
+                consensus="YZ tespit doğruluğunu artırır.",
+                disagreements="Cihaz varyasyonları genellenebilirliği etkiler.",
+                implications="İkinci okuyucu desteği olarak kullanılmalıdır.",
+                source_ids=["src-1"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        cross_study_assessment="Değerlendirme",
+        conclusion="Sonuç",
+        uncertainty="Belirsizlik",
+        study_profiles=[],
+        generated_by_llm=True,
+        report_mode="standard",
+    )
+    inputs = _minimal_report_inputs()
+    inputs.update({"title": "Uzun Sentez Testi", "synthesis_package": package})
+    res = build_presentation_report(**inputs)
+    prs = pptx.Presentation(io.BytesIO(res.document))
+
+    # Theme 1 synthesis slide (Slide 6)
+    s6 = prs.slides[5]
+    shp_syn = next(s for s in s6.shapes if s.name == "sections[].synthesis")
+    shp_cit = next(s for s in s6.shapes if s.name == "sections[].citations")
+    font_pt = shp_syn.text_frame.paragraphs[0].runs[0].font.size.pt
+
+    # Font should be scaled down to accommodate long text
+    assert font_pt <= 16.0
+    # Text box must not collide with citations box
+    assert shp_syn.top.inches + shp_syn.height.inches <= shp_cit.top.inches + 0.05
+
+    # Very long synthesis should scale down further (<= 12.5pt)
+    package2 = SynthesisPackage(
+        executive_summary="Özet [S01].",
+        sections=[
+            SynthesisSection(
+                title="Klinik Doğruluk ve Hassasiyet",
+                synthesis=long_synthesis + "\n\n" + long_synthesis,
+                consensus="YZ tespit doğruluğunu artırır.",
+                disagreements="Cihaz varyasyonları genellenebilirliği etkiler.",
+                implications="İkinci okuyucu desteği olarak kullanılmalıdır.",
+                source_ids=["src-1"],
+                claim_ids=["claim-1"],
+            )
+        ],
+        cross_study_assessment="Değerlendirme",
+        conclusion="Sonuç",
+        uncertainty="Belirsizlik",
+        study_profiles=[],
+        generated_by_llm=True,
+        report_mode="standard",
+    )
+    inputs2 = _minimal_report_inputs()
+    inputs2.update({"title": "Çok Uzun Sentez Testi", "synthesis_package": package2})
+    res2 = build_presentation_report(**inputs2)
+    prs2 = pptx.Presentation(io.BytesIO(res2.document))
+    s6_2 = prs2.slides[5]
+    shp_syn_2 = next(s for s in s6_2.shapes if s.name == "sections[].synthesis")
+    shp_cit_2 = next(s for s in s6_2.shapes if s.name == "sections[].citations")
+    font_pt_2 = shp_syn_2.text_frame.paragraphs[0].runs[0].font.size.pt
+    assert font_pt_2 <= 12.5
+    assert shp_syn_2.top.inches + shp_syn_2.height.inches <= shp_cit_2.top.inches + 0.05
+
+    # Theme 1 findings slide (Slide 7): vertical stacking without overlaps
+    s7 = prs.slides[6]
+    shp_con = next(s for s in s7.shapes if s.name == "sections[].consensus")
+    shp_dis = next(s for s in s7.shapes if s.name == "sections[].disagreements")
+    shp_imp = next(s for s in s7.shapes if s.name == "sections[].implications")
+
+    assert shp_con.top.inches + shp_con.height.inches <= shp_dis.top.inches
+    assert shp_dis.top.inches + shp_dis.height.inches <= shp_imp.top.inches
+    assert shp_imp.top.inches + shp_imp.height.inches <= 7.0
+
