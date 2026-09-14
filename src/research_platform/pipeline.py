@@ -139,6 +139,25 @@ FALLBACK_PLANNING_QUESTIONS = {
 }
 
 
+async def retry_unusable_answer(call: Any, counts: Counter[str]) -> Any:
+    """One more attempt when the model's answer was unusable: cut off, or not JSON.
+
+    Measured 2026-09-14, run 01M2FGWHWKW1GCRXVWTC97B94H: the extraction call for "3.2.2
+    Multi-Head Attention" of the Transformer paper ran to the 4096-token ceiling and that
+    passage produced no claims. Replayed with the byte-identical 874-token prompt, it
+    finished at 437 tokens, with and without a repeat penalty -- the runaway belonged to that
+    call, not to the prompt, so a second call recovers it. A transport error is not retried
+    here; it is not a property of the answer. `counts` receives "retried" and "recovered".
+    """
+    try:
+        return await call()
+    except ValueError:
+        counts["retried"] += 1
+        result = await call()
+        counts["recovered"] += 1
+        return result
+
+
 class PipelineState(TypedDict, total=False):
     run_id: str
     protocol: dict[str, Any]
@@ -3071,6 +3090,7 @@ class ResearchPipeline:
         semaphore = asyncio.Semaphore(self.settings.evidence_extraction_concurrency)
         extraction_errors: list[dict[str, str]] = []
         extraction_rejections: Counter[str] = Counter()
+        extraction_retries: Counter[str] = Counter()
         formula_notes_by_passage = await self._read_formulas(
             state["run_id"], passages, documents_by_version
         )
@@ -3086,18 +3106,21 @@ class ResearchPipeline:
                     extraction_rejections["non_evidence_section"] += 1
                     return []
                 try:
-                    model_claims = await extract_claims(
-                        self.llm,
-                        doc,
-                        research_question=protocol.primary_question,
-                        content_override=passage.text,
-                        neighbor_context=neighbor_context(passage, all_passages),
-                        passage_id=passage.id,
-                        section_path=passage.section_path,
-                        page_number=passage.page_number,
-                        original_offset=passage.start_char,
-                        retrieval_score=passage.retrieval_score,
-                        formula_notes=formula_notes_by_passage.get(passage.id, ""),
+                    model_claims = await retry_unusable_answer(
+                        lambda: extract_claims(
+                            self.llm,
+                            doc,
+                            research_question=protocol.primary_question,
+                            content_override=passage.text,
+                            neighbor_context=neighbor_context(passage, all_passages),
+                            passage_id=passage.id,
+                            section_path=passage.section_path,
+                            page_number=passage.page_number,
+                            original_offset=passage.start_char,
+                            retrieval_score=passage.retrieval_score,
+                            formula_notes=formula_notes_by_passage.get(passage.id, ""),
+                        ),
+                        extraction_retries,
                     )
                     deterministic_claims = relevant_sentence_claims(
                         passage,
@@ -3139,6 +3162,7 @@ class ResearchPipeline:
             "passage_count": len(passages), "claim_count": len(rows),
             "error_count": len(extraction_errors),
             "rejections": dict(extraction_rejections),
+            "retries": dict(extraction_retries),
         })
         return {"claims": rows}
 
