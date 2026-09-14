@@ -766,3 +766,69 @@ def test_the_word_report_carries_no_diagnostic_codes_and_shows_the_reader_note()
     ):
         assert code not in text, code
     assert "This theme could not be merged into a single text." in text
+
+
+def test_word_report_date_formatting_and_near_scope_cap() -> None:
+    inputs = _minimal_report_inputs()
+    inputs["language"] = "tr"
+    inputs["scope"] = {
+        "start_date": "2023-09-15T08:37:12.273500Z",
+        "end_date": "2026-09-14T10:00:00Z",
+    }
+    # Provide 15 near-scope sources
+    near_sources = [
+        SimpleNamespace(
+            id=f"near-{i}",
+            title=f"Kapsam Dışı Kaynak {i}",
+            url=f"https://example.org/near/{i}",
+            connector_id="crossref",
+            metadata_json={"research_scope_role": "near_scope", "year": 2024},
+        )
+        for i in range(1, 16)
+    ]
+    inputs["sources"] = list(inputs["sources"]) + near_sources
+
+    package = SynthesisPackage(
+        executive_summary="Özet metni [S01].",
+        sections=[],
+        study_profiles=[],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        generated_by_llm=True,
+    )
+
+    report = build_word_report(**inputs, synthesis_package=package)
+    doc = Document(io.BytesIO(report.document))
+    full_text = "\n".join(p.text for p in doc.paragraphs)
+
+    # Check date formatting in tables
+    table_texts = [cell.text for tbl in doc.tables for row in tbl.rows for cell in row.cells]
+    assert any("15.09.2023 – 14.09.2026" in t for t in table_texts)
+    assert not any("2023-09-15T" in t for t in table_texts)
+
+    # Check near-scope capping at 10 and footnote
+    assert "Yakın ama kapsam dışı çalışmalar" in full_text
+    assert "Kapsam Dışı Kaynak 10" in full_text
+    assert "Kapsam Dışı Kaynak 11" not in full_text
+    assert "ve kapsam dışı bırakılan 5 diğer çalışma (tam liste Ek C'de yer almaktadır)" in full_text
+
+
+def test_word_report_empty_summary_fallback() -> None:
+    inputs = _minimal_report_inputs()
+    inputs["language"] = "tr"
+    package = SynthesisPackage(
+        executive_summary="",
+        sections=[],
+        study_profiles=[],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        generated_by_llm=False,
+    )
+
+    report = build_word_report(**inputs, synthesis_package=package)
+    doc = Document(io.BytesIO(report.document))
+    table_texts = [cell.text for tbl in doc.tables for row in tbl.rows for cell in row.cells]
+    assert any("yönetici özeti doğrudan sentez bölümlerinde derlenmiştir" in t for t in table_texts)
+

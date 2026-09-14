@@ -395,3 +395,189 @@ def test_presentation_asserts_nothing_the_run_did_not_establish():
     ):
         assert verdict not in deck, verdict
     assert "Bu tema tek bir metinde birleştirilemedi." in deck
+
+
+def test_presentation_report_formats_date_and_toc_subsections():
+    inputs = _minimal_report_inputs()
+    inputs["scope"] = {
+        "start_date": "2023-09-15T08:37:12.273500Z",
+        "end_date": "2026-09-14T10:00:00Z",
+        "query_intent": "Transformer mimarisi",
+    }
+    inputs["synthesis_package"] = SynthesisPackage(
+        executive_summary="Özet metni [S01].",
+        sections=[
+            SynthesisSection(
+                title="Dikkat Mekanizmaları",
+                synthesis="Self-attention formülasyonu [S01].",
+                source_ids=["src-1"],
+                claim_ids=["claim-1"],
+            ),
+            SynthesisSection(
+                title="Pozisyonel Kodlama",
+                synthesis="Sinüzoidal pozisyonel kodlama [S01].",
+                source_ids=["src-1"],
+                claim_ids=["claim-1"],
+            ),
+        ],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        study_profiles=[],
+        generated_by_llm=True,
+        report_mode="standard",
+    )
+    prs = pptx.Presentation(io.BytesIO(build_presentation_report(**inputs).document))
+
+    # Check Slide 2 TOC
+    toc_slide = prs.slides[1]
+    toc_text = "\n".join(shp.text for shp in toc_slide.shapes if shp.has_text_frame)
+    assert "3.1 Dikkat Mekanizmaları" in toc_text
+    assert "3.2 Pozisyonel Kodlama" in toc_text
+
+    # Check Slide 4 Scope date formatting
+    scope_slide = prs.slides[3]
+    scope_text = "\n".join(shp.text for shp in scope_slide.shapes if shp.has_text_frame)
+    assert "15.09.2023 – 14.09.2026" in scope_text
+    assert "2023-09-15T" not in scope_text
+
+
+def test_presentation_report_findings_slide_conditional_and_appendices():
+    from PIL import Image as PILImage
+
+    # Create dummy PNG bytes
+    buf_a = io.BytesIO()
+    PILImage.new("RGB", (400, 300), color="blue").save(buf_a, format="PNG")
+    png_a = buf_a.getvalue()
+
+    buf_b = io.BytesIO()
+    PILImage.new("RGB", (400, 300), color="green").save(buf_b, format="PNG")
+    png_b = buf_b.getvalue()
+
+    inputs = _minimal_report_inputs()
+    # Provide 6 sources and 5 claims to test bottom notes (> 4)
+    sources = [
+        SimpleNamespace(
+            id=f"src-{i}",
+            title=f"Araştırma Kaynağı {i}",
+            url=f"https://example.org/s{i}",
+            connector_id="crossref",
+            metadata_json={"year": 2020 + i, "type": "Makale", "research_scope_role": "primary_in_scope"},
+        )
+        for i in range(1, 7)
+    ]
+    claims = [
+        SimpleNamespace(
+            id=f"claim-{i}",
+            text=f"Doğrulanmış iddia {i}",
+            status="supported",
+            confidence=0.90 + (i * 0.01),
+            audit={"question_relevance": 0.85},
+        )
+        for i in range(1, 6)
+    ]
+    evidence_by_claim = {
+        "claim-1": [(SimpleNamespace(), sources[0]), (SimpleNamespace(), sources[1])],
+        "claim-2": [(SimpleNamespace(), sources[1])],
+    }
+
+    inputs["sources"] = sources
+    inputs["claims"] = claims
+    inputs["reportable_claims"] = claims
+    inputs["evidence_by_claim"] = evidence_by_claim
+    inputs["figures"] = {
+        "16a_research_contribution_landscape.png": png_a,
+        "16b_theme_evidence_map.png": png_b,
+    }
+
+    # Section 1 has findings, Section 2 does NOT have findings
+    sec1 = SynthesisSection(
+        title="Tema 1",
+        synthesis="Tema 1 sentezi [S01].",
+        consensus="Tema 1 konsensus",
+        disagreements="",
+        implications="Tema 1 çıkarım",
+        source_ids=["src-1"],
+        claim_ids=["claim-1"],
+    )
+    sec2 = SynthesisSection(
+        title="Tema 2",
+        synthesis="Tema 2 sentezi [S02].",
+        consensus="",
+        disagreements="",
+        implications="",
+        source_ids=["src-2"],
+        claim_ids=["claim-2"],
+    )
+
+    inputs["synthesis_package"] = SynthesisPackage(
+        executive_summary="Özet [S01].",
+        sections=[sec1, sec2],
+        cross_study_assessment="Değerlendirme",
+        conclusion="Sonuç",
+        uncertainty="Belirsizlik",
+        study_profiles=[],
+        generated_by_llm=True,
+        report_mode="standard",
+    )
+
+    res = build_presentation_report(**inputs)
+    prs = pptx.Presentation(io.BytesIO(res.document))
+
+    # Check that Slide 7 (Findings) was created for sec1, but NOT duplicated for sec2
+    findings_headings = [
+        shp.text
+        for s in prs.slides
+        for shp in s.shapes
+        if shp.has_text_frame and "Bulgular" in shp.text
+    ]
+    assert len(findings_headings) == 1
+    assert "3.1 Tema 1 — Bulgular" in findings_headings[0]
+
+    # Check Slide 13 / Ek B (Topic Landscape) has pictures replaced
+    all_slide_texts = []
+    for s in prs.slides:
+        for shp in s.shapes:
+            if shp.has_text_frame:
+                all_slide_texts.append(shp.text)
+    deck_str = "\n".join(all_slide_texts)
+
+    # Placeholders should be gone
+    assert "[Araştırma katkısı dağılımı]" not in deck_str
+    assert "[Tema–kanıt haritası]" not in deck_str
+
+    # Check Ek C bottom note (because sources > 4)
+    assert "Araştırmada korunan 6 kaynaktan ilk 4'ü özetlenmiştir" in deck_str
+
+    # Check Ek D bottom note (because claims > 4)
+    assert "Raporlanan 5 denetlenmiş iddiadan ilk 4'ü özetlenmiştir" in deck_str
+
+    # Check that Ek D claim sources uses real citations S01, S02 instead of hardcoded S01
+    claims_slide = next(
+        s for s in prs.slides
+        if any(shp.name == "content_heading" and "Denetlenmiş iddia kaydı" in shp.text for shp in s.shapes if shp.has_text_frame)
+    )
+    tbl = next(shp.table for shp in claims_slide.shapes if shp.has_table)
+    # Row 1 is claim-1 which is backed by src-1 (S01) and src-2 (S02)
+    c1_sources = tbl.cell(1, 5).text
+    assert "S01, S02" in c1_sources
+
+
+def test_presentation_report_empty_summary_fallback():
+    inputs = _minimal_report_inputs()
+    inputs["executive_summary"] = ""
+    inputs["synthesis_package"] = SynthesisPackage(
+        executive_summary="",
+        sections=[],
+        cross_study_assessment="",
+        conclusion="",
+        uncertainty="",
+        study_profiles=[],
+        generated_by_llm=False,
+    )
+    res = build_presentation_report(**inputs)
+    prs = pptx.Presentation(io.BytesIO(res.document))
+    slide_3 = prs.slides[2]
+    slide_3_text = "\n".join(shp.text for shp in slide_3.shapes if shp.has_text_frame)
+    assert "doğrulanmış kanıt eşiğini geçen bir yönetici özeti üretilemedi" in slide_3_text
+

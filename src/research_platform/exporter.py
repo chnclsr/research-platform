@@ -971,6 +971,7 @@ async def build_exports(
         synthesis_package=synthesis_package,
         figure_observations=figure_result.observations,
         research_figures=figure_result.generated_figures,
+        figures=word_report.figures,
     )
     files[presentation_report_name(protocol.label)] = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
