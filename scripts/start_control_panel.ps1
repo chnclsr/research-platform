@@ -109,6 +109,22 @@ for ($attempt = 1; $attempt -le 30; $attempt++) {
 }
 if (-not $healthy) { throw "Control panel sağlık kontrolü başarısız: $url" }
 
+# /health'e yanit veren, bu betigin baslattigi panel olmayabilir: port doluysa yeni surec
+# "address in use" ile olur ve saglik kontrolune portu tutan ESKI panel yanit verir (olculdu
+# 2026-09-14). .venv\Scripts\python.exe bir baslaticidir; portu onun cocugu tutar.
+if ($panel) {
+    $sahipler = @(
+        Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    )
+    $bizim = @($sahipler | Where-Object {
+        $_ -eq $panel.Id -or (Get-CimInstance Win32_Process -Filter "ProcessId=$_").ParentProcessId -eq $panel.Id
+    })
+    if (-not $bizim) {
+        throw "Yeni panel portu alamadi: $port baska bir surecte ($($sahipler -join ', ')). Eski paneli durdurun."
+    }
+}
+
 if (-not $NoBrowser) { Start-Process $url }
 Write-Host "Research Platform Control Panel: $url"
 $mcpHost = Ayar "MCP_HOST"

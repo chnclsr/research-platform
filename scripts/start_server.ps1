@@ -167,6 +167,28 @@ if (-not $SkipPanel) {
     }
     $panelSureci = if ($panelPid) { Get-Process -Id $panelPid -ErrorAction SilentlyContinue } else { $null }
 
+    # Pid dosyasi portu tutan paneli gostermeyebilir: basarisiz bir baslatma dosyaya kendi
+    # (hemen olen) surecini yazar, eski panel portu tutmaya devam eder. O zaman asagidaki
+    # bayatlik kontrolu hic calismaz, yeni panel "address in use" ile oler ve saglik
+    # kontrolune eski panel yanit verir.
+    #
+    # Olculdu 2026-09-14: pid dosyasi 19340 (olu), 8020'yi 11 Eylul 16:02'den kalan panel
+    # tutuyordu; -Build "panel ayakta" dedi ve panel eski kodu sunmaya devam etti.
+    if (-not $panelSureci) {
+        $portSahibi = Get-NetTCPConnection -LocalPort ([int]$panelPort) -State Listen -ErrorAction SilentlyContinue |
+                      Select-Object -First 1 -ExpandProperty OwningProcess
+        if ($portSahibi) {
+            $komut = (Get-CimInstance Win32_Process -Filter "ProcessId=$portSahibi" -ErrorAction SilentlyContinue).CommandLine
+            if ($komut -match 'research_platform\.control_panel:app') {
+                $panelPid = [int]$portSahibi
+                $panelSureci = Get-Process -Id $panelPid -ErrorAction SilentlyContinue
+                Write-Host "[..] pid dosyasi portu tutan paneli gostermiyor; surec $panelPid ele alindi" -ForegroundColor Yellow
+            } else {
+                Hata "panel portu $panelPort panel olmayan bir surecte ($portSahibi)"; $durum = 1
+            }
+        }
+    }
+
     if ($panelSureci) {
         $enYeni = Get-ChildItem "$root\src\research_platform" -Filter *.py -Recurse -ErrorAction SilentlyContinue |
                   Sort-Object LastWriteTime -Descending | Select-Object -First 1
