@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import io
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -18,7 +19,8 @@ from typing import Any
 
 import pptx
 from PIL import Image
-from pptx.util import Pt
+from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.util import Inches, Pt
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
 from .report_synthesis import SynthesisPackage, citation_tokens
@@ -51,11 +53,69 @@ def _is_turkish(language: str) -> bool:
     return language.lower().strip().startswith("tr")
 
 
-def _text(value: Any, limit: int = 1000) -> str:
+def _text(value: Any, limit: int = 10000) -> str:
+    """Return string representation, preserving full text within a generous limit."""
     if value is None:
         return ""
     text = str(value).strip()
     return text[:limit] if len(text) > limit else text
+
+
+def _estimate_text_height(
+    text: str,
+    width_pt: float,
+    font_size_pt: float,
+    line_spacing: float = 1.20,
+    paragraph_space_pt: float = 3.0,
+) -> float:
+    """Estimate rendered height of text in points for a given width and font size."""
+    if not text:
+        return 0.0
+    # Average character width for Arial/Calibri is ~0.53 * font_size
+    char_width_pt = font_size_pt * 0.53
+    # Usable width after internal text frame margins (default ~14.4 pt total)
+    usable_width = max(40.0, width_pt - 14.4)
+    chars_per_line = max(10.0, usable_width / char_width_pt)
+
+    paragraphs = text.split("\n")
+    total_lines = 0
+    for p in paragraphs:
+        p_len = len(p)
+        if p_len == 0:
+            total_lines += 1
+        else:
+            # 1.08 safety multiplier for word wrapping
+            lines_in_p = max(1, math.ceil((p_len * 1.08) / chars_per_line))
+            total_lines += lines_in_p
+
+    line_h = font_size_pt * line_spacing
+    return (total_lines * line_h) + (max(0, len(paragraphs) - 1) * paragraph_space_pt)
+
+
+def _fit_font_size(
+    text: str,
+    width_pt: float,
+    height_pt: float,
+    max_font_pt: float = 18.0,
+    min_font_pt: float = 8.0,
+) -> float:
+    """Find the optimal font size that fits text comfortably within width and height.
+
+    Steadily steps down font size so that the entire text is preserved without truncation.
+    """
+    if not text:
+        return max_font_pt
+    # Target 88% of usable height for safe visual margins
+    usable_height = max(20.0, height_pt - 8.0)
+    target_h = usable_height * 0.88
+
+    candidate = max_font_pt
+    while candidate > min_font_pt:
+        h = _estimate_text_height(text, width_pt, candidate)
+        if h <= target_h:
+            return candidate
+        candidate -= 0.5
+    return min_font_pt
 
 
 def _set_shape_text(
@@ -63,10 +123,15 @@ def _set_shape_text(
     text: str,
     font_size_pt: float | None = None,
     bold: bool | None = None,
+    max_font_pt: float = 18.0,
+    min_font_pt: float = 8.0,
+    auto_fit: bool = True,
 ) -> None:
+    """Assign text to shape with word wrap, dynamic font fitting, and native auto-size."""
     if not shape.has_text_frame:
         return
     tf = shape.text_frame
+    tf.word_wrap = True
 
     font_name = "Arial"
     if tf.paragraphs and tf.paragraphs[0].runs:
@@ -74,18 +139,55 @@ def _set_shape_text(
         if r0.font.name:
             font_name = r0.font.name
         if font_size_pt is None and r0.font.size:
-            font_size_pt = r0.font.size.pt
+            max_font_pt = min(max_font_pt, r0.font.size.pt)
         if bold is None and r0.font.bold is not None:
             bold = r0.font.bold
 
+    if font_size_pt is None and auto_fit:
+        w_pt = shape.width.pt if shape.width else 600.0
+        h_pt = shape.height.pt if shape.height else 200.0
+        font_size_pt = _fit_font_size(
+            text, w_pt, h_pt, max_font_pt=max_font_pt, min_font_pt=min_font_pt
+        )
+    elif font_size_pt is None:
+        font_size_pt = max_font_pt
+
     tf.text = text
+    try:
+        tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    except Exception:
+        pass
+
     for p in tf.paragraphs:
+        p.space_after = Pt(max(2.0, font_size_pt * 0.25))
         for r in p.runs:
             r.font.name = font_name
             if font_size_pt:
                 r.font.size = Pt(font_size_pt)
             if bold is not None:
                 r.font.bold = bold
+
+
+def _set_cell_text(
+    cell: Any,
+    text: str,
+    font_size_pt: float = 10.0,
+    bold: bool = False,
+    font_name: str = "Arial",
+) -> None:
+    """Format table cell with word wrap, compact margins, and explicit font size."""
+    cell.text = text
+    tf = cell.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Pt(4)
+    tf.margin_right = Pt(4)
+    tf.margin_top = Pt(2)
+    tf.margin_bottom = Pt(2)
+    for p in tf.paragraphs:
+        for r in p.runs:
+            r.font.name = font_name
+            r.font.size = Pt(font_size_pt)
+            r.font.bold = bold
 
 
 def _find_shape_by_name(slide: Any, name: str) -> Any:
@@ -112,6 +214,83 @@ def _duplicate_slide(prs: Any, source_slide: Any) -> Any:
     return new_slide
 
 
+def _format_findings_slide(
+    slide: Any,
+    consensus_text: str,
+    disagreements_text: str,
+    implications_text: str,
+    turkish: bool,
+) -> None:
+    """Layout the three thematic findings blocks with dynamic auto-fit and non-overlapping vertical slots."""
+    shp_con = _find_shape_by_name(slide, "sections[].consensus")
+    shp_dis = _find_shape_by_name(slide, "sections[].disagreements")
+    shp_imp = _find_shape_by_name(slide, "sections[].implications")
+    lbl_con = _find_shape_by_name(slide, "label_consensus")
+    lbl_dis = _find_shape_by_name(slide, "label_disagreements")
+    lbl_imp = _find_shape_by_name(slide, "label_implications")
+
+    # Available vertical range: Top = 2.20 in to 6.65 in (4.45 in total)
+    # 3 rows of 1.35 in height with 0.15 in gap
+    row_height = Inches(1.35)
+    y1 = Inches(2.20)
+    y2 = Inches(3.70)
+    y3 = Inches(5.20)
+
+    con_fallback = "Belirgin ortak bir yön bildirilmedi." if turkish else "No consensus reported."
+    dis_fallback = (
+        "Kaynaklar arasında doğrudan bir çelişki gözlemlenmedi."
+        if turkish
+        else "No direct contradiction reported."
+    )
+    imp_fallback = (
+        "Bulgular araştırma çerçevesini desteklemektedir."
+        if turkish
+        else "Findings align with research scope."
+    )
+
+    if lbl_con:
+        lbl_con.top = y1
+        lbl_con.height = row_height
+        _set_shape_text(lbl_con, lbl_con.text_frame.text, font_size_pt=14.0, bold=True, auto_fit=False)
+    if shp_con:
+        shp_con.top = y1
+        shp_con.height = row_height
+        _set_shape_text(
+            shp_con,
+            _text(consensus_text) or con_fallback,
+            max_font_pt=14.0,
+            min_font_pt=8.5,
+        )
+
+    if lbl_dis:
+        lbl_dis.top = y2
+        lbl_dis.height = row_height
+        _set_shape_text(lbl_dis, lbl_dis.text_frame.text, font_size_pt=14.0, bold=True, auto_fit=False)
+    if shp_dis:
+        shp_dis.top = y2
+        shp_dis.height = row_height
+        _set_shape_text(
+            shp_dis,
+            _text(disagreements_text) or dis_fallback,
+            max_font_pt=14.0,
+            min_font_pt=8.5,
+        )
+
+    if lbl_imp:
+        lbl_imp.top = y3
+        lbl_imp.height = row_height
+        _set_shape_text(lbl_imp, lbl_imp.text_frame.text, font_size_pt=14.0, bold=True, auto_fit=False)
+    if shp_imp:
+        shp_imp.top = y3
+        shp_imp.height = row_height
+        _set_shape_text(
+            shp_imp,
+            _text(implications_text) or imp_fallback,
+            max_font_pt=14.0,
+            min_font_pt=8.5,
+        )
+
+
 def _populate_figure_slide(
     slide: Any,
     fig_info: dict[str, Any],
@@ -123,22 +302,23 @@ def _populate_figure_slide(
         title_str = _text(
             fig_info.get("title") or ("Araştırma Görseli" if turkish else "Research Figure"), 70
         )
-        _set_shape_text(shp_fig_h, f"3. Figür {fig_num} — {title_str}")
+        _set_shape_text(shp_fig_h, f"3. Figür {fig_num} — {title_str}", bold=True, font_size_pt=24.0)
 
     interp_parts = []
     main_findings = fig_info.get("main_findings") or []
     if main_findings:
-        interp_parts.append("• " + "\n• ".join(_text(f, 200) for f in main_findings[:2]))
+        interp_parts.append("• " + "\n• ".join(_text(f, 300) for f in main_findings[:2]))
     elif fig_info.get("interpretation"):
-        interp_parts.append(_text(fig_info.get("interpretation"), 400))
+        interp_parts.append(_text(fig_info.get("interpretation"), 600))
 
     limitations = fig_info.get("limitations") or []
     if limitations:
         lim_str = "Sınır: " if turkish else "Limitation: "
-        interp_parts.append(lim_str + " ".join(_text(l, 150) for l in limitations[:1]))
+        interp_parts.append(lim_str + " ".join(_text(l, 200) for l in limitations[:1]))
 
     shp_fig_interp = _find_shape_by_name(slide, "figure.interpretation")
     if shp_fig_interp:
+        shp_fig_interp.height = Inches(2.70)
         _set_shape_text(
             shp_fig_interp,
             "\n".join(interp_parts)
@@ -148,22 +328,25 @@ def _populate_figure_slide(
                 if turkish
                 else "Source figure supports the findings."
             ),
-            font_size_pt=13.0,
+            max_font_pt=13.0,
+            min_font_pt=8.5,
         )
 
     caption_parts = []
     if fig_info.get("caption"):
-        caption_parts.append(_text(fig_info.get("caption"), 200))
+        caption_parts.append(_text(fig_info.get("caption"), 300))
     attr_bits = []
     if fig_info.get("attribution"):
-        attr_bits.append(f"Kaynak: {_text(fig_info.get('attribution'), 80)}")
+        attr_bits.append(f"Kaynak: {_text(fig_info.get('attribution'), 120)}")
     if fig_info.get("rights"):
-        attr_bits.append(f"Telif: {_text(fig_info.get('rights'), 40)}")
+        attr_bits.append(f"Telif: {_text(fig_info.get('rights'), 60)}")
     if attr_bits:
         caption_parts.append(" · ".join(attr_bits))
 
     shp_fig_cap = _find_shape_by_name(slide, "figure.caption_attribution")
     if shp_fig_cap:
+        shp_fig_cap.top = Inches(6.20)
+        shp_fig_cap.height = Inches(0.60)
         _set_shape_text(
             shp_fig_cap,
             "\n".join(caption_parts) if caption_parts else "",
@@ -201,13 +384,15 @@ def _populate_figure_slide(
         slide.shapes.add_picture(io.BytesIO(fig_data), target_left, target_top, target_w, target_h)
 
 
-def _extract_source_citations(text: str) -> list[str]:
-    """The labels a slide's citation box should show.
+def _section_text(section: Any) -> str:
+    """A theme's prose for its slide, headed by the reader note when it carries one."""
+    note = str(getattr(section, "reader_note", "") or "").strip()
+    synthesis = str(getattr(section, "synthesis", "") or "")
+    return f"{note}\n\n{synthesis}" if note else synthesis
 
-    Reads grouped citations too, and three-digit labels: the pattern here was `\\[S\\d{2}\\]`,
-    which silently skipped every label past S99. Run 01M27RKQFHR80WNHEQVF2AF2DS carried 209
-    sources, so the boxes would have dropped most of what the prose actually cited.
-    """
+
+def _extract_source_citations(text: str) -> list[str]:
+    """The labels a slide's citation box should show."""
     return sorted(set(citation_tokens(text)))
 
 
@@ -294,6 +479,8 @@ def build_presentation_report(
                 shp,
                 f"{title}\nAraştırma Raporu" if turkish else f"{title}\nResearch Report",
                 bold=True,
+                max_font_pt=32.0,
+                min_font_pt=18.0,
             )
         elif shp.name == "Google Shape;96;p1" or (
             shp.has_text_frame and "Rapor tarihi" in shp.text_frame.text
@@ -304,6 +491,7 @@ def build_presentation_report(
                 f"Rapor Tarihi: {date_str}  ·  Çalışma Kimliği: {run_id[:8]}"
                 if turkish
                 else f"Report Date: {date_str}  ·  Run ID: {run_id[:8]}",
+                font_size_pt=11.0,
             )
 
     # Slide 2: Table of Contents (İçindekiler)
@@ -317,6 +505,7 @@ def build_presentation_report(
                 "1. Özet\n2. Araştırma çerçevesi\n3. Belirsizlikler ve araştırma boşlukları"
                 if turkish
                 else "1. Summary\n2. Research frame\n3. Uncertainties and research gaps",
+                font_size_pt=18.0,
             )
     else:
         if shp_toc_main:
@@ -325,6 +514,7 @@ def build_presentation_report(
                 "1. Özet\n2. Araştırma çerçevesi\n3. Tematik kanıt sentezi\n4. Çalışmalar arası değerlendirme ve sonuç"
                 if turkish
                 else "1. Summary\n2. Research frame\n3. Thematic evidence synthesis\n4. Cross-study assessment and conclusion",
+                font_size_pt=18.0,
             )
     if shp_toc_app:
         _set_shape_text(
@@ -332,6 +522,7 @@ def build_presentation_report(
             "Ek A. Yöntem, kapsam ve yeniden üretilebilirlik\nEk B. Literatürün konu haritası\nEk C. Tam kaynak kataloğu\nEk D. Denetlenmiş iddia kaydı"
             if turkish
             else "Appendix A. Method, scope and reproducibility\nAppendix B. Literature topic map\nAppendix C. Complete source catalog\nAppendix D. Audited claim register",
+            font_size_pt=18.0,
         )
 
     # Slide 3: Executive Summary (Özet)
@@ -341,9 +532,13 @@ def build_presentation_report(
     ) or executive_summary
     shp_exec = _find_shape_by_name(slide_3, "executive_summary")
     if shp_exec:
-        _set_shape_text(shp_exec, _text(exec_summary_text, 1400))
+        shp_exec.top = Inches(2.24)
+        shp_exec.height = Inches(3.70)
+        _set_shape_text(shp_exec, _text(exec_summary_text), max_font_pt=16.0, min_font_pt=8.5)
     shp_sum_cit = _find_shape_by_name(slide_3, "summary_citations")
     if shp_sum_cit:
+        shp_sum_cit.top = Inches(6.20)
+        shp_sum_cit.height = Inches(0.55)
         sum_cits = _extract_source_citations(exec_summary_text)
         cit_label = (
             f"Kullanılan kaynaklar: {', '.join(sum_cits)}"
@@ -354,31 +549,42 @@ def build_presentation_report(
                 else "Sources are preserved in audit appendices."
             )
         )
-        _set_shape_text(shp_sum_cit, cit_label)
+        _set_shape_text(shp_sum_cit, cit_label, font_size_pt=11.0)
 
     # Slide 4: Research Framework - Primary Question & Scope
     slide_4 = prs.slides[3]
     shp_q = _find_shape_by_name(slide_4, "question")
     if shp_q:
-        _set_shape_text(shp_q, _text(question, 800))
+        shp_q.top = Inches(2.19)
+        shp_q.height = Inches(1.30)
+        _set_shape_text(shp_q, _text(question), max_font_pt=18.0, min_font_pt=11.0)
+    shp_scopelbl = _find_shape_by_name(slide_4, "scope_label")
+    if shp_scopelbl:
+        shp_scopelbl.top = Inches(3.65)
     shp_scope = _find_shape_by_name(slide_4, "scope")
     if shp_scope:
+        shp_scope.top = Inches(4.15)
+        shp_scope.height = Inches(2.30)
         scope_dict = scope or {}
         scope_lines = [
             f"• Tarih aralığı: {_text(scope_dict.get('start_date') or '—')} – {_text(scope_dict.get('end_date') or '—')}",
             f"• Araştırma modu: {research_mode}",
-            f"• Kapsam gerekçesi: {_text(scope_dict.get('query_intent') or 'Sistematik kanıt temelli literatür taraması', 300)}",
+            f"• Kapsam gerekçesi: {_text(scope_dict.get('query_intent') or 'Sistematik kanıt temelli literatür taraması')}",
         ]
-        _set_shape_text(shp_scope, "\n".join(scope_lines))
+        _set_shape_text(shp_scope, "\n".join(scope_lines), max_font_pt=15.0, min_font_pt=10.0)
 
     # Slide 5: Research Framework - Sub-questions & Exclusions
     slide_5 = prs.slides[4]
     shp_subq = _find_shape_by_name(slide_5, "sub_questions")
     if shp_subq:
+        shp_subq.top = Inches(2.19)
+        shp_subq.height = Inches(4.20)
         if sub_questions:
             _set_shape_text(
                 shp_subq,
-                "\n".join(f"{i}. {_text(sq, 250)}" for i, sq in enumerate(sub_questions, 1)),
+                "\n".join(f"{i}. {_text(sq)}" for i, sq in enumerate(sub_questions, 1)),
+                max_font_pt=15.0,
+                min_font_pt=9.5,
             )
         else:
             _set_shape_text(
@@ -386,9 +592,13 @@ def build_presentation_report(
                 "Ana araştırma sorusu bütüncül olarak ele alınmıştır."
                 if turkish
                 else "The primary research question was addressed holistically.",
+                max_font_pt=15.0,
+                min_font_pt=11.0,
             )
     shp_near = _find_shape_by_name(slide_5, "near_scope_sources")
     if shp_near:
+        shp_near.top = Inches(3.10)
+        shp_near.height = Inches(3.30)
         near_sources = [
             s
             for s in sources
@@ -397,32 +607,21 @@ def build_presentation_report(
         ]
         if near_sources:
             near_lines = [
-                f"• {_text(s.title, 100)} ({getattr(s, 'metadata_json', {}).get('research_scope_role')})"
-                for s in near_sources[:4]
+                f"• {_text(s.title)} ({getattr(s, 'metadata_json', {}).get('research_scope_role')})"
+                for s in near_sources[:5]
             ]
-            _set_shape_text(shp_near, "\n".join(near_lines))
+            _set_shape_text(shp_near, "\n".join(near_lines), max_font_pt=13.0, min_font_pt=9.0)
         else:
             _set_shape_text(
                 shp_near,
                 "Kapsam dışı bırakılan özel bir sınır çalışma bildirilmemiştir."
                 if turkish
                 else "No specific near-scope excluded studies were flagged.",
+                max_font_pt=13.0,
+                min_font_pt=10.0,
             )
 
     # Identify initial slides for Section 3, 4 and Appendices
-    # Original template indices:
-    # 5: Slide 6 (Thematic Section Narrative)
-    # 6: Slide 7 (Thematic Section Consensus/Disagreements/Implications)
-    # 7: Slide 8 (Figure)
-    # 8: Slide 9 (Cross-study assessment)
-    # 9: Slide 10 (Conclusion)
-    # 10: Slide 11 (Uncertainty)
-    # 11: Slide 12 (Ek A)
-    # 12: Slide 13 (Ek B)
-    # 13: Slide 14 (Ek C)
-    # 14: Slide 15 (Ek D)
-    # 15: Slide 16 (Closing)
-
     slide_6 = prs.slides[5]
     slide_7 = prs.slides[6]
     slide_8 = prs.slides[7]
@@ -437,68 +636,36 @@ def build_presentation_report(
         sec0 = sections[0]
         shp_h6 = _find_shape_by_name(slide_6, "content_heading")
         if shp_h6:
-            _set_shape_text(shp_h6, f"3.1 {_text(sec0.title, 80)}")
+            _set_shape_text(shp_h6, f"3.1 {_text(sec0.title, 80)}", bold=True, font_size_pt=24.0)
         shp_syn = _find_shape_by_name(slide_6, "sections[].synthesis")
         if shp_syn:
-            _set_shape_text(shp_syn, _text(sec0.synthesis, 1400))
+            shp_syn.top = Inches(2.24)
+            shp_syn.height = Inches(3.70)
+            _set_shape_text(shp_syn, _text(_section_text(sec0)), max_font_pt=16.0, min_font_pt=8.5)
         shp_cit6 = _find_shape_by_name(slide_6, "sections[].citations")
         if shp_cit6:
+            shp_cit6.top = Inches(6.20)
+            shp_cit6.height = Inches(0.55)
             cits = _extract_source_citations(sec0.synthesis)
             cit_txt = (
                 f"Bu temada kullanılan kaynaklar: {', '.join(cits)}"
                 if cits
                 else ("Kabul edilen kanıtlar" if turkish else "Accepted evidence")
             )
-            _set_shape_text(shp_cit6, cit_txt)
+            _set_shape_text(shp_cit6, cit_txt, font_size_pt=11.0)
 
         shp_h7 = _find_shape_by_name(slide_7, "content_heading")
         if shp_h7:
-            _set_shape_text(shp_h7, f"3.1 {_text(sec0.title, 80)} — Bulgular")
-        shp_con = _find_shape_by_name(slide_7, "sections[].consensus")
-        if shp_con:
-            _set_shape_text(
-                shp_con,
-                _text(
-                    sec0.consensus
-                    or (
-                        "Belirgin ortak bir yön bildirilmedi."
-                        if turkish
-                        else "No consensus reported."
-                    ),
-                    450,
-                ),
-            )
-        shp_dis = _find_shape_by_name(slide_7, "sections[].disagreements")
-        if shp_dis:
-            _set_shape_text(
-                shp_dis,
-                _text(
-                    sec0.disagreements
-                    or (
-                        "Kaynaklar arasında doğrudan bir çelişki gözlemlenmedi."
-                        if turkish
-                        else "No direct contradiction reported."
-                    ),
-                    450,
-                ),
-            )
-        shp_imp = _find_shape_by_name(slide_7, "sections[].implications")
-        if shp_imp:
-            _set_shape_text(
-                shp_imp,
-                _text(
-                    sec0.implications
-                    or (
-                        "Bulgular araştırma çerçevesini desteklemektedir."
-                        if turkish
-                        else "Findings align with research scope."
-                    ),
-                    450,
-                ),
-            )
+            _set_shape_text(shp_h7, f"3.1 {_text(sec0.title, 80)} — Bulgular", bold=True, font_size_pt=24.0)
+        _format_findings_slide(
+            slide_7,
+            sec0.consensus,
+            sec0.disagreements,
+            sec0.implications,
+            turkish,
+        )
 
         # Handle additional sections (Section 2, 3...) by duplicating Slide 6 & 7
-        # Insert them right after Slide 7 (index 7, 8, etc.)
         insert_target = 7
         for s_idx, sec in enumerate(sections[1:], 2):
             # Duplicate Slide 6
@@ -510,19 +677,23 @@ def build_presentation_report(
 
             dh6 = _find_shape_by_name(dup6, "content_heading")
             if dh6:
-                _set_shape_text(dh6, f"3.{s_idx} {_text(sec.title, 80)}")
+                _set_shape_text(dh6, f"3.{s_idx} {_text(sec.title, 80)}", bold=True, font_size_pt=24.0)
             dsyn = _find_shape_by_name(dup6, "sections[].synthesis")
             if dsyn:
-                _set_shape_text(dsyn, _text(sec.synthesis, 1400))
+                dsyn.top = Inches(2.24)
+                dsyn.height = Inches(3.70)
+                _set_shape_text(dsyn, _text(_section_text(sec)), max_font_pt=16.0, min_font_pt=8.5)
             dcit = _find_shape_by_name(dup6, "sections[].citations")
             if dcit:
+                dcit.top = Inches(6.20)
+                dcit.height = Inches(0.55)
                 cits = _extract_source_citations(sec.synthesis)
                 dcit_txt = (
                     f"Bu temada kullanılan kaynaklar: {', '.join(cits)}"
                     if cits
-                    else "Kabul edilen kanıtlar"
+                    else ("Kabul edilen kanıtlar" if turkish else "Accepted evidence")
                 )
-                _set_shape_text(dcit, dcit_txt)
+                _set_shape_text(dcit, dcit_txt, font_size_pt=11.0)
 
             # Duplicate Slide 7
             dup7 = _duplicate_slide(prs, slide_7)
@@ -533,30 +704,14 @@ def build_presentation_report(
 
             dh7 = _find_shape_by_name(dup7, "content_heading")
             if dh7:
-                _set_shape_text(dh7, f"3.{s_idx} {_text(sec.title, 80)} — Bulgular")
-            dcon = _find_shape_by_name(dup7, "sections[].consensus")
-            if dcon:
-                _set_shape_text(
-                    dcon, _text(sec.consensus or "Belirgin ortak bir yön bildirilmedi.", 450)
-                )
-            ddis = _find_shape_by_name(dup7, "sections[].disagreements")
-            if ddis:
-                _set_shape_text(
-                    ddis,
-                    _text(
-                        sec.disagreements
-                        or "Kaynaklar arasında doğrudan bir çelişki gözlemlenmedi.",
-                        450,
-                    ),
-                )
-            dimp = _find_shape_by_name(dup7, "sections[].implications")
-            if dimp:
-                _set_shape_text(
-                    dimp,
-                    _text(
-                        sec.implications or "Bulgular araştırma çerçevesini desteklemektedir.", 450
-                    ),
-                )
+                _set_shape_text(dh7, f"3.{s_idx} {_text(sec.title, 80)} — Bulgular", bold=True, font_size_pt=24.0)
+            _format_findings_slide(
+                dup7,
+                sec.consensus,
+                sec.disagreements,
+                sec.implications,
+                turkish,
+            )
 
     # Figure handling (Slide 8): support multiple parsed figures
     figures_to_render = []
@@ -619,34 +774,64 @@ def build_presentation_report(
     # Slide 9: Cross-study assessment
     shp_cross = _find_shape_by_name(slide_9, "cross_study_assessment")
     if shp_cross:
+        shp_cross.top = Inches(2.24)
+        shp_cross.height = Inches(3.70)
         c_text = getattr(package, "cross_study_assessment", "") if package else narrative
         _set_shape_text(
-            shp_cross, _text(c_text or "Çalışmalar arasında genel tutarlılık saptanmıştır.", 1200)
+            shp_cross,
+            _text(c_text)
+            or (
+                "Çalışmalar arası değerlendirme bu raporda ayrıca yer almıyor."
+                if turkish
+                else "No separate cross-study assessment is included in this report."
+            ),
+            max_font_pt=16.0,
+            min_font_pt=8.5,
         )
     shp_ascit = _find_shape_by_name(slide_9, "assessment_citations")
     if shp_ascit:
+        shp_ascit.top = Inches(6.20)
+        shp_ascit.height = Inches(0.55)
         _set_shape_text(
             shp_ascit,
             "Kaynak değerlendirmesi literatür haritasında sunulmuştur."
             if turkish
             else "Source assessment is provided in the literature map.",
+            font_size_pt=11.0,
         )
 
     # Slide 10: Conclusion
+    conc_text = getattr(package, "conclusion", "") if package else ""
     shp_conc = _find_shape_by_name(slide_10, "conclusion")
     if shp_conc:
-        conc_text = getattr(package, "conclusion", "") if package else ""
+        shp_conc.top = Inches(2.24)
+        shp_conc.height = Inches(3.70)
         _set_shape_text(
             shp_conc,
-            _text(conc_text or "Araştırma sorusu doğrulanmış kanıtlarla yanıtlanmıştır.", 1200),
+            _text(conc_text)
+            or (
+                "Sonuç bölümü bu raporda ayrıca yer almıyor."
+                if turkish
+                else "No separate conclusion is included in this report."
+            ),
+            max_font_pt=16.0,
+            min_font_pt=8.5,
         )
     shp_conccit = _find_shape_by_name(slide_10, "conclusion_citations")
     if shp_conccit:
+        shp_conccit.top = Inches(6.20)
+        shp_conccit.height = Inches(0.55)
+        conc_cits = _extract_source_citations(conc_text)
         _set_shape_text(
             shp_conccit,
-            "Sonuç doğrulanmış kanıt kaydıyla desteklenmiştir."
-            if turkish
-            else "Conclusion is supported by audited evidence.",
+            f"Kullanılan kaynaklar: {', '.join(conc_cits)}"
+            if conc_cits
+            else (
+                "Kaynaklar denetim eklerinde korunmuştur."
+                if turkish
+                else "Sources are preserved in audit appendices."
+            ),
+            font_size_pt=11.0,
         )
 
     # Slide 11: Uncertainty
@@ -658,12 +843,23 @@ def build_presentation_report(
                 "3. Belirsizlikler ve araştırma boşlukları"
                 if turkish
                 else "3. Uncertainties and research gaps",
+                font_size_pt=16.5,
             )
     shp_unc = _find_shape_by_name(slide_11, "uncertainty")
     if shp_unc:
+        shp_unc.top = Inches(2.24)
+        shp_unc.height = Inches(4.20)
         unc_text = getattr(package, "uncertainty", "") if package else uncertainty
         _set_shape_text(
-            shp_unc, _text(unc_text or "Açık bir belirsizlik veya veri boşluğu bildirilmedi.", 1200)
+            shp_unc,
+            _text(unc_text)
+            or (
+                "Belirsizlik bölümü bu raporda ayrıca yer almıyor."
+                if turkish
+                else "No separate uncertainty section is included in this report."
+            ),
+            max_font_pt=16.0,
+            min_font_pt=8.5,
         )
 
     # Slide 12: Ek A (Method & coverage)
@@ -672,6 +868,8 @@ def build_presentation_report(
     )
     shp_meth = _find_shape_by_name(slide_12, "method")
     if shp_meth:
+        shp_meth.top = Inches(2.14)
+        shp_meth.height = Inches(3.80)
         method_desc = (
             "1. Keşif: Çoklu akademik ve web arama bağlayıcıları üzerinden literatür tarandı.\n"
             "2. Edinim: Tam metinler ve açık erişimli içerikler tekilleştirilerek edinildi.\n"
@@ -685,41 +883,54 @@ def build_presentation_report(
             "4. Evidence: Claim linking with entailment scoring.\n"
             "5. Synthesis: Audited findings integrated into report."
         )
-        _set_shape_text(shp_meth, method_desc)
+        _set_shape_text(shp_meth, method_desc, max_font_pt=12.0, min_font_pt=9.0)
     shp_run_meta = _find_shape_by_name(slide_12, "run_metadata")
     if shp_run_meta:
+        shp_run_meta.top = Inches(6.20)
+        shp_run_meta.left = Inches(0.50)
+        shp_run_meta.width = Inches(11.40)  # Avoid overlapping slide_number at 12.40
+        shp_run_meta.height = Inches(0.65)
         meta_lines = [
             f"Çalışma Kimliği: {run_id}",
             f"Üretim Zamanı: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}",
             f"Rapor Pipeline Sürümü: v{REPORT_PIPELINE_VERSION}",
             f"Biçim / Mod: {getattr(package, 'report_mode', 'standard')}",
         ]
-        _set_shape_text(shp_run_meta, "\n".join(meta_lines))
+        _set_shape_text(shp_run_meta, "\n".join(meta_lines), font_size_pt=9.5)
     for shp in slide_12.shapes:
         if shp.has_table and len(shp.table.columns) == 2:
             tbl = shp.table
             cov = coverage or {}
+
+            def share(key: str) -> str:
+                value = cov.get(key)
+                return f"{value:.0%}" if isinstance(value, (int, float)) else "—"
+
+            unresolved = cov.get("unresolved_major_claims")
             metrics = [
-                ("Kaynak ailesi kapsamı", f"{cov.get('source_family_coverage', 1.0):.0%}"),
-                ("Sorgu dalı kapsamı", f"{cov.get('query_branch_coverage', 1.0):.0%}"),
-                ("İddia denetim kapsamı", f"{cov.get('claim_audit_coverage', 1.0):.0%}"),
-                ("Tahmini tamlık", f"{cov.get('estimated_completeness', 'Tamamlandı')}"),
-                ("Çözülmemiş ana iddia", str(cov.get("unresolved_primary_claims", 0))),
+                ("Kaynak ailesi kapsamı", share("source_family_coverage")),
+                ("Sorgu dalı kapsamı", share("query_branch_coverage")),
+                ("İddia denetim kapsamı", share("claim_audit_coverage")),
+                ("Tahmini tamlık", share("estimated_completeness")),
+                ("Çözülmemiş ana iddia", str(unresolved) if unresolved is not None else "—"),
             ]
             for row_idx, (m_label, m_val) in enumerate(metrics, 1):
                 if row_idx < len(tbl.rows):
-                    tbl.cell(row_idx, 0).text = m_label
-                    tbl.cell(row_idx, 1).text = m_val
+                    _set_cell_text(tbl.cell(row_idx, 0), m_label, font_size_pt=10.5, bold=False)
+                    _set_cell_text(tbl.cell(row_idx, 1), m_val, font_size_pt=10.5, bold=True)
 
     # Slide 13: Ek B (Topic / Literature landscape)
     slide_13 = _find_slide_with_heading(prs, "Literatürün konu haritası") or prs.slides[12]
     shp_lcap = _find_shape_by_name(slide_13, "landscape_caption")
     if shp_lcap:
+        shp_lcap.top = Inches(6.15)
+        shp_lcap.height = Inches(0.65)
         _set_shape_text(
             shp_lcap,
             "Literatürde yer alan araştırma katkı türleri ve kanıt yoğunluk haritası."
             if turkish
             else "Research contribution distribution and evidence density map.",
+            font_size_pt=11.0,
         )
 
     # Slide 14: Ek C (Sources table)
@@ -731,14 +942,16 @@ def build_presentation_report(
                 if r_idx < len(tbl.rows):
                     s_label = f"S{r_idx:02d}"
                     meta = getattr(source, "metadata_json", {}) or {}
-                    tbl.cell(r_idx, 0).text = s_label
-                    tbl.cell(r_idx, 1).text = _text(
-                        meta.get("year") or meta.get("publication_year") or "—", 10
+                    _set_cell_text(tbl.cell(r_idx, 0), s_label, font_size_pt=10.0, bold=True)
+                    _set_cell_text(
+                        tbl.cell(r_idx, 1),
+                        _text(meta.get("year") or meta.get("publication_year") or "—", 10),
+                        font_size_pt=10.0,
                     )
-                    tbl.cell(r_idx, 2).text = _text(meta.get("type") or "Makale", 15)
-                    tbl.cell(r_idx, 3).text = _text(getattr(source, "title", "Kaynak"), 45)
-                    tbl.cell(r_idx, 4).text = _text(getattr(source, "connector_id", "web"), 15)
-                    tbl.cell(r_idx, 5).text = "1"
+                    _set_cell_text(tbl.cell(r_idx, 2), _text(meta.get("type") or "Makale", 20), font_size_pt=10.0)
+                    _set_cell_text(tbl.cell(r_idx, 3), _text(getattr(source, "title", "Kaynak"), 100), font_size_pt=9.5)
+                    _set_cell_text(tbl.cell(r_idx, 4), _text(getattr(source, "connector_id", "web"), 20), font_size_pt=10.0)
+                    _set_cell_text(tbl.cell(r_idx, 5), "1", font_size_pt=10.0)
             break
 
     # Slide 15: Ek D (Audited claims table)
@@ -749,16 +962,20 @@ def build_presentation_report(
             for r_idx, claim in enumerate(reportable_claims[:4], 1):
                 if r_idx < len(tbl.rows):
                     c_label = f"C{r_idx:02d}"
-                    tbl.cell(r_idx, 0).text = c_label
-                    tbl.cell(r_idx, 1).text = _text(getattr(claim, "text", ""), 40)
-                    tbl.cell(r_idx, 2).text = _text(getattr(claim, "status", "supported"), 12)
-                    tbl.cell(
-                        r_idx, 3
-                    ).text = f"{float(getattr(claim, 'confidence', 0.9) or 0.9):.2f}"
-                    tbl.cell(
-                        r_idx, 4
-                    ).text = f"{float((getattr(claim, 'audit', {}) or {}).get('question_relevance', 0.9) or 0.9):.2f}"
-                    tbl.cell(r_idx, 5).text = "S01"
+                    _set_cell_text(tbl.cell(r_idx, 0), c_label, font_size_pt=10.0, bold=True)
+                    _set_cell_text(tbl.cell(r_idx, 1), _text(getattr(claim, "text", ""), 120), font_size_pt=9.5)
+                    _set_cell_text(tbl.cell(r_idx, 2), _text(getattr(claim, "status", "supported"), 15), font_size_pt=10.0)
+                    _set_cell_text(
+                        tbl.cell(r_idx, 3),
+                        f"{float(getattr(claim, 'confidence', 0.9) or 0.9):.2f}",
+                        font_size_pt=10.0,
+                    )
+                    _set_cell_text(
+                        tbl.cell(r_idx, 4),
+                        f"{float((getattr(claim, 'audit', {}) or {}).get('question_relevance', 0.9) or 0.9):.2f}",
+                        font_size_pt=10.0,
+                    )
+                    _set_cell_text(tbl.cell(r_idx, 5), "S01", font_size_pt=10.0)
             break
 
     # Slide Pruning:
@@ -783,7 +1000,7 @@ def build_presentation_report(
     for idx, s in enumerate(prs.slides):
         shp_num = _find_shape_by_name(s, "slide_number")
         if shp_num:
-            _set_shape_text(shp_num, str(idx + 1))
+            _set_shape_text(shp_num, str(idx + 1), font_size_pt=12.0, auto_fit=False)
 
     output = io.BytesIO()
     prs.save(output)
