@@ -53,12 +53,21 @@ class SynthesisSection:
     # index alignment between the two lists is an invariant nothing enforced.
     generation_note: str = ""
     # Validation is advisory for reader-facing LLM prose. The original text above is never
-    # rewritten or discarded because one of these diagnostics fired.
+    # rewritten because one of these diagnostics fired; the one field ever held back whole is
+    # `disagreements` -- see `withheld_disagreements`.
     validation_warnings: list[str] = field(default_factory=list)
     # A plain-language line shown to the reader above this section when how it was produced
     # changes how it should be read -- drafts presented unmerged, for one. Never a diagnostic
     # code: those stay in `validation_warnings` and never reach Word or PowerPoint.
     reader_note: str = ""
+    # Disagreements the model wrote with no conflicting evidence behind them: no claim in the
+    # section carries counter-evidence or a contradicting quote. Kept verbatim for the audit
+    # record, never rendered. Measured on run 01M2FGWHWKW1GCRXVWTC97B94H: a draft turned "the
+    # sources give no formula for layer normalization" into "so there is disagreement", the
+    # merge carried it into the theme, and the overview repeated it as a cross-study finding,
+    # while one claim of 73 had counter-evidence. A merge prompt told to report only
+    # conflicting sources returned the same paragraph word for word.
+    withheld_disagreements: str = ""
 
 
 @dataclass(frozen=True)
@@ -866,12 +875,14 @@ def _claim_evidence_block(
     lines: list[str] = []
     sources: list[str] = []
     primary_sources: set[str] = set()
+    contradicted = False
     for link, source in evidence_by_claim.get(str(claim.id), []):
         source_label = source_labels.get(str(source.id))
         quote = " ".join(str(getattr(link, "quote", "")).split())[:650]
         if not source_label or not quote:
             continue
         direction = str(getattr(link, "direction", "supports"))
+        contradicted = contradicted or direction == "contradicts"
         lines.append(f"{source_label} {direction}: {quote}")
         if source_label not in sources:
             sources.append(source_label)
@@ -892,9 +903,13 @@ def _claim_evidence_block(
         and grade in {"strong", "moderate"}
         and len(primary_sources) >= 2
     )
+    # A disagreement needs evidence that conflicts, not evidence that is missing.
+    counter_evidence = int((getattr(claim, "audit", None) or {}).get("counter_evidence", 0) or 0)
+    disagreement_eligible = contradicted or counter_evidence > 0
     body = (
         f"status={getattr(claim, 'status', 'qualified')} | {grade_field}"
         f"consensus_eligible={'true' if consensus_eligible else 'false'} | "
+        f"disagreement_eligible={'true' if disagreement_eligible else 'false'} | "
         f"claim={str(getattr(claim, 'text', ''))[:900]}\n" + "\n".join(lines[:4])
     )
     return body, sources
@@ -1022,8 +1037,13 @@ def _advisory_section_from_data(
     language: str,
     consensus_allowed: bool,
     limited_evidence_only: bool = False,
+    disagreements_allowed: bool = True,
 ) -> SynthesisSection | None:
-    """Accept usable LLM prose and report defects without changing the prose."""
+    """Accept usable LLM prose and report defects without changing the prose.
+
+    The exception is `disagreements` written with no conflicting evidence behind it, which
+    is held back whole rather than shown -- see `SynthesisSection.withheld_disagreements`.
+    """
     if not isinstance(data, dict):
         return None
     synthesis = _reader_text(data.get("synthesis"))
@@ -1053,6 +1073,10 @@ def _advisory_section_from_data(
         for field_name, value in values.items():
             if value and _STRONG_CONCLUSION_RE.search(value):
                 warnings.append(f"{field_name}:stronger_than_available_evidence")
+    withheld = ""
+    if values["disagreements"] and not disagreements_allowed:
+        warnings.append("disagreements:no_conflicting_evidence")
+        withheld, values["disagreements"] = values["disagreements"], ""
     return SynthesisSection(
         title=title,
         synthesis=values["synthesis"],
@@ -1062,6 +1086,7 @@ def _advisory_section_from_data(
         source_ids=source_ids,
         claim_ids=claim_ids,
         validation_warnings=list(dict.fromkeys(warnings)),
+        withheld_disagreements=withheld,
     )
 
 
@@ -1156,7 +1181,10 @@ async def _draft_section(
         "[S12, S27]. Never "
         "invent a source, number, method, population, result, or URL. Treat status=qualified "
         "and evidence=limited|insufficient as tentative single-study findings. Write consensus "
-        "only from claims marked consensus_eligible=true; otherwise leave it empty. Do not "
+        "only from claims marked consensus_eligible=true; otherwise leave it empty. Write "
+        "disagreements only from claims marked disagreement_eligible=true, where the evidence "
+        "itself conflicts; evidence that does not cover a point is a gap, not a disagreement, "
+        "so otherwise leave it empty. Do not "
         "mention prompts, claims, auditing, retrieval, or an evidence packet. Preserve literal "
         "scope boundaries. "
         + _language_directive(language)
@@ -1184,6 +1212,7 @@ async def _draft_section(
                 "consensus_eligible=true" not in packet
                 and not re.search(r"evidence=(?:strong|moderate)", packet)
             ),
+            disagreements_allowed="disagreement_eligible=true" in packet,
         )
         if section is not None:
             note = "initial_visible" if attempt == 0 else "retry_visible"
@@ -1265,6 +1294,7 @@ def _unmerged_section(
             )
         ),
         reader_note=_UNMERGED_THEME_NOTE[turkish],
+        withheld_disagreements=joined("withheld_disagreements"),
     )
 
 
@@ -1294,7 +1324,11 @@ def _partial_theme_section(
 
 
 def _pass_cards(passes: list[SynthesisSection], budget: int) -> tuple[str, int]:
-    """Render one merge prompt's PASSES block, and count the fields that lost citations.
+    """Render one merge prompt's DRAFTS block, and count the fields that lost citations.
+
+    The cards carry no number or name. They used to open with "PASS 1", "PASS 2", and a merge
+    of run 01M2FGWHWKW1GCRXVWTC97B94H wrote "Pass 2 states the formula as ... while Pass 1
+    ..." into the report -- two wordings of one formula presented as a disagreement.
 
     The floor is `_CONSOLIDATION_PASS_FLOOR` rather than the old 600: below it the card
     fields are too narrow to carry an `[Sxx]`, and a merge model that is shown no citation
@@ -1305,8 +1339,8 @@ def _pass_cards(passes: list[SynthesisSection], budget: int) -> tuple[str, int]:
     per_pass = max(_CONSOLIDATION_PASS_FLOOR, budget // max(1, len(passes)))
     cards: list[str] = []
     ungrounded = 0
-    for number, section in enumerate(passes, 1):
-        rows = [f"PASS {number}"]
+    for section in passes:
+        rows: list[str] = []
         for label, value in (
             ("SYNTHESIS", section.synthesis),
             ("CONSENSUS", section.consensus),
@@ -1319,7 +1353,7 @@ def _pass_cards(passes: list[SynthesisSection], budget: int) -> tuple[str, int]:
             ungrounded += int(not grounded)
             rows.append(f"{label}: {excerpt}")
         cards.append("\n".join(rows))
-    return "\n\n".join(cards), ungrounded
+    return "\n\n---\n\n".join(cards), ungrounded
 
 
 async def _reduce_group(
@@ -1351,18 +1385,20 @@ async def _reduce_group(
             data = await llm.complete_json(
                 "You are merging several partial drafts of ONE thematic section of a research "
                 "report into a single integrated section. Return one JSON object with keys "
-                "synthesis, consensus, disagreements, implications. The passes cover different "
-                "studies from the same theme: combine them into one argument rather than "
-                "reporting them in sequence, and say where the passes agree and where they "
-                "diverge. Use only facts present in the passes. Never invent a source, number, "
-                "method, population, result, or URL, and never add a citation that is not "
-                "already in the passes. Keep at least one supplied [Sxx] citation on every "
-                "factual sentence, and write each citation in its own brackets: [S12] [S27], "
-                "never [S12, S27]. Do not mention passes, drafts, prompts, or an evidence "
+                "synthesis, consensus, disagreements, implications. The drafts below, separated "
+                "by ---, were cut from one theme only so that each fit the context window; they "
+                "are not studies. Combine them into one argument rather than reporting them in "
+                "sequence. Disagreements are between the cited studies, never between the "
+                "drafts: carry over only disagreements the drafts already state, and add none. "
+                "Use only facts present in the drafts. Never invent a source, number, method, "
+                "population, result, or URL, and never add a citation that is not already in "
+                "the drafts. Keep at least one supplied [Sxx] citation on every factual "
+                "sentence, and write each citation in its own brackets: [S12] [S27], never "
+                "[S12, S27]. Do not mention drafts, parts, passes, prompts, or an evidence "
                 "packet. " + _language_directive(language),
                 f"RESEARCH_QUESTION:\n{question}\n\nTHEME:\n{title}\n\n"
                 f"SCOPE_BOUNDARIES:\n{scope_context}\n\n"
-                f"ALLOWED_SOURCE_IDS: {', '.join(allowed_ids)}\n\nPASSES:\n{cards}",
+                f"ALLOWED_SOURCE_IDS: {', '.join(allowed_ids)}\n\nDRAFTS:\n{cards}",
             )
         except Exception as exc:  # noqa: BLE001 - one transport retry is intentional
             errors.append(type(exc).__name__)
@@ -1379,6 +1415,9 @@ async def _reduce_group(
                 not in item.validation_warnings
                 for item in group
             ),
+            # The drafts were gated on the evidence already; a merge may keep what they
+            # state, and has nothing to ground a disagreement of its own on.
+            disagreements_allowed=any(item.disagreements for item in group),
         )
         if section is None:
             errors.append("unusable_response")
@@ -1391,8 +1430,16 @@ async def _reduce_group(
                 ]
             )
         )
+        withheld = "\n\n".join(
+            value
+            for value in (
+                *(item.withheld_disagreements for item in group),
+                section.withheld_disagreements,
+            )
+            if value
+        )
         return (
-            replace(section, validation_warnings=warnings),
+            replace(section, validation_warnings=warnings, withheld_disagreements=withheld),
             "initial" if attempt == 0 else "retry",
             errors,
             ungrounded,

@@ -1585,7 +1585,7 @@ class EchoingConsolidationLLM(MultiPassLLM):
     async def complete_json(self, system: str, user: str):
         if "merging several partial drafts" in system:
             self.consolidations += 1
-            block = user.split("PASSES:", 1)[1]
+            block = user.split("DRAFTS:", 1)[1]
             found = list(dict.fromkeys(re.findall(r"\[S\d{2,3}\]", block)))[:3]
             if not found:
                 return {
@@ -1634,8 +1634,8 @@ async def test_every_merge_call_stays_within_the_fan_in_and_shows_its_citations(
     class FanInAssertingLLM(EchoingConsolidationLLM):
         async def complete_json(self, system: str, user: str):
             if "merging several partial drafts" in system:
-                block = user.split("PASSES:", 1)[1]
-                seen.append(block.count("PASS "))
+                block = user.split("DRAFTS:", 1)[1]
+                seen.append(block.count("SYNTHESIS:"))
                 assert re.search(r"\[S\d{2,3}\]", block), "a card lost its citations"
             return await super().complete_json(system, user)
 

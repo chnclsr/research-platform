@@ -387,6 +387,8 @@ async def build_exports(
                 "claim_ids": section.claim_ids,
                 "generation_note": section.generation_note,
                 "validation_warnings": section.validation_warnings,
+                # Held back from the report, kept here: see withheld_disagreements.
+                "withheld_disagreements": section.withheld_disagreements,
             }
             for section in synthesis_package.sections
         ],
