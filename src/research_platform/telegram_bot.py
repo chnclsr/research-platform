@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import logging
 import re
 import secrets
@@ -36,6 +37,7 @@ FAILURE_NOTICE_EVENT = "telegram_failure_notified"
 # reverse -- still gets both notices exactly once.
 PLAN_LIMIT_EVENT = "plan_rejection_limit"
 PLAN_CANCEL_NOTICE_EVENT = "telegram_plan_cancel_notified"
+COMPLETION_NOTICE_EVENT = "telegram_completion_notified"
 
 # Every word the bot says, in both languages. One table rather than several: a new string
 # has exactly one place to go, and the key-parity test catches the half that gets
@@ -158,6 +160,36 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
         "scoping_skip": "Eklemek istemiyorum",
         "scoping_done": "Teşekkürler, yanıtlarınız alındı. Planı hazırlayıp onayınıza "
                         "sunacağım.",
+        "revision": {
+            "complete": "✅ Rapor hazır — sürüm {number}\n\nÖnce belgeleri indirip "
+                        "inceleyebilir, daha sonra aynı mesajdan ajanla güncelleyebilirsiniz.",
+            "pptx": "📥 PPTX",
+            "docx": "📥 DOCX",
+            "revise": "✨ Ajanla güncelle",
+            "revise_this": "✨ Bu belgeyi ajanla güncelle",
+            "all_results": "📦 Tüm sonuçlar",
+            "feedback_prompt": "Bu belgenin sürüm {number} kopyasında neyi değiştirmek "
+                               "istersiniz? Talimatınızı doğal dille yazın.",
+            "planning": "Geri bildiriminizi aldım; değişiklik planını hazırlıyorum.",
+            "clarification": "Planı netleştirmek için bir sorum var:\n\n{question}",
+            "plan_ready": "Önerilen değişiklik planı:\n\n{summary}\n\n{operations}\n\n"
+                          "Kaynaklar, sayısal bulgular ve atıflar korunacak.",
+            "extension": "Bu istek belge düzenlemesinden çok yeni araştırma gerektiriyor:\n\n"
+                         "{summary}",
+            "apply": "✅ Uygula",
+            "edit": "✏️ Talimatı değiştir",
+            "cancel": "İptal",
+            "edit_prompt": "Yeni veya düzeltilmiş talimatınızı yazın; planı yeniden kuracağım.",
+            "applying": "Plan onaylandı; DOCX ve PPTX taslağı hazırlanıyor.",
+            "draft_ready": "✅ Rapor sürüm {number} taslağı hazır ve doğrulamadan geçti.",
+            "accept": "✅ Güncel sürüm yap",
+            "new_feedback": "✨ Yeni geri bildirim",
+            "accepted": "Sürüm {number} güncel rapor olarak yayımlandı.",
+            "cancelled": "Belge revizyonu iptal edildi; mevcut rapor değişmedi.",
+            "failed": "Belge revizyonu başarısız oldu; mevcut rapor korunuyor.\n\n{error}",
+            "invalid_state": "Bu revizyon düğmesi artık geçerli değil.",
+            "downloaded": "{name} — sürüm {number}",
+        },
         # Values, not sentences. The strings around them were translated a version ago and
         # the enum tokens inside were not, which is what produced "durum queued".
         "status": {
@@ -332,6 +364,36 @@ In the commands below you can use the run's name instead of <run_id>.
         "scoping_skip": "Nothing to add",
         "scoping_done": "Thank you, your answers are in. I will prepare the plan and put "
                         "it up for approval.",
+        "revision": {
+            "complete": "✅ Report ready — version {number}\n\nYou can download and review "
+                        "the files first, then return to this message to revise them with the agent.",
+            "pptx": "📥 PPTX",
+            "docx": "📥 DOCX",
+            "revise": "✨ Revise with agent",
+            "revise_this": "✨ Revise this document",
+            "all_results": "📦 All results",
+            "feedback_prompt": "What would you like to change in version {number} of this "
+                               "document? Write the instruction in natural language.",
+            "planning": "I have your feedback and am preparing a change plan.",
+            "clarification": "One question before I can finish the plan:\n\n{question}",
+            "plan_ready": "Proposed change plan:\n\n{summary}\n\n{operations}\n\n"
+                          "Sources, numeric findings and citations will be preserved.",
+            "extension": "This request needs new research rather than a document edit:\n\n"
+                         "{summary}",
+            "apply": "✅ Apply",
+            "edit": "✏️ Change instruction",
+            "cancel": "Cancel",
+            "edit_prompt": "Type the new or corrected instruction and I will rebuild the plan.",
+            "applying": "Plan approved; the DOCX and PPTX drafts are being rendered.",
+            "draft_ready": "✅ Report version {number} draft is ready and validated.",
+            "accept": "✅ Make current version",
+            "new_feedback": "✨ New feedback",
+            "accepted": "Version {number} is now the current published report.",
+            "cancelled": "Document revision cancelled; the current report was not changed.",
+            "failed": "Document revision failed; the current report is unchanged.\n\n{error}",
+            "invalid_state": "This revision button is no longer valid.",
+            "downloaded": "{name} — version {number}",
+        },
         "status": {
             "queued": "queued", "running": "running", "awaiting_input": "awaiting input",
             "paused": "paused", "cancel_requested": "cancelling",
@@ -860,6 +922,88 @@ def plan_keyboard(run_id: str, language: str) -> dict:
     }
 
 
+def report_ready_keyboard(run_id: str, revision: Mapping[str, Any], language: str) -> dict:
+    strings = text_for(language)["revision"]
+    versions = revision.get("artifacts") or []
+    pptx = next((item for item in versions if str(item.get("logical_name", "")).endswith(".pptx")), None)
+    docx = next((item for item in versions if str(item.get("logical_name", "")).endswith(".docx")), None)
+    rows: list[list[dict[str, str]]] = []
+    downloads = []
+    if pptx:
+        downloads.append(
+            {"text": strings["pptx"], "callback_data": f"rvfile:{pptx['id']}"}
+        )
+    if docx:
+        downloads.append(
+            {"text": strings["docx"], "callback_data": f"rvfile:{docx['id']}"}
+        )
+    if downloads:
+        rows.append(downloads)
+    revision_source = pptx or docx
+    if revision_source:
+        rows.append(
+            [
+                {
+                    "text": strings["revise"],
+                    "callback_data": f"revise:{run_id}:{revision_source['id']}",
+                },
+                {
+                    "text": strings["all_results"],
+                    "callback_data": f"delivery:{run_id}:result",
+                },
+            ]
+        )
+    return {"inline_keyboard": rows}
+
+
+def revision_plan_keyboard(revision_id: str, language: str, *, extension: bool = False) -> dict:
+    strings = text_for(language)["revision"]
+    row = [] if extension else [
+        {"text": strings["apply"], "callback_data": f"rvplan:{revision_id}:approve"},
+        {"text": strings["edit"], "callback_data": f"rvplan:{revision_id}:edit"},
+    ]
+    row.append({"text": strings["cancel"], "callback_data": f"rvplan:{revision_id}:cancel"})
+    return {"inline_keyboard": [row]}
+
+
+def revision_draft_keyboard(revision: Mapping[str, Any], language: str) -> dict:
+    strings = text_for(language)["revision"]
+    rows = []
+    downloads = [
+        {
+            "text": strings["pptx"] if str(item.get("logical_name", "")).endswith(".pptx") else strings["docx"],
+            "callback_data": f"rvfile:{item['id']}",
+        }
+        for item in revision.get("artifacts") or []
+        if str(item.get("logical_name", "")).endswith((".pptx", ".docx"))
+    ]
+    if downloads:
+        rows.append(downloads)
+    rows.append(
+        [
+            {"text": strings["accept"], "callback_data": f"rvaccept:{revision['id']}"},
+            {"text": strings["new_feedback"], "callback_data": f"rvnew:{revision['id']}"},
+            {"text": strings["cancel"], "callback_data": f"rvcancel:{revision['id']}"},
+        ]
+    )
+    return {"inline_keyboard": rows}
+
+
+def revision_plan_text(revision: Mapping[str, Any], language: str) -> str:
+    strings = text_for(language)["revision"]
+    plan = revision.get("edit_plan") or {}
+    summary = str(plan.get("summary") or "")
+    if plan.get("classification") == "research_extension_required":
+        return strings["extension"].format(summary=summary)
+    operations = []
+    for index, operation in enumerate(plan.get("operations") or [], 1):
+        visible = operation.get("expected_summary") or operation.get("instruction") or ""
+        operations.append(f"{index}. {visible}")
+    return strings["plan_ready"].format(
+        summary=summary, operations="\n".join(operations)
+    )
+
+
 def has_explicit_duration(parts: list[str]) -> bool:
     tokens = [item for item in parts if item not in {"--hitl", "--plansiz"}]
     if tokens and tokens[0] in {item.value for item in DeliveryMode}:
@@ -985,12 +1129,21 @@ class TelegramResearchBot:
         client: httpx.AsyncClient,
         chat_id: int,
         path: Path,
+        *,
+        media_type: str = "application/zip",
+        caption: str | None = None,
+        reply_markup: dict | None = None,
     ) -> None:
+        data = {"chat_id": str(chat_id)}
+        if caption:
+            data["caption"] = caption[:1024]
+        if reply_markup is not None:
+            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
         with path.open("rb") as handle:
             await client.post(
                 f"{self.bot_url}/sendDocument",
-                data={"chat_id": str(chat_id)},
-                files={"document": (path.name, handle, "application/zip")},
+                data=data,
+                files={"document": (path.name, handle, media_type)},
                 timeout=None,
             )
 
@@ -1135,6 +1288,143 @@ class TelegramResearchBot:
             return None
         return pending
 
+
+    async def _handle_revision_callback(
+        self,
+        client: httpx.AsyncClient,
+        callback_id: str,
+        parts: list[str],
+        chat_id: int,
+        user_id: int,
+        message: dict,
+        language: str,
+    ) -> None:
+        strings = text_for(language)["revision"]
+        actor_id = await self._resolve_actor(user_id)
+        if actor_id is None:
+            await self._answer_callback(
+                client, callback_id, self._link_hint(language), alert=True
+            )
+            return
+        gateway = self.gateway.for_actor(actor_id)
+        try:
+            kind = parts[0]
+            if kind == "rvfile" and len(parts) == 2:
+                await self._answer_callback(client, callback_id, "✓")
+                path, media_type, metadata = await gateway.download_artifact_version(
+                    parts[1], Path(self.settings.gateway_download_dir)
+                )
+                markup = None
+                if metadata["run_id"] and media_type in {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                }:
+                    markup = {
+                        "inline_keyboard": [
+                            [
+                                {
+                                    "text": strings["revise_this"],
+                                    "callback_data": (
+                                        f"revise:{metadata['run_id']}:{metadata['version_id']}"
+                                    ),
+                                }
+                            ]
+                        ]
+                    }
+                caption = strings["downloaded"].format(
+                    name=metadata["logical_name"],
+                    number=metadata["revision_number"] or "?",
+                )
+                await self._send_document(
+                    client,
+                    chat_id,
+                    path,
+                    media_type=media_type,
+                    caption=caption,
+                    reply_markup=markup,
+                )
+                return
+            if kind == "delivery" and len(parts) == 3:
+                await self._answer_callback(client, callback_id, "✓")
+                path = await gateway.download(
+                    parts[1], DeliveryMode(parts[2]), Path(self.settings.gateway_download_dir)
+                )
+                await self._send_document(client, chat_id, path)
+                return
+            if kind == "revise" and len(parts) == 3:
+                versions = await gateway.artifact_versions(parts[1])
+                version = next((item for item in versions if item.get("id") == parts[2]), None)
+                if version is None:
+                    raise ValueError(strings["invalid_state"])
+                revision = await gateway.create_revision(
+                    parts[1],
+                    str(version["logical_name"]),
+                    base_revision_id=str(version["revision_id"]),
+                    channel="telegram",
+                    conversation_id=str(chat_id),
+                    idempotency_key=f"telegram:{callback_id}"[:120],
+                )
+                await self._answer_callback(client, callback_id, "✓")
+                await self._send_message(
+                    client,
+                    chat_id,
+                    strings["feedback_prompt"].format(number=revision["revision_number"] - 1),
+                )
+                return
+            if kind == "rvplan" and len(parts) == 3:
+                revision = await gateway.revision(parts[1])
+                action = parts[2]
+                if action == "approve":
+                    await gateway.approve_revision_plan(revision["run_id"], revision["id"])
+                    response_text = strings["applying"]
+                elif action == "edit":
+                    response_text = strings["edit_prompt"]
+                elif action == "cancel":
+                    await gateway.cancel_revision(revision["run_id"], revision["id"])
+                    response_text = strings["cancelled"]
+                else:
+                    raise ValueError(strings["invalid_state"])
+                await self._answer_callback(client, callback_id, "✓")
+                await self._clear_markup(client, chat_id, int(message.get("message_id", 0)))
+                await self._send_message(client, chat_id, response_text)
+                return
+            if kind in {"rvaccept", "rvnew", "rvcancel"} and len(parts) == 2:
+                revision = await gateway.revision(parts[1])
+                if kind == "rvaccept":
+                    updated = await gateway.accept_revision(revision["run_id"], revision["id"])
+                    response_text = strings["accepted"].format(
+                        number=updated["revision_number"]
+                    )
+                elif kind == "rvcancel":
+                    await gateway.cancel_revision(revision["run_id"], revision["id"])
+                    response_text = strings["cancelled"]
+                else:
+                    child = await gateway.create_revision(
+                        revision["run_id"],
+                        revision["target_artifact_name"],
+                        base_revision_id=revision["base_revision_id"],
+                        parent_revision_id=revision["id"],
+                        channel="telegram",
+                        conversation_id=str(chat_id),
+                        idempotency_key=f"telegram:{callback_id}"[:120],
+                    )
+                    response_text = strings["feedback_prompt"].format(
+                        number=child["revision_number"] - 1
+                    )
+                await self._answer_callback(client, callback_id, "✓")
+                await self._clear_markup(client, chat_id, int(message.get("message_id", 0)))
+                await self._send_message(client, chat_id, response_text)
+                return
+            raise ValueError(strings["invalid_state"])
+        except (httpx.HTTPError, ValueError) as exc:
+            detail = str(exc)
+            if isinstance(exc, httpx.HTTPStatusError):
+                try:
+                    detail = str(exc.response.json().get("detail") or detail)
+                except ValueError:
+                    pass
+            await self._answer_callback(client, callback_id, detail[:180], alert=True)
+
     async def _handle_callback(self, client: httpx.AsyncClient, callback: dict) -> None:
         callback_id = str(callback.get("id") or "")
         message = callback.get("message") or {}
@@ -1150,6 +1440,19 @@ class TelegramResearchBot:
             )
             return
         parts = str(callback.get("data") or "").split(":")
+        if parts and parts[0] in {
+            "rvfile",
+            "delivery",
+            "revise",
+            "rvplan",
+            "rvaccept",
+            "rvnew",
+            "rvcancel",
+        }:
+            await self._handle_revision_callback(
+                client, callback_id, parts, chat_id, user_id, message, client_language
+            )
+            return
         if parts and parts[0] in {"plan_answer", "plan_extra"}:
             await self._handle_answer_callback(client, callback_id, parts, chat_id, message)
             return
@@ -1582,6 +1885,34 @@ class TelegramResearchBot:
             return True
         return False
 
+    async def _consume_revision_text(
+        self,
+        client: httpx.AsyncClient,
+        message: dict,
+        gateway: ResearchGatewayClient,
+        language: str,
+    ) -> bool:
+        body = str(message.get("text") or "").strip()
+        if not body or body.startswith("/"):
+            return False
+        chat_id = int((message.get("chat") or {}).get("id", 0))
+        revision = await gateway.active_revision(
+            channel="telegram", conversation_id=str(chat_id)
+        )
+        if not revision or revision.get("status") not in {
+            "awaiting_feedback",
+            "clarifying",
+            "awaiting_plan_approval",
+        }:
+            return False
+        await gateway.add_revision_feedback(
+            revision["run_id"], revision["id"], body
+        )
+        await self._send_message(
+            client, chat_id, text_for(language)["revision"]["planning"]
+        )
+        return True
+
     async def _handle(self, client: httpx.AsyncClient, message: dict) -> None:
         chat_id = int((message.get("chat") or {}).get("id", 0))
         text_body = str(message.get("text") or "").strip()
@@ -1635,6 +1966,8 @@ class TelegramResearchBot:
             return
         gateway = self.gateway.for_actor(actor_id)
         try:
+            if await self._consume_revision_text(client, message, gateway, language):
+                return
             if command == "/research":
                 research_parts, flag_language = take_language_flag(parts[1:])
                 research_parts, flag_priority = take_priority_flag(research_parts)
@@ -1931,6 +2264,125 @@ class TelegramResearchBot:
                     run.id, PLAN_CANCEL_NOTICE_EVENT, {"chat_count": len(chat_ids)}
                 )
 
+    async def _notify_completed_runs(self, client: httpx.AsyncClient) -> None:
+        """Publish durable report buttons once, including after a bot restart."""
+        settings = get_settings()
+        cutoff = datetime.now(UTC) - timedelta(
+            hours=settings.telegram_failure_notice_window_h
+        )
+        async with SessionLocal() as session:
+            repo = Repository(session, actor=Principal.system())
+            for run in await repo.list_completed_runs_since(cutoff):
+                if await repo.events_by_types(run.id, {COMPLETION_NOTICE_EVENT}):
+                    continue
+                chat_ids = (
+                    await telegram_ids_for(session, run.owner_id) if run.owner_id else []
+                )
+                language = reply_language(run={"protocol": run.protocol or {}})
+                strings = text_for(language)["revision"]
+                sent = 0
+                if run.owner_id:
+                    gateway = self.gateway.for_actor(run.owner_id)
+                    try:
+                        revisions = await gateway.revisions(run.id)
+                        accepted = next(
+                            (
+                                item
+                                for item in revisions
+                                if item.get("status") == "accepted"
+                            ),
+                            None,
+                        )
+                    except (httpx.HTTPError, ValueError):
+                        logger.exception("tamamlanan kosunun artifact surumu alinamadi: %s", run.id)
+                        continue
+                    if accepted:
+                        for chat_id in chat_ids:
+                            await self._send_message(
+                                client,
+                                chat_id,
+                                strings["complete"].format(
+                                    number=accepted["revision_number"]
+                                ),
+                                reply_markup=report_ready_keyboard(
+                                    run.id, accepted, language
+                                ),
+                            )
+                            sent += 1
+                await repo.event(
+                    run.id, COMPLETION_NOTICE_EVENT, {"chat_count": sent}
+                )
+
+    async def _notify_document_revisions(self, client: httpx.AsyncClient) -> None:
+        """Resume Telegram revision conversations from durable database state."""
+        statuses = {
+            "clarifying",
+            "awaiting_plan_approval",
+            "awaiting_revision_approval",
+            "failed",
+        }
+        async with SessionLocal() as session:
+            repo = Repository(session, actor=Principal.system())
+            rows = await repo.list_document_revisions_by_statuses(
+                statuses, channel="telegram"
+            )
+            for row in rows:
+                if not row.conversation_id:
+                    continue
+                state = dict(row.channel_state or {})
+                marker = f"{row.status}_notified"
+                if state.get(marker):
+                    continue
+                run = await repo.get_run(row.run_id)
+                language = reply_language(run={"protocol": (run.protocol if run else {})})
+                strings = text_for(language)["revision"]
+                chat_id = int(row.conversation_id)
+                if row.status == "clarifying":
+                    plan = row.edit_plan or {}
+                    text = strings["clarification"].format(
+                        question=plan.get("clarification_question") or ""
+                    )
+                    markup = None
+                elif row.status == "awaiting_plan_approval":
+                    payload = {
+                        "id": row.id,
+                        "edit_plan": row.edit_plan,
+                    }
+                    extension = (
+                        (row.edit_plan or {}).get("classification")
+                        == "research_extension_required"
+                    )
+                    text = revision_plan_text(payload, language)
+                    markup = revision_plan_keyboard(
+                        row.id, language, extension=extension
+                    )
+                elif row.status == "awaiting_revision_approval":
+                    versions = await repo.list_artifact_versions(
+                        row.run_id, revision_id=row.id
+                    )
+                    payload = {
+                        "id": row.id,
+                        "artifacts": [
+                            {
+                                "id": item.id,
+                                "logical_name": item.logical_name,
+                            }
+                            for item in versions
+                        ],
+                    }
+                    text = strings["draft_ready"].format(number=row.revision_number)
+                    markup = revision_draft_keyboard(payload, language)
+                else:
+                    text = strings["failed"].format(error=row.error or "")
+                    markup = None
+                await self._send_message(
+                    client, chat_id, text, reply_markup=markup
+                )
+                state[marker] = datetime.now(UTC).isoformat()
+                await repo.update_document_revision(
+                    row.run_id, row.id, channel_state=state
+                )
+
     async def _notify_waiting_runs(self, client: httpx.AsyncClient) -> None:
         """Tell the chat when one of its runs has stopped for input.
 
@@ -2021,6 +2473,14 @@ class TelegramResearchBot:
                     await self._notify_failed_runs(client)
                 except Exception:
                     logger.exception("dusen kosu bildirimi basarisiz")
+                try:
+                    await self._notify_completed_runs(client)
+                except Exception:
+                    logger.exception("tamamlanan kosu bildirimi basarisiz")
+                try:
+                    await self._notify_document_revisions(client)
+                except Exception:
+                    logger.exception("belge revizyonu bildirimi basarisiz")
                 # Same rule again: its own guard, so one silent notice does not silence
                 # the others.
                 try:

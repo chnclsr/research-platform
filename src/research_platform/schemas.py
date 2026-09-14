@@ -458,6 +458,21 @@ class DeliveryMode(StrEnum):
     BOTH = "both"
 
 
+class RevisionStatus(StrEnum):
+    AWAITING_FEEDBACK = "awaiting_feedback"
+    CLARIFYING = "clarifying"
+    QUEUED = "queued"
+    PLANNING = "planning"
+    AWAITING_PLAN_APPROVAL = "awaiting_plan_approval"
+    RENDERING = "rendering"
+    VALIDATING = "validating"
+    AWAITING_REVISION_APPROVAL = "awaiting_revision_approval"
+    ACCEPTED = "accepted"
+    SUPERSEDED = "superseded"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
 class ResearchRunCreate(BaseModel):
     protocol: ResearchProtocol
     # Scheduling, kept beside the protocol rather than inside it: the protocol is the
@@ -697,6 +712,124 @@ class ArtifactView(BaseModel):
     media_type: str
     size_bytes: int
     download_url: str
+
+
+RevisionOperationName = Literal[
+    "set_title",
+    "replace_text",
+    "rewrite_section",
+    "shorten_section",
+    "rename_section",
+    "reorder_sections",
+    "set_format_override",
+]
+
+
+class RevisionOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: RevisionOperationName
+    target: str = Field(min_length=1, max_length=160)
+    instruction: str = Field(min_length=1, max_length=4000)
+    rationale: str = Field(default="", max_length=2000)
+    format_scope: Literal["all", "docx", "pptx"] = "all"
+    preserve_citations: bool = True
+    replacement: str | None = Field(default=None, max_length=30000)
+    order: list[str] = Field(default_factory=list, max_length=100)
+    value: Any = None
+    expected_summary: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_payload(self):
+        text_operations = {
+            "set_title",
+            "replace_text",
+            "rewrite_section",
+            "shorten_section",
+            "rename_section",
+        }
+        if self.operation in text_operations and self.replacement is None:
+            raise ValueError(f"{self.operation} requires replacement")
+        if self.operation == "reorder_sections" and not self.order:
+            raise ValueError("reorder_sections requires order")
+        if self.operation == "set_format_override" and self.value is None:
+            raise ValueError("set_format_override requires value")
+        return self
+
+
+class RevisionPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str = Field(min_length=1, max_length=4000)
+    classification: Literal["document_revision", "research_extension_required"] = (
+        "document_revision"
+    )
+    requires_clarification: bool = False
+    clarification_question: str = Field(default="", max_length=2000)
+    operations: list[RevisionOperation] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_decision(self):
+        if self.requires_clarification and not self.clarification_question.strip():
+            raise ValueError("clarification_question is required")
+        if (
+            self.classification == "document_revision"
+            and not self.requires_clarification
+            and not self.operations
+        ):
+            raise ValueError("a document revision requires at least one operation")
+        return self
+
+
+class DocumentRevisionCreate(BaseModel):
+    feedback: str = Field(default="", max_length=12000)
+    base_revision_id: str | None = Field(default=None, min_length=26, max_length=26)
+    parent_revision_id: str | None = Field(default=None, min_length=26, max_length=26)
+    channel: Literal["api", "telegram", "panel", "mcp"] = "api"
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+
+class RevisionFeedbackRequest(BaseModel):
+    feedback: str = Field(min_length=1, max_length=12000)
+
+
+class ArtifactVersionView(BaseModel):
+    id: str
+    run_id: str
+    revision_id: str
+    logical_name: str
+    revision_number: int
+    parent_version_id: str | None = None
+    media_type: str
+    sha256: str
+    size_bytes: int
+    download_url: str
+    created_at: datetime
+
+
+class DocumentRevisionView(BaseModel):
+    id: str
+    run_id: str
+    parent_revision_id: str | None = None
+    base_revision_id: str | None = None
+    target_artifact_name: str
+    revision_number: int
+    status: RevisionStatus
+    feedback: str
+    edit_plan: RevisionPlan | None = None
+    format_overrides: dict[str, Any] = Field(default_factory=dict)
+    requested_by: str
+    channel: str
+    conversation_id: str | None = None
+    model_id: str | None = None
+    prompt_version: str | None = None
+    usage: dict[str, Any] = Field(default_factory=dict)
+    validation: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    accepted_at: datetime | None = None
+    artifacts: list[ArtifactVersionView] = Field(default_factory=list)
 
 
 class CorpusSearchRequest(BaseModel):

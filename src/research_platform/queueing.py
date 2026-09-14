@@ -60,6 +60,10 @@ def job_id_for(run_id: str) -> str:
     return f"run:{run_id}"
 
 
+def revision_job_id_for(revision_id: str) -> str:
+    return f"revision:{revision_id}"
+
+
 def run_id_of(job_id: str) -> str | None:
     text = job_id.decode() if isinstance(job_id, bytes) else str(job_id)
     return text[len("run:") :] if text.startswith("run:") else None
@@ -98,6 +102,20 @@ async def enqueue_run(redis: Any, run_id: str, priority: str = NORMAL) -> Any:
     )
 
 
+async def enqueue_revision(redis: Any, revision_id: str, priority: str = NORMAL) -> Any:
+    """Queue one planning or rendering pass under a stable revision job id."""
+    job_id = revision_job_id_for(revision_id)
+    if await redis.exists(f"{in_progress_key_prefix}{job_id}"):
+        return None
+    await redis.delete(f"{job_key_prefix}{job_id}", f"{result_key_prefix}{job_id}")
+    return await redis.enqueue_job(
+        "execute_document_revision",
+        revision_id,
+        _job_id=job_id,
+        **score_kwargs(priority),
+    )
+
+
 async def rescore_run(redis: Any, run_id: str, priority: str) -> bool:
     """Move a waiting job into another band. True when a waiting job was moved."""
     job_id = job_id_for(run_id)
@@ -121,3 +139,18 @@ async def discard_run_jobs(redis: Any, run_id: str) -> None:
         f"{in_progress_key_prefix}{job_id}",
         f"{retry_key_prefix}{job_id}",
     )
+
+
+async def discard_revision_jobs(redis: Any, revision_id: str) -> None:
+    job_id = revision_job_id_for(revision_id)
+    await redis.zrem(default_queue_name, job_id)
+    await redis.delete(
+        f"{job_key_prefix}{job_id}",
+        f"{in_progress_key_prefix}{job_id}",
+        f"{retry_key_prefix}{job_id}",
+    )
+
+
+async def cancel_queued_revision_job(redis: Any, revision_id: str) -> None:
+    """Remove only a pending queue entry, leaving an executing worker's lock intact."""
+    await redis.zrem(default_queue_name, revision_job_id_for(revision_id))

@@ -4,21 +4,23 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from arq.constants import default_queue_name, in_progress_key_prefix, result_key_prefix
-
-from sqlalchemy import delete
-
 from conftest import acting_principal
 from fake_redis import FakeRedis
+from sqlalchemy import delete
+
 from research_platform.auth import Principal
 from research_platform.db import ResearchRunRow, SessionLocal, create_schema
 from research_platform.queueing import (
     JOB_EXPIRY,
     NORMAL,
     URGENT,
+    cancel_queued_revision_job,
+    enqueue_revision,
     enqueue_run,
     job_id_for,
     normalize_priority,
     rescore_run,
+    revision_job_id_for,
     score_kwargs,
 )
 from research_platform.repository import Repository
@@ -85,6 +87,30 @@ async def test_the_worker_would_pull_the_urgent_run_first():
     assert redis.order()[0] == job_id_for("URGENT1")
     # The normal band keeps its own arrival order behind it.
     assert redis.order()[1:] == [job_id_for("NORMAL1"), job_id_for("NORMAL2")]
+
+
+@pytest.mark.asyncio
+async def test_revision_jobs_share_the_same_priority_queue_with_a_stable_id():
+    redis = FakeRedis()
+    await enqueue_revision(redis, "REVISION1", URGENT)
+
+    assert redis.order() == [revision_job_id_for("REVISION1")]
+    function, argument, kwargs = redis.enqueued[0]
+    assert (function, argument) == ("execute_document_revision", "REVISION1")
+    assert kwargs["_job_id"] == revision_job_id_for("REVISION1")
+
+
+@pytest.mark.asyncio
+async def test_cancelling_a_revision_removes_only_its_pending_queue_entry():
+    redis = FakeRedis()
+    await enqueue_revision(redis, "REVISION1", NORMAL)
+    in_progress = f"{in_progress_key_prefix}{revision_job_id_for('REVISION1')}"
+    redis.keys.add(in_progress)
+
+    await cancel_queued_revision_job(redis, "REVISION1")
+
+    assert revision_job_id_for("REVISION1") not in redis.queue
+    assert in_progress in redis.keys
 
 
 @pytest.mark.asyncio
@@ -278,9 +304,9 @@ async def test_the_worker_cron_is_wired_to_the_scheduler():
 
 @pytest.mark.asyncio
 async def test_the_priority_endpoint_only_moves_a_waiting_run():
+    from conftest import api_headers, ensure_test_user
     from fastapi.testclient import TestClient
 
-    from conftest import api_headers, ensure_test_user
     from research_platform.api import app
 
     await ensure_test_user()
@@ -319,9 +345,9 @@ async def test_the_priority_endpoint_only_moves_a_waiting_run():
 
 @pytest.mark.asyncio
 async def test_a_run_is_created_in_the_band_the_caller_asked_for():
+    from conftest import api_headers, ensure_test_user
     from fastapi.testclient import TestClient
 
-    from conftest import api_headers, ensure_test_user
     from research_platform.api import app
 
     await ensure_test_user()

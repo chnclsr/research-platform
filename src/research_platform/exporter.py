@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import io
 import json
@@ -1051,6 +1052,7 @@ async def build_exports(
         "research_bundle.zip": set(files),
     }
     bundle_names = []
+    bundle_payloads: dict[str, bytes] = {}
     for bundle_name, selected_names in bundle_specs.items():
         archive_stream = io.BytesIO()
         with zipfile.ZipFile(archive_stream, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -1062,4 +1064,49 @@ async def build_exports(
         await store.put(bundle_key, bundle, "application/zip")
         await repo.save_artifact(run_id, bundle_name, "application/zip", bundle_key, len(bundle))
         bundle_names.append(bundle_name)
+        bundle_payloads[bundle_name] = bundle
+
+    # Future runs start life versioned. Older runs take the same shape lazily from their
+    # reproducibility manifest when a revision surface is opened.
+    from .document_revision import (
+        DOCX_MEDIA_TYPE,
+        PPTX_MEDIA_TYPE,
+        VERSIONED_BUNDLES,
+        report_model_from_manifest,
+    )
+
+    version_rows = []
+    for name, (media_type, data) in files.items():
+        if media_type not in {DOCX_MEDIA_TYPE, PPTX_MEDIA_TYPE}:
+            continue
+        version_rows.append(
+            {
+                "logical_name": name,
+                "media_type": media_type,
+                "object_key": f"runs/{run_id}/{name}",
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "size_bytes": len(data),
+            }
+        )
+    for name in VERSIONED_BUNDLES:
+        data = bundle_payloads.get(name)
+        if data is None:
+            continue
+        version_rows.append(
+            {
+                "logical_name": name,
+                "media_type": "application/zip",
+                "object_key": f"runs/{run_id}/{name}",
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "size_bytes": len(data),
+            }
+        )
+    run = await repo.get_run(run_id)
+    await repo.bootstrap_document_revision(
+        run_id,
+        report_model=report_model_from_manifest(manifest),
+        artifact_versions=version_rows,
+        citations=[citation.model_dump(mode="json") for citation in word_report.citations],
+        requested_by=str((run.owner_id if run else None) or "system"),
+    )
     return [*saved, *bundle_names]

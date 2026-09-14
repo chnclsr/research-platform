@@ -1562,6 +1562,126 @@ async def artifact_download(
     )
 
 
+@app.get("/api/runs/{run_id}/revisions")
+async def document_revisions(
+    run_id: str, principal: Principal = Depends(require_user)
+) -> list[dict[str, Any]]:
+    """Expose the same durable revision records used by Telegram and MCP."""
+    try:
+        response = await _api_request(
+            "GET", f"/v1/research-runs/{run_id}/revisions", principal, timeout=120
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Revizyon geçmişi alınamadı") from exc
+    if not response.is_success:
+        raise HTTPException(status_code=response.status_code, detail=response.text[:500])
+    return response.json()
+
+
+@app.post("/api/runs/{run_id}/artifacts/{artifact_name}/revisions")
+async def create_document_revision(
+    run_id: str,
+    artifact_name: str,
+    body: dict[str, Any],
+    principal: Principal = Depends(require_csrf),
+) -> dict[str, Any]:
+    payload = {
+        "feedback": str(body.get("feedback") or "").strip(),
+        "base_revision_id": body.get("base_revision_id"),
+        "parent_revision_id": body.get("parent_revision_id"),
+        "channel": "panel",
+    }
+    try:
+        response = await _api_request(
+            "POST",
+            f"/v1/research-runs/{run_id}/artifacts/{artifact_name}/revisions",
+            principal,
+            timeout=30,
+            json_body=payload,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Revizyon başlatılamadı") from exc
+    if not response.is_success:
+        detail = response.json().get("detail", response.text[:500])
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
+
+
+@app.post("/api/runs/{run_id}/revisions/{revision_id}/{action}")
+async def document_revision_action(
+    run_id: str,
+    revision_id: str,
+    action: Literal["feedback", "approve-plan", "accept", "cancel", "restore"],
+    body: dict[str, Any] | None = None,
+    principal: Principal = Depends(require_csrf),
+) -> dict[str, Any]:
+    json_body = None
+    if action == "feedback":
+        feedback = str((body or {}).get("feedback") or "").strip()
+        if not feedback:
+            raise HTTPException(status_code=400, detail="Geri bildirim boş olamaz")
+        json_body = {"feedback": feedback}
+    try:
+        response = await _api_request(
+            "POST",
+            f"/v1/research-runs/{run_id}/revisions/{revision_id}/{action}",
+            principal,
+            timeout=30,
+            json_body=json_body,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Revizyon işlemi tamamlanamadı") from exc
+    if not response.is_success:
+        detail = response.json().get("detail", response.text[:500])
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
+
+
+@app.get("/api/runs/{run_id}/revisions/{revision_id}/diff")
+async def document_revision_diff(
+    run_id: str,
+    revision_id: str,
+    principal: Principal = Depends(require_user),
+) -> dict[str, Any]:
+    try:
+        response = await _api_request(
+            "GET",
+            f"/v1/research-runs/{run_id}/revisions/{revision_id}/diff",
+            principal,
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Revizyon farkı alınamadı") from exc
+    if not response.is_success:
+        raise HTTPException(status_code=response.status_code, detail=response.text[:500])
+    return response.json()
+
+
+@app.get("/api/runs/{run_id}/artifact-versions/{version_id}")
+async def artifact_version_download(
+    run_id: str, version_id: str, principal: Principal = Depends(require_user)
+) -> Response:
+    try:
+        response = await _api_request(
+            "GET",
+            f"/v1/research-runs/{run_id}/artifact-versions/{version_id}",
+            principal,
+            timeout=120,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Belge sürümü indirilemedi") from exc
+    if not response.is_success:
+        raise HTTPException(status_code=response.status_code, detail=response.text[:500])
+    disposition = response.headers.get(
+        "content-disposition", f'attachment; filename="{version_id}.bin"'
+    )
+    return Response(
+        content=response.content,
+        media_type=response.headers.get("content-type", "application/octet-stream"),
+        headers={"Content-Disposition": disposition},
+    )
+
+
 @app.post("/api/system/{action}")
 async def system_action(
     action: Literal["start", "stop", "restart"],

@@ -12,12 +12,21 @@ from .auth import Principal
 from .capacity import GATE, startup_ceiling
 from .config import get_settings
 from .db import SessionLocal, create_schema
+from .document_revision import DocumentRevisionService
 from .hardware_telemetry import HUB, finalize_hardware_telemetry
+from .llm import build_llm
 from .pipeline import ResearchPipeline
-from .queueing import NORMAL, discard_run_jobs, enqueue_run
+from .queueing import (
+    NORMAL,
+    discard_revision_jobs,
+    discard_run_jobs,
+    enqueue_revision,
+    enqueue_run,
+)
 from .repository import Repository
 from .scheduler import resume_preempted
-from .schemas import RunStatus
+from .schemas import RevisionStatus, RunStatus
+from .storage import ObjectStore
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +65,26 @@ async def _recover_interrupted_jobs(ctx: dict) -> None:
                 {"stage": row.current_stage, "resumed_from_checkpoint": True},
             )
             await enqueue_run(redis, row.id, row.priority)
+
+        revision_rows = await repo.list_document_revisions_by_statuses(
+            {
+                RevisionStatus.QUEUED.value,
+                RevisionStatus.PLANNING.value,
+                RevisionStatus.RENDERING.value,
+                RevisionStatus.VALIDATING.value,
+            }
+        )
+        for revision in revision_rows:
+            await discard_revision_jobs(redis, revision.id)
+            if revision.status != RevisionStatus.QUEUED.value:
+                await repo.update_document_revision(
+                    revision.run_id,
+                    revision.id,
+                    status=RevisionStatus.QUEUED.value,
+                    error=None,
+                )
+            run = await repo.get_run(revision.run_id)
+            await enqueue_revision(redis, revision.id, run.priority if run else NORMAL)
 
 
 async def startup(ctx: dict) -> None:
@@ -134,6 +163,69 @@ async def execute_research_run(ctx: dict, run_id: str) -> None:
             GATE.release(run_id)
 
 
+async def execute_document_revision(ctx: dict, revision_id: str) -> None:
+    """Run one planning or rendering pass inside the same hardware capacity gate."""
+    settings = get_settings()
+    gate_id = f"revision:{revision_id}"
+    priority = NORMAL
+    run_id = ""
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=Principal.system())
+        revision = await repo.get_document_revision_by_id(revision_id)
+        run_id = revision.run_id
+        run = await repo.get_run(run_id)
+        priority = run.priority if run else NORMAL
+
+    async def announce(capacity) -> None:
+        async with SessionLocal() as session:
+            await Repository(session, actor=Principal.system()).event(
+                run_id,
+                "revision_awaiting_capacity",
+                {"revision_id": revision_id, **capacity.as_dict()},
+            )
+
+    await GATE.acquire(gate_id, priority=priority, settings=settings, on_wait=announce)
+    try:
+        async with SessionLocal() as session:
+            repo = Repository(session, actor=Principal.system())
+            revision = await repo.get_document_revision_by_id(revision_id)
+            if revision.status != RevisionStatus.QUEUED.value:
+                return
+            service = DocumentRevisionService(
+                repo,
+                ObjectStore(settings),
+                llm=build_llm(settings, ctx["http"]),
+                settings=settings,
+            )
+            try:
+                if revision.edit_plan:
+                    await service.render(revision_id)
+                else:
+                    await service.plan(revision_id)
+            except Exception as exc:
+                current = await repo.get_document_revision(
+                    revision.run_id, revision.id, lock=True
+                )
+                if current.status == RevisionStatus.CANCELLED.value:
+                    logger.info("document revision %s was cancelled", revision_id)
+                    return
+                logger.exception("document revision %s failed", revision_id)
+                await repo.update_document_revision(
+                    revision.run_id,
+                    revision.id,
+                    status=RevisionStatus.FAILED.value,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+                await repo.event(
+                    revision.run_id,
+                    "document_revision_failed",
+                    {"revision_id": revision.id, "error_type": type(exc).__name__},
+                )
+                raise
+    finally:
+        GATE.release(gate_id)
+
+
 async def expire_hitl_interactions(ctx: dict) -> None:
     """Release worker resources while preserving unanswered HITL state."""
     async with SessionLocal() as session:
@@ -170,7 +262,12 @@ async def resume_preempted_runs(ctx: dict) -> None:
 
 
 class WorkerSettings:
-    functions = [execute_research_run, expire_hitl_interactions, resume_preempted_runs]
+    functions = [
+        execute_research_run,
+        execute_document_revision,
+        expire_hitl_interactions,
+        resume_preempted_runs,
+    ]
     cron_jobs = [
         cron(expire_hitl_interactions, second={0, 30}, run_at_startup=True),
         cron(resume_preempted_runs, second={5, 35}, run_at_startup=True),

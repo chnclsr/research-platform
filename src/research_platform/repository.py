@@ -19,9 +19,11 @@ from .auth import Principal
 from .config import get_settings
 from .db import (
     ArtifactRow,
+    ArtifactVersionRow,
     CheckpointRow,
     ClaimRow,
     ConnectorSyncCursorRow,
+    DocumentRevisionRow,
     EventRow,
     EvidenceRow,
     FigureObservationRow,
@@ -30,6 +32,7 @@ from .db import (
     PassageRow,
     ReportCitationRow,
     ResearchRunRow,
+    RevisionCitationRow,
     SourceRelationRow,
     SourceRow,
     SourceVersionRow,
@@ -47,6 +50,7 @@ from .schemas import (
     Passage,
     ReportCitation,
     ResearchProtocol,
+    RevisionStatus,
     RunStatus,
     RunView,
     SourceFamily,
@@ -103,6 +107,14 @@ class RunAccessDenied(RuntimeError):
     def __init__(self, run_id: str) -> None:
         super().__init__(f"Run {run_id} is not accessible to this actor")
         self.run_id = run_id
+
+
+class RevisionConflict(RuntimeError):
+    """The requested base or state no longer permits this revision transition."""
+
+
+class RevisionNotFound(RuntimeError):
+    """A revision or artifact version is missing inside an accessible run."""
 
 
 # Methods that take a ``run_id`` but must not be ownership-checked, each for a reason
@@ -373,6 +385,23 @@ class Repository(metaclass=_OwnershipEnforced):
             select(ResearchRunRow)
             .where(
                 ResearchRunRow.status == RunStatus.FAILED.value,
+                ResearchRunRow.updated_at >= cutoff,
+            )
+            .order_by(ResearchRunRow.updated_at)
+        )
+        return list(rows)
+
+    async def list_completed_runs_since(self, cutoff: datetime) -> list[ResearchRunRow]:
+        """Recently completed runs, for durable owner notifications."""
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        rows = await self.session.scalars(
+            select(ResearchRunRow)
+            .where(
+                ResearchRunRow.status.in_(
+                    {RunStatus.COMPLETED.value, RunStatus.COMPLETED_INCOMPLETE.value}
+                ),
                 ResearchRunRow.updated_at >= cutoff,
             )
             .order_by(ResearchRunRow.updated_at)
@@ -1595,6 +1624,525 @@ class Repository(metaclass=_OwnershipEnforced):
             await self.session.scalars(select(ArtifactRow).where(ArtifactRow.run_id == run_id))
         )
 
+    async def current_document_revision(self, run_id: str) -> DocumentRevisionRow | None:
+        return await self.session.scalar(
+            select(DocumentRevisionRow)
+            .where(
+                DocumentRevisionRow.run_id == run_id,
+                DocumentRevisionRow.status == RevisionStatus.ACCEPTED.value,
+            )
+            .order_by(DocumentRevisionRow.revision_number.desc())
+        )
+
+    async def bootstrap_document_revision(
+        self,
+        run_id: str,
+        *,
+        report_model: dict[str, Any],
+        artifact_versions: list[dict[str, Any]],
+        citations: list[dict[str, Any]],
+        requested_by: str,
+    ) -> DocumentRevisionRow:
+        """Create revision 1 from the artifacts an older completed run already owns."""
+        await self.session.scalar(
+            select(ResearchRunRow).where(ResearchRunRow.id == run_id).with_for_update()
+        )
+        current = await self.current_document_revision(run_id)
+        if current is not None:
+            return current
+        now = datetime.now(timezone.utc)
+        revision = DocumentRevisionRow(
+            id=new_id(),
+            run_id=run_id,
+            parent_revision_id=None,
+            base_revision_id=None,
+            target_artifact_name="report",
+            revision_number=1,
+            status=RevisionStatus.ACCEPTED.value,
+            feedback="Initial generated report",
+            edit_plan=None,
+            report_model=report_model,
+            format_overrides={},
+            requested_by=requested_by,
+            channel="internal",
+            channel_state={},
+            usage={},
+            validation={"bootstrap": True},
+            created_at=now,
+            updated_at=now,
+            accepted_at=now,
+        )
+        self.session.add(revision)
+        await self.session.flush()
+        for item in artifact_versions:
+            self.session.add(
+                ArtifactVersionRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    revision_id=revision.id,
+                    logical_name=str(item["logical_name"]),
+                    revision_number=1,
+                    parent_version_id=None,
+                    media_type=str(item["media_type"]),
+                    object_key=str(item["object_key"]),
+                    sha256=str(item["sha256"]),
+                    size_bytes=int(item["size_bytes"]),
+                )
+            )
+        for citation in citations:
+            self.session.add(
+                RevisionCitationRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    revision_id=revision.id,
+                    source_id=str(citation["source_id"]),
+                    payload=citation,
+                )
+            )
+        await self.session.commit()
+        return revision
+
+    async def create_document_revision(
+        self,
+        run_id: str,
+        *,
+        target_artifact_name: str,
+        feedback: str,
+        base_revision_id: str,
+        parent_revision_id: str | None,
+        idempotency_key: str | None,
+        channel: str,
+        conversation_id: str | None,
+    ) -> DocumentRevisionRow:
+        actor = self.require_actor()
+        if actor.user_id is None:
+            raise ActorRequired("A document revision must have a human requester")
+        await self.session.scalar(
+            select(ResearchRunRow).where(ResearchRunRow.id == run_id).with_for_update()
+        )
+        if idempotency_key:
+            existing = await self.session.scalar(
+                select(DocumentRevisionRow).where(
+                    DocumentRevisionRow.run_id == run_id,
+                    DocumentRevisionRow.requested_by == actor.user_id,
+                    DocumentRevisionRow.idempotency_key == idempotency_key,
+                )
+            )
+            if existing is not None:
+                return existing
+        current = await self.current_document_revision(run_id)
+        if current is None:
+            raise RevisionConflict("The run has no accepted document revision")
+        if current.id != base_revision_id:
+            raise RevisionConflict("stale revision")
+        parent = current
+        if parent_revision_id:
+            parent = await self.get_document_revision(run_id, parent_revision_id)
+            if parent.base_revision_id not in {None, current.id} and parent.id != current.id:
+                raise RevisionConflict("parent revision is based on a stale accepted revision")
+        latest_number = await self.session.scalar(
+            select(DocumentRevisionRow.revision_number)
+            .where(DocumentRevisionRow.run_id == run_id)
+            .order_by(DocumentRevisionRow.revision_number.desc())
+            .limit(1)
+        )
+        now = datetime.now(timezone.utc)
+        row = DocumentRevisionRow(
+            id=new_id(),
+            run_id=run_id,
+            parent_revision_id=parent.id,
+            base_revision_id=current.id,
+            target_artifact_name=target_artifact_name,
+            revision_number=int(latest_number or 0) + 1,
+            status=(
+                RevisionStatus.QUEUED.value
+                if feedback.strip()
+                else RevisionStatus.AWAITING_FEEDBACK.value
+            ),
+            feedback=feedback.strip(),
+            edit_plan=None,
+            report_model={},
+            format_overrides=dict(parent.format_overrides or {}),
+            requested_by=actor.user_id,
+            idempotency_key=idempotency_key,
+            channel=channel,
+            conversation_id=conversation_id,
+            channel_state={},
+            usage={},
+            validation={},
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(row)
+        await self.session.commit()
+        return row
+
+    async def get_document_revision(
+        self, run_id: str, revision_id: str, *, lock: bool = False
+    ) -> DocumentRevisionRow:
+        statement = select(DocumentRevisionRow).where(
+            DocumentRevisionRow.run_id == run_id,
+            DocumentRevisionRow.id == revision_id,
+        )
+        if lock:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        row = await self.session.scalar(statement)
+        if row is None:
+            raise RevisionNotFound("Document revision not found")
+        return row
+
+    async def get_document_revision_by_id(
+        self, revision_id: str, *, lock: bool = False
+    ) -> DocumentRevisionRow:
+        statement = select(DocumentRevisionRow).where(DocumentRevisionRow.id == revision_id)
+        if lock:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        row = await self.session.scalar(statement)
+        if row is None:
+            raise RevisionNotFound("Document revision not found")
+        await self._guard_run(row.run_id)
+        return row
+
+    async def list_document_revisions(self, run_id: str) -> list[DocumentRevisionRow]:
+        return list(
+            await self.session.scalars(
+                select(DocumentRevisionRow)
+                .where(DocumentRevisionRow.run_id == run_id)
+                .order_by(DocumentRevisionRow.revision_number.desc())
+            )
+        )
+
+    async def list_document_revisions_by_statuses(
+        self, statuses: set[str], *, channel: str | None = None
+    ) -> list[DocumentRevisionRow]:
+        actor = self.require_actor()
+        if not actor.is_admin:
+            raise RunAccessDenied("*")
+        if not statuses:
+            return []
+        statement = select(DocumentRevisionRow).where(DocumentRevisionRow.status.in_(statuses))
+        if channel is not None:
+            statement = statement.where(DocumentRevisionRow.channel == channel)
+        return list(await self.session.scalars(statement.order_by(DocumentRevisionRow.updated_at)))
+
+    async def active_document_revision(
+        self, *, channel: str, conversation_id: str
+    ) -> DocumentRevisionRow | None:
+        actor = self.require_actor()
+        if actor.user_id is None:
+            raise ActorRequired("An active revision lookup requires a human actor")
+        terminal = {
+            RevisionStatus.ACCEPTED.value,
+            RevisionStatus.SUPERSEDED.value,
+            RevisionStatus.CANCELLED.value,
+            RevisionStatus.FAILED.value,
+        }
+        return await self.session.scalar(
+            select(DocumentRevisionRow)
+            .where(
+                DocumentRevisionRow.requested_by == actor.user_id,
+                DocumentRevisionRow.channel == channel,
+                DocumentRevisionRow.conversation_id == conversation_id,
+                DocumentRevisionRow.status.not_in(terminal),
+            )
+            .order_by(DocumentRevisionRow.updated_at.desc())
+        )
+
+    async def update_document_revision(
+        self, run_id: str, revision_id: str, **fields: Any
+    ) -> DocumentRevisionRow:
+        row = await self.get_document_revision(run_id, revision_id, lock=True)
+        allowed = {
+            "status",
+            "feedback",
+            "edit_plan",
+            "report_model",
+            "format_overrides",
+            "channel_state",
+            "model_id",
+            "prompt_version",
+            "usage",
+            "validation",
+            "error",
+            "accepted_at",
+        }
+        unknown = set(fields) - allowed
+        if unknown:
+            raise ValueError(f"Unsupported document revision fields: {sorted(unknown)}")
+        for key, value in fields.items():
+            setattr(row, key, value)
+        row.updated_at = datetime.now(timezone.utc)
+        await self.session.commit()
+        return row
+
+    async def list_artifact_versions(
+        self, run_id: str, *, revision_id: str | None = None
+    ) -> list[ArtifactVersionRow]:
+        statement = select(ArtifactVersionRow).where(ArtifactVersionRow.run_id == run_id)
+        if revision_id is not None:
+            statement = statement.where(ArtifactVersionRow.revision_id == revision_id)
+        return list(
+            await self.session.scalars(
+                statement.order_by(
+                    ArtifactVersionRow.revision_number.desc(), ArtifactVersionRow.logical_name
+                )
+            )
+        )
+
+    async def get_artifact_version(
+        self, run_id: str, version_id: str
+    ) -> ArtifactVersionRow:
+        row = await self.session.scalar(
+            select(ArtifactVersionRow).where(
+                ArtifactVersionRow.run_id == run_id,
+                ArtifactVersionRow.id == version_id,
+            )
+        )
+        if row is None:
+            raise RevisionNotFound("Artifact version not found")
+        return row
+
+    async def get_artifact_version_by_id(self, version_id: str) -> ArtifactVersionRow:
+        row = await self.session.scalar(
+            select(ArtifactVersionRow).where(ArtifactVersionRow.id == version_id)
+        )
+        if row is None:
+            raise RevisionNotFound("Artifact version not found")
+        await self._guard_run(row.run_id)
+        return row
+
+    async def list_revision_citations(
+        self, run_id: str, revision_id: str
+    ) -> list[RevisionCitationRow]:
+        return list(
+            await self.session.scalars(
+                select(RevisionCitationRow)
+                .where(
+                    RevisionCitationRow.run_id == run_id,
+                    RevisionCitationRow.revision_id == revision_id,
+                )
+                .order_by(RevisionCitationRow.source_id)
+            )
+        )
+
+    async def save_revision_outputs(
+        self,
+        run_id: str,
+        revision_id: str,
+        *,
+        report_model: dict[str, Any],
+        format_overrides: dict[str, Any],
+        validation: dict[str, Any],
+        artifact_versions: list[dict[str, Any]],
+        citations: list[dict[str, Any]],
+    ) -> DocumentRevisionRow:
+        revision = await self.get_document_revision(run_id, revision_id, lock=True)
+        if revision.status == RevisionStatus.CANCELLED.value:
+            return revision
+        if revision.status != RevisionStatus.VALIDATING.value:
+            raise RevisionConflict(
+                f"Cannot save revision outputs in {revision.status}"
+            )
+        await self.session.execute(
+            delete(ArtifactVersionRow).where(ArtifactVersionRow.revision_id == revision_id)
+        )
+        await self.session.execute(
+            delete(RevisionCitationRow).where(RevisionCitationRow.revision_id == revision_id)
+        )
+        for item in artifact_versions:
+            self.session.add(
+                ArtifactVersionRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    revision_id=revision_id,
+                    logical_name=str(item["logical_name"]),
+                    revision_number=revision.revision_number,
+                    parent_version_id=item.get("parent_version_id"),
+                    media_type=str(item["media_type"]),
+                    object_key=str(item["object_key"]),
+                    sha256=str(item["sha256"]),
+                    size_bytes=int(item["size_bytes"]),
+                )
+            )
+        for citation in citations:
+            self.session.add(
+                RevisionCitationRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    revision_id=revision_id,
+                    source_id=str(citation["source_id"]),
+                    payload=citation,
+                )
+            )
+        revision.report_model = report_model
+        revision.format_overrides = format_overrides
+        revision.validation = validation
+        revision.status = RevisionStatus.AWAITING_REVISION_APPROVAL.value
+        revision.error = None
+        revision.updated_at = datetime.now(timezone.utc)
+        await self.session.commit()
+        return revision
+
+    async def restore_document_revision(
+        self, run_id: str, source_revision_id: str, *, channel: str = "api"
+    ) -> DocumentRevisionRow:
+        """Prepare an immutable historical version as a new, reviewable draft."""
+        actor = self.require_actor()
+        if actor.user_id is None:
+            raise ActorRequired("A document restore must have a human requester")
+        await self.session.scalar(
+            select(ResearchRunRow).where(ResearchRunRow.id == run_id).with_for_update()
+        )
+        current = await self.current_document_revision(run_id)
+        source = await self.get_document_revision(run_id, source_revision_id)
+        if current is None or not source.report_model:
+            raise RevisionConflict("The requested revision cannot be restored")
+        if source.id == current.id:
+            raise RevisionConflict("The requested revision is already current")
+        latest_number = await self.session.scalar(
+            select(DocumentRevisionRow.revision_number)
+            .where(DocumentRevisionRow.run_id == run_id)
+            .order_by(DocumentRevisionRow.revision_number.desc())
+            .limit(1)
+        )
+        now = datetime.now(timezone.utc)
+        restored = DocumentRevisionRow(
+            id=new_id(),
+            run_id=run_id,
+            parent_revision_id=source.id,
+            base_revision_id=current.id,
+            target_artifact_name=source.target_artifact_name,
+            revision_number=int(latest_number or 0) + 1,
+            status=RevisionStatus.AWAITING_REVISION_APPROVAL.value,
+            feedback=f"Restore revision {source.revision_number}",
+            edit_plan=None,
+            report_model=json.loads(json.dumps(source.report_model)),
+            format_overrides=json.loads(json.dumps(source.format_overrides or {})),
+            requested_by=actor.user_id,
+            channel=channel,
+            channel_state={},
+            usage={},
+            validation={
+                "passed": True,
+                "restored_from_revision_id": source.id,
+                "restored_from_revision_number": source.revision_number,
+            },
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(restored)
+        await self.session.flush()
+        versions = await self.list_artifact_versions(run_id, revision_id=source.id)
+        if not versions:
+            raise RevisionConflict("The requested revision has no stored artifacts")
+        for version in versions:
+            self.session.add(
+                ArtifactVersionRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    revision_id=restored.id,
+                    logical_name=version.logical_name,
+                    revision_number=restored.revision_number,
+                    parent_version_id=version.id,
+                    media_type=version.media_type,
+                    object_key=version.object_key,
+                    sha256=version.sha256,
+                    size_bytes=version.size_bytes,
+                )
+            )
+        for citation in await self.list_revision_citations(run_id, source.id):
+            self.session.add(
+                RevisionCitationRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    revision_id=restored.id,
+                    source_id=citation.source_id,
+                    payload=json.loads(json.dumps(citation.payload)),
+                )
+            )
+        await self.session.commit()
+        return restored
+
+    async def accept_document_revision(
+        self, run_id: str, revision_id: str
+    ) -> DocumentRevisionRow:
+        revision = await self.get_document_revision(run_id, revision_id, lock=True)
+        if revision.status != RevisionStatus.AWAITING_REVISION_APPROVAL.value:
+            raise RevisionConflict(f"Cannot accept revision in {revision.status}")
+        current = await self.session.scalar(
+            select(DocumentRevisionRow)
+            .where(
+                DocumentRevisionRow.run_id == run_id,
+                DocumentRevisionRow.status == RevisionStatus.ACCEPTED.value,
+            )
+            .with_for_update()
+        )
+        if current is None or revision.base_revision_id != current.id:
+            raise RevisionConflict("stale revision")
+        versions = list(
+            await self.session.scalars(
+                select(ArtifactVersionRow).where(ArtifactVersionRow.revision_id == revision_id)
+            )
+        )
+        if not versions:
+            raise RevisionConflict("Revision has no validated artifacts")
+        artifacts = {
+            row.name: row
+            for row in await self.session.scalars(
+                select(ArtifactRow).where(ArtifactRow.run_id == run_id)
+            )
+        }
+        for version in versions:
+            artifact = artifacts.get(version.logical_name)
+            if artifact is None:
+                artifact = ArtifactRow(
+                    id=new_id(),
+                    run_id=run_id,
+                    name=version.logical_name,
+                    media_type=version.media_type,
+                    object_key=version.object_key,
+                    size_bytes=version.size_bytes,
+                )
+                self.session.add(artifact)
+            else:
+                artifact.media_type = version.media_type
+                artifact.object_key = version.object_key
+                artifact.size_bytes = version.size_bytes
+        citation_rows = list(
+            await self.session.scalars(
+                select(RevisionCitationRow).where(RevisionCitationRow.revision_id == revision_id)
+            )
+        )
+        if citation_rows:
+            await self.session.execute(
+                delete(ReportCitationRow).where(ReportCitationRow.run_id == run_id)
+            )
+            for snapshot in citation_rows:
+                payload = snapshot.payload or {}
+                drop_reason = payload.get("drop_reason")
+                self.session.add(
+                    ReportCitationRow(
+                        id=new_id(),
+                        run_id=run_id,
+                        source_id=snapshot.source_id,
+                        label=str(payload.get("label", "")),
+                        number=int(payload.get("number", 0)),
+                        cited_sections=list(payload.get("cited_sections") or []),
+                        offered_sections=list(payload.get("offered_sections") or []),
+                        claim_ids=list(payload.get("claim_ids") or []),
+                        evidence_ids=list(payload.get("evidence_ids") or []),
+                        citation_count=int(payload.get("citation_count", 0)),
+                        in_bibliography=bool(payload.get("in_bibliography", True)),
+                        drop_reason=None if drop_reason == "cited" else drop_reason,
+                    )
+                )
+        current.status = RevisionStatus.SUPERSEDED.value
+        revision.status = RevisionStatus.ACCEPTED.value
+        revision.accepted_at = datetime.now(timezone.utc)
+        revision.updated_at = revision.accepted_at
+        await self.session.commit()
+        return revision
+
     async def purge_run(self, run_id: str) -> dict[str, int]:
         """Erase a run and everything that only exists because of it.
 
@@ -1640,6 +2188,15 @@ class Repository(metaclass=_OwnershipEnforced):
             ("frontier", delete(FrontierRow).where(FrontierRow.run_id == run_id)),
             ("report_citations", delete(ReportCitationRow).where(
                 ReportCitationRow.run_id == run_id
+            )),
+            ("revision_citations", delete(RevisionCitationRow).where(
+                RevisionCitationRow.run_id == run_id
+            )),
+            ("artifact_versions", delete(ArtifactVersionRow).where(
+                ArtifactVersionRow.run_id == run_id
+            )),
+            ("document_revisions", delete(DocumentRevisionRow).where(
+                DocumentRevisionRow.run_id == run_id
             )),
             ("artifacts", delete(ArtifactRow).where(ArtifactRow.run_id == run_id)),
             ("checkpoints", delete(CheckpointRow).where(CheckpointRow.run_id == run_id)),
