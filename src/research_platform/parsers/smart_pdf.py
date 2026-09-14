@@ -268,6 +268,10 @@ class SmartPdfParser(DocumentParser):
             # which torch produced the text on it, and an upgrade moves the text
             # without moving the device.
             "engine_build": merged.engine_builds,
+            # The same for the fast path, which keeps most pages. pdf-inspector
+            # 1.14.1 -> 1.19.0 changed the text of 152 of 380 corpus PDFs and moved 10
+            # routing decisions (measured 2026-09-14); None means PyMuPDFFallback ran.
+            "fast_engine_build": PdfInspectorAdapter.surum(),
             "degraded": merged.degraded,
             "notes": merged.notes,
             "engine_counts": merged.engine_counts,

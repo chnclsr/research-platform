@@ -24,8 +24,10 @@ dependencies = [
   # only, absent here, so a real deployment would silently run the whole
   # pipeline on the unmeasured PyMuPDF fallback (inspector.py's
   # PyMuPDFFallback) with no error, just a name change in provenance nobody
-  # was watching for. All of today's measurements assume 1.14.1.
-  "pdf-inspector==1.14.1",
+  # was watching for. RC1 measurements assume 1.14.1; 1.19.0 was A/B-measured
+  # against it on the 380-document corpus on 2026-09-14 (OPEN_ITEMS 47). A bump
+  # changes fast-path text and routing inputs: re-measure before moving it.
+  "pdf-inspector==1.19.0",
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "pypdf>=5.1,<7",
