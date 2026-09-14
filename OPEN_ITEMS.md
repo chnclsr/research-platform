@@ -4,7 +4,7 @@
 [DEVELOPMENTS_IMPLEMENTATION_REPORT.md](DEVELOPMENTS_IMPLEMENTATION_REPORT.md) içindedir;
 burası tek liste hâlinde durum tablosudur.
 
-Son güncelleme: `2026-09-10`
+Son güncelleme: `2026-09-14`
 
 Hiçbiri sistemi bozmuyor; hepsi bilinçli olarak ertelendi. Ölçümler bu oturumda alındı ve
 tekrar ölçmeye gerek kalmaması için buraya yazıldı.
@@ -48,6 +48,7 @@ tekrar ölçmeye gerek kalmaması için buraya yazıldı.
 | 43 | Docker Desktop oturum açılmasını gerektiriyor | Windows sunucu reboot sonrası başsız ayağa kalkamaz | Orta |
 | 44 | Session 0'dan kimlik deposuna erişilemiyor | `docker build` ve `git push` uzak oturumdan çalışmıyor | Orta |
 | 45 | Testler gerçek `.env`'i okuyordu | Süit artık hermetik; dotenv kapatıldı | Çözüldü |
+| 47 | pdf-inspector 1.19.0 — kod hazır, canlıya geçiş bekliyor | Hızlı yol metni iyileşiyor; 152/380 belgenin `content_hash`'i bir kez kayar | Düşük |
 
 ---
 
@@ -1011,12 +1012,51 @@ SourceVersion olur (kabul edildi).
 - Model alıntıyı formülden önceki cümlede kesiyor; Ek F bu yüzden alıntıya değil
   kanıtın passage'ına bakıyor. Bir formülün yanlış okunması (24'te 1) raporda kaynak
   kırpıntısı olmadan fark edilmez.
-- pdf-inspector 1.14.1 → 1.19.0 ayrı görev: tüm PDF'lerin fast metni ve yönlendirme
-  girdileri değişir; resmi değerlendiriciyle 380 sayfalık korpusta ölçülmeli.
+- ~~pdf-inspector 1.14.1 → 1.19.0 ayrı görev~~ — ölçüldü ve yükseltildi, bkz. 47. madde.
 - `figure_analysis` Docling'in görsel bölgelerini (`bolgeler`, `tur=gorsel`, başlıklı)
   aday olarak kullanabilir — PyMuPDF sezgisinin kaçırdıklarını yakalar; sonraki görev.
 - Deney imajları `research-platform-docling:gcc-deney` ve `:formul-bolge`, durdurulmuş
   `docling-formul-deney` konteyneri silinebilir.
+
+---
+
+## 47. pdf-inspector 1.14.1 → 1.19.0 — kod hazır, canlıya geçiş bekliyor
+
+**Durum (2026-09-14):** pin `==1.19.0`, `developments-supplementer` üzerinde; testler
+`1126 passed, 4 skipped`. Canlı worker hâlâ 1.14.1. Rapor:
+[PDF_INSPECTOR_1.19_YUKSELTME_RAPORU.md](PDF_INSPECTOR_1.19_YUKSELTME_RAPORU.md).
+
+**Ölçüm:** 380 belge (opendataloader 200 + OCRTurk 180), aynı kod ve aynı Docling
+önbelleği (`out/c1_docling_cache_cuda`), tek fark sürüm; hakem resmi opendataloader
+değerlendiricisi. Nihai çıktı overall 0,8780 → 0,8803; hızlı yol 0,8283 → 0,8370 (TEDS
++0,0345). Heavy belge 160 → 154, karantina 3 → 1. 10 sayfa kararı değişti: 7 tablosuz
+sayfa Docling'den çıktı, 2 tablosuz sayfa girdi, 1 tablolu sayfa kaçtı. Hız 69 → 87 ms/sayfa.
+Koşular: `research/pdf-parser/out/c1_runs/pi114_2026-09-14`, `pi119u_2026-09-14`;
+betikler ve belge bazlı sonuçlar `research/pdf-parser/out/pdf_inspector_1.19_2026-09-14/`
+(gitignore'lu).
+
+**Ne değişti:**
+- 1.18.0'dan beri markdown `<sup>`/`<sub>` yazıyor (52/380 belge). `inspector.py`
+  `betik_etiketlerini_coz` gate'ten önce Unicode'a çeviriyor (`cm⁻¹`); karşılığı yoksa
+  etiketi söküyor. Etiketler dokunulmadan bırakılınca OCRTurk nihai skoru 1.14.1'in altına
+  düşüyordu (referansta etiket yok), Word alıntılarında da etiketler basılırdı.
+- `parse_provenance.fast_engine_build` (ve teslimat manifesti): belgeyi ayrıştıran
+  pdf-inspector sürümü. `None` = PyMuPDFFallback.
+- `test_the_installed_inspector_is_the_measured_pin`: kurulu sürüm ≠ pin ise kırılır.
+
+**Canlıya geçiş:** canlı kopya bu commit'e getirilir, worker ve api imajları yeniden
+kurulur (Docling imajında pdf-inspector yok). Hızlı yol metni değişen belgeler yeniden
+edinildiğinde yeni SourceVersion olur (bir kez).
+
+**Açık kalanlar:**
+- `data_114` (bilanço şeması) artık tablo bayrağı almıyor; tablo recall 82/84 → 81/84.
+  Kabul edildi (1.14.1'de de Docling çıktısı karantinaya alınıyordu). Kaçan diğer iki sayfa
+  (`01030000000121`, `…122`) iki sürümde de kaçıyor.
+- `data_10`'da tablosuz ama yönlendirilen sayfa hızlı yola döndü ve nihai skor 0,943 →
+  0,850 düştü (Docling bu sayfada daha iyiydi). Karar tablo sinyalinden değil, yanlış pozitif
+  bayrağın kalkmasından; eşiklere dokunulmadı.
+- Eşikler (`gate_v2`) 1.14.1 çıktısıyla konmuştu, 1.19.0 için yeniden kalibre edilmedi.
+  Ölçülen fark eşiklerin olduğu gibi kalabileceğini gösteriyor.
 
 ---
 

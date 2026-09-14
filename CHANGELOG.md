@@ -4,7 +4,17 @@ Platform sürümü: `v0.24.0`
 
 Belge sürümü: `6.52`
 
-Son güncelleme: `2026-09-11`
+Son güncelleme: `2026-09-14`
+
+## Yayınlanmamış — 2026-09-14
+
+- pdf-inspector `1.14.1` → `1.19.0`. 380 belgelik korpusta resmi değerlendiriciyle ölçüldü:
+  nihai çıktı overall +0,0023, hızlı yol +0,0086 (tablo +0,0345); Docling'e giden belge
+  160 → 154. Rapor: `PDF_INSPECTOR_1.19_YUKSELTME_RAPORU.md`, `OPEN_ITEMS.md` 47. madde.
+- Hızlı yolun üst/alt simgeleri passage'a Unicode olarak giriyor (`cm⁻¹`, `(CN)₆`);
+  pdf-inspector'ın `<sup>`/`<sub>` etiketleri metne girmiyor.
+- `parse_provenance.fast_engine_build` ve teslimat manifesti belgeyi ayrıştıran
+  pdf-inspector sürümünü kaydediyor.
 
 ## Yayınlanmamış — 2026-09-11
 

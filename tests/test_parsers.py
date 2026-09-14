@@ -107,8 +107,81 @@ def test_the_fast_path_runs_the_real_inspector():
 
     assert PdfInspectorAdapter.available(), (
         f"pdf-inspector is not installed ({PdfInspectorAdapter.import_hatasi()}); "
-        "run: uv pip install 'pdf-inspector==1.14.1'"
+        "run: uv pip install 'pdf-inspector==1.19.0'"
     )
+
+
+def test_the_installed_inspector_is_the_measured_pin():
+    """
+    Every routing threshold and the sup/sub handling in inspector.py were measured on
+    one pdf-inspector build. A venv or image left on another build still passes
+    `available()` and parses different text -- 152 of 380 corpus PDFs changed between
+    1.14.1 and 1.19.0 -- so the pin in pyproject.toml has to be what actually loads.
+    """
+    import pathlib
+    import tomllib
+
+    from research_platform.parsers.smart_router.inspector import PdfInspectorAdapter
+
+    pyproject = pathlib.Path(__file__).resolve().parents[1] / "pyproject.toml"
+    deps = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["dependencies"]
+    pin = next(d for d in deps if d.startswith("pdf-inspector==")).split("==", 1)[1]
+    assert PdfInspectorAdapter.surum() == pin, (
+        f"pdf-inspector {PdfInspectorAdapter.surum()} is loaded, pyproject pins {pin}; "
+        f"run: uv pip install 'pdf-inspector=={pin}'"
+    )
+
+
+@pytest.mark.parametrize("ham, beklenen", [
+    ("3400-3100 cm<sup>-1</sup> dalga", "3400-3100 cm⁻¹ dalga"),
+    ("10<sup>–15</sup> m", "10⁻¹⁵ m"),
+    ("{[Cu(μ-CN)<sub>6</sub>]·3H₂O}<sub>n</sub>", "{[Cu(μ-CN)₆]·3H₂O}ₙ"),
+    # No Unicode form for every character: the tag goes, the content stays.
+    ("**Dahyun Kim<sup>∗</sup>, Chanjun Park<sup>∗†</sup>**", "**Dahyun Kim∗, Chanjun Park∗†**"),
+    ("V<sub>f</sub> ve Yibo Yan<sup>1,2,3</sup>", "Vf ve Yibo Yan1,2,3"),
+    ("∆𝐱𝐱<sub>𝟏𝟏</sub>**.f(**", "∆𝐱𝐱𝟏𝟏**.f(**"),
+    ("<sup>†\n</sup>**, Sunghun Kim<sup>†\n</sup>**", "†\n**, Sunghun Kim†\n**"),
+    ("stray </sup> tag", "stray  tag"),
+    ("no tags | a < b", "no tags | a < b"),
+])
+def test_inspector_sup_sub_tags_never_leave_the_adapter(ham, beklenen):
+    """
+    pdf-inspector 1.18+ writes `<sup>`/`<sub>`; Docling writes the same spot as plain
+    text and word_report.py prints passage text verbatim, so tags would show up raw in
+    quotes. Examples are taken from the 2026-09-14 corpus run.
+    """
+    from research_platform.parsers.smart_router.inspector import betik_etiketlerini_coz
+
+    assert betik_etiketlerini_coz(ham) == beklenen
+
+
+def test_smart_pdf_prints_a_real_superscript_as_unicode_and_records_the_fast_build():
+    """
+    End to end through the real library: pdf-inspector 1.19.0 reads a raised "-1"
+    as `cm<sup>-1</sup>`. The passage text must carry `cm⁻¹`, and provenance must name
+    the fast-path build next to engine_build, since that build decides this text.
+    """
+    import pymupdf as fitz
+
+    from research_platform.parsers.smart_pdf import SmartPdfParser
+    from research_platform.parsers.smart_router.inspector import PdfInspectorAdapter
+
+    govde = "Absorption bands appear near 3400 cm"
+    belge = fitz.open()
+    sayfa = belge.new_page()
+    x = 72 + fitz.get_text_length(govde, fontsize=11)
+    sayfa.insert_text((72, 100), govde, fontsize=11)
+    sayfa.insert_text((x, 96), "-1", fontsize=7)
+    sayfa.insert_text((x + fitz.get_text_length("-1", fontsize=7) + 3, 100),
+                      " in the infrared spectrum of water molecules.", fontsize=11)
+    icerik = belge.tobytes()
+    belge.close()
+
+    parsed = SmartPdfParser().parse(icerik, url="https://e.org/sup.pdf",
+                                    content_type="application/pdf")
+    assert "3400 cm⁻¹ in the infrared" in parsed.text
+    assert "<sup>" not in parsed.text
+    assert parsed.parse_provenance["fast_engine_build"] == PdfInspectorAdapter.surum()
 
 
 # CODEX-2026-08-18: The smart parser must decline PDFs when its router import

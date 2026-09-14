@@ -34,6 +34,7 @@ def test_manifest_records_the_engine_and_the_device_that_produced_the_text():
                 "engine_counts": {"pdf-inspector": 28, "docling-service": 15},
                 "engine_devices": {"docling-service": "cuda"},
                 "engine_build": {"docling-service": "docling 2.121.0, torch 2.13.0+cu132"},
+                "fast_engine_build": "1.19.0",
                 "engine_version": "engines_v2_2026-08-21",
                 "esik_version": "gate_v2_kalibre_edilmedi_3a5bb5c9",
                 "degraded": False,
@@ -48,6 +49,7 @@ def test_manifest_records_the_engine_and_the_device_that_produced_the_text():
     assert kayit["engine_devices"] == {"docling-service": "cuda"}
     assert kayit["engine_counts"]["docling-service"] == 15
     assert "2.121.0" in kayit["engine_build"]["docling-service"]
+    assert kayit["fast_engine_build"] == "1.19.0"
     assert kayit["esik_version"] == "gate_v2_kalibre_edilmedi_3a5bb5c9"
     assert "pages" not in kayit, "the per-page trail belongs in the raw dump, not the manifest"
 

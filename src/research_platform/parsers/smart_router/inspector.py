@@ -23,12 +23,19 @@ SAYFA NUMARASI TABANI — ölçüldü (2026-08-18), aynı sonuç nesnesinde İK�
     pages_with_columns       -> 1-tabanlı   (6 sayfalık belgede max 6)
 
 Karıştırılması hata vermez, sessizce komşu sayfayı döndürür. Bu modülün
-DIŞINA çıkan her sayfa numarası 1-tabanlıdır (plan E5).
+DIŞINA çıkan her sayfa numarası 1-tabanlıdır (plan E5). 1.19.0'da yeniden
+doğrulandı (2026-09-14): sözleşme değişmedi.
+
+ÜST/ALT SİMGE — 1.18.0'dan beri markdown `cm<sup>-1</sup>`, `V<sub>f</sub>`
+yazıyor (2026-09-14, 380 belgelik korpusun 52'sinde). Docling aynı yeri düz
+yazıyor, Word raporu passage'ı olduğu gibi basıyor; etiket bu modülden dışarı
+çıkmaz, `betik_etiketlerini_coz` Unicode'a çevirir (bkz. orada).
 """
 
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Sequence
 
@@ -43,9 +50,9 @@ except ImportError as exc:  # opsiyonel bağımlılık
 
 #: Paket `__version__` dışa vermiyor (2026-08-20'de doğrulandı, `pdf_inspector.__version__`
 #: yok) -- kurulum meta verisinden okunuyor. `health()`'in yalnız "kurulu mu"
-#: değil "hangi sürüm" diyebilmesi için: pyproject.toml artık `pdf-inspector==1.14.1`'e
-#: sabitliyor, ama pin'in kendisi çalışma anında neyin fiilen yüklendiğini
-#: garanti etmez -- health bunu görünür kılar.
+#: değil "hangi sürüm" diyebilmesi için: pyproject.toml sürümü sabitliyor, ama
+#: pin'in kendisi çalışma anında neyin fiilen yüklendiğini garanti etmez --
+#: health ve parse provenance (`fast_engine_build`) bunu görünür kılar.
 def _kurulu_surum() -> Optional[str]:
     if pdf_inspector is None:
         return None
@@ -59,6 +66,37 @@ def _kurulu_surum() -> Optional[str]:
 # yazılabilsin diye çıktı bu adlarla etiketlenir (plan E6).
 PROFIL_INSPECTOR = "inspector_v1"
 PROFIL_FALLBACK = "pymupdf_fallback_v1"
+
+
+_UST = dict(zip("0123456789+-−–=()ni", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁻⁻⁼⁽⁾ⁿⁱ"))
+_ALT = dict(zip("0123456789+-−–=()aeoxhklmnpst", "₀₁₂₃₄₅₆₇₈₉₊₋₋₋₌₍₎ₐₑₒₓₕₖₗₘₙₚₛₜ"))
+_BETIK = re.compile(r"<(sup|sub)>(.*?)</\1>", re.DOTALL)
+_ARTIK_BETIK = re.compile(r"</?su[bp]>")
+
+
+def _betik_cevir(eslesme: re.Match) -> str:
+    tablo = _UST if eslesme.group(1) == "sup" else _ALT
+    icerik = eslesme.group(2)
+    if icerik and all(c in tablo for c in icerik):
+        return "".join(tablo[c] for c in icerik)
+    return icerik
+
+
+def betik_etiketlerini_coz(markdown: str) -> str:
+    """pdf-inspector'ın `<sup>`/`<sub>` etiketlerini passage'a uygun düz metne çevirir.
+
+    İçeriğin her karakterinin Unicode karşılığı varsa ona çevrilir
+    (`cm<sup>-1</sup>` -> `cm⁻¹`, `10<sup>–15</sup>` -> `10⁻¹⁵`); yoksa etiket
+    sökülüp içerik kalır (`Kim<sup>∗†</sup>` -> `Kim∗†`, `V<sub>f</sub>` -> `Vf`).
+    Düz sökmek tek başına yetmezdi: `10–15` bir aralık gibi okunur.
+
+    Ölçüm (2026-09-14, resmi opendataloader değerlendiricisi, 380 belge): referans
+    metinlerde etiket yok; etiketler olduğu gibi kalınca 1.19'un OCRTurk nihai
+    skoru 1.14'ün altına düşüyordu (-0,0006), içerik aslında daha doğruydu.
+    """
+    if "<su" not in markdown and "</su" not in markdown:
+        return markdown
+    return _ARTIK_BETIK.sub("", _BETIK.sub(_betik_cevir, markdown))
 
 
 def bir_tabanli(sayfa_indeksi: int) -> int:
@@ -187,7 +225,7 @@ class PdfInspectorAdapter:
         for p in ham.pages:
             sonuc.pages.append(InspectorSayfa(
                 sayfa_no=bir_tabanli(p.page),          # .page 0-tabanlı
-                markdown=p.markdown or "",
+                markdown=betik_etiketlerini_coz(p.markdown or ""),
                 needs_ocr=bool(getattr(p, "needs_ocr", False)),
                 ocr_reason=getattr(p, "ocr_reason", None),
             ))

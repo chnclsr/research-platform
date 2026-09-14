@@ -227,6 +227,7 @@ def _parsing_manifest(versions: list[tuple[Any, Any]]) -> list[dict[str, Any]]:
         "engine_counts",
         "engine_devices",
         "engine_build",
+        "fast_engine_build",
         "engine_version",
         "router_version",
         "esik_version",
