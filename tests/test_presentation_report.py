@@ -579,5 +579,7 @@ def test_presentation_report_empty_summary_fallback():
     prs = pptx.Presentation(io.BytesIO(res.document))
     slide_3 = prs.slides[2]
     slide_3_text = "\n".join(shp.text for shp in slide_3.shapes if shp.has_text_frame)
-    assert "doğrulanmış kanıt eşiğini geçen bir yönetici özeti üretilemedi" in slide_3_text
+    assert "Bu rapor için özet oluşturulamadı" in slide_3_text
+    # No reason the run did not establish, and none of the wording the reports dropped.
+    assert "eşiğ" not in slide_3_text and "üretilemedi" not in slide_3_text
 

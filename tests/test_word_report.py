@@ -830,5 +830,7 @@ def test_word_report_empty_summary_fallback() -> None:
     report = build_word_report(**inputs, synthesis_package=package)
     doc = Document(io.BytesIO(report.document))
     table_texts = [cell.text for tbl in doc.tables for row in tbl.rows for cell in row.cells]
-    assert any("yönetici özeti doğrudan sentez bölümlerinde derlenmiştir" in t for t in table_texts)
+    assert any("Bu rapor için özet oluşturulamadı" in t for t in table_texts)
+    # An empty summary must not be described as compiled anywhere.
+    assert not any("derlenmiştir" in t for t in table_texts)
 

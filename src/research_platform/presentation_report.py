@@ -24,9 +24,9 @@ from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.util import Inches, Pt
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
-from .report_synthesis import SynthesisPackage, citation_tokens
+from .report_synthesis import _REPORT_WITHOUT_SUMMARY, SynthesisPackage, citation_tokens
 from .schemas import ReportCitation
-from .word_report import _collect_citations
+from .word_report import _collect_citations, _format_date
 
 REPORT_PIPELINE_VERSION = "0.24.0"
 PRESENTATION_REPORT_FALLBACK = "16_research_report.pptx"
@@ -194,21 +194,6 @@ def _set_cell_text(
             r.font.bold = bold
 
 
-def _format_date(d_str: Any) -> str:
-    """Format ISO datetime strings into DD.MM.YYYY."""
-    if not d_str or str(d_str).strip() in ("—", "-", ""):
-        return "—"
-    s = str(d_str).strip()
-    try:
-        clean = s.split("T")[0]
-        parts = clean.split("-")
-        if len(parts) == 3 and len(parts[0]) == 4:
-            return f"{parts[2]}.{parts[1]}.{parts[0]}"
-    except Exception:
-        pass
-    return s
-
-
 def _claim_sources(
     claim_id: str,
     evidence_by_claim: dict[str, list[tuple[Any, Any]]],
@@ -263,7 +248,7 @@ def _replace_shape_with_picture(slide: Any, target_shape: Any, img_bytes: bytes)
             t_w = int(box_h * aspect)
             t_top = box_top
             t_left = box_left + int((box_w - t_w) / 2)
-    except Exception:
+    except (OSError, ValueError, TypeError):
         pass
 
     sp = target_shape._element
@@ -328,7 +313,7 @@ def _format_findings_slide(
     y2 = Inches(3.70)
     y3 = Inches(5.20)
 
-    con_fallback = "Bu temada ayrışan bir ortaklaşma bildirilmedi." if turkish else "No consensus reported."
+    con_fallback = "Bu tema için ortak bir yön bildirilmedi." if turkish else "No consensus reported."
     dis_fallback = (
         "Kaynaklar arasında doğrudan bir çelişki bildirilmedi."
         if turkish
@@ -615,11 +600,9 @@ def build_presentation_report(
         getattr(package, "executive_summary", "") if package else executive_summary
     ) or executive_summary
     if not exec_summary_text or not exec_summary_text.strip():
-        exec_summary_text = (
-            "Bu araştırma çalıştırmasında doğrulanmış kanıt eşiğini geçen bir yönetici özeti üretilemedi. İddia ve kaynak denetim ayrıntıları rapor eklerinde sunulmuştur."
-            if turkish
-            else "No executive summary met the verified evidence threshold for this run. Claim and source audit details are provided in the appendices."
-        )
+        # The synthesis layer's own wording, so every surface says the same plain thing and
+        # none of them gives the reader a reason the run did not establish.
+        exec_summary_text = _REPORT_WITHOUT_SUMMARY[turkish]
     shp_exec = _find_shape_by_name(slide_3, "executive_summary")
     if shp_exec:
         shp_exec.top = Inches(2.24)
@@ -1042,7 +1025,7 @@ def build_presentation_report(
             title_chart = "Araştırma katkısı dağılımı" if turkish else "Research contribution distribution"
             figs_map["16a_research_contribution_landscape.png"] = _bar_chart(title_chart, contribution_counts.most_common())
             figs_map["16b_theme_evidence_map.png"] = _theme_evidence_map(package, turkish=turkish)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - a chart that fails to draw leaves its "not available" text; it must not fail the deck
             pass
 
     land_bytes = (
@@ -1206,7 +1189,7 @@ def build_presentation_report(
     prs.save(output)
     return PresentationReportResult(
         document=output.getvalue(),
-        figures=figs_map if 'figs_map' in locals() else (figures or {}),
+        figures=figs_map,
         citations=citations,
     )
 

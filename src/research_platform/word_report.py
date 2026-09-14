@@ -30,6 +30,7 @@ from .formula_render import FormulaDisplay, add_formula, add_quote
 from .report_synthesis import (
     _CITATION_RE,
     _LABEL_RE,
+    _REPORT_WITHOUT_SUMMARY,
     _TOKEN_RE,
     SynthesisPackage,
     citation_counts,
@@ -126,13 +127,9 @@ def _format_date(d_str: Any) -> str:
     if not d_str or str(d_str).strip() in ("—", "-", ""):
         return "—"
     s = str(d_str).strip()
-    try:
-        clean = s.split("T")[0]
-        parts = clean.split("-")
-        if len(parts) == 3 and len(parts[0]) == 4:
-            return f"{parts[2]}.{parts[1]}.{parts[0]}"
-    except Exception:
-        pass
+    parts = s.split("T")[0].split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        return f"{parts[2]}.{parts[1]}.{parts[0]}"
     return s
 
 
@@ -1052,13 +1049,8 @@ def _build_synthesis_word_report(
     lead = document.add_table(rows=1, cols=1)
     summary_text = _model_text(package.executive_summary).strip()
     if not summary_text:
-        summary_text = (
-            "Bu araştırma raporu için yönetici özeti doğrudan sentez bölümlerinde derlenmiştir. "
-            "Ayrıntılı kanıt değerlendirmesi ve bulgular takip eden tematik bölümlerde ve denetim eklerinde sunulmaktadır."
-            if turkish
-            else "An executive summary was compiled across the synthesis sections. "
-            "Detailed findings and audited evidence are presented in the following thematic sections and appendices."
-        )
+        # Not "compiled in the sections": nothing was compiled when this branch runs.
+        summary_text = _REPORT_WITHOUT_SUMMARY[turkish]
     lead.rows[0].cells[0].text = summary_text
     _set_cell_shading(lead.rows[0].cells[0], PALE_BLUE)
     _style_table(lead, [6.5], header_fill=PALE_BLUE, font_size=10.5)
