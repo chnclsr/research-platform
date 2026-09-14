@@ -21,6 +21,7 @@ from typing import Any
 import pptx
 from PIL import Image
 from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
@@ -280,13 +281,37 @@ def _delete_slide(prs: Any, index: int) -> None:
     del prs.slides._sldIdLst[index]
 
 
+_RELATIONSHIP_ATTRIBUTES = (qn("r:embed"), qn("r:link"), qn("r:id"))
+
+
 def _duplicate_slide(prs: Any, source_slide: Any) -> Any:
+    """Copy a slide's shapes onto a new slide, with the relationships they point at.
+
+    A picture's XML names its image by relationship id, and that id belongs to the slide
+    part it came from. Copying the XML alone left the new slide pointing at an id it does
+    not have: run 01M2FYR67BS5WXFMEVY2RT1EHP shipped four figure slides of which only the
+    first image opened.
+    """
     new_slide = prs.slides.add_slide(source_slide.slide_layout)
     for shp in list(new_slide.shapes):
         sp = shp._element
         sp.getparent().remove(sp)
+    source_rels = source_slide.part.rels
     for shp in source_slide.shapes:
         new_sp = copy.deepcopy(shp._element)
+        for element in new_sp.iter():
+            if not isinstance(element.tag, str):
+                continue
+            for attribute in _RELATIONSHIP_ATTRIBUTES:
+                rid = element.get(attribute)
+                if not rid or rid not in source_rels:
+                    continue
+                rel = source_rels[rid]
+                if rel.is_external:
+                    new_rid = new_slide.part.relate_to(rel.target_ref, rel.reltype, is_external=True)
+                else:
+                    new_rid = new_slide.part.relate_to(rel.target_part, rel.reltype)
+                element.set(attribute, new_rid)
         new_slide.shapes._spTree.append(new_sp)
     return new_slide
 
@@ -825,7 +850,12 @@ def build_presentation_report(
     for obs in figure_observations or []:
         if getattr(obs, "image_hash", "") not in covered_hashes:
             obs_data = getattr(obs, "data", None) or getattr(obs, "image_bytes", None)
-            if obs_data or getattr(obs, "main_findings", None):
+            # A figure slide only for a figure there is an image of, as in the Word report.
+            # An observation without one used to get a slide anyway: run
+            # 01M2FYR67BS5WXFMEVY2RT1EHP's fourth figure slide showed the template's
+            # "[Kaynak figürü veya araştırma görseli]" placeholder under a reading of an image
+            # the reader never saw. Such observations stay in the Word observation register.
+            if obs_data:
                 figures_to_render.append(
                     {
                         "title": getattr(obs, "recommended_section", "")
@@ -842,16 +872,22 @@ def build_presentation_report(
 
     created_figure_slides = []
     if figures_to_render and not is_compact:
-        _populate_figure_slide(slide_8, figures_to_render[0], 1, turkish)
+        # Every copy is taken from the template slide before any figure is placed on it.
+        # Placing a figure replaces the slide's `figure.asset` placeholder with the picture,
+        # so a copy of an already filled slide has no placeholder for its own figure and
+        # keeps the first figure's picture instead.
         created_figure_slides.append(slide_8)
-        for f_idx, fig_info in enumerate(figures_to_render[1:], 2):
+        for _ in figures_to_render[1:]:
             dup_fig = _duplicate_slide(prs, slide_8)
             last_pos = next(i for i, s in enumerate(prs.slides) if s == created_figure_slides[-1])
             sldId = prs.slides._sldIdLst[-1]
             prs.slides._sldIdLst.remove(sldId)
             prs.slides._sldIdLst.insert(last_pos + 1, sldId)
-            _populate_figure_slide(dup_fig, fig_info, f_idx, turkish)
             created_figure_slides.append(dup_fig)
+        for f_idx, (fig_slide, fig_info) in enumerate(
+            zip(created_figure_slides, figures_to_render), 1
+        ):
+            _populate_figure_slide(fig_slide, fig_info, f_idx, turkish)
 
     # Slide 9: Cross-study assessment
     shp_cross = _find_shape_by_name(slide_9, "cross_study_assessment")

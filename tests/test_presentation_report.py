@@ -2,9 +2,11 @@ import io
 from types import SimpleNamespace
 
 import pptx
+from pptx.oxml.ns import qn
 
 from research_platform.presentation_report import (
     PRESENTATION_REPORT_FALLBACK,
+    _duplicate_slide,
     build_presentation_report,
     presentation_report_name,
 )
@@ -252,6 +254,100 @@ def test_standard_presentation_report_renders_multiple_figures():
     # Both figures must be present as distinct slides
     fig_headings = [h for h in all_headings if "Figür" in h]
     assert len(fig_headings) == 2
+
+
+def _broken_image_links(prs):
+    broken = []
+    for number, slide in enumerate(prs.slides, 1):
+        rels = slide.part.rels
+        for element in slide._element.iter():
+            if not isinstance(element.tag, str):
+                continue
+            rid = element.get(qn("r:embed"))
+            if rid and rid not in rels:
+                broken.append((number, rid))
+    return broken
+
+
+def _png(color):
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (640, 480), color=color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_every_figure_slide_shows_its_own_image():
+    """Run 01M2FYR67BS5WXFMEVY2RT1EHP shipped four figure slides; only the first image opened.
+
+    The other three carried the first figure's picture XML with a relationship id their own
+    slide did not have, and no placeholder left for their own figure. The headings were right,
+    which is all the multi-figure test above looks at.
+    """
+    images = {name: _png(color) for name, color in (("A", "red"), ("B", "green"), ("C", "blue"))}
+    inputs = _minimal_report_inputs()
+    inputs.update(
+        {
+            "research_figures": [
+                SimpleNamespace(
+                    title=f"Figür başlığı {name}",
+                    caption=f"Şekil {name}",
+                    attribution="S01",
+                    rights_statement="CC-BY 4.0",
+                    data=data,
+                    observation_hash=f"h{name}",
+                )
+                for name, data in images.items()
+            ],
+            # Included in the report, but no image of it was exported.
+            "figure_observations": [
+                SimpleNamespace(
+                    image_hash="h-no-image",
+                    recommended_section="Görseli olmayan gözlem",
+                    selection_reason="Veri kümesi örneği",
+                    caption="Figure 2: Dataset examples.",
+                    source_label="S01",
+                    main_findings=["Sağ tarafta plevral efüzyon."],
+                    limitations=[],
+                )
+            ],
+        }
+    )
+    prs = pptx.Presentation(io.BytesIO(build_presentation_report(**inputs).document))
+
+    assert _broken_image_links(prs) == []
+    deck = "\n".join(
+        shape.text_frame.text for slide in prs.slides for shape in slide.shapes if shape.has_text_frame
+    )
+    assert "[Kaynak figürü veya araştırma görseli]" not in deck
+    assert "Görseli olmayan gözlem" not in deck
+    shown = {}
+    for slide in prs.slides:
+        heading = next(
+            (s.text_frame.text for s in slide.shapes if s.has_text_frame and s.name == "content_heading"),
+            "",
+        )
+        if "Figür" in heading:
+            shown[heading] = [s.image.blob for s in slide.shapes if s.shape_type == 13]
+    assert len(shown) == 3
+    for name, data in images.items():
+        blobs = next(blobs for heading, blobs in shown.items() if f"Figür başlığı {name}" in heading)
+        assert blobs == [data]
+
+
+def test_a_duplicated_slide_keeps_the_images_its_shapes_point_at():
+    prs = pptx.Presentation()
+    source = prs.slides.add_slide(prs.slide_layouts[6])
+    data = _png("purple")
+    source.shapes.add_picture(io.BytesIO(data), 0, 0)
+
+    _duplicate_slide(prs, source)
+    saved = io.BytesIO()
+    prs.save(saved)
+    reopened = pptx.Presentation(io.BytesIO(saved.getvalue()))
+
+    assert _broken_image_links(reopened) == []
+    assert [s.image.blob for s in reopened.slides[1].shapes if s.shape_type == 13] == [data]
 
 
 def test_presentation_report_long_synthesis_autofit_and_no_overlap():
