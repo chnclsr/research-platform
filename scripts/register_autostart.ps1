@@ -16,8 +16,8 @@
     Kontrol paneli icin AYRICA register_control_panel.ps1 CALISTIRMAYIN: start_server.ps1
     paneli zaten baslatiyor, iki gorev ayni portu almaya calisir.
 
-    Ollama'yi bu gorev kapsamiyor -- o natif ve Docker'a bagli olmadigi icin gercek bir
-    ONSTART gorevi olarak kurulabilir (kurulum notlarina bakin).
+    Ollama'yi bu gorev dogrudan kapsamaz -- ayrica register_ollama_autostart.ps1
+    calistirilarak Ollama icin ayri bir kalici gorev tanimlanmistir.
 #>
 param(
     [string]$TaskName = "Research Platform Server"

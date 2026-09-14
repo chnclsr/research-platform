@@ -229,7 +229,16 @@ function Bekle($ad, $url, $limit) {
 Bilgi "Uclar"
 if (-not (Bekle "Research API" "http://127.0.0.1:8000/health" 30)) { $durum = 1 }
 if (-not (Bekle "Docling" "http://127.0.0.1:3941/health" 60)) { $durum = 1 }
-if (-not (Bekle "Ollama" "http://127.0.0.1:11434/api/tags" 10)) { $durum = 1 }
+$ollamaAyakta = $false
+try { Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 2 | Out-Null; $ollamaAyakta = $true } catch {}
+if (-not $ollamaAyakta) {
+    Bilgi "Ollama calismiyor, baslatiliyor"
+    $ollamaExe = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
+    if (Test-Path $ollamaExe) {
+        Start-Process $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
+    }
+}
+if (-not (Bekle "Ollama" "http://127.0.0.1:11434/api/tags" 15)) { $durum = 1 }
 if (-not $SkipPanel) {
     if (-not (Bekle "Kontrol paneli" "http://127.0.0.1:$panelPort/health" 20)) { $durum = 1 }
 }
