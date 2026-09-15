@@ -2,9 +2,15 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.53`
+Belge sürümü: `6.54`
 
-Son güncelleme: `2026-09-14`
+Son güncelleme: `2026-09-15`
+
+## Yayınlanmamış — 2026-09-15
+
+- Telegram plan onayında üçüncü revizyon artık iptal edilmeden kullanıcıya sunulur; koşu
+  yalnız bu son plan da reddedilirse kapatılır. Son iki karar noktasındaki uyarılar bu
+  davranışı açıkça belirtir.
 
 ## Yayınlanmamış — 2026-09-14
 

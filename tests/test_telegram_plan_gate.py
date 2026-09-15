@@ -433,6 +433,52 @@ async def test_the_reject_button_waits_for_a_reason_before_sending_anything():
 
 
 @pytest.mark.asyncio
+async def test_rejecting_the_final_revised_plan_says_the_run_will_cancel():
+    bot = RecordingBot()
+    class FinalPlanGateway(PlanGateway):
+        async def status(self, run_id):
+            return {
+                "id": run_id,
+                "status": "awaiting_input",
+                "interaction": {
+                    "interaction_id": "INT2",
+                    "type": "plan_review",
+                    "data": {
+                        "plan": {
+                            "questions": {"primary": "Which methods detect nodules?"},
+                            "budget": {"max_wall_minutes": 30},
+                            "revisions_left": 0,
+                            "is_final_revision": True,
+                        }
+                    },
+                },
+            }
+
+    gateway = FinalPlanGateway()
+    _watched(bot, gateway)
+    await bot._notify_waiting_runs(None)
+    assert "Bu son revize plan" in bot.sent[-1][1]
+    assert bot.watched_runs["RUN1"]["plan_is_final_revision"] is True
+
+    await bot._handle_plan_callback(
+        None, "CB1", ["plan_review", "RUN1", "reject"], 11, 7, {"message_id": 3}
+    )
+    await bot._consume_interview_text(
+        None, {"chat": {"id": 11}, "text": "Son plan da uygun değil"}
+    )
+
+    assert gateway.sent == [
+        (
+            "RUN1",
+            "INT2",
+            {"approved": False, "modifications": "Son plan da uygun değil"},
+        )
+    ]
+    assert "koşu iptal ediliyor" in bot.sent[-1][1]
+    assert "yeniden kuruyorum" not in bot.sent[-1][1]
+
+
+@pytest.mark.asyncio
 async def test_someone_elses_button_press_is_refused():
     bot = RecordingBot()
     gateway = PlanGateway()

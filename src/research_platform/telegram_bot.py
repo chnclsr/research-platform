@@ -132,7 +132,7 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
         "run_plan_cancelled": (
             "🚫 <b>Araştırma iptal edildi</b>\n\n"
             "🧭 <b>{label}</b>\n<code>{run_id}</code>\n\n"
-            "Plan {limit} kez değişiklik istendikten sonra onaylanmadığı için koşu "
+            "Plan {limit} kez revize edildi ve son plan da reddedildiği için koşu "
             "kapatıldı. İsterseniz /research ile yeniden başlatabilirsiniz; son "
             "istediğiniz değişiklikleri baştan yazmanız yeterli."
         ),
@@ -232,7 +232,13 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
             "answers": "Verdiğiniz yanıtlar",
             "feedback": "Önceki geri bildiriminiz",
             "strategy": "Strateji",
-            "last_revision": "⚠️ Bir değişiklik hakkınız kaldı; sonrasında koşu iptal edilir.",
+            "last_revision": (
+                "⚠️ Bir revizyon hakkınız kaldı. Değişiklik isterseniz yeni plan son "
+                "onayınıza sunulur."
+            ),
+            "final_revision": (
+                "⚠️ Bu son revize plan. Bunu da reddederseniz koşu iptal edilir."
+            ),
             "applied": "Uyguladığım ayarlar",
             "approve_button": "✅ Onayla",
             "reject_button": "✏️ Değişiklik iste",
@@ -240,6 +246,7 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
                              "kuracağım.",
             "approved": "Plan onaylandı, araştırma başlıyor.",
             "rejected": "Geri bildiriminiz alındı; planı yeniden kuruyorum.",
+            "final_rejected": "Son revize plan reddedildi; koşu iptal ediliyor.",
             "expired": "Bu plan düğmesi artık geçerli değil. /respond {run_id} approve ya "
                        "da /respond {run_id} reject <gerekçe> kullanın.",
             "fallback": "Onay:       /respond {run_id} approve\n"
@@ -336,8 +343,8 @@ In the commands below you can use the run's name instead of <run_id>.
         "run_plan_cancelled": (
             "🚫 <b>Research cancelled</b>\n\n"
             "🧭 <b>{label}</b>\n<code>{run_id}</code>\n\n"
-            "The plan was not approved after {limit} rounds of changes, so the run was "
-            "closed. Start again with /research whenever you like -- just say what you "
+            "The plan was revised {limit} times and the final plan was rejected, so the "
+            "run was closed. Start again with /research whenever you like -- just say what you "
             "wanted changed."
         ),
         "respond_ok": "{run_id}: answer received, status {status}",
@@ -435,7 +442,13 @@ In the commands below you can use the run's name instead of <run_id>.
             "answers": "Your answers",
             "feedback": "Your earlier feedback",
             "strategy": "Strategy",
-            "last_revision": "⚠️ One round of changes left; after that the run is cancelled.",
+            "last_revision": (
+                "⚠️ One revision remains. If you request changes, the rebuilt plan will "
+                "still be presented for your final approval."
+            ),
+            "final_revision": (
+                "⚠️ This is the final revised plan. If you reject it, the run is cancelled."
+            ),
             "applied": "Settings I applied",
             "approve_button": "✅ Approve",
             "reject_button": "✏️ Request changes",
@@ -443,6 +456,9 @@ In the commands below you can use the run's name instead of <run_id>.
                              "the plan around it.",
             "approved": "Plan approved, the research is starting.",
             "rejected": "Your feedback is in; I am rebuilding the plan.",
+            "final_rejected": (
+                "The final revised plan was rejected; the run is being cancelled."
+            ),
             "expired": "This plan button is no longer valid. Use /respond {run_id} approve "
                        "or /respond {run_id} reject <reason>.",
             "fallback": "Approve: /respond {run_id} approve\n"
@@ -813,9 +829,11 @@ def plan_summary(run: Mapping[str, Any], plan: dict) -> str:
             f"{item.get('label', '')} → {item.get('detail', '')}" for item in applied
         )
         decision.append(f"⚙️ <b>{text['applied']}</b>: {html.escape(summary[:300])}")
-    # Beside the button that spends it, because the limit was being reached without the
-    # person rejecting having been told there was one.
-    if plan.get("revisions_left") == 1:
+    # Beside the buttons that spend the last rebuild or decide the final revised plan.
+    # Zero does not mean the gate has already cancelled: this plan must still be judged.
+    if plan.get("is_final_revision") or plan.get("revisions_left") == 0:
+        decision.append(text["final_revision"])
+    elif plan.get("revisions_left") == 1:
         decision.append(text["last_revision"])
 
     # (shed rank, lines). Rendered in the order built, dropped highest rank first: the
@@ -1689,8 +1707,8 @@ class TelegramResearchBot:
         await self._clear_markup(client, chat_id, int(message.get("message_id", 0)))
         if action == "reject":
             # A rejection with no reason rebuilds the identical plan: _plan_feedback skips
-            # empty notes, so the run would loop until plan_max_revisions cancels it. Ask
-            # first, submit once there is something to act on.
+            # empty notes, so the run would loop until the final revised plan is rejected.
+            # Ask first, submit once there is something to act on.
             self.pending_answers[run_id] = {
                 "kind": "plan_reject",
                 "chat_id": chat_id,
@@ -1717,6 +1735,16 @@ class TelegramResearchBot:
         except (httpx.HTTPError, ValueError) as exc:
             await self._send_message(
                 client, watch["chat_id"], text["failed"].format(error=str(exc)[:1000])
+            )
+            return
+        final_rejection = (
+            not response.get("approved") and watch.get("plan_is_final_revision", False)
+        )
+        if final_rejection:
+            await self._send_message(
+                client,
+                watch["chat_id"],
+                text["plan"]["final_rejected"],
             )
             return
         note = text["plan"]["approved" if response.get("approved") else "rejected"]
@@ -2411,10 +2439,14 @@ class TelegramResearchBot:
             watch["language"] = language
             data = interaction.get("data") or {}
             if kind == "plan_review":
+                plan = data.get("plan") or {}
+                watch["plan_is_final_revision"] = bool(
+                    plan.get("is_final_revision") or plan.get("revisions_left") == 0
+                )
                 await self._send_message(
                     client,
                     watch["chat_id"],
-                    plan_summary(run, data.get("plan") or {}),
+                    plan_summary(run, plan),
                     reply_markup=plan_keyboard(run_id, language),
                     parse_mode="HTML",
                 )

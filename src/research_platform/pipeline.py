@@ -537,12 +537,20 @@ class ResearchPipeline:
             )
             return output
         feedback = await self._plan_feedback(run_id)
-        if len(answered) >= self.settings.plan_max_revisions:
+        # ``plan_max_revisions`` counts rebuilt plans, not the initial proposal.  At
+        # exactly the limit we still owe the user the final rebuilt plan and an explicit
+        # approve/reject choice.  Only rejecting that final plan adds the extra answer
+        # which closes the gate.
+        if len(answered) > self.settings.plan_max_revisions:
             await self.repo.update_run(run_id, status=RunStatus.CANCELLED.value)
             await self.repo.event(
                 run_id,
                 "plan_rejection_limit",
-                {"revisions": len(answered), "feedback": feedback},
+                {
+                    "revisions": self.settings.plan_max_revisions,
+                    "rejections": len(answered),
+                    "feedback": feedback,
+                },
             )
             raise PipelineHalted("plan_rejected")
         planning_state = {**state, **output, "plan_feedback": feedback}

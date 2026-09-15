@@ -113,6 +113,7 @@ def build_research_plan(
     actually use -- queries, connector, parser and model names -- stays exactly as it runs.
     """
     language = protocol.display_language()
+    revision = len(state.get("plan_feedback", []) or [])
     missions = [
         {
             "branch_id": mission.get("branch_id"),
@@ -132,7 +133,7 @@ def build_research_plan(
         if getattr(protocol.hitl, name)
     ]
     return {
-        "revision": len(state.get("plan_feedback", [])),
+        "revision": revision,
         "display_language": language,
         "questions": {
             "primary": protocol.primary_question,
@@ -207,13 +208,10 @@ def build_research_plan(
         # separately because it is the only part the run is obliged to honour.
         "applied_settings": list(state.get("applied_settings", [])),
         "feedback": list(state.get("plan_feedback", [])),
-        # Rejections left before the gate gives up and cancels the run. Carried in the plan
-        # because the moment a person needs it is the moment they are deciding whether to
-        # reject again, and the limit was being reached without anyone having been told it
-        # existed.
-        "revisions_left": max(
-            settings.plan_max_revisions - len(state.get("plan_feedback", []) or []), 0
-        ),
+        # Rebuilds left after this plan.  A plan with zero left is still presented: it is
+        # the final revised plan and cancelling happens only if the user rejects it.
+        "revisions_left": max(settings.plan_max_revisions - revision, 0),
+        "is_final_revision": revision >= settings.plan_max_revisions,
         "strategy_note": "",
     }
 
