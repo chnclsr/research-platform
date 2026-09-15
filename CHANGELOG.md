@@ -2,12 +2,19 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.55`
+Belge sürümü: `6.56`
 
 Son güncelleme: `2026-09-15`
 
 ## Yayınlanmamış — 2026-09-15
 
+- PowerPoint raporu yeni kurumsal tasarıma geçti. Başlıklar ve metinler artık kesilmiyor
+  ya da 8 punto'ya küçülmüyor; sığmayan metin cümle sınırında sonraki slayta geçiyor.
+  Kapak başlığı logoyla çakışmıyor.
+- Deste Arial ile yazılıyor; gömülü font gerektirmediği için her bilgisayarda aynı
+  görünüyor. Ek C ve Ek D sunumda özet olarak yer alıyor; tam liste Word raporunda ve
+  teslim paketinde. Uzun sentez metinleri daha çok slayt üretiyor (örnek koşu 27 → 52).
+  Ayrıntılar: `DEVELOPMENTS_IMPLEMENTATION_REPORT.md` 75. bölüm.
 - Beş dakikalık model testi Türkçe kelimeleri Unicode token olarak korur; İngilizce
   stopword eşleşmeleri konu kanıtı sayılmaz. Plan geçersizse Türkçe soruyla İngilizce
   korpusta sahte fallback retrieval yapılmaz; sorgu dili İngilizceye sabitlenir ve yeni

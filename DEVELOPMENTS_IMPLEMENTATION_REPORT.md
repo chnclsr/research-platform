@@ -2,9 +2,9 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `12.51`
+Belge sürümü: `12.52`
 
-Son güncelleme: `2026-09-11`
+Son güncelleme: `2026-09-15`
 
 v0.24.0 panel adım/hata/karar ayrıntıları ve doğrulama: [uygulama raporu](PANEL_DIAGNOSTICS_V0.24.0_IMPLEMENTATION_REPORT.md).
 
@@ -79,6 +79,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 62 | v0.23 araştırma derinliği kabul boşluklarının kapatılması | _çalışma ağacı_ |
 | 63 | Kapsam rolünün determinist hâle getirilmesi | _çalışma ağacı_ |
 | 74 | Rapor kapağı için iki dilli LLM konu başlığı | _çalışma ağacı_ |
+| 75 | PowerPoint raporu: ölçülen yerleşimle yeni şablon | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -4380,3 +4381,68 @@ paket Linux uygulama imajından geçici test konteynerinde `TESTING=true` ile
 **1032 passed, 3 skipped, 1 warning** (53,82 sn) sonucuyla ve sıfır çıkış koduyla geçti.
 Yeni modül ile test dosyasında Ruff temiz; değişen mevcut Python dosyalarında Ruff bulgu
 sayısı HEAD'e göre artmadı. `git diff --check` temiz.
+
+## 75. PowerPoint raporu: ölçülen yerleşimle yeni şablon
+
+**Sorun.** Koşu `01M2FYR67BS5WXFMEVY2RT1EHP`'nin PPTX'inde tema başlıkları 80 karakterde
+kelime ortasında kesiliyordu ("…mimari", "…olgusa"); içindekiler 42, figür başlıkları 70,
+tablo hücreleri 40–45 karakterde kesiliyordu. Kapak başlığı, arka plan görseline gömülü
+logonun üstüne biniyordu; metin `tf.text` ile yazıldığı için şablonun beyaz rengi ve sağa
+hizası da kayboluyordu. Sığdırma, karakter başına 0,53 × punto tahminine ve PowerPoint'in
+"taşarsa küçült" ayarına dayanıyordu. Bu ayar python-pptx ile yazılan dosyada hiç çalışmaz;
+5.132 karakterlik tema metni 8 punto'ya iniyordu. Google Slides dışa aktarımının gömdüğü
+Roboto'yu PowerPoint gömülü saymıyor (`Fonts.Embedded = 0`), yani Roboto kurulu olmayan her
+makinede başka bir fontla çiziliyordu.
+
+**Karar.** Tasarım tuvalinde seçilen "B · Editoryal Ray" yönü uygulandı. Slaytlar artık
+şablondaki kutuların doldurulmasıyla değil, kodda tanımlı sabit geometriyle çiziliyor:
+
+- `presentation_layout.py` her metin kutusunu yerleştirmeden önce ölçer. Deste Arial ile
+  yazılır; ölçüm, Arial ile metrik uyumlu Arimo (OFL, `src/research_platform/fonts/`) ile
+  yapılır. Böylece Linux konteyneri Windows ve macOS'ta çizilen satır kırılımını ölçer.
+  Satır aralığı tam punto olarak yazılır, ölçülen yükseklik çizilen yüksekliktir; sarma %3
+  dar ölçülür.
+- Kurallar: rol başına tek punto; metin küçültülmez ve kesilmez. Taşan metin cümle
+  sınırında devam slaytına geçer, başlığa "(devam)" eklenir. Üç satırı aşan başlık 24 pt'den
+  20 pt'ye iner. Kapak başlığı 37,5 → 30 → 24 → 20 pt kademeleriyle yerleşir; logo ayrı
+  kırmızı panelde olduğu için çakışma yapısal olarak mümkün değildir. İçindekiler tek slayta
+  sığmazsa tema satırları 14 pt'den 12 pt'ye iner, yine sığmazsa ikinci slayt açılır.
+- Ek C ve Ek D sunumda özettir: tek slayta sığan satırlar gösterilir (kaynaklar destekledikleri
+  iddia sayısına göre sıralı), tam listenin yeri alt notta yazar. Kaynak başlıklarından site
+  ekleri (`| Springer Nature Link`, ` - PMC`) temizlenir; alan adı ayrı sütundadır.
+- Ek B: katkı dağılımı PowerPoint'in kendi grafiğiyle, tema–kaynak eşleşmesi şekillerle
+  çizilen bir matrisle (12 pt) gösterilir. Sentez paketi yoksa Word raporunun PNG'leri kullanılır.
+- Şablon `Cansagligi_Arastirma_Raporu_Sablonu_v2.pptx`, `scripts/build_presentation_template.py`
+  ile v1'den türetilir: slaytlar, kullanılmayan layout'lar ve gömülü fontlar çıkarılır, tema
+  fontu Arial yapılır. Logolar `templates/brand/` altındadır; v1'deki yatay logonun kırpık
+  işareti tamamlandı.
+- Şekil adları anlamlı ve slayt içinde tekildir (`content_heading`, `sections[].synthesis`,
+  `slide_number` …); belge revizyonundaki `pptx.slide:N.shape:<ad>` hedefleri çalışmaya devam eder.
+- Boş alanlar için 6ddad67 ve 88f6596'nın nötr cümleleri korunur. Figür için yorum yoksa
+  "Kaynak figürü bulguları desteklemektedir." yazılmaz; koşunun kurmadığı bir hüküm olurdu.
+
+**Önceki kararlarla ilişkisi.** 171f45a ve 85ae971'in dinamik punto küçültme yaklaşımı
+(`_fit_font_size`, 8–8,5 pt alt sınır) bilerek geri alındı. faf66b2'nin "her figür slaytı
+kendi görseliyle" davranışı korunur; slayt kopyalama artık yoktur, her slayt baştan çizilir.
+
+**Uç girdiler.** Kurallar içeriğin uzunluğundan bağımsız tutulur; testler koşunun
+sınırlarının üstündeki girdilerle çalışır:
+
+- Gövdeye en az dört satır bırakmayan tema başlığı gövdenin ilk öğesi olarak yerleşir ve
+  metinle birlikte sonraki slayta akar (alt soru başlıklarının şemada uzunluk sınırı yoktur).
+  İçindekiler slaytından uzun bir girdi satır sınırında sonraki slayta devam eder.
+- Figür görseli en az 150 pt yükseklikte kalır; altına sığmayan açıklama "(devam)"
+  başlıklı slayta geçer.
+- Kapak başlığı 12 pt'ye kadar kademeyle iner; 1.000 karakterlik başlık sayfada kalır
+  (rapor başlığı en çok 120, protokol başlığı en çok 300 karakterdir).
+
+**Bilinen sonuç.** Metin kesilmediği için uzun sentez metinleri çok slayta yayılır: aynı koşu
+27 yerine 52 slayt üretir (3.2 teması 9 slayt). Kullanıcı bu slayt sayısını kabul etti; slayt
+başına üst sınır ya da sentez tarafında kelime sınırı uygulanmadı.
+
+**Doğrulama:** `tests/test_presentation_report.py` ve `tests/test_presentation_layout.py`
+**28 passed**. Aynı koşunun teslim paketinden yeniden üretilen deste PowerPoint'te render
+edildi: 52 slayt, yalnız Arial, taşan ya da kesilen metin yok. Tam paket Windows'ta
+`TESTING=true` ile **1194 passed, 5 skipped**; POSIX'e özgü `tests/test_thread_scaling_harness.py`
+(`resource` modülü) Windows'ta toplanamadığı için hariç tutuldu. Değişen Python dosyalarında
+Ruff temiz; `git diff --check` temiz.
