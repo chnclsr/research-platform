@@ -365,7 +365,63 @@ async def test_a_bound_answer_reaches_the_protocol_the_next_stage_reads():
 
 
 @pytest.mark.asyncio
-async def test_the_run_is_cancelled_once_the_revision_limit_is_reached():
+async def test_the_final_revision_is_presented_and_only_its_rejection_cancels_the_run():
+    await create_schema()
+    async with SessionLocal() as session, httpx.AsyncClient() as client:
+        repo = Repository(session, actor=acting_principal())
+        row = await _plan_run(repo)
+        pipeline = ResearchPipeline(get_settings(), session, client)
+        protocol = ResearchProtocol.model_validate(row.protocol)
+        limit = get_settings().plan_max_revisions
+        rejections = [
+            {
+                "type": "plan_review",
+                "response": {"approved": False, "modifications": f"no {i}"},
+            }
+            for i in range(limit)
+        ]
+        await repo.update_run(
+            row.id,
+            hitl_history=rejections,
+        )
+
+        # Reaching the rebuild limit produces one last plan; it must not cancel before
+        # the user has had an approve/reject choice on that plan.
+        with pytest.raises(PipelineHalted, match="awaiting_input"):
+            await pipeline._plan_gate(_plan_state(row), {}, protocol)
+        waiting = await repo.get_run(row.id)
+        assert waiting.status == RunStatus.AWAITING_INPUT.value
+        final_plan = waiting.interaction["data"]["plan"]
+        assert final_plan["revision"] == limit
+        assert final_plan["revisions_left"] == 0
+        assert final_plan["is_final_revision"] is True
+        assert not await repo.events_by_types(row.id, {"plan_rejection_limit"})
+
+        # Rejecting that displayed final plan is the terminal decision.
+        await repo.update_run(
+            row.id,
+            status=RunStatus.QUEUED.value,
+            interaction=None,
+            hitl_history=[
+                *rejections,
+                {
+                    "type": "plan_review",
+                    "response": {"approved": False, "modifications": "still not right"},
+                },
+            ],
+        )
+        with pytest.raises(PipelineHalted, match="plan_rejected"):
+            await pipeline._plan_gate(_plan_state(row), {}, protocol)
+        cancelled = await repo.get_run(row.id)
+        assert cancelled.status == RunStatus.CANCELLED.value
+        events = await repo.events_by_types(row.id, {"plan_rejection_limit"})
+        assert len(events) == 1
+        assert events[0].payload["revisions"] == limit
+        assert events[0].payload["rejections"] == limit + 1
+
+
+@pytest.mark.asyncio
+async def test_approving_the_final_revised_plan_still_starts_the_research():
     await create_schema()
     async with SessionLocal() as session, httpx.AsyncClient() as client:
         repo = Repository(session, actor=acting_principal())
@@ -376,16 +432,20 @@ async def test_the_run_is_cancelled_once_the_revision_limit_is_reached():
         await repo.update_run(
             row.id,
             hitl_history=[
-                {"type": "plan_review", "response": {"approved": False, "modifications": f"no {i}"}}
+                {
+                    "type": "plan_review",
+                    "response": {"approved": False, "modifications": f"change {i}"},
+                }
                 for i in range(limit)
-            ],
+            ] + [{"type": "plan_review", "response": {"approved": True}}],
         )
-        with pytest.raises(PipelineHalted, match="plan_rejected"):
-            await pipeline._plan_gate(_plan_state(row), {}, protocol)
-        cancelled = await repo.get_run(row.id)
-        assert cancelled.status == RunStatus.CANCELLED.value
-        events = {event.event_type for event in await repo.events_after(row.id)}
-        assert "plan_rejection_limit" in events
+
+        output = {"queries": ["nodule detection"]}
+        assert await pipeline._plan_gate(_plan_state(row), output, protocol) == output
+        assert (await repo.get_run(row.id)).status != RunStatus.CANCELLED.value
+        assert not await repo.events_by_types(row.id, {"plan_rejection_limit"})
+        approved = await repo.events_by_types(row.id, {"research_plan_approved"})
+        assert approved[-1].payload["revisions"] == limit
 
 
 @pytest.mark.asyncio

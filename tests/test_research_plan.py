@@ -217,14 +217,21 @@ async def test_strategy_note_is_optional_and_never_blocks_approval():
 
 
 def test_the_plan_says_how_many_revisions_are_left():
-    """The gate cancels at the limit; the person deciding whether to reject needs to know."""
+    """The limit still produces a final plan which the person gets to judge."""
     settings = get_settings()
     fresh = plan_for(protocol())
     assert fresh["revisions_left"] == settings.plan_max_revisions
+    assert fresh["is_final_revision"] is False
     once = plan_for(protocol(), plan_feedback=["Add regulatory sources"])
     assert once["revisions_left"] == settings.plan_max_revisions - 1
+    final = plan_for(
+        protocol(), plan_feedback=[f"note {n}" for n in range(settings.plan_max_revisions)]
+    )
+    assert final["revisions_left"] == 0
+    assert final["is_final_revision"] is True
     spent = plan_for(
         protocol(), plan_feedback=[f"note {n}" for n in range(settings.plan_max_revisions + 2)]
     )
     # Never negative: the count is read as "how many are left", not as an offset.
     assert spent["revisions_left"] == 0
+    assert spent["is_final_revision"] is True

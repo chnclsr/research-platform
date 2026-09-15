@@ -178,7 +178,7 @@ async def _cancelled_by_the_plan_gate(owner_id: str, *, mark: bool = True) -> st
 
 @pytest.mark.asyncio
 async def test_the_gate_cancelling_a_run_reaches_its_owner_once():
-    """The complaint this closes: three revisions and then nothing at all."""
+    """The final rejection gets one durable cancellation notice."""
     owner = await _user("plancancel-owner@example.test", 5151)
     run_id = await _cancelled_by_the_plan_gate(owner)
     bot = RecordingBot()
@@ -190,6 +190,7 @@ async def test_the_gate_cancelling_a_run_reaches_its_owner_once():
     assert chat_id == 5151
     assert run_id in text
     assert "iptal edildi" in text
+    assert "son plan da reddedildi" in text
     # The limit is named, so the number is not a mystery the reader has to infer.
     assert "3" in text
 
@@ -229,17 +230,24 @@ async def test_the_two_notices_do_not_consume_each_others_marker():
     assert len(bot.sent) == 1
 
 
-def test_the_plan_warns_before_the_last_revision_is_spent():
-    """The limit was being reached without the person rejecting having been told."""
+def test_the_plan_explains_both_the_last_rebuild_and_the_final_decision():
+    """The final rebuilt plan remains actionable and says what rejecting it will do."""
     base = {
         "questions": {"primary": "q"},
         "budget": {"max_wall_minutes": 30, "max_sources": 8, "max_rounds": 4},
     }
     warned = plan_summary({"id": "R1", "protocol": {}}, {**base, "revisions_left": 1})
-    assert "Bir değişiklik hakkınız kaldı" in warned
-    for left in (3, 2, 0):
+    assert "Bir revizyon hakkınız kaldı" in warned
+    final = plan_summary(
+        {"id": "R1", "protocol": {}},
+        {**base, "revisions_left": 0, "is_final_revision": True},
+    )
+    assert "Bu son revize plan" in final
+    assert "reddederseniz koşu iptal edilir" in final
+    for left in (3, 2):
         text = plan_summary({"id": "R1", "protocol": {}}, {**base, "revisions_left": left})
         assert "hakkınız kaldı" not in text
+        assert "son revize plan" not in text
 
 
 def test_the_cancelled_run_query_does_not_distinct_over_json_columns():
