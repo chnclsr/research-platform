@@ -441,9 +441,16 @@ def _prompt_char_budget(llm: LLMProvider) -> int:
     once. The drafting layer takes its evidence share from `_PACKET_TARGET_CHARS` instead --
     see `_section_packet_budget`.
     """
-    settings = getattr(llm, "settings", None)
-    context_tokens = int(getattr(settings, "llm_context_tokens", 8192))
-    output_tokens = int(getattr(settings, "llm_max_output_tokens", 2048))
+    # A provider that knows its own window says so. `settings` describe the local model only,
+    # and an API provider has none -- which used to shrink its budgets to the 8192/2048 defaults.
+    token_limits = getattr(llm, "token_limits", None)
+    limits = token_limits() if callable(token_limits) else None
+    if limits:
+        context_tokens, output_tokens = limits
+    else:
+        settings = getattr(llm, "settings", None)
+        context_tokens = int(getattr(settings, "llm_context_tokens", 8192))
+        output_tokens = int(getattr(settings, "llm_max_output_tokens", 2048))
     available_tokens = max(2048, context_tokens - output_tokens - 1536)
     return max(6000, min(24000, available_tokens * 2))
 

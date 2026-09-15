@@ -305,7 +305,10 @@ async def build_exports(
     repo: Repository,
     store: ObjectStore,
     llm: LLMProvider,
+    report_llm: LLMProvider | None = None,
 ) -> list[str]:
+    # `llm` is the run's own model and carries the local settings figure analysis reads;
+    # `report_llm`, when given, writes the report's prose: synthesis and the translations.
     sources = await repo.list_sources(run_id)
     claims = await repo.list_claims(run_id)
     evidence = await repo.list_evidence(run_id)
@@ -332,7 +335,7 @@ async def build_exports(
     # synthesis fallback, the atomic-findings appendices and the executive summary -- which
     # is how English sentences reached a Turkish report from three different directions.
     claim_texts, claim_language_diagnostics = await localize_claim_texts(
-        llm, ordered_reportable, protocol.report_language
+        report_llm or llm, ordered_reportable, protocol.report_language
     )
     await repo.event(run_id, "claim_localization", claim_language_diagnostics)
 
@@ -346,7 +349,7 @@ async def build_exports(
         return claim_texts.get(str(claim.id), str(getattr(claim, "text", "")))
 
     synthesis_package = await build_synthesis_package(
-        llm=llm,
+        llm=report_llm or llm,
         # The model reasons over English claims, so it gets the English question. That
         # makes the prompt English on every side -- question, packet, instructions -- and
         # the output language then rests entirely on the synthesis directive. It did not
@@ -426,6 +429,7 @@ async def build_exports(
             repo=repo,
             store=store,
             settings=getattr(llm, "settings", None),
+            report_llm=report_llm,
         )
     if protocol.output_mode == "raw":
         synthesis = {
@@ -449,7 +453,7 @@ async def build_exports(
         # v0.23.0 keeps this hook as a diagnostic surface only. It must return the exact
         # package it received even when the prose is in the wrong language.
         synthesis_package, sweep_diagnostics = await sweep_synthesis_package(
-            llm, synthesis_package, protocol.report_language
+            report_llm or llm, synthesis_package, protocol.report_language
         )
         await repo.event(run_id, "report_language_sweep", sweep_diagnostics)
         # Derived after the sweep so the markdown and the .docx render the same prose.

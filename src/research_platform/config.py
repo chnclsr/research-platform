@@ -187,6 +187,23 @@ class Settings(BaseSettings):
     deepseek_api_key: str | None = None
     deepseek_preparation_model: str = "deepseek-chat"
     deepseek_preparation_timeout_s: float = Field(60.0, ge=10.0, le=300.0)
+    # Providers for the report's own prose -- synthesis, claim and figure-caption translation,
+    # document revision planning -- tried in order; "local" is the run's own model. Empty keeps
+    # all of that on the run's model. Anything else sends evidence text (claims, quotes, draft
+    # prose) to the providers listed: relaxed on 2026-09-15 for this final stage only, so that
+    # the report reads as good Turkish. Collection, extraction, filtering and appraisal stay on
+    # the run's model whatever this says.
+    report_llm_chain: str = ""
+    # What the report providers accept. Prompt budgets follow the smallest window in the chain,
+    # so a fallback to the local model still receives a prompt it can take.
+    report_llm_context_tokens: int = Field(65536, ge=8192, le=2_000_000)
+    report_llm_max_output_tokens: int = Field(8192, ge=1024, le=65536)
+    report_llm_timeout_s: float = Field(180.0, ge=10.0, le=900.0)
+    # The report model of each provider; empty uses that provider's preparation model.
+    gemini_report_model: str = ""
+    openrouter_report_model: str = ""
+    groq_report_model: str = ""
+    deepseek_report_model: str = ""
 
     github_token: str | None = None
     epo_ops_key: str | None = None
@@ -369,21 +386,32 @@ class Settings(BaseSettings):
     hardware_telemetry_output_type: Literal["csv", "all"] = "all"
     testing: bool = False
 
-    @field_validator("preparation_llm_chain")
-    @classmethod
-    def _validate_preparation_chain(cls, value: str) -> str:
+    @staticmethod
+    def _provider_chain(value: str, setting: str) -> list[str]:
         names = [name.strip().lower() for name in value.split(",") if name.strip()]
-        if not names:
-            raise ValueError("PREPARATION_LLM_CHAIN must name at least one provider")
         unknown = [name for name in names if name not in PREPARATION_PROVIDERS]
         if unknown:
             raise ValueError(
-                f"PREPARATION_LLM_CHAIN has unknown providers {unknown}; "
+                f"{setting} has unknown providers {unknown}; "
                 f"known providers are {list(PREPARATION_PROVIDERS)}"
             )
         if len(set(names)) != len(names):
-            raise ValueError("PREPARATION_LLM_CHAIN lists the same provider twice")
+            raise ValueError(f"{setting} lists the same provider twice")
+        return names
+
+    @field_validator("preparation_llm_chain")
+    @classmethod
+    def _validate_preparation_chain(cls, value: str) -> str:
+        names = cls._provider_chain(value, "PREPARATION_LLM_CHAIN")
+        if not names:
+            raise ValueError("PREPARATION_LLM_CHAIN must name at least one provider")
         return ",".join(names)
+
+    @field_validator("report_llm_chain")
+    @classmethod
+    def _validate_report_chain(cls, value: str) -> str:
+        # Empty is valid and is the default: the report stays on the run's own model.
+        return ",".join(cls._provider_chain(value, "REPORT_LLM_CHAIN"))
 
     @field_validator("openrouter_preparation_model")
     @classmethod
@@ -410,11 +438,22 @@ class Settings(BaseSettings):
                 f"LLM_CONTEXT_TOKENS={self.llm_context_tokens} for the prompt; at least 4096 "
                 "are needed, or the evidence packet is truncated without an error"
             )
+        report_room = self.report_llm_context_tokens - self.report_llm_max_output_tokens
+        if self.report_llm_chain and report_room < 4096:
+            raise ValueError(
+                f"REPORT_LLM_MAX_OUTPUT_TOKENS={self.report_llm_max_output_tokens} leaves "
+                f"{report_room} tokens of REPORT_LLM_CONTEXT_TOKENS="
+                f"{self.report_llm_context_tokens} for the prompt; at least 4096 are needed"
+            )
         return self
 
     @property
     def preparation_chain(self) -> tuple[str, ...]:
         return tuple(self.preparation_llm_chain.split(","))
+
+    @property
+    def report_chain(self) -> tuple[str, ...]:
+        return tuple(name for name in self.report_llm_chain.split(",") if name)
 
 
 @lru_cache

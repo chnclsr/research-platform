@@ -14,7 +14,7 @@ from .config import get_settings
 from .db import SessionLocal, create_schema
 from .document_revision import DocumentRevisionService
 from .hardware_telemetry import HUB, finalize_hardware_telemetry
-from .llm import build_llm
+from .llm import build_llm, build_report_llm
 from .pipeline import ResearchPipeline
 from .queueing import (
     NORMAL,
@@ -194,7 +194,8 @@ async def execute_document_revision(ctx: dict, revision_id: str) -> None:
             service = DocumentRevisionService(
                 repo,
                 ObjectStore(settings),
-                llm=build_llm(settings, ctx["http"]),
+                # Revision planning writes the report's prose, so it follows REPORT_LLM_CHAIN.
+                llm=build_report_llm(settings, ctx["http"]) or build_llm(settings, ctx["http"]),
                 settings=settings,
             )
             try:
