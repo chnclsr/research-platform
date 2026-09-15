@@ -326,12 +326,72 @@ async def test_source_caption_is_localized_without_mutating_provenance() -> None
     )
 
     assert observation.caption == candidate.caption
-    assert figures[0].caption == (
-        "Kaynak figürü: Şekil 2. Analizin 3 aşaması ve klinik sonuçları. [S01, s. 3]."
-    )
+    assert figures[0].caption == "Analizin 3 aşaması ve klinik sonuçları. [S01, s. 3]."
     assert "The analysis" not in figures[0].caption
     assert updates[candidate.image_hash]["caption_status"] == "translated"
     assert diagnostics["translated"] == 1
+
+
+def test_source_figure_caption_opens_with_the_description() -> None:
+    """Report captions read "Kaynak figürü: Şekil 1: (a) ..."; both labels were noise."""
+    candidate = FigureCandidate(
+        source_id="source-1",
+        source_version_id="version-1",
+        source_label="S01",
+        source_title="Clinical figure source",
+        image=_png(),
+        page_number=3,
+        caption="Figure 1: (a) Existing models and (b) our model.",
+        locator="PDF page 3 figure crop",
+        source_excerpt_ready=True,
+    )
+    observation = FigureObservation(
+        source_id="source-1",
+        source_version_id="version-1",
+        source_label="S01",
+        source_title="Clinical figure source",
+        image_hash=candidate.image_hash,
+        image_key="runs/test/figure.png",
+        page_number=3,
+        caption=candidate.caption,
+        figure_type="flowchart",
+        title="Şekil 1: Model karşılaştırması",
+        axes={"x": "", "y": ""},
+        series=[],
+        data_points=[],
+        flow_steps=[],
+        main_findings=["Önerilen model mevcut modellerle karşılaştırılır."],
+        limitations=[],
+        recommended_section="Yaklaşımlar ve yöntemler",
+        relevance_score=0.9,
+        exact_values_visible=False,
+        confidence=0.9,
+        vision_model="qwen3.5:4b",
+        include_in_report=True,
+    )
+
+    def caption_for(override: str) -> str:
+        figures = _source_excerpt_figures(
+            [observation],
+            [candidate],
+            minimum_relevance=0.55,
+            minimum_confidence=0.75,
+            maximum=3,
+            turkish=True,
+            caption_overrides={candidate.image_hash: override},
+        )
+        return figures[0].caption
+
+    # The panel letters are the description, not a label, so "(a)" stays.
+    assert caption_for("Şekil 1: (a) Mevcut modeller ile (b) bizim modelimiz.") == (
+        "(a) Mevcut modeller ile (b) bizim modelimiz. [S01, s. 3]."
+    )
+    # A caption that is only a number falls back to the title, also without its number.
+    assert caption_for("Şekil 1.") == "Model karşılaştırması [S01, s. 3]."
+    # Without a separator the number opens a sentence and is not cut out of it.
+    assert caption_for("Şekil 1 iki modeli karşılaştırır.") == (
+        "Şekil 1 iki modeli karşılaştırır. [S01, s. 3]."
+    )
 
 
 @pytest.mark.asyncio

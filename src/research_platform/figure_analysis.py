@@ -574,6 +574,17 @@ def _localized_figure_label(text: str, language: str) -> str:
     return f"{label} {match.group('number')}" if match else label
 
 
+def _without_figure_label(text: str) -> str:
+    """The caption without the source's own leading "Figure 2." / "Şekil 2:" number."""
+    match = _FIGURE_LABEL_RE.match(text)
+    if not match:
+        return text
+    rest = text[match.end():]
+    # Only a label when a separator or nothing follows: "Figure 2 shows ..." is a sentence.
+    separated = re.match(r"\s*(?:[:.\-–—]\s*|$)", rest)
+    return rest[separated.end():] if separated else text
+
+
 def _caption_fallback(observation: FigureObservation, language: str) -> str:
     label = _localized_figure_label(observation.caption or observation.title, language)
     if _report_language(language) == "tr":
@@ -1458,19 +1469,19 @@ def _source_excerpt_figures(
                 else ""
             )
         )
-        source_caption = _text(
-            (caption_overrides or {}).get(observation.image_hash)
-            or observation.caption
-            or observation.title,
-            1000,
-        )
-        caption = (
-            f"Kaynak figürü: {source_caption} "
-            f"[{observation.source_label}{page}]."
-            if turkish
-            else f"Source figure: {source_caption} "
-            f"[{observation.source_label}{page}]."
-        )
+        # Neither a "Source figure:" prefix nor the paper's own "Figure 2:" number: the
+        # number counts figures in the source, not in this report, so under a report figure
+        # both read as stray labels. The caption starts with the description itself.
+        # A localized caption that was only a number falls back to the report-language
+        # title, never to the untranslated original.
+        source_caption = _without_figure_label(
+            _text(
+                (caption_overrides or {}).get(observation.image_hash) or observation.caption,
+                1000,
+            )
+        ) or _without_figure_label(_text(observation.title, 1000))
+        citation = f"[{observation.source_label}{page}]."
+        caption = f"{source_caption} {citation}" if source_caption else citation
         rights_notice = (
             f"{candidate.rights_statement} Bu kırpım kurum içi araştırma incelemesi "
             "içindir; dış dağıtım öncesi lisans koşulları doğrulanmalıdır."

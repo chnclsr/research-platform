@@ -267,7 +267,7 @@ _TITLE_SUFFIX = re.compile(
     r"(?:\s+[|·]\s+.*|\s+-\s+(?:PMC|arXiv|ScienceDirect|PubMed|ResearchGate|MDPI|GitHub|ejrai))$",
     re.IGNORECASE,
 )
-_FIGURE_NUMBER = re.compile(r"^\s*(?:Şekil|Sekil|Figure|Figür|Fig\.?)\s*\d+[a-z]?\s*[:.\-–—]\s*", re.IGNORECASE)
+_FIGURE_NUMBER = re.compile(r"^\s*(?:Şekil|Sekil|Figure|Figür|Fig\.?)\s*\d+[a-z]?\b\s*(?:[:.\-–—]\s*|$)", re.IGNORECASE)
 
 
 def _is_turkish(language: str) -> bool:
@@ -1307,7 +1307,8 @@ def _add_figures(pages: list[_Page], deck: _Deck, research_figures: list[Any], o
         )
         label = _clean(figure["label"])
         eyebrow = f"{t('figure')} {number}" + (f" · {label}" if label else "")
-        caption_parts = [_clean(figure["caption"])]
+        # An observation without an exported figure brings its raw "Figure 2: ..." caption.
+        caption_parts = [_FIGURE_NUMBER.sub("", _clean(figure["caption"]))]
         attribution = re.sub(r"^(?:kaynak|source)\s*:\s*", "", _clean(figure["attribution"]), flags=re.IGNORECASE)
         if attribution and attribution != label:
             caption_parts.append(f"{t('source')}: {attribution}")

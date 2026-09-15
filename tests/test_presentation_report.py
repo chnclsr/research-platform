@@ -687,7 +687,9 @@ def test_appendix_tables_name_where_the_full_list_is():
 def test_figure_captions_do_not_repeat_their_prefixes():
     prs = _deck(_long_inputs())
     captions = [_text(slide, "figure.caption_attribution") for slide in prs.slides]
-    caption = next(text for text in captions if text.startswith("Figure 2"))
+    # The source's own "Figure 2:" number is dropped; the caption opens with the description.
+    caption = next(text for text in captions if text.startswith("Dataset examples."))
+    assert not any(text.startswith(("Figure", "Şekil")) for text in captions)
     assert "Kaynak: Kaynak:" not in caption and "Telif: Telif:" not in caption
     heading = next(
         _text(slide, "content_heading") for slide in prs.slides if _text(slide, "eyebrow") == "FİGÜR 1 · S47"
