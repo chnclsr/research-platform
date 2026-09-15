@@ -36,7 +36,6 @@ from .llm import (
     LLMProvider,
     build_llm,
     build_preparation_llm,
-    build_report_llm,
     decompose,
     extract_claims,
     generate_search_queries,
@@ -296,8 +295,6 @@ class ResearchPipeline:
         self.acquisition = AcquisitionService(settings, client)
         self.llm: LLMProvider = build_llm(settings, client)
         self.preparation_llm = build_preparation_llm(settings, client)
-        # The report's prose -- synthesis and translations -- when REPORT_LLM_CHAIN names one.
-        self.report_llm: LLMProvider = build_report_llm(settings, client) or self.llm
         self._telegram_preparation = False
         self.embeddings = EmbeddingClient(settings, client)
         self.store = ObjectStore(settings)
@@ -619,9 +616,7 @@ class ResearchPipeline:
             # the llm_metrics rows name the model but not that a switch happened.
             for switch in target.drain_fallbacks():
                 await self.repo.event(
-                    run_id,
-                    f"{getattr(target, 'label', 'preparation')}_provider_fallback",
-                    {"stage": stage, **switch},
+                    run_id, "preparation_provider_fallback", {"stage": stage, **switch}
                 )
 
     async def _interruptible(
@@ -4313,9 +4308,8 @@ class ResearchPipeline:
             self.repo,
             self.store,
             self.llm,
-            report_llm=self.report_llm,
         )
-        await self._emit_llm_metrics(state["run_id"], "SYNTHESIZE_EXPORT", provider=self.report_llm)
+        await self._emit_llm_metrics(state["run_id"], "SYNTHESIZE_EXPORT")
         await self.repo.event(state["run_id"], "artifacts", {"names": artifacts})
         return {}
 

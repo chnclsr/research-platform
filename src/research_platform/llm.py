@@ -127,21 +127,10 @@ class LLMProvider(ABC):
         self._metrics = []
         return metrics
 
-    def token_limits(self) -> tuple[int, int] | None:
-        """(context, output) tokens this provider works within, when it knows them.
-
-        Prompt budgets are sized from this. A provider that does not know returns None and
-        the budget falls back to whatever `settings` the caller can find.
-        """
-        return None
-
 
 class OllamaProvider(LLMProvider):
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
         self.settings, self.client = settings, client
-
-    def token_limits(self) -> tuple[int, int] | None:
-        return self.settings.llm_context_tokens, self.settings.llm_max_output_tokens
 
     async def complete_json(self, system: str, user: str) -> Any:
         # One GPU, so one model call at a time whatever else the worker is running. Taken
@@ -318,8 +307,6 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str | None,
         model: str,
         timeout_s: float,
-        max_output_tokens: int | None = None,
-        context_tokens: int | None = None,
     ):
         if not base_url:
             raise RuntimeError(f"{name} provider needs a base URL")
@@ -329,37 +316,24 @@ class OpenAICompatibleProvider(LLMProvider):
         self.api_key = api_key
         self.model = model
         self.timeout_s = timeout_s
-        self.max_output_tokens = max_output_tokens
-        self.context_tokens = context_tokens
-
-    def token_limits(self) -> tuple[int, int] | None:
-        if self.context_tokens and self.max_output_tokens:
-            return self.context_tokens, self.max_output_tokens
-        return None
 
     async def complete_json(self, system: str, user: str) -> Any:
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        body: dict[str, Any] = {
-            "model": self.model, "temperature": 0,
-            # Every prompt sent here already asks for JSON in words, which is what DeepSeek's
-            # JSON mode requires; models that ignore the flag are still handled by
-            # _json_from_text.
-            "response_format": {"type": "json_object"},
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        }
-        if self.max_output_tokens:
-            # Without a stated ceiling the provider's own default applies, and nothing below
-            # could tell a cut-off answer from a finished one.
-            body["max_tokens"] = self.max_output_tokens
         started = time.perf_counter()
         try:
             response = await self.client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json=body,
-                timeout=self.timeout_s,
+                json={
+                    "model": self.model, "temperature": 0,
+                    # Every preparation prompt already asks for JSON in words, which is what
+                    # DeepSeek's JSON mode requires; models that ignore the flag are still
+                    # handled by _json_from_text.
+                    "response_format": {"type": "json_object"},
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                }, timeout=self.timeout_s,
             )
         except httpx.TransportError as exc:
             raise ProviderUnavailable(self.name, None, model=self.model) from exc
@@ -372,60 +346,33 @@ class OpenAICompatibleProvider(LLMProvider):
             )
         payload = response.json()
         usage = payload.get("usage", {})
-        choices = payload.get("choices") if isinstance(payload, dict) else None
-        finish = (
-            choices[0].get("finish_reason")
-            if isinstance(choices, list) and choices and isinstance(choices[0], dict)
-            else None
-        )
-        metric = {
+        self.record_metric({
             "provider": self.name, "model": self.model,
             "wall_seconds": round(time.perf_counter() - started, 4),
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
-        }
-        if finish:
-            metric["done_reason"] = finish
-        self.record_metric(metric)
+        })
         try:
             content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError(f"{self.name} did not return a message") from exc
-        return _json_from_text(content, truncated=finish == "length")
+        return _json_from_text(content)
 
 
 class GeminiProvider(LLMProvider):
-    """Gemini Developer API provider: Telegram run preparation, and the report's prose when
-    REPORT_LLM_CHAIN lists it. The two uses differ only in model, timeout and limits."""
+    """Gemini Developer API provider used only for Telegram run preparation."""
 
-    def __init__(
-        self,
-        settings: Settings,
-        client: httpx.AsyncClient,
-        *,
-        model: str | None = None,
-        timeout_s: float | None = None,
-        max_output_tokens: int | None = None,
-        context_tokens: int | None = None,
-        required_by: str = "TELEGRAM_PREPARATION_LLM_ENABLED=true",
-    ):
+    def __init__(self, settings: Settings, client: httpx.AsyncClient):
         if not settings.gemini_api_key:
-            raise RuntimeError(f"GEMINI_API_KEY is required when {required_by}")
+            raise RuntimeError(
+                "GEMINI_API_KEY is required when TELEGRAM_PREPARATION_LLM_ENABLED=true"
+            )
         self.settings, self.client = settings, client
-        self.model = model or settings.gemini_preparation_model
-        self.timeout_s = timeout_s or settings.gemini_preparation_timeout_s
-        self.max_output_tokens = max_output_tokens or settings.llm_max_output_tokens
-        self.context_tokens = context_tokens
-
-    def token_limits(self) -> tuple[int, int] | None:
-        if self.context_tokens:
-            return self.context_tokens, self.max_output_tokens
-        return None
 
     async def complete_json(self, system: str, user: str) -> Any:
         url = (
             f"{self.settings.gemini_api_url.rstrip('/')}/v1beta/models/"
-            f"{self.model}:generateContent"
+            f"{self.settings.gemini_preparation_model}:generateContent"
         )
         headers = {
             "x-goog-api-key": str(self.settings.gemini_api_key),
@@ -436,7 +383,7 @@ class GeminiProvider(LLMProvider):
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {
                 "temperature": 0,
-                "maxOutputTokens": self.max_output_tokens,
+                "maxOutputTokens": self.settings.llm_max_output_tokens,
                 "responseMimeType": "application/json",
             },
         }
@@ -449,11 +396,13 @@ class GeminiProvider(LLMProvider):
                     url,
                     headers=headers,
                     json=body,
-                    timeout=self.timeout_s,
+                    timeout=self.settings.gemini_preparation_timeout_s,
                 )
             except httpx.TransportError as exc:
                 if attempt + 1 >= attempts:
-                    raise ProviderUnavailable("gemini", None, model=self.model) from exc
+                    raise ProviderUnavailable(
+                        "gemini", None, model=self.settings.gemini_preparation_model
+                    ) from exc
                 await asyncio.sleep(min(2**attempt, 8))
                 continue
             if response.status_code not in RETRYABLE_STATUSES:
@@ -468,7 +417,9 @@ class GeminiProvider(LLMProvider):
                 break
             await asyncio.sleep(delay)
         if response is None:
-            raise ProviderUnavailable("gemini", None, model=self.model)
+            raise ProviderUnavailable(
+                "gemini", None, model=self.settings.gemini_preparation_model
+            )
         if response.is_error:
             # Do not include the response body: providers may echo request details, and
             # operational events need only the stable status/model tuple.
@@ -476,33 +427,24 @@ class GeminiProvider(LLMProvider):
                 "gemini",
                 response.status_code,
                 retry_after=_retry_after_seconds(response),
-                model=self.model,
+                model=self.settings.gemini_preparation_model,
             )
         payload = response.json()
         usage = payload.get("usageMetadata") or {}
-        candidates = payload.get("candidates") if isinstance(payload, dict) else None
-        finish = (
-            candidates[0].get("finishReason")
-            if isinstance(candidates, list) and candidates and isinstance(candidates[0], dict)
-            else None
-        )
-        metric = {
+        self.record_metric({
             "provider": "gemini",
-            "model": self.model,
+            "model": self.settings.gemini_preparation_model,
             "wall_seconds": round(time.perf_counter() - started, 4),
             "prompt_tokens": usage.get("promptTokenCount", 0),
             "completion_tokens": usage.get("candidatesTokenCount", 0),
             "total_tokens": usage.get("totalTokenCount", 0),
-        }
-        if finish:
-            metric["done_reason"] = finish
-        self.record_metric(metric)
+        })
         try:
             parts = payload["candidates"][0]["content"]["parts"]
             content = "".join(str(part.get("text", "")) for part in parts)
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError("Gemini did not return a text candidate") from exc
-        return _json_from_text(content, truncated=finish == "MAX_TOKENS")
+        return _json_from_text(content)
 
 
 class DeterministicProvider(LLMProvider):
@@ -535,33 +477,17 @@ class FallbackProvider(LLMProvider):
 
     The switch is not silent: every fallback is recorded for the pipeline to write as a run
     event, so a run planned by the second-choice model says so in its own history.
-
-    The report chain (REPORT_LLM_CHAIN) is the same machinery under the label "report".
     """
 
-    def __init__(
-        self,
-        providers: list[tuple[str, LLMProvider]],
-        cooldown_s: float,
-        *,
-        label: str = "preparation",
-    ):
+    def __init__(self, providers: list[tuple[str, LLMProvider]], cooldown_s: float):
         self._providers = providers
         self._cooldown_s = cooldown_s
         self._blocked: dict[str, float] = {}
         self._fallbacks: list[dict[str, Any]] = []
-        self.label = label
 
     @property
     def provider_names(self) -> list[str]:
         return [name for name, _ in self._providers]
-
-    def token_limits(self) -> tuple[int, int] | None:
-        """The tightest limits in the chain, so a fallback still receives a prompt it can take."""
-        known = [limits for _, provider in self._providers if (limits := provider.token_limits())]
-        if not known:
-            return None
-        return min(context for context, _ in known), min(output for _, output in known)
 
     async def complete_json(self, system: str, user: str) -> Any:
         skipped: list[str] = []
@@ -587,7 +513,7 @@ class FallbackProvider(LLMProvider):
                 self._fallbacks.append({"served_by": name, "skipped": skipped})
             return result
         raise RuntimeError(
-            f"every {self.label} provider failed ({', '.join(skipped) or 'none configured'})"
+            f"every preparation provider failed ({', '.join(skipped) or 'none configured'})"
         ) from last_error
 
     def _block(self, name: str, error: ProviderUnavailable) -> None:
@@ -706,90 +632,6 @@ def build_preparation_llm(
     if len(chain) == 1:
         return chain[0][1]
     return FallbackProvider(chain, settings.preparation_provider_cooldown_s)
-
-
-def _report_openai_compatible(
-    settings: Settings,
-    client: httpx.AsyncClient,
-    *,
-    name: str,
-    base_url: str,
-    api_key: str | None,
-    model: str,
-) -> LLMProvider:
-    if not api_key:
-        raise RuntimeError(f"{name.upper()}_API_KEY is required when REPORT_LLM_CHAIN lists {name}")
-    return OpenAICompatibleProvider(
-        client,
-        name=name,
-        base_url=base_url,
-        api_key=api_key,
-        model=model,
-        timeout_s=settings.report_llm_timeout_s,
-        max_output_tokens=settings.report_llm_max_output_tokens,
-        context_tokens=settings.report_llm_context_tokens,
-    )
-
-
-def _report_gemini(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
-    return GeminiProvider(
-        settings,
-        client,
-        model=settings.gemini_report_model or settings.gemini_preparation_model,
-        timeout_s=settings.report_llm_timeout_s,
-        max_output_tokens=settings.report_llm_max_output_tokens,
-        context_tokens=settings.report_llm_context_tokens,
-        required_by="REPORT_LLM_CHAIN lists gemini",
-    )
-
-
-def _report_openrouter(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
-    return _report_openai_compatible(
-        settings, client, name="openrouter", base_url=settings.openrouter_api_url,
-        api_key=settings.openrouter_api_key,
-        model=settings.openrouter_report_model or settings.openrouter_preparation_model,
-    )
-
-
-def _report_groq(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
-    return _report_openai_compatible(
-        settings, client, name="groq", base_url=settings.groq_api_url,
-        api_key=settings.groq_api_key,
-        model=settings.groq_report_model or settings.groq_preparation_model,
-    )
-
-
-def _report_deepseek(settings: Settings, client: httpx.AsyncClient) -> LLMProvider:
-    return _report_openai_compatible(
-        settings, client, name="deepseek", base_url=settings.deepseek_api_url,
-        api_key=settings.deepseek_api_key,
-        model=settings.deepseek_report_model or settings.deepseek_preparation_model,
-    )
-
-
-REPORT_BUILDERS = {
-    "gemini": _report_gemini,
-    "openrouter": _report_openrouter,
-    "groq": _report_groq,
-    "deepseek": _report_deepseek,
-    # Its own instance, as in the preparation chain, so its calls are drained with the report.
-    "local": _preparation_local,
-}
-assert set(REPORT_BUILDERS) == set(PREPARATION_PROVIDERS)
-
-
-def build_report_llm(settings: Settings, client: httpx.AsyncClient) -> LLMProvider | None:
-    """The provider for the report's own prose, or None to keep it on the run's model.
-
-    Synthesis, claim and figure-caption translation and document revision planning use it.
-    A listed provider without its key fails at startup, as in the preparation chain.
-    """
-    if getattr(settings, "testing", False) or not getattr(settings, "report_llm_chain", ""):
-        return None
-    chain = [(name, REPORT_BUILDERS[name](settings, client)) for name in settings.report_chain]
-    if len(chain) == 1:
-        return chain[0][1]
-    return FallbackProvider(chain, settings.preparation_provider_cooldown_s, label="report")
 
 
 async def translate_research_request(
