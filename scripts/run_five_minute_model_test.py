@@ -19,11 +19,42 @@ from typing import Any
 
 import httpx
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CORPUS = ROOT / "data" / "qualitative_v1_corpus.json"
 DEFAULT_OUTPUT = ROOT / "data" / "five-minute-model-test"
 RESEARCH_BUDGET_SECONDS = 300.0
+SEARCH_LANGUAGE = "en"
+RETRIEVAL_CONTRACT_VERSION = "1.1"
+TURKISH_LETTERS = frozenset("çğıöşüÇĞİÖŞÜ")
+# This corpus is English. Function words are not evidence of topical overlap, and
+# accent-folding ``iş`` into English ``is`` previously made unrelated documents rank.
+ENGLISH_STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "this",
+        "to",
+        "was",
+        "were",
+        "with",
+    ]
+)
 
 
 @dataclass(frozen=True)
@@ -108,12 +139,21 @@ PROFILES = [
 
 
 def normalize(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(character for character in decomposed if not unicodedata.combining(character))
+    text = unicodedata.normalize("NFKC", text)
+
+    def turkish_capital_i(match: re.Match[str]) -> str:
+        word = match.group()
+        # Preserve English I/AI while handling Turkish words such as IŞIK/ışık.
+        return word.replace("I", "ı") if any(char in TURKISH_LETTERS for char in word) else word
+
+    text = re.sub(r"[^\W_]+", turkish_capital_i, text, flags=re.UNICODE)
+    return unicodedata.normalize("NFC", text.casefold().replace("i\u0307", "i"))
 
 
 def tokenize(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9]+", normalize(text))
+    # Unicode letters (including dotless ı) remain inside their original words.  Do
+    # not fold Turkish diacritics into unrelated English corpus terms.
+    return re.findall(r"[^\W_]+", normalize(text), flags=re.UNICODE)
 
 
 class BM25:
@@ -132,7 +172,7 @@ class BM25:
                 self.document_frequency[token] = self.document_frequency.get(token, 0) + 1
 
     def search(self, query: str, limit: int = 5) -> list[tuple[str, float]]:
-        query_tokens = tokenize(query)
+        query_tokens = [token for token in tokenize(query) if token not in ENGLISH_STOPWORDS]
         scores: list[tuple[str, float]] = []
         total = len(self.documents)
         for document, document_tokens in zip(self.documents, self.tokens, strict=True):
@@ -168,7 +208,11 @@ def reciprocal_rank_fusion(
         for rank, (document_id, bm25_score) in enumerate(ranking, 1):
             fused[document_id] = fused.get(document_id, 0.0) + 1 / (constant + rank)
             appearances.setdefault(document_id, []).append(
-                {"query_index": query_index, "rank": rank, "bm25_score": round(bm25_score, 6)}
+                {
+                    "query_index": query_index,
+                    "rank": rank,
+                    "bm25_score": round(bm25_score, 6),
+                }
             )
     ordered = sorted(fused, key=lambda document_id: (-fused[document_id], document_id))[:limit]
     return [
@@ -199,15 +243,19 @@ class GPUMonitor:
         start = time.perf_counter()
         while not self._stop.is_set():
             try:
-                output = subprocess.check_output(
-                    [
-                        "nvidia-smi",
-                        "--query-gpu=memory.used,utilization.gpu",
-                        "--format=csv,noheader,nounits",
-                    ],
-                    text=True,
-                    timeout=3,
-                ).strip().splitlines()[0]
+                output = (
+                    subprocess.check_output(
+                        [
+                            "nvidia-smi",
+                            "--query-gpu=memory.used,utilization.gpu",
+                            "--format=csv,noheader,nounits",
+                        ],
+                        text=True,
+                        timeout=3,
+                    )
+                    .strip()
+                    .splitlines()[0]
+                )
                 memory, utilization = [part.strip() for part in output.split(",")[:2]]
                 self.samples.append(
                     {
@@ -221,16 +269,13 @@ class GPUMonitor:
             self._stop.wait(0.25)
 
     def summary(self) -> dict[str, Any]:
-        active = [
-            sample for sample in self.samples if int(sample["utilization_percent"]) > 0
-        ]
+        active = [sample for sample in self.samples if int(sample["utilization_percent"]) > 0]
         return {
             "sample_count": len(self.samples),
-            "peak_vram_mib": max(
-                (int(sample["memory_mib"]) for sample in self.samples), default=0
-            ),
+            "peak_vram_mib": max((int(sample["memory_mib"]) for sample in self.samples), default=0),
             "peak_gpu_utilization_percent": max(
-                (int(sample["utilization_percent"]) for sample in self.samples), default=0
+                (int(sample["utilization_percent"]) for sample in self.samples),
+                default=0,
             ),
             "mean_active_gpu_utilization_percent": round(
                 sum(int(sample["utilization_percent"]) for sample in active) / max(1, len(active)),
@@ -271,7 +316,9 @@ def extract_json(text: str) -> Any:
     try:
         return json.loads(candidate)
     except json.JSONDecodeError:
-        starts = [position for position in (candidate.find("{"), candidate.find("[")) if position >= 0]
+        starts = [
+            position for position in (candidate.find("{"), candidate.find("[")) if position >= 0
+        ]
         if not starts:
             raise
         start = min(starts)
@@ -350,9 +397,11 @@ async def chat(
             "configured_timeout_seconds": round(timeout_seconds, 3),
         }
         generation_seconds = float(result["generation_seconds"])
-        result["tokens_per_second"] = round(
-            int(result["completion_tokens"]) / generation_seconds, 3
-        ) if generation_seconds else 0.0
+        result["tokens_per_second"] = (
+            round(int(result["completion_tokens"]) / generation_seconds, 3)
+            if generation_seconds
+            else 0.0
+        )
         return result
     except Exception as exc:
         return {
@@ -393,9 +442,7 @@ def retrieval_metrics(corpus: dict[str, Any], ranking: list[dict[str, Any]]) -> 
         "unique_documents": len(retrieved_set),
         "relevant_recall": round(len(retrieved_set & relevant) / max(1, len(relevant)), 4),
         "critical_recall": round(len(retrieved_set & critical) / max(1, len(critical)), 4),
-        "counter_evidence_recall": round(
-            len(retrieved_set & counter) / max(1, len(counter)), 4
-        ),
+        "counter_evidence_recall": round(len(retrieved_set & counter) / max(1, len(counter)), 4),
         "precision": round(len(retrieved_set & relevant) / max(1, len(retrieved_set)), 4),
         "first_relevant_rank": first_relevant_rank,
         "reciprocal_rank": round(1 / first_relevant_rank, 4) if first_relevant_rank else 0.0,
@@ -415,26 +462,48 @@ def documents_for_prompt(corpus: dict[str, Any], ranking: list[dict[str, Any]]) 
     return "\n\n".join(selected)
 
 
-def safe_plan(call: dict[str, Any], question: str) -> tuple[dict[str, Any], bool]:
+def safe_plan(call: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     try:
+        if call.get("status") not in (None, "ok"):
+            raise ValueError("Planning call failed")
         parsed = extract_json(str(call.get("content", "")))
         if not isinstance(parsed, dict):
-            raise ValueError("Plan is not an object")
-        queries = [
-            str(query).strip()
-            for query in parsed.get("queries", [])
-            if str(query).strip()
-        ][:10]
+            raise TypeError("Plan is not an object")
+        raw_queries = parsed.get("queries")
+        if not isinstance(raw_queries, list) or any(
+            not isinstance(query, str) for query in raw_queries
+        ):
+            raise TypeError("Queries must be a list of strings")
+        queries = list(dict.fromkeys(query.strip() for query in raw_queries if query.strip()))[:10]
         if not queries:
             raise ValueError("No queries")
+        if any(any(character in TURKISH_LETTERS for character in query) for query in queries):
+            raise ValueError("Queries must match the English corpus language")
         parsed["queries"] = queries
         return parsed, False
-    except Exception:
+    except (TypeError, ValueError) as exc:
+        # A failed plan is not a model-generated search strategy.  The former fallback
+        # searched the full Turkish question against English documents and credited
+        # incidental word matches (notably iş/is) as retrieval success.
         return {
-            "research_plan": ["Fallback retrieval using the complete research question"],
-            "queries": [question],
-            "risks": ["Planning response could not be parsed"],
+            "research_plan": [],
+            "queries": [],
+            "risks": [
+                f"Planning output unusable ({exc}); retrieval skipped and no evidence selected"
+            ],
         }, True
+
+
+def planning_user_prompt(question: str) -> str:
+    return (
+        f"ARAŞTIRMA SORUSU:\n{question}\n\n"
+        "Şu JSON nesnesini üret: research_plan (string listesi), queries (en fazla 10, "
+        "yalnız İNGİLİZCE arama sorgusu), risks (string listesi). Soru ve nihai rapor "
+        "Türkçe olabilir; dondurulmuş belge korpusu İngilizcedir. Türkçe sorgu ya da "
+        "Türkçe sorunun aynısını arama sorgusu olarak kullanma. Sorgular; kontrollü "
+        "çalışmaları, null/olumsuz bulguları, iş yoğunlaştırmayı, attrition/seçilimi ve "
+        "uzun dönem takibi bulabilmeli."
+    )
 
 
 def phase_summary(calls: list[dict[str, Any]]) -> dict[str, Any]:
@@ -446,9 +515,9 @@ def phase_summary(calls: list[dict[str, Any]]) -> dict[str, Any]:
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "generation_seconds": round(generation_seconds, 3),
-        "generation_tokens_per_second": round(
-            completion_tokens / generation_seconds, 3
-        ) if generation_seconds else 0.0,
+        "generation_tokens_per_second": round(completion_tokens / generation_seconds, 3)
+        if generation_seconds
+        else 0.0,
         "timeouts": sum(call.get("status") == "timeout" for call in calls),
         "errors": sum(call.get("status") == "error" for call in calls),
     }
@@ -475,24 +544,25 @@ async def run_model(
                     "Nedensellik, ölçüm, seçilim, karşı kanıt ve uzun dönem sorunlarını özellikle ara. "
                     "JSON dışında metin üretme."
                 ),
-                user=(
-                    f"ARAŞTIRMA SORUSU:\n{question}\n\n"
-                    "Şu JSON nesnesini üret: research_plan (string listesi), queries (en fazla 10, "
-                    "İngilizce veya Türkçe arama sorgusu), risks (string listesi). Sorgular; kontrollü "
-                    "çalışmaları, null/olumsuz bulguları, iş yoğunlaştırmayı, attrition/seçilimi ve "
-                    "uzun dönem takibi bulabilmeli."
-                ),
+                user=planning_user_prompt(question),
                 num_predict=profile.plan_tokens,
                 timeout_seconds=min(120.0, RESEARCH_BUDGET_SECONDS),
             )
             calls.append(plan_call)
-            plan, plan_parser_fallback = safe_plan(plan_call, question)
+            plan, plan_parser_fallback = safe_plan(plan_call)
             ranking, per_query_rankings = retrieve(corpus, plan["queries"])
             retrieved_documents = documents_for_prompt(corpus, ranking)
+            retrieval_status = (
+                "skipped_unusable_plan"
+                if plan_parser_fallback
+                else "matched"
+                if ranking
+                else "no_matches"
+            )
 
             remaining = RESEARCH_BUDGET_SECONDS - (time.perf_counter() - research_started)
             evidence_call: dict[str, Any] | None = None
-            if remaining >= 45:
+            if ranking and remaining >= 45:
                 evidence_call = await chat(
                     client,
                     ollama_url,
@@ -540,9 +610,7 @@ async def run_model(
                 )
                 calls.append(audit_call)
 
-            research_elapsed = min(
-                time.perf_counter() - research_started, RESEARCH_BUDGET_SECONDS
-            )
+            research_elapsed = min(time.perf_counter() - research_started, RESEARCH_BUDGET_SECONDS)
             placement_before_synthesis = ollama_ps()
             synthesis_started = time.perf_counter()
             synthesis_call = await chat(
@@ -553,11 +621,13 @@ async def run_model(
                 system=(
                     "Sen kanıta bağlı bir araştırma sentezleyicisisin. Yalnız sağlanan corpus belgelerini "
                     "ve analiz notlarını kullan. Kaynaklardan daha güçlü iddia kurma. Türkçe, açık ve "
-                    "denetlenebilir bir rapor yaz. Belge atıflarını [Dxx] biçiminde ver."
+                    "denetlenebilir bir rapor yaz. Belge atıflarını [Dxx] biçiminde ver. "
+                    "Belge getirilmediyse kanıt yokluğunu açıkça söyle; bulgu veya atıf uydurma."
                 ),
                 user=(
                     f"SORU:\n{question}\n\nPLAN:\n{json.dumps(plan, ensure_ascii=False)}\n\n"
-                    f"RETRIEVED DOCUMENTS:\n{retrieved_documents}\n\n"
+                    f"RETRIEVED DOCUMENTS:\n"
+                    f"{retrieved_documents or 'Hiç belge getirilemedi; bu testte kanıt yok.'}\n\n"
                     f"EVIDENCE ANALYSIS:\n{evidence_call['content'] if evidence_call else 'Yok'}\n\n"
                     f"ADVERSARIAL AUDIT:\n{audit_call['content'] if audit_call else 'Yok'}\n\n"
                     "Nihai raporda kısa hüküm, kanıt tablosu, nedensellik değerlendirmesi, refah ve "
@@ -580,6 +650,9 @@ async def run_model(
             "budget_exhausted": research_elapsed >= RESEARCH_BUDGET_SECONDS - 1,
             "plan": plan,
             "plan_parser_fallback": plan_parser_fallback,
+            "search_language": SEARCH_LANGUAGE,
+            "retrieval_contract_version": RETRIEVAL_CONTRACT_VERSION,
+            "retrieval_status": retrieval_status,
             "retrieval_ranking": ranking,
             "per_query_rankings": [
                 [{"document_id": row[0], "bm25_score": round(row[1], 6)} for row in rows]
@@ -603,9 +676,9 @@ def blind_payload(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "research_question": result["research_question"],
         "queries": result["research"]["plan"].get("queries", []),
-        "retrieved_document_ids": result["research"]["retrieval_metrics"][
-            "retrieved_document_ids"
-        ],
+        "retrieval_status": result["research"]["retrieval_status"],
+        "retrieval_contract_version": result["research"]["retrieval_contract_version"],
+        "retrieved_document_ids": result["research"]["retrieval_metrics"]["retrieved_document_ids"],
         "planning_output": result["research"]["calls"][0].get("content", ""),
         "evidence_output": next(
             (
@@ -643,8 +716,7 @@ async def main() -> None:
     args = parser.parse_args()
     corpus = json.loads(args.corpus.read_text(encoding="utf-8"))
     selected = [
-        profile for profile in PROFILES
-        if args.models is None or profile.key in set(args.models)
+        profile for profile in PROFILES if args.models is None or profile.key in set(args.models)
     ]
     args.output.mkdir(parents=True, exist_ok=True)
     unblinded = args.output / "unblinded"
@@ -683,6 +755,11 @@ async def main() -> None:
         "suite_version": corpus["version"],
         "generated_at": datetime.now(UTC).isoformat(),
         "protocol": "previous_reports/benchmarks/FIVE_MINUTE_MODEL_TEST_PROTOCOL.md",
+        "retrieval_addendum": (
+            "previous_reports/benchmarks/FIVE_MINUTE_MODEL_TEST_RETRIEVAL_V1_1.md"
+        ),
+        "retrieval_contract_version": RETRIEVAL_CONTRACT_VERSION,
+        "search_language": SEARCH_LANGUAGE,
         "research_budget_seconds_per_model": RESEARCH_BUDGET_SECONDS,
         "corpus_sha256": hashlib.sha256(args.corpus.read_bytes()).hexdigest(),
         "profiles": [asdict(profile) for profile in selected],

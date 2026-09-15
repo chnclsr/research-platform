@@ -2,12 +2,17 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.54`
+Belge sürümü: `6.55`
 
 Son güncelleme: `2026-09-15`
 
 ## Yayınlanmamış — 2026-09-15
 
+- Beş dakikalık model testi Türkçe kelimeleri Unicode token olarak korur; İngilizce
+  stopword eşleşmeleri konu kanıtı sayılmaz. Plan geçersizse Türkçe soruyla İngilizce
+  korpusta sahte fallback retrieval yapılmaz; sorgu dili İngilizceye sabitlenir ve yeni
+  retrieval sözleşmesi sonuçlara işlenir. Ayrıntılar:
+  `previous_reports/benchmarks/FIVE_MINUTE_MODEL_TEST_RETRIEVAL_V1_1.md`.
 - Telegram plan onayında üçüncü revizyon artık iptal edilmeden kullanıcıya sunulur; koşu
   yalnız bu son plan da reddedilirse kapatılır. Son iki karar noktasındaki uyarılar bu
   davranışı açıkça belirtir.
