@@ -121,6 +121,11 @@ EVENT_LABELS = {
 def event_severity(event_type: str, payload: dict[str, Any]) -> str:
     if "error" in event_type or payload.get("success") is False:
         return "error"
+    if event_type == "presentation_polish":
+        # The report is delivered either way; a deck the agent did not polish is worth a
+        # look, an agent that chose to change nothing is not.
+        kept = payload.get("status") != "polished" and payload.get("reason") != "agent-made-no-changes"
+        return "warning" if kept else "info"
     if ("degraded" in event_type or "fallback" in event_type
             or any(payload.get(key) for key in ("validation_warnings", "rejected", "invalid_evidence"))
             or (payload.get("audit") or {}).get("invalid_evidence")):

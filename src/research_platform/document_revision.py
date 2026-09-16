@@ -24,7 +24,7 @@ from .figure_analysis import FigureObservation, GeneratedResearchFigure
 from .formula_render import load_formula_displays
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
-from .presentation_polisher import polish_presentation
+from .presentation_polisher import polish_and_record
 from .presentation_report import build_presentation_report
 from .report_synthesis import (
     StudyProfile,
@@ -823,15 +823,17 @@ class DocumentRevisionService:
             ]
         if render_both or "pptx" in changed_scopes:
             presentation = build_presentation_report(**common)
-            pptx_data = presentation.document
-            rev_settings = self.settings or get_settings()
-            if getattr(rev_settings, "presentation_polisher_enabled", False):
-                pptx_data = await polish_presentation(
-                    pptx_bytes=pptx_data,
-                    run_id=revision.run_id,
-                    language=protocol.report_language,
-                    settings=rev_settings,
-                )
+            # A re-rendered deck is the builder's again; without this, every revision
+            # would silently undo the agent's edits.
+            pptx_data = await polish_and_record(
+                self.repo,
+                revision.run_id,
+                presentation.document,
+                language=protocol.report_language,
+                settings=self.settings or get_settings(),
+                stage="revision",
+                revision_id=revision.id,
+            )
         else:
             pptx_data = await self.store.get(pptx_parent.object_key)
         docx_data, pptx_data = _apply_format_overrides(

@@ -6,11 +6,13 @@ import httpx
 import pytest
 from conftest import acting_principal
 from docx import Document
+from pptx import Presentation
 
 from research_platform.config import get_settings
 from research_platform.db import SessionLocal, create_schema
-from research_platform.exporter import build_exports, word_report_name
+from research_platform.exporter import build_exports, presentation_report_name, word_report_name
 from research_platform.pipeline import ResearchPipeline
+from research_platform.presentation_polisher import PolishResult
 from research_platform.report_titles import clean_report_titles
 from research_platform.repository import Repository
 from research_platform.schemas import CoverageMetrics, ResearchProtocol
@@ -128,3 +130,39 @@ async def test_export_uses_display_title_in_word_and_markdown(language):
         assert TITLES[language] in paragraphs
         assert protocol.title not in paragraphs
         assert any(QUESTION in paragraph for paragraph in paragraphs)
+
+
+@pytest.mark.asyncio
+async def test_export_delivers_the_polished_deck_and_records_the_attempt(monkeypatch):
+    await create_schema()
+    protocol = ResearchProtocol(
+        title="Polished deck", primary_question=QUESTION, report_titles=TITLES,
+        label="ai_lung_ct", budget={"max_wall_minutes": 30},
+    )
+    polished_deck = io.BytesIO()
+    Presentation().save(polished_deck)
+    settings = get_settings().model_copy(
+        update={"presentation_polisher_enabled": True, "presentation_polisher_token": "t"}
+    )
+    monkeypatch.setattr("research_platform.exporter.get_settings", lambda: settings)
+
+    async def polisher(pptx_bytes, run_id=None, language="tr", settings=None):
+        assert settings.presentation_polisher_enabled
+        return PolishResult(
+            data=polished_deck.getvalue(), status="polished", reason="agy-SUCCESS",
+            agy_status="SUCCESS", duration_s=412.5, turns=31,
+        )
+
+    monkeypatch.setattr("research_platform.presentation_polisher.polish_presentation", polisher)
+    store = ObjectStore(get_settings())
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        row = await repo.create_run(protocol)
+        await build_exports(row.id, protocol, CoverageMetrics(), repo, store, NamingLLM())
+        deck = await store.get(f"runs/{row.id}/{presentation_report_name(protocol.label)}")
+        events = await repo.events_by_types(row.id, {"presentation_polish"})
+
+    assert deck == polished_deck.getvalue()
+    assert [(e.payload["stage"], e.payload["status"], e.payload["turns"]) for e in events] == [
+        ("export", "polished", 31)
+    ]

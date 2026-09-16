@@ -37,6 +37,13 @@ if grep -qE '^TELEGRAM_BOT_TOKEN=.+' .env; then
   tamam "telegram-bot baslatildi"
 fi
 
+if grep -qiE '^PRESENTATION_POLISHER_ENABLED=(true|1)$' .env; then
+  bilgi "Presentation Polisher"
+  # Imajlar her calismada yeniden derleniyor; host servisi de yeni kod ve .env ile kalksin.
+  bash scripts/linux/start_presentation_polisher.sh --restart
+  tamam "presentation-polisher baslatildi"
+fi
+
 bilgi "SearXNG"
 if docker compose -f scripts/linux/searxng/docker-compose.searxng.yml ps --quiet 2>/dev/null | grep -q .; then
   tamam "zaten calisiyor"
@@ -69,6 +76,9 @@ bekle "Research API"   "http://127.0.0.1:8000/health"  30 || DURUM=1
 bekle "MCP gateway"    "http://127.0.0.1:8010/health"  30 || DURUM=1
 bekle "Docling"        "http://127.0.0.1:3941/health"  60 || DURUM=1
 bekle "Ollama"         "http://127.0.0.1:11434/api/tags" 10 || DURUM=1
+if grep -qiE '^PRESENTATION_POLISHER_ENABLED=(true|1)$' .env; then
+  bekle "Presentation Polisher" "http://127.0.0.1:3942/health" 20 || DURUM=1
+fi
 PANEL_PORT="$(grep -E '^CONTROL_PANEL_PORT=' .env | cut -d= -f2 | tr -d '[:space:]')"
 bekle "Kontrol paneli" "http://127.0.0.1:${PANEL_PORT:-1111}/health" 20 || DURUM=1
 

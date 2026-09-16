@@ -236,8 +236,15 @@ if (-not $SkipPanel) {
 
 if (Select-String -Path "$root\.env" -Pattern '^PRESENTATION_POLISHER_ENABLED=(true|1)' -Quiet) {
     Bilgi "Presentation Polisher"
-    & "$PSScriptRoot\start_presentation_polisher.ps1"
-    if ($LASTEXITCODE -eq 0) { Tamam "polisher ayakta" } else { Hata "polisher baslatilamadi"; $durum = 1 }
+    try {
+        # Servis imajda degil, calisma agacindan calisir; ayakta kalan surec eski kodu ve
+        # eski .env ayarlarini kullanmaya devam eder. -Build bir canliya alma demek.
+        & "$PSScriptRoot\start_presentation_polisher.ps1" -Restart:$Build
+        Tamam "polisher ayakta"
+    } catch {
+        Hata "polisher baslatilamadi: $($_.Exception.Message)"
+        $durum = 1
+    }
 }
 
 # ------------------------------------------------------------------ saglik kontrolu

@@ -1,8 +1,11 @@
-"""Tests for presentation polisher client and service logic."""
+"""Tests for the presentation polisher: the agent has full authority, delivery never fails."""
 
 from __future__ import annotations
 
+import asyncio
 import io
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -11,164 +14,564 @@ import pytest
 from pptx.util import Inches
 
 from research_platform.config import Settings
-from research_platform.presentation_polisher import polish_presentation
-from scripts.presentation_polisher_service import (
-    BulletItem,
-    PolishedSlideResult,
-    SlidePolishItem,
-    apply_polished_content,
-    extract_polishable_slides,
-    fallback_polish_item,
+from research_platform.diagnostics import event_severity
+from research_platform.presentation_polisher import (
+    POLISH_EVENT,
+    PolishResult,
+    polish_and_record,
+    polish_presentation,
 )
+from scripts import presentation_polisher_render as render_helper
+from scripts import presentation_polisher_service as service
+
+PPTX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+TOKEN = "test-polisher-token"
 
 
-def _build_test_deck() -> bytes:
+def _deck(text: str = "Özgün başlık [S01]") -> bytes:
     prs = pptx.Presentation()
-    prs.slide_width = Inches(13.33)
-    prs.slide_height = Inches(7.5)
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
-
-    # Heading shape
-    h_shape = slide.shapes.add_textbox(Inches(1), Inches(0.5), Inches(8), Inches(1))
-    h_shape.name = "content_heading"
-    h_shape.text_frame.text = "BT taramalarından rapor oluşturmak için derin öğrenme modelleri nelerdir?"
-
-    # Body shape
-    b_shape = slide.shapes.add_textbox(Inches(1), Inches(2), Inches(8), Inches(4))
-    b_shape.name = "sections[].synthesis"
-    b_shape.text_frame.text = (
-        "Vision Transformers ve multimodal mimariler 2D ve 3D görüntülerden metin sentezinde öncü sistemlerdir [S1]. "
-        "Büyük ölçekli veri setleri ile klinik doğruluk desteklenmektedir [S2]."
-    )
-
-    buf = io.BytesIO()
-    prs.save(buf)
-    return buf.getvalue()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+    box.text_frame.text = text
+    buffer = io.BytesIO()
+    prs.save(buffer)
+    return buffer.getvalue()
 
 
-@pytest.mark.asyncio
-async def test_polish_presentation_disabled():
-    data = b"dummy_pptx_data"
-    settings = Settings(presentation_polisher_enabled=False)
-    result = await polish_presentation(data, run_id="test_run", settings=settings)
-    assert result == data
-
-
-@pytest.mark.asyncio
-async def test_polish_presentation_unreachable_fallback():
-    data = b"dummy_pptx_data"
-    settings = Settings(
-        presentation_polisher_enabled=True,
-        presentation_polisher_url="http://127.0.0.1:59999",  # non-existent port
-        presentation_polisher_timeout_s=2.0,
-    )
-    result = await polish_presentation(data, run_id="test_run", settings=settings)
-    assert result == data
-
-
-@pytest.mark.asyncio
-async def test_polish_presentation_success():
-    raw_data = b"raw_pptx_content"
-    polished_data = b"polished_pptx_content"
-    settings = Settings(
-        presentation_polisher_enabled=True,
-        presentation_polisher_url="http://127.0.0.1:3942",
-    )
-
-    mock_resp = httpx.Response(200, content=polished_data)
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.return_value = mock_resp
-        result = await polish_presentation(raw_data, run_id="test_run", settings=settings)
-        assert result == polished_data
-        mock_post.assert_called_once()
-
-
-def test_extract_and_apply_polish():
-    deck_bytes = _build_test_deck()
-    prs = pptx.Presentation(io.BytesIO(deck_bytes))
-
-    # 1. Extraction
-    items = extract_polishable_slides(prs)
-    assert len(items) == 1
-    item = items[0]
-    assert item.slide_number == 1
-    assert item.heading_shape_name == "content_heading"
-    assert "derin öğrenme" in (item.heading_text or "")
-    assert item.body_shape_name == "sections[].synthesis"
-    assert "[S1]" in item.citations and "[S2]" in item.citations
-
-    # 2. Results to apply
-    results = {
-        1: PolishedSlideResult(
-            new_heading="3.1 Derin Öğrenme Mimarileri",
-            bullets=[
-                BulletItem(prefix="• Öncü Mimariler:", text="Vision Transformers ve multimodal sistemler [S1]."),
-                BulletItem(prefix="• Veri Kümeleri:", text="Büyük veri setleri klinik doğruluğu artırmaktadır [S2]."),
-            ],
-        )
+def _settings(**overrides) -> Settings:
+    values = {
+        "presentation_polisher_enabled": True,
+        "presentation_polisher_url": "http://127.0.0.1:3942",
+        "presentation_polisher_timeout_s": 2.0,
+        "presentation_polisher_token": TOKEN,
     }
-
-    # 3. Application
-    apply_polished_content(prs, items, results)
-
-    # Verify heading was updated
-    slide = prs.slides[0]
-    h_shape = next(s for s in slide.shapes if s.name == "content_heading")
-    assert h_shape.text_frame.text == "3.1 Derin Öğrenme Mimarileri"
-    assert h_shape.text_frame.paragraphs[0].runs[0].font.bold is True
-
-    # Verify body paragraphs and bullets
-    b_shape = next(s for s in slide.shapes if s.name == "sections[].synthesis")
-    paragraphs = b_shape.text_frame.paragraphs
-    assert len(paragraphs) == 2
-    assert "• Öncü Mimariler:" in paragraphs[0].text
-    assert "[S1]" in paragraphs[0].text
-    assert "• Veri Kümeleri:" in paragraphs[1].text
-    assert "[S2]" in paragraphs[1].text
+    values.update(overrides)
+    return Settings(**values)
 
 
-def test_fallback_polish_item():
-    item = SlidePolishItem(
-        slide_index=0,
-        slide_number=1,
-        heading_shape_name="heading",
-        heading_text="Bu çok uzun bir araştırma sorusu başlığıdır ve kısaltılması gerekmektedir (devam)",
-        body_shape_name="synthesis",
-        body_text="İlk cümle önemli bulguyu anlatır [S1]. İkinci cümle klinik analizi içerir [S2].",
-        citations=["[S1]", "[S2]"],
+def _reply(status: str, reason: str, content: bytes, **headers: str) -> httpx.Response:
+    return httpx.Response(
+        200,
+        content=content,
+        headers={
+            "Content-Type": PPTX_MEDIA_TYPE,
+            "X-Presentation-Polisher-Status": status,
+            "X-Presentation-Polisher-Reason": reason,
+            **headers,
+        },
     )
 
-    res = fallback_polish_item(item)
-    assert res.new_heading is not None
-    assert "(devam)" in res.new_heading
-    assert len(res.bullets) >= 2
-    assert "[S1]" in res.bullets[0].text
-    assert "[S2]" in res.bullets[1].text
+
+class RecordingRepo:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict]] = []
+
+    async def event(self, run_id: str, event_type: str, payload: dict | None = None) -> int:
+        self.events.append((run_id, event_type, payload or {}))
+        return len(self.events)
 
 
-def test_service_health_and_polish_endpoint():
+# --------------------------------------------------------------------------- client
+
+
+@pytest.mark.asyncio
+async def test_disabled_polisher_is_skipped_without_network():
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        result = await polish_presentation(
+            b"original", settings=Settings(presentation_polisher_enabled=False)
+        )
+    assert result == PolishResult(data=b"original", status="skipped", reason="disabled")
+    post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_shared_service_token_is_not_a_fallback():
+    settings = _settings(presentation_polisher_token="", service_token="shared-token")
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        result = await polish_presentation(b"original", settings=settings)
+    assert (result.data, result.status, result.reason) == (b"original", "skipped", "no-token")
+    post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unreachable_and_slow_services_keep_the_original():
+    data = _deck()
+    unreachable = await polish_presentation(
+        data, settings=_settings(presentation_polisher_url="http://127.0.0.1:59999")
+    )
+    assert unreachable.data == data
+    assert unreachable.status == "failed"
+    assert unreachable.reason.startswith("unreachable:")
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.side_effect = httpx.ReadTimeout("slow agent")
+        slow = await polish_presentation(data, settings=_settings())
+    assert (slow.data, slow.status, slow.reason) == (data, "failed", "timeout")
+
+
+@pytest.mark.asyncio
+async def test_polished_deck_and_its_details_are_returned():
+    original, polished = _deck(), _deck("Ajanın sunumu")
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = _reply(
+            "polished",
+            "agy-SUCCESS",
+            polished,
+            **{
+                "X-Presentation-Polisher-Agy-Status": "SUCCESS",
+                "X-Presentation-Polisher-Duration-S": "412.5",
+                "X-Presentation-Polisher-Turns": "31",
+            },
+        )
+        result = await polish_presentation(original, run_id="run-1", settings=_settings())
+
+    assert result == PolishResult(
+        data=polished,
+        status="polished",
+        reason="agy-SUCCESS",
+        agy_status="SUCCESS",
+        duration_s=412.5,
+        turns=31,
+    )
+    assert post.await_args.kwargs["headers"]["Authorization"] == f"Bearer {TOKEN}"
+    assert post.await_args.kwargs["params"] == {"language": "tr", "run_id": "run-1"}
+
+
+@pytest.mark.asyncio
+async def test_service_decision_to_keep_the_original_is_passed_on():
+    original = _deck()
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = _reply("unchanged", "timeout-no-output", original)
+        result = await polish_presentation(original, settings=_settings())
+    assert (result.data, result.status, result.reason) == (original, "unchanged", "timeout-no-output")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("response", "reason"),
+    [
+        (httpx.Response(503, json={"detail": "agy and LibreOffice are required"}), "http-503"),
+        (
+            httpx.Response(
+                200,
+                content=b"ok",
+                headers={"Content-Type": "text/html", "X-Presentation-Polisher-Status": "polished"},
+            ),
+            "invalid-response",
+        ),
+        (_reply("polished", "agy-SUCCESS", b"not-pptx"), "invalid-response"),
+        (httpx.Response(200, content=b"x", headers={"Content-Type": PPTX_MEDIA_TYPE}), "invalid-response"),
+    ],
+)
+async def test_untrusted_responses_keep_the_original(response, reason):
+    original = _deck()
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = response
+        result = await polish_presentation(original, settings=_settings())
+    assert (result.data, result.status, result.reason) == (original, "failed", reason)
+
+
+@pytest.mark.asyncio
+async def test_every_attempt_is_recorded_on_the_run():
+    repo = RecordingRepo()
+    original, polished = _deck(), _deck("Ajanın sunumu")
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = _reply("polished", "timeout-partial", polished)
+        delivered = await polish_and_record(
+            repo, "run-1", original, language="tr", settings=_settings(), stage="export"
+        )
+        post.side_effect = httpx.ConnectError("refused")
+        kept = await polish_and_record(
+            repo,
+            "run-1",
+            original,
+            language="tr",
+            settings=_settings(),
+            stage="revision",
+            revision_id="rev-2",
+        )
+
+    assert delivered == polished
+    assert kept == original
+    assert [(run, kind) for run, kind, _ in repo.events] == [("run-1", POLISH_EVENT)] * 2
+    first, second = (payload for _, _, payload in repo.events)
+    assert first["stage"] == "export"
+    assert (first["status"], first["reason"]) == ("polished", "timeout-partial")
+    assert (first["original_bytes"], first["output_bytes"]) == (len(original), len(polished))
+    assert "revision_id" not in first
+    assert (second["stage"], second["status"], second["revision_id"]) == ("revision", "failed", "rev-2")
+    assert second["reason"] == "unreachable:ConnectError"
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_recorded_while_the_feature_is_off():
+    repo = RecordingRepo()
+    delivered = await polish_and_record(
+        repo,
+        "run-1",
+        b"deck",
+        language="tr",
+        settings=Settings(presentation_polisher_enabled=False),
+        stage="export",
+    )
+    assert delivered == b"deck"
+    assert repo.events == []
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "severity"),
+    [
+        ("polished", "agy-SUCCESS", "info"),
+        ("unchanged", "agent-made-no-changes", "info"),
+        ("unchanged", "timeout-no-output", "warning"),
+        ("failed", "unreachable:ConnectError", "warning"),
+        ("skipped", "no-token", "warning"),
+    ],
+)
+def test_a_deck_that_was_not_polished_is_a_warning(status, reason, severity):
+    assert event_severity(POLISH_EVENT, {"status": status, "reason": reason}) == severity
+
+
+# --------------------------------------------------------------------------- service
+
+
+def test_agent_environment_withholds_secrets_and_puts_the_service_python_first(monkeypatch):
+    monkeypatch.setenv("SERVICE_TOKEN", "secret")
+    monkeypatch.setenv("PRESENTATION_POLISHER_TOKEN", "secret")
+    monkeypatch.setenv("DATABASE_URL", "secret")
+    monkeypatch.setenv("PATH", "safe-path")
+    environment = service._agent_environment("C:/LibreOffice/soffice.exe")
+    path_key = next(name for name in environment if name.upper() == "PATH")
+    assert environment[path_key].split(service.os.pathsep) == [
+        str(Path(sys.executable).parent),
+        "safe-path",
+    ]
+    assert environment["PRESENTATION_POLISHER_SOFFICE"] == "C:/LibreOffice/soffice.exe"
+    assert "SERVICE_TOKEN" not in environment
+    assert "PRESENTATION_POLISHER_TOKEN" not in environment
+    assert "DATABASE_URL" not in environment
+
+
+@pytest.mark.parametrize("sandbox", [True, False])
+def test_agy_gets_full_authority_and_the_prompt_last(monkeypatch, sandbox):
+    monkeypatch.setattr(service, "AGY_SANDBOX", sandbox)
+    monkeypatch.setattr(service, "AGY_MODEL", "gemini-test")
+    command = service.agy_command("agy", "istem", 600.0)
+    assert command[0] == "agy"
+    assert "--dangerously-skip-permissions" in command
+    assert command[command.index("--output-format") + 1] == "json"
+    assert command[command.index("--print-timeout") + 1] == "600s"
+    assert command[command.index("--model") + 1] == "gemini-test"
+    assert ("--sandbox" in command) is sandbox
+    assert "--mode" not in command
+    assert command[-2:] == ["-p", "istem"]
+
+
+def test_prompt_is_read_on_every_request_and_carries_the_contract(monkeypatch, tmp_path):
+    prompt_file = tmp_path / "istem.md"
+    prompt_file.write_text("Sunumu daha etkileyici yap.", encoding="utf-8")
+    monkeypatch.setattr(service, "PROMPT_FILE", prompt_file)
+
+    prompt = service.build_prompt("tr", 600.0)
+    assert prompt.startswith("Sunumu daha etkileyici yap.")
+    for expected in ("sunum.pptx", "cilali.pptx", "cilali.tmp.pptx", "python render.py", "10 dakika", "Türkçe (tr)"):
+        assert expected in prompt
+    assert "[S" not in prompt  # citations are the agent's call, not a rule
+
+    prompt_file.write_text("Yeni istem.", encoding="utf-8")
+    assert service.build_prompt("en", 300.0).startswith("Yeni istem.")
+    assert "English (en)" in service.build_prompt("en", 300.0)
+
+    monkeypatch.setattr(service, "_MAX_PROMPT_CHARS", 50)
+    with pytest.raises(service.PromptError, match="prompt-too-long"):
+        service.build_prompt("tr", 600.0)
+
+    monkeypatch.setattr(service, "PROMPT_FILE", tmp_path / "missing.md")
+    with pytest.raises(service.PromptError, match="prompt-missing"):
+        service.build_prompt("tr", 600.0)
+
+
+def test_envelope_survives_a_log_line_before_it():
+    text = 'warming up\n{"status": "SUCCESS", "num_turns": 4, "response": "ok"}\n'
+    assert service._parse_envelope(text)["num_turns"] == 4
+    assert service._parse_envelope("not json") == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("run", "expected"),
+    [
+        (service.AgentRun(stop_reason="timeout"), "timeout-no-output"),
+        (service.AgentRun(stop_reason="agy-auth-required"), "agy-auth-required"),
+        (service.AgentRun(status="ERROR", exit_code=1), "agy-error:ERROR"),
+        (service.AgentRun(exit_code=3), "agy-exit:3"),
+        (service.AgentRun(status="SUCCESS", exit_code=0), "no-output"),
+    ],
+)
+async def test_missing_output_keeps_the_original_with_a_reason(tmp_path, run, expected):
+    original = _deck()
+    assert await service.judge_output(tmp_path, original, run, "soffice") == (
+        original,
+        "unchanged",
+        expected,
+    )
+
+
+@pytest.mark.asyncio
+async def test_whatever_opens_and_renders_is_delivered(tmp_path, monkeypatch):
+    original = _deck()
+    # No citation left at all: the agent is allowed to drop them.
+    rewritten = _deck("Kısa ve atıfsız bir başlık")
+    render = AsyncMock(return_value=True)
+    monkeypatch.setattr(service, "validate_with_soffice", render)
+    (tmp_path / service.OUTPUT_NAME).write_bytes(rewritten)
+
+    finished = service.AgentRun(status="SUCCESS", exit_code=0)
+    assert await service.judge_output(tmp_path, original, finished, "soffice") == (
+        rewritten,
+        "polished",
+        "agy-SUCCESS",
+    )
+    assert render.await_args.kwargs["expected_pages"] == 1
+
+    # Saved before the time ran out: still the agent's deck.
+    stopped = service.AgentRun(stop_reason="timeout")
+    assert await service.judge_output(tmp_path, original, stopped, "soffice") == (
+        rewritten,
+        "polished",
+        "timeout-partial",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("output", "renders", "expected"),
+    [
+        ("same", True, "agent-made-no-changes"),
+        (b"half-written", True, "invalid-pptx"),
+        (None, False, "render-failed"),
+    ],
+)
+async def test_output_that_is_not_a_usable_deck_is_rejected(tmp_path, monkeypatch, output, renders, expected):
+    original = _deck()
+    data = original if output == "same" else output or _deck("Çizilemeyen sunum")
+    (tmp_path / service.OUTPUT_NAME).write_bytes(data)
+    monkeypatch.setattr(service, "validate_with_soffice", AsyncMock(return_value=renders))
+    monkeypatch.setattr(service, "MAX_REQUEST_BYTES", 10 * 1024 * 1024)
+    result = await service.judge_output(
+        tmp_path, original, service.AgentRun(status="SUCCESS", exit_code=0), "soffice"
+    )
+    assert result == (original, "unchanged", expected)
+
+
+async def _never_disconnected() -> bool:
+    return False
+
+
+async def _run_fake_agent(tmp_path, code: str, **kwargs) -> service.AgentRun:
+    options = {"timeout_s": 30.0, "is_disconnected": _never_disconnected, **kwargs}
+    return await service.run_agent(
+        [sys.executable, "-c", code],
+        workdir=tmp_path,
+        env=service._agent_environment(),
+        **options,
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_envelope_is_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "_POLL_S", 0.05)
+    run = await _run_fake_agent(
+        tmp_path,
+        "import json; print('log'); "
+        "print(json.dumps({'status': 'SUCCESS', 'num_turns': 7, 'response': 'Başlıklar kısaldı.'}))",
+    )
+    assert (run.status, run.turns, run.exit_code, run.stop_reason) == ("SUCCESS", 7, 0, "")
+    assert run.summary == "Başlıklar kısaldı."
+
+
+@pytest.mark.asyncio
+async def test_login_prompt_stops_the_agent_at_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "_POLL_S", 0.05)
+    run = await _run_fake_agent(
+        tmp_path,
+        "import sys, time; "
+        "print('Authentication required. Please visit the URL to log in:', file=sys.stderr, flush=True); "
+        "time.sleep(60)",
+    )
+    assert run.stop_reason == "agy-auth-required"
+    assert run.exit_code is not None
+    assert run.duration_s < 20
+
+
+@pytest.mark.asyncio
+async def test_time_limit_and_hang_up_stop_the_agent(tmp_path, monkeypatch):
+    monkeypatch.setattr(service, "_POLL_S", 0.05)
+    monkeypatch.setattr(service, "_AGENT_KILL_GRACE_S", 0.0)
+    sleeper = "import time; time.sleep(60)"
+
+    timed_out = await _run_fake_agent(tmp_path, sleeper, timeout_s=0.3)
+    assert timed_out.stop_reason == "timeout"
+    assert timed_out.exit_code is not None
+    assert timed_out.duration_s < 20
+
+    async def gone() -> bool:
+        return True
+
+    hung_up = await _run_fake_agent(tmp_path, sleeper, is_disconnected=gone)
+    assert hung_up.stop_reason == "client-disconnected"
+    assert hung_up.exit_code is not None
+
+
+@pytest.mark.asyncio
+async def test_stop_process_terminates_and_reaps_child():
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        "import time; time.sleep(60)",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await service._stop_process(proc)
+    assert proc.returncode is not None
+
+
+def test_render_helper_reports_missing_inputs(tmp_path, monkeypatch):
+    assert render_helper.main([str(tmp_path / "missing.pptx")]) == 2
+    deck = tmp_path / "cilali.pptx"
+    deck.write_bytes(_deck())
+    monkeypatch.setattr(render_helper, "find_soffice", lambda: None)
+    assert render_helper.main([str(deck), "--out", str(tmp_path / "render")]) == 1
+
+
+# --------------------------------------------------------------------------- endpoint
+
+
+@pytest.fixture
+def endpoint(monkeypatch, tmp_path):
     from starlette.testclient import TestClient
 
-    from scripts.presentation_polisher_service import app
+    prompt_file = tmp_path / "istem.md"
+    prompt_file.write_text("Sunumu toparla.", encoding="utf-8")
+    monkeypatch.setenv("PRESENTATION_POLISHER_TOKEN", TOKEN)
+    monkeypatch.setattr(service, "PROMPT_FILE", prompt_file)
+    monkeypatch.setattr(service, "AGY_TIMEOUT_S", 600.0)
+    monkeypatch.setattr(service, "REQUEST_BUDGET_S", 780.0)
+    monkeypatch.setattr(service, "find_agy_binary", lambda: "agy")
+    monkeypatch.setattr(service, "find_soffice_binary", lambda: "soffice")
+    monkeypatch.setattr(service, "validate_with_soffice", AsyncMock(return_value=True))
 
-    client = TestClient(app)
-    health_resp = client.get("/health")
-    assert health_resp.status_code == 200
-    data = health_resp.json()
-    assert data["status"] == "ok"
-    assert data["service"] == "presentation-polisher"
+    async def no_agent(*args, **kwargs):
+        raise AssertionError("the agent must not be started")
 
-    deck_bytes = _build_test_deck()
-    polish_resp = client.post(
+    monkeypatch.setattr(service, "run_agent", no_agent)
+    return TestClient(service.app)
+
+
+def _post(client, content: bytes, token: str = TOKEN):
+    return client.post(
         "/polish",
-        content=deck_bytes,
-        headers={"Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
-        params={"language": "tr", "run_id": "test_service_run"},
+        content=content,
+        headers={"Content-Type": PPTX_MEDIA_TYPE, "Authorization": f"Bearer {token}"},
+        params={"language": "tr", "run_id": "run-1"},
     )
-    assert polish_resp.status_code == 200
-    assert len(polish_resp.content) > 0
 
-    # Verify that the returned bytes are a valid pptx
-    prs = pptx.Presentation(io.BytesIO(polish_resp.content))
-    assert len(prs.slides) == 1
 
+def test_endpoint_delivers_the_agents_deck(endpoint, monkeypatch):
+    original, rewritten = _deck(), _deck("Ajanın sunumu")
+    seen: dict = {}
+
+    async def agent(command, *, workdir, env, timeout_s, is_disconnected):
+        seen.update(
+            command=command,
+            files=sorted(path.name for path in workdir.iterdir()),
+            input=(workdir / service.INPUT_NAME).read_bytes(),
+            timeout=timeout_s,
+        )
+        (workdir / service.OUTPUT_NAME).write_bytes(rewritten)
+        return service.AgentRun(status="SUCCESS", exit_code=0, duration_s=412.5, turns=31)
+
+    monkeypatch.setattr(service, "run_agent", agent)
+    response = _post(endpoint, original)
+
+    assert response.status_code == 200
+    assert response.content == rewritten
+    assert response.headers["X-Presentation-Polisher-Status"] == "polished"
+    assert response.headers["X-Presentation-Polisher-Reason"] == "agy-SUCCESS"
+    assert response.headers["X-Presentation-Polisher-Agy-Status"] == "SUCCESS"
+    assert response.headers["X-Presentation-Polisher-Duration-S"] == "412.5"
+    assert response.headers["X-Presentation-Polisher-Turns"] == "31"
+    assert seen["files"] == ["render", "render.py", "sunum.pptx"]
+    assert seen["input"] == original
+    assert seen["timeout"] == pytest.approx(600.0)
+    assert seen["command"][-2] == "-p"
+    assert seen["command"][-1].startswith("Sunumu toparla.")
+    assert "cilali.pptx" in seen["command"][-1]
+
+
+def test_endpoint_answers_with_the_original_when_the_agent_saves_nothing(endpoint, monkeypatch):
+    original = _deck()
+
+    async def agent(command, **kwargs):
+        return service.AgentRun(stop_reason="timeout", duration_s=630.0)
+
+    monkeypatch.setattr(service, "run_agent", agent)
+    response = _post(endpoint, original)
+    assert response.status_code == 200
+    assert response.content == original
+    assert response.headers["X-Presentation-Polisher-Status"] == "unchanged"
+    assert response.headers["X-Presentation-Polisher-Reason"] == "timeout-no-output"
+
+
+def test_a_long_queue_wait_skips_the_agent(endpoint, monkeypatch):
+    monkeypatch.setattr(service, "REQUEST_BUDGET_S", 100.0)
+    original = _deck()
+    response = _post(endpoint, original)
+    assert response.status_code == 200
+    assert response.content == original
+    assert response.headers["X-Presentation-Polisher-Reason"] == "busy"
+
+
+def test_a_missing_prompt_file_skips_the_agent(endpoint, monkeypatch, tmp_path):
+    monkeypatch.setattr(service, "PROMPT_FILE", tmp_path / "missing.md")
+    response = _post(endpoint, _deck())
+    assert response.status_code == 200
+    assert response.headers["X-Presentation-Polisher-Status"] == "unchanged"
+    assert response.headers["X-Presentation-Polisher-Reason"] == "prompt-missing"
+
+
+def test_endpoint_rejects_bad_requests(endpoint, monkeypatch):
+    unauthorized = endpoint.post(
+        "/polish", content=_deck(), headers={"Content-Type": PPTX_MEDIA_TYPE}
+    )
+    assert unauthorized.status_code == 401
+    assert _post(endpoint, _deck(), token="wrong").status_code == 401
+    assert _post(endpoint, b"not a presentation").status_code == 400
+
+    monkeypatch.setattr(service, "MAX_REQUEST_BYTES", 4)
+    assert _post(endpoint, b"12345").status_code == 413
+
+
+def test_shared_service_token_does_not_open_the_service(endpoint, monkeypatch):
+    monkeypatch.delenv("PRESENTATION_POLISHER_TOKEN")
+    monkeypatch.setenv("SERVICE_TOKEN", TOKEN)
+    assert _post(endpoint, _deck()).status_code == 503
+    health = endpoint.get("/health")
+    assert health.status_code == 503
+    assert health.json()["authentication"] is False
+
+
+def test_health_reports_readiness(endpoint, monkeypatch):
+    ready = endpoint.get("/health")
+    assert ready.status_code == 200
+    body = ready.json()
+    assert body["status"] == "ok"
+    assert body["prompt"] is True and body["render_helper"] is True
+    assert body["agent_timeout_s"] == 600.0
+    assert "agy_path" not in body
+
+    monkeypatch.setattr(service, "find_agy_binary", lambda: None)
+    monkeypatch.setattr(service, "find_soffice_binary", lambda: None)
+    degraded = endpoint.get("/health")
+    assert degraded.status_code == 503
+    assert degraded.json()["status"] == "degraded"

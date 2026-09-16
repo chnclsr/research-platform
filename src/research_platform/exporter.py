@@ -19,7 +19,7 @@ from .figure_analysis import FigurePipelineResult, analyze_run_figures
 from .formula_render import load_formula_displays, markdown_formulas
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
-from .presentation_polisher import polish_presentation
+from .presentation_polisher import polish_and_record
 from .presentation_report import PRESENTATION_REPORT_FALLBACK, build_presentation_report
 from .report_synthesis import SynthesisPackage, build_synthesis_package
 from .repository import Repository
@@ -976,24 +976,14 @@ async def build_exports(
         research_figures=figure_result.generated_figures,
         figures=word_report.figures,
     )
-    pptx_document = presentation_report.document
-    settings = get_settings()
-    if settings.presentation_polisher_enabled:
-        pptx_document = await polish_presentation(
-            pptx_bytes=pptx_document,
-            run_id=run_id,
-            language=protocol.report_language,
-            settings=settings,
-        )
-        if pptx_document != presentation_report.document:
-            await repo.event(
-                run_id,
-                "presentation_polished",
-                {
-                    "original_bytes": len(presentation_report.document),
-                    "polished_bytes": len(pptx_document),
-                },
-            )
+    pptx_document = await polish_and_record(
+        repo,
+        run_id,
+        presentation_report.document,
+        language=protocol.report_language,
+        settings=get_settings(),
+        stage="export",
+    )
     files[presentation_report_name(protocol.label)] = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         pptx_document,

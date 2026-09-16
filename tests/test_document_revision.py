@@ -27,6 +27,7 @@ from research_platform.document_revision import (
     office_format_context,
     report_model_from_manifest,
 )
+from research_platform.presentation_polisher import PolishResult
 from research_platform.queueing import revision_job_id_for
 from research_platform.repository import Repository, RevisionConflict
 from research_platform.schemas import ResearchProtocol, RevisionPlan, RevisionStatus, RunStatus
@@ -399,9 +400,8 @@ async def test_worker_restart_recovers_an_interrupted_revision_job():
     assert revision_job_id_for(draft.id) in redis.queue
 
 
-@pytest.mark.asyncio
-async def test_rendering_regenerates_both_office_files_and_their_bundles():
-    await create_schema()
+async def _stored_run_with_planned_draft(repo: Repository, store: ObjectStore, settings):
+    """A completed run with both Office files, their bundles and a planned title edit."""
     docx, pptx = _bytes_for_office_files()
     manifest = json.dumps(_manifest()).encode()
     initial_files = {"report.docx": docx, "report.pptx": pptx}
@@ -409,41 +409,48 @@ async def test_rendering_regenerates_both_office_files_and_their_bundles():
     research_bundle = _bundle(
         {**initial_files, "10_reproducibility_manifest.json": manifest}
     )
+    run = await repo.create_run(
+        ResearchProtocol.model_validate(_manifest()["protocol"])
+    )
+    await repo.update_run(run.id, status=RunStatus.COMPLETED.value)
+    payloads = {
+        "report.docx": (DOCX_MEDIA_TYPE, docx),
+        "report.pptx": (PPTX_MEDIA_TYPE, pptx),
+        "result_bundle.zip": ("application/zip", result_bundle),
+        "research_bundle.zip": ("application/zip", research_bundle),
+        "10_reproducibility_manifest.json": ("application/json", manifest),
+    }
+    for name, (media_type, data) in payloads.items():
+        key = f"runs/{run.id}/{name}"
+        await store.put(key, data, media_type)
+        await repo.save_artifact(run.id, name, media_type, key, len(data))
+
+    service = DocumentRevisionService(repo, store, settings=settings)
+    initial = await service.ensure_initial_revision(run.id)
+    draft = await repo.create_document_revision(
+        run.id,
+        target_artifact_name="report.pptx",
+        feedback="Use a clearer title",
+        base_revision_id=initial.id,
+        parent_revision_id=None,
+        idempotency_key=None,
+        channel="api",
+        conversation_id=None,
+    )
+    await repo.update_document_revision(
+        run.id, draft.id, edit_plan=_plan().model_dump(mode="json")
+    )
+    return service, run, draft
+
+
+@pytest.mark.asyncio
+async def test_rendering_regenerates_both_office_files_and_their_bundles():
+    await create_schema()
     store = ObjectStore(get_settings())
 
     async with SessionLocal() as session:
         repo = Repository(session, actor=acting_principal())
-        run = await repo.create_run(
-            ResearchProtocol.model_validate(_manifest()["protocol"])
-        )
-        await repo.update_run(run.id, status=RunStatus.COMPLETED.value)
-        payloads = {
-            "report.docx": (DOCX_MEDIA_TYPE, docx),
-            "report.pptx": (PPTX_MEDIA_TYPE, pptx),
-            "result_bundle.zip": ("application/zip", result_bundle),
-            "research_bundle.zip": ("application/zip", research_bundle),
-            "10_reproducibility_manifest.json": ("application/json", manifest),
-        }
-        for name, (media_type, data) in payloads.items():
-            key = f"runs/{run.id}/{name}"
-            await store.put(key, data, media_type)
-            await repo.save_artifact(run.id, name, media_type, key, len(data))
-
-        service = DocumentRevisionService(repo, store, settings=get_settings())
-        initial = await service.ensure_initial_revision(run.id)
-        draft = await repo.create_document_revision(
-            run.id,
-            target_artifact_name="report.pptx",
-            feedback="Use a clearer title",
-            base_revision_id=initial.id,
-            parent_revision_id=None,
-            idempotency_key=None,
-            channel="api",
-            conversation_id=None,
-        )
-        await repo.update_document_revision(
-            run.id, draft.id, edit_plan=_plan().model_dump(mode="json")
-        )
+        service, run, draft = await _stored_run_with_planned_draft(repo, store, get_settings())
 
         rendered = await service.render(draft.id)
         versions = await repo.list_artifact_versions(run.id, revision_id=draft.id)
@@ -458,6 +465,34 @@ async def test_rendering_regenerates_both_office_files_and_their_bundles():
             with zipfile.ZipFile(io.BytesIO(by_name[bundle_name])) as archive:
                 assert archive.read("report.docx") == by_name["report.docx"]
                 assert archive.read("report.pptx") == by_name["report.pptx"]
+
+
+@pytest.mark.asyncio
+async def test_a_re_rendered_deck_goes_back_to_the_polisher_and_is_recorded(monkeypatch):
+    await create_schema()
+    settings = get_settings().model_copy(
+        update={"presentation_polisher_enabled": True, "presentation_polisher_token": "t"}
+    )
+    calls = []
+
+    async def polisher(pptx_bytes, run_id=None, language="tr", settings=None):
+        calls.append((run_id, language))
+        return PolishResult(data=pptx_bytes, status="unchanged", reason="agy-auth-required")
+
+    monkeypatch.setattr("research_platform.presentation_polisher.polish_presentation", polisher)
+    store = ObjectStore(get_settings())
+    async with SessionLocal() as session:
+        repo = Repository(session, actor=acting_principal())
+        service, run, draft = await _stored_run_with_planned_draft(repo, store, settings)
+        rendered = await service.render(draft.id)
+        events = await repo.events_by_types(run.id, {"presentation_polish"})
+
+    assert rendered.status == "awaiting_revision_approval"
+    assert calls == [(run.id, "en")]
+    assert [
+        (e.payload["stage"], e.payload["status"], e.payload["reason"], e.payload["revision_id"])
+        for e in events
+    ] == [("revision", "unchanged", "agy-auth-required", draft.id)]
 
 
 @pytest.mark.asyncio

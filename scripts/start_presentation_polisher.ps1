@@ -6,6 +6,42 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+# agy, Antigravity girisini yalniz masaustu oturumunda gorur. SSH ya da servis olarak
+# (oturum 0) kalkan polisher saglikli gorunur ama her istek "agy-auth-required" ile
+# ozgun sunumu dondurur (olculdu 2026-09-16).
+if ((Get-Process -Id $PID).SessionId -eq 0) {
+    throw "Presentation Polisher oturum 0'dan (SSH/servis) baslatilamaz: agy girisi burada gorunmez. Sunucu ekranindaki konsoldan calistirin."
+}
+
+function Get-DotEnvValue([string]$Name) {
+    $match = Get-Content -LiteralPath "$root\.env" -ErrorAction SilentlyContinue |
+             Where-Object { $_ -match "^$([regex]::Escape($Name))=" } |
+             Select-Object -Last 1
+    if (-not $match) { return "" }
+    $value = ($match -split "=", 2)[1].Trim()
+    if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+        ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+        $value = $value.Substring(1, $value.Length - 2)
+    }
+    return $value
+}
+
+# SERVICE_TOKEN'a geri dusulmez: servis ajana komut calistirma yetkisi veriyor.
+$polisherToken = Get-DotEnvValue "PRESENTATION_POLISHER_TOKEN"
+if (-not $polisherToken) {
+    throw "PRESENTATION_POLISHER_TOKEN ayarlanmamis (.env). SERVICE_TOKEN yerine gecmez."
+}
+$env:PRESENTATION_POLISHER_TOKEN = $polisherToken
+foreach ($setting in @("PRESENTATION_POLISHER_MAX_BYTES", "PRESENTATION_POLISHER_MAX_CONCURRENT",
+                       "PRESENTATION_POLISHER_AGY_TIMEOUT_S", "PRESENTATION_POLISHER_REQUEST_BUDGET_S",
+                       "PRESENTATION_POLISHER_SOFFICE_TIMEOUT_S", "PRESENTATION_POLISHER_AGY_SANDBOX",
+                       "PRESENTATION_POLISHER_AGY_MODEL", "PRESENTATION_POLISHER_PROMPT_FILE")) {
+    $value = Get-DotEnvValue $setting
+    # .env'den kaldirilan bir ayar, ayni konsolun onceki calismasindan kalan degerle yasamasin.
+    if ($value) { Set-Item -Path "Env:$setting" -Value $value }
+    else { Remove-Item -Path "Env:$setting" -ErrorAction SilentlyContinue }
+}
+
 $pythonCandidates = @(
     "$root\.venv\Scripts\python.exe",
     "$env:LOCALAPPDATA\anaconda3\python.exe",
@@ -24,34 +60,59 @@ $pidFile = "$root\logs\presentation-polisher.pid"
 $port = 3942
 $hostAddress = "0.0.0.0"
 
-if ($Restart -and (Test-Path $pidFile)) {
-    try {
-        $oldPid = [int](Get-Content $pidFile)
-        Stop-Process -Id $oldPid -Force -ErrorAction SilentlyContinue
-    } catch {}
+function Get-PortOwners {
+    return @(
+        Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+    )
+}
+
+function Test-PolisherProcess([int]$ProcessId) {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
+    return [bool]($process -and $process.CommandLine -match "scripts\.presentation_polisher_service:app")
+}
+
+# Calisan surec basladigi koddan devam eder. Servis dosyasi sonradan degistiyse surec
+# bayattir ve yeniden baslatilmalidir; ayni kural kontrol panelinde de uygulaniyor.
+if (-not $Restart) {
+    $serviceFile = Get-Item "$root\scripts\presentation_polisher_service.py" -ErrorAction SilentlyContinue
+    foreach ($owner in (Get-PortOwners)) {
+        $process = Get-Process -Id $owner -ErrorAction SilentlyContinue
+        if ($serviceFile -and $process -and (Test-PolisherProcess $owner) -and
+            $serviceFile.LastWriteTime -gt $process.StartTime) {
+            Write-Host "[..] Presentation Polisher kodu surecten yeni; yeniden baslatiliyor" -ForegroundColor Yellow
+            $Restart = $true
+        }
+    }
+}
+
+if ($Restart) {
+    $targets = @()
+    if (Test-Path $pidFile) {
+        try { $targets += [int](Get-Content $pidFile) } catch {}
+    }
+    $targets += Get-PortOwners
+    foreach ($target in ($targets | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Test-PolisherProcess $target) {
+            Stop-Process -Id $target -Force -ErrorAction SilentlyContinue
+        }
+    }
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    for ($attempt = 1; $attempt -le 20 -and (Get-PortOwners); $attempt++) {
+        Start-Sleep -Milliseconds 250
+    }
+    if (Get-PortOwners) { throw "Presentation Polisher portu yeniden baslatma icin birakilmadi: $port" }
 }
 
 $running = $false
-if (Test-Path $pidFile) {
-    try {
-        $existingPid = [int](Get-Content $pidFile)
-        $running = [bool](Get-Process -Id $existingPid -ErrorAction SilentlyContinue)
-    } catch {}
-    if (-not $running) { Remove-Item $pidFile -Force -ErrorAction SilentlyContinue }
-}
-
-# Also verify port is not held by another process
-if (-not $running) {
-    $portOwner = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
-                 Select-Object -First 1 -ExpandProperty OwningProcess
-    if ($portOwner) {
-        $proc = Get-Process -Id $portOwner -ErrorAction SilentlyContinue
-        if ($proc -and $proc.ProcessName -match "python") {
-            $running = $true
-            Set-Content -Path $pidFile -Value $portOwner -Encoding ASCII
-        }
+$portOwners = Get-PortOwners
+if ($portOwners) {
+    $wrongOwner = $portOwners | Where-Object { -not (Test-PolisherProcess $_) } | Select-Object -First 1
+    if ($wrongOwner) {
+        throw "Port $port baska bir surec tarafindan kullaniliyor (PID $wrongOwner)."
     }
+    $running = $true
+    Set-Content -Path $pidFile -Value $portOwners[0] -Encoding ASCII
 }
 
 if (-not $running) {
@@ -60,21 +121,37 @@ if (-not $running) {
         -WorkingDirectory $root -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput "$root\logs\presentation-polisher.stdout.log" `
         -RedirectStandardError "$root\logs\presentation-polisher.stderr.log"
-    Set-Content -Path $pidFile -Value $polisher.Id -Encoding ASCII
 }
 
 $url = "http://127.0.0.1:$port"
 $healthy = $false
+$health = $null
 for ($attempt = 1; $attempt -le 20; $attempt++) {
     try {
         $health = Invoke-RestMethod "$url/health" -TimeoutSec 2
         if ($health.status -eq "ok") { $healthy = $true; break }
-    } catch {}
+    } catch {
+        # 503 (degraded) govdesi de hangi bagimliligin eksik oldugunu soyler.
+        try { $health = $_.ErrorDetails.Message | ConvertFrom-Json } catch {}
+    }
     Start-Sleep -Milliseconds 500
 }
 
 if (-not $healthy) {
-    throw "Presentation Polisher sağlık kontrolü başarısız: $url"
+    foreach ($owner in (Get-PortOwners)) {
+        if (Test-PolisherProcess $owner) {
+            Stop-Process -Id $owner -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    $detay = if ($health) { " [agy=$($health.agy), soffice=$($health.soffice), token=$($health.authentication), istem=$($health.prompt)]" } else { "" }
+    throw "Presentation Polisher sağlık kontrolü başarısız: $url$detay"
 }
 
-Write-Host "Presentation Polisher Service: $url [agy=$($health.agy), soffice=$($health.soffice)]"
+$actualOwner = Get-PortOwners | Select-Object -First 1
+if (-not $actualOwner -or -not (Test-PolisherProcess $actualOwner)) {
+    throw "Presentation Polisher saglikli gorunuyor ancak port sahibi dogrulanamadi."
+}
+Set-Content -Path $pidFile -Value $actualOwner -Encoding ASCII
+
+Write-Host "Presentation Polisher Service: $url [agy=$($health.agy), soffice=$($health.soffice), sandbox=$($health.sandbox), sure=$($health.agent_timeout_s)s]"
