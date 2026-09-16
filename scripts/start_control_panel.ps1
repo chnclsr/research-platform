@@ -127,7 +127,7 @@ if ($panel) {
 
 if (-not $NoBrowser) { Start-Process $url }
 Write-Host "Research Platform Control Panel: $url"
-$mcpHost = Ayar "MCP_HOST"
+$mcpHost = Ayar "MCP_BIND_HOST" (Ayar "MCP_HOST")
 if ($hostAddress -eq "0.0.0.0" -and $mcpHost) {
     Write-Host "Office LAN Control Panel: http://${mcpHost}:$port"
 }
