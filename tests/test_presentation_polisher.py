@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -21,6 +23,7 @@ from research_platform.presentation_polisher import (
     polish_and_record,
     polish_presentation,
 )
+from scripts import presentation_polisher_outline as outline_helper
 from scripts import presentation_polisher_render as render_helper
 from scripts import presentation_polisher_service as service
 
@@ -247,6 +250,7 @@ def test_agent_environment_withholds_secrets_and_puts_the_service_python_first(m
         "safe-path",
     ]
     assert environment["PRESENTATION_POLISHER_SOFFICE"] == "C:/LibreOffice/soffice.exe"
+    assert (environment["PYTHONUTF8"], environment["PYTHONIOENCODING"]) == ("1", "utf-8")
     assert "SERVICE_TOKEN" not in environment
     assert "PRESENTATION_POLISHER_TOKEN" not in environment
     assert "DATABASE_URL" not in environment
@@ -272,9 +276,22 @@ def test_prompt_is_read_on_every_request_and_carries_the_contract(monkeypatch, t
     prompt_file.write_text("Sunumu daha etkileyici yap.", encoding="utf-8")
     monkeypatch.setattr(service, "PROMPT_FILE", prompt_file)
 
-    prompt = service.build_prompt("tr", 600.0)
+    istanbul = timezone(timedelta(hours=3))
+    prompt = service.build_prompt(
+        "tr", 600.0, now=datetime(2026, 9, 16, 13, 50, tzinfo=istanbul)
+    )
     assert prompt.startswith("Sunumu daha etkileyici yap.")
-    for expected in ("sunum.pptx", "cilali.pptx", "cilali.tmp.pptx", "python render.py", "10 dakika", "Türkçe (tr)"):
+    for expected in (
+        "sunum.pptx",
+        "cilali.pptx",
+        "cilali.tmp.pptx",
+        "python render.py",
+        "python outline.py cilali.pptx --check",
+        "10 dakika",
+        "Başlangıç saati 13:50",
+        "en geç 13:58",
+        "Türkçe (tr)",
+    ):
         assert expected in prompt
     assert "[S" not in prompt  # citations are the agent's call, not a rule
 
@@ -457,6 +474,48 @@ def test_render_helper_reports_missing_inputs(tmp_path, monkeypatch):
     assert render_helper.main([str(deck), "--out", str(tmp_path / "render")]) == 1
 
 
+def test_outline_lists_boxes_and_flags_collisions(tmp_path, capsys):
+    """Slide 9 of the first polished deck kept an old text box under the new body text."""
+    prs = pptx.Presentation()
+
+    def box(slide, name, left, top, width, height, text):
+        shape = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
+        shape.name = name
+        shape.text_frame.text = text
+
+    crowded = prs.slides.add_slide(prs.slide_layouts[6])
+    box(crowded, "sections[].consensus", 1, 1, 6, 3, "Ana metin: ğüşıöç")
+    box(crowded, "sections[].implications_3", 1, 3, 6, 1, "Eski kutu")
+    box(crowded, "rail_number", 0, 0, 1.2, 1.2, "3.1")  # template chrome, never flagged
+    clean = prs.slides.add_slide(prs.slide_layouts[6])
+    box(clean, "summary", 1, 1, 6, 3, "Tek kutu")
+    wide = prs.slides.add_slide(prs.slide_layouts[6])
+    box(wide, "wide", 8, 1, 3, 1, "Taşan kutu")
+    deck = tmp_path / "cilali.pptx"
+    prs.save(deck)
+
+    result = outline_helper.outline(deck, slides=None, text_limit=5)
+    first = result["slides"][0]
+    assert [item["name"] for item in first["boxes"]] == [
+        "sections[].consensus",
+        "sections[].implications_3",
+        "rail_number",
+    ]
+    assert first["boxes"][0]["text"] == "Ana m…"
+    assert first["boxes"][0]["chars"] == len("Ana metin: ğüşıöç")
+    assert first["issues"] == [
+        "overlap: sections[].consensus <-> sections[].implications_3 (432 x 72 pt)"
+    ]
+    assert result["slides"][1]["issues"] == []
+    assert result["slides"][2]["issues"] == ["off-slide: wide"]
+
+    assert outline_helper.main([str(deck), "--check", "--slides", "1-3"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["slides_with_problems"] == 2
+    assert [problem["number"] for problem in report["problems"]] == [1, 3]
+    assert outline_helper.main([str(tmp_path / "missing.pptx")]) == 2
+
+
 # --------------------------------------------------------------------------- endpoint
 
 
@@ -514,7 +573,7 @@ def test_endpoint_delivers_the_agents_deck(endpoint, monkeypatch):
     assert response.headers["X-Presentation-Polisher-Agy-Status"] == "SUCCESS"
     assert response.headers["X-Presentation-Polisher-Duration-S"] == "412.5"
     assert response.headers["X-Presentation-Polisher-Turns"] == "31"
-    assert seen["files"] == ["render", "render.py", "sunum.pptx"]
+    assert seen["files"] == ["outline.py", "render", "render.py", "sunum.pptx"]
     assert seen["input"] == original
     assert seen["timeout"] == pytest.approx(600.0)
     assert seen["command"][-2] == "-p"

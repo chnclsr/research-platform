@@ -4527,6 +4527,13 @@ Worker'ın Docker Linux ortamında (`python:3.12-slim`) çalışması, ancak `ag
   - Windows sunucusunda `PRESENTATION_POLISHER_AGY_SANDBOX=false` kullanılıyor.
   - Servis artık bütçesinin tamamını kullanan bir çalışmayı `agy` ne derse desin süre dolması sayıyor.
   - Konuşma kimliği günlüğe yazılıyor; ajanın dökümü `~/.gemini/antigravity-cli/brain/<kimlik>` altında.
+- **İkinci deneme (sandbox kapalı, 2026-09-16):** Sonuç `polished` / `timeout-partial`, süre 608 sn, sunum 42 slayttan 27'ye indi. LibreOffice oturum 1'de çalışıyor.
+  - Ajan 7 dakikayı sunumu incelemeye harcadı. Kendi yazdığı betiklerden en az altısı `cp1254` konsol kodlamasında `UnicodeEncodeError` verdi.
+  - 7 ve 9. slaytlardaki üst üste binmeleri kendisi fark etti, ama düzeltirken süre doldu ve sunum o haliyle teslim edildi.
+  - Bu yüzden ajana üç şey verildi:
+    - `PYTHONUTF8=1`;
+    - hazır `outline.py` (`scripts/presentation_polisher_outline.py`): kutu dökümü ve `--check` ile çakışma/taşma denetimi. Bu araç teslim edilen sunumda iki çakışmayı da buldu, özgün sunumda ise sorun bulmadı;
+    - başlangıç ve "son kayıt en geç" saatleri içeren çalışma kuralları; bu kurallar her kayıttan sonra sunumu çizip denetlemeyi de istiyor.
 
 **Doğrulama.** `tests/test_presentation_polisher.py` 42 test içeriyor. Konular:
 - istemci durum eşlemesi ve olay kaydı;
