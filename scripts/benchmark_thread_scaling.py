@@ -33,12 +33,16 @@ import argparse
 import json
 import os
 import random
-import resource
 import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any
+
+try:
+    import resource
+except ImportError:  # Windows has no resource module; psutil supplies the fallback below.
+    resource = None  # type: ignore[assignment]
 
 KOK = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(KOK / "research" / "gil-scaling"))
@@ -71,8 +75,31 @@ def _rss() -> int:
 
 def _child_cpu_ns() -> int:
     """Child process'lerin CPU zamanı. E1 (ProcessPool) kolunda tek görünür kaynak."""
-    kullanim = resource.getrusage(resource.RUSAGE_CHILDREN)
-    return int((kullanim.ru_utime + kullanim.ru_stime) * 1e9)
+    if resource is not None:
+        kullanim = resource.getrusage(resource.RUSAGE_CHILDREN)
+        return int((kullanim.ru_utime + kullanim.ru_stime) * 1e9)
+
+    import psutil
+
+    toplam = 0.0
+    for child in psutil.Process().children(recursive=True):
+        try:
+            cpu = child.cpu_times()
+            toplam += cpu.user + cpu.system
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return int(toplam * 1e9)
+
+
+def _load_at_start() -> float:
+    if hasattr(os, "getloadavg"):
+        return float(os.getloadavg()[0])
+    try:
+        import psutil
+
+        return float(psutil.getloadavg()[0])
+    except (AttributeError, OSError):
+        return 0.0
 
 
 def olc_bir_kez(workload: Workload, shared: object, threads: int, batch: int) -> dict[str, Any]:
@@ -159,7 +186,7 @@ def olc_bir_kez(workload: Workload, shared: object, threads: int, batch: int) ->
         "rss_end": rss_son,
         "result_digest": gecerli[0] if gecerli else None,
         "digest_divergence": ayrisma,
-        "load_at_start": os.getloadavg()[0],
+        "load_at_start": _load_at_start(),
     }
 
 
