@@ -23,3 +23,17 @@ Gözetmen gerekenler:
   bakışta okunabilsin.
 - Figürleri ve görselleri koru; altyazılarını sadeleştirebilirsin.
 - Bitirmeden önce slaytları çizip tek tek bak ve gördüğün sorunları düzelt.
+
+Otomatik üretimden kalan bilinen kusurları da düzelt:
+
+- Aynı figür birden fazla slaytta yer alıyorsa (aynı altyazı ya da aynı görsel; aynı
+  makalenin farklı sürümlerinden gelmiş olabilir), yalnızca birini bırak.
+- Figür başlığı rapor dilinde değilse ya da "Araştırma görseli" gibi genel bir ifadeyse,
+  altyazıya ve görseldeki etiketlere dayanarak kısa bir başlık yaz.
+- Altyazısı figürü anlatmayan figürlerde (ör. "Ayrıntılı özgün açıklama kaynak kaydında
+  korunmuştur.") slayt başlığına ve görselde okuyabildiğin etiketlere dayanan kısa bir
+  altyazı yaz. Görselde görmediğin bir bulgu ya da sayı ekleme.
+- İddia ve bulgu metinlerinde kalan yabancı dildeki cümleleri rapor diline çevir. Sayıları,
+  birimleri, yüzdeleri, model ve veri kümesi adlarını birebir koru.
+- Kaynak kataloğundaki makale başlıklarını ve "Kaynak:" satırlarını çevirme; okur makaleyi
+  bu adla bulur.
