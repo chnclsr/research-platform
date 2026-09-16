@@ -234,6 +234,12 @@ if (-not $SkipPanel) {
     if ($LASTEXITCODE -eq 0) { Tamam "panel ayakta" } else { Hata "panel baslatilamadi"; $durum = 1 }
 }
 
+if (Select-String -Path "$root\.env" -Pattern '^PRESENTATION_POLISHER_ENABLED=(true|1)' -Quiet) {
+    Bilgi "Presentation Polisher"
+    & "$PSScriptRoot\start_presentation_polisher.ps1"
+    if ($LASTEXITCODE -eq 0) { Tamam "polisher ayakta" } else { Hata "polisher baslatilamadi"; $durum = 1 }
+}
+
 # ------------------------------------------------------------------ saglik kontrolu
 function Bekle($ad, $url, $limit) {
     for ($i = 1; $i -le $limit; $i++) {
@@ -265,9 +271,6 @@ if (-not $SkipPanel) {
     if (-not (Bekle "Kontrol paneli" "http://127.0.0.1:$panelPort/health" 20)) { $durum = 1 }
 }
 if (Select-String -Path "$root\.env" -Pattern '^PRESENTATION_POLISHER_ENABLED=(true|1)' -Quiet) {
-    try {
-        & powershell -ExecutionPolicy Bypass -File "$root\scripts\start_presentation_polisher.ps1" | Out-Null
-    } catch {}
     if (-not (Bekle "Presentation Polisher" "http://127.0.0.1:3942/health" 15)) { $durum = 1 }
 }
 
