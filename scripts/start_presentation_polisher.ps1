@@ -32,6 +32,10 @@ if (-not $polisherToken) {
     throw "PRESENTATION_POLISHER_TOKEN ayarlanmamis (.env). SERVICE_TOKEN yerine gecmez."
 }
 $env:PRESENTATION_POLISHER_TOKEN = $polisherToken
+# Gunluk dosyasi aksi halde Windows kod sayfasiyla (cp1254) yazilir ve ajanin Turkce ozeti
+# UTF-8 okuyan araclarda bozuk gorunur (olculdu 2026-09-16).
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 foreach ($setting in @("PRESENTATION_POLISHER_MAX_BYTES", "PRESENTATION_POLISHER_MAX_CONCURRENT",
                        "PRESENTATION_POLISHER_AGY_TIMEOUT_S", "PRESENTATION_POLISHER_REQUEST_BUDGET_S",
                        "PRESENTATION_POLISHER_SOFFICE_TIMEOUT_S", "PRESENTATION_POLISHER_AGY_SANDBOX",
