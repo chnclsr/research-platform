@@ -329,6 +329,23 @@ Four optional checkpoints can be enabled independently:
 Waiting for a human does not consume the research budget. State is persisted in PostgreSQL,
 so the worker does not need to remain occupied while a run is paused.
 
+### Blocked searches and sources
+
+Set `ACCESS_ESCALATION_ENABLED=true` to keep the search queries and source URLs that stopped
+at a bot check, a CAPTCHA or a login wall. The run carries on and finishes with the evidence
+it could reach; the platform never solves the challenge, logs in, or retries.
+
+When the run finishes, the control-panel drawer lists these items, and the Telegram
+completion notice says how many there were, with a button that lists them. The list is
+informational: the user can open the links and try them in their own browser. Nothing is fed
+back into the run, and no follow-up run is started. `ACCESS_ESCALATION_MAX_ITEMS_PER_RUN`
+caps how many distinct items one run keeps (default 50).
+
+What counts as a usable page changes in one way only: a redirect onto a login path
+(`/login`, `/signin`, `/auth`, ...) that carries no article text is now rejected, as a
+bot-check interstitial already was. The words "CAPTCHA" or "authentication required"
+only name a block that was found that way; on their own they never reject a page.
+
 ## Development
 
 ```powershell
@@ -354,6 +371,7 @@ in the repository as the project’s engineering notebook.
 The platform deliberately does **not** implement:
 
 - paywall bypassing;
+- CAPTCHA solving, automated login, or two-factor authentication;
 - shadow-library access;
 - active cyberattacks, exploitation, or port scanning;
 - arbitrary instructions found inside acquired web content.

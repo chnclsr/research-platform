@@ -473,6 +473,36 @@ class RevisionStatus(StrEnum):
     FAILED = "failed"
 
 
+class AccessIssueKind(StrEnum):
+    SEARCH_QUERY = "search_query"
+    SOURCE_URL = "source_url"
+
+
+class AccessIssueReason(StrEnum):
+    BOT_BLOCK = "bot_block"
+    CAPTCHA = "captcha"
+    LOGIN_WALL = "login_wall"
+
+
+class AccessIssueView(BaseModel):
+    id: str
+    run_id: str
+    kind: AccessIssueKind
+    reason: AccessIssueReason
+    # The candidate's title when the block hit a source URL; a search has none.
+    title: str | None = None
+    query: str | None = None
+    url: str | None = None
+    connector_id: str | None = None
+    mission_id: str | None = None
+    branch_id: str | None = None
+    detail: str = ""
+    strategies_tried: list[str] = Field(default_factory=list)
+    occurrences: int = 1
+    created_at: datetime
+    updated_at: datetime
+
+
 class ResearchRunCreate(BaseModel):
     protocol: ResearchProtocol
     # Scheduling, kept beside the protocol rather than inside it: the protocol is the
@@ -630,6 +660,7 @@ class AcquiredDocument(BaseModel):
     retrieved_at: datetime = Field(default_factory=utcnow)
     strategies_tried: list[str] = Field(default_factory=list)
     error: str | None = None
+    failure_reason: AccessIssueReason | Literal["paywall"] | None = None
 
 
 class ExtractedClaim(BaseModel):

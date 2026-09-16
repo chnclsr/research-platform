@@ -4,7 +4,20 @@ Platform sürümü: `v0.24.0`
 
 Belge sürümü: `6.56`
 
-Son güncelleme: `2026-09-15`
+Son güncelleme: `2026-09-16`
+
+## Yayınlanmamış — 2026-09-16
+
+- Bot koruması, CAPTCHA veya oturum açma duvarına takılan aramalar ve kaynak URL'leri koşuyu
+  durdurmadan kaydediliyor (`ACCESS_ESCALATION_ENABLED`, varsayılan kapalı). Koşu bitince
+  kontrol panelinde listeleniyor; Telegram tamamlanma bildirimi sayısını veriyor ve listeyi
+  gösteren bir düğme ekliyor. Liste yalnızca bilgi amaçlı: platform bunları çözmeye, yeniden
+  denemeye ya da takip koşusu başlatmaya çalışmaz. CAPTCHA çözme, otomatik oturum açma ve 2FA
+  kapsam dışıdır. Göç: `0013_access_escalations`.
+- Oturum açma sayfasına (`/login`, `/signin`, `/auth` gibi yol bölümleri) yönlendirilen ve
+  makale metni taşımayan sayfalar artık kaynak olarak alınmıyor. "CAPTCHA" veya
+  "authentication required" sözcükleri tek başına bir sayfayı reddettirmiyor; yalnızca
+  zaten engellenmiş bir sayfanın nedenini adlandırıyor.
 
 ## Yayınlanmamış — 2026-09-15
 

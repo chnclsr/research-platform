@@ -93,6 +93,39 @@ class EventRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class AccessIssueRow(Base):
+    """A blocked query or URL, kept so the user can see it after the run finishes.
+
+    Informational only: nothing reads these back into a run, and the platform never
+    retries, solves or follows up on them.
+    """
+
+    __tablename__ = "access_issues"
+    __table_args__ = (
+        UniqueConstraint("run_id", "kind", "dedupe_key", name="uq_access_issue_identity"),
+    )
+
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(26), index=True)
+    owner_id: Mapped[str] = mapped_column(String(26), index=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    reason: Mapped[str] = mapped_column(String(30))
+    dedupe_key: Mapped[str] = mapped_column(String(64))
+    query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    connector_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    mission_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
+    branch_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    strategies_tried: Mapped[list] = mapped_column(json_type(), default=list)
+    context: Mapped[dict] = mapped_column(json_type(), default=dict)
+    occurrences: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class SourceRow(Base):
     __tablename__ = "sources"
     __table_args__ = (UniqueConstraint("run_id", "dedupe_key", name="uq_source_run_dedupe"),)

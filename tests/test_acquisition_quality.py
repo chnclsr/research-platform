@@ -58,6 +58,7 @@ def test_bot_check_page_is_not_acquired_as_a_document(govde: str) -> None:
     assert document.access_status == "unavailable"
     assert document.content == ""
     assert document.error == "Bot check interstitial"
+    assert document.failure_reason in {"bot_block", "captcha"}
 
 
 def test_bot_check_is_unavailable_not_restricted() -> None:
@@ -71,8 +72,10 @@ def test_bot_check_is_unavailable_not_restricted() -> None:
 
     assert engel.access_status == "unavailable"
     assert engel.error == "Bot check interstitial"
+    assert engel.failure_reason == "bot_block"
     assert duvar.access_status == "restricted"
     assert duvar.error == "Paywall detected"
+    assert duvar.failure_reason == "paywall"
 
 
 def test_a_paper_that_discusses_bot_detection_is_still_acquired() -> None:

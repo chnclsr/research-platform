@@ -43,6 +43,7 @@ from .repository import (
 )
 from .scheduler import preempt_for
 from .schemas import (
+    AccessIssueView,
     ArtifactVersionView,
     ArtifactView,
     CorpusSearchRequest,
@@ -459,6 +460,20 @@ async def list_research_runs(
     repo: Repository = Depends(repository),
 ) -> list[RunView]:
     return [repo.run_view(row) for row in await repo.list_runs(limit=limit)]
+
+
+@app.get(
+    "/v1/research-runs/{run_id}/access-issues",
+    response_model=list[AccessIssueView],
+    dependencies=[Depends(resolve_principal)],
+)
+async def list_access_issues(
+    run_id: str,
+    repo: Repository = Depends(repository),
+) -> list[AccessIssueView]:
+    """Searches and sources the run could not reach past a bot check or login wall."""
+    await _required_run(run_id, repo)
+    return [repo.access_issue_view(row) for row in await repo.list_access_issues(run_id)]
 
 
 @app.post(

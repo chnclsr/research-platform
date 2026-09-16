@@ -190,6 +190,22 @@ Aşağıdaki komutlarda <run_id> yerine koşunun adını da yazabilirsiniz.
             "invalid_state": "Bu revizyon düğmesi artık geçerli değil.",
             "downloaded": "{name} — sürüm {number}",
         },
+        "access": {
+            "notice": "⚠️ Bu koşuda {count} arama veya kaynak bot korumasına, CAPTCHA'ya ya da "
+                      "oturum açma duvarına takıldı. Rapor erişilebilen kanıtlarla tamamlandı; "
+                      "bunlara kendiniz erişmeyi deneyebilirsiniz.",
+            "inspect": "🔎 Takılanları gör",
+            "empty": "Bu koşuda erişim engeline takılan arama veya kaynak yok.",
+            "heading": "<b>Erişim engeline takılanlar</b> ({count})",
+            "search": "Engellenen arama",
+            "source": "Engellenen kaynak",
+            "more": "… ve {count} öğe daha; tamamı kontrol panelinde.",
+            "reasons": {
+                "bot_block": "bot koruması",
+                "captcha": "CAPTCHA",
+                "login_wall": "oturum açma duvarı",
+            },
+        },
         # Values, not sentences. The strings around them were translated a version ago and
         # the enum tokens inside were not, which is what produced "durum queued".
         "status": {
@@ -400,6 +416,22 @@ In the commands below you can use the run's name instead of <run_id>.
             "failed": "Document revision failed; the current report is unchanged.\n\n{error}",
             "invalid_state": "This revision button is no longer valid.",
             "downloaded": "{name} — version {number}",
+        },
+        "access": {
+            "notice": "⚠️ {count} searches or sources in this run stopped at bot protection, "
+                      "a CAPTCHA or a login wall. The report finished with the evidence that "
+                      "was reachable; you can try these yourself.",
+            "inspect": "🔎 Show blocked items",
+            "empty": "No search or source in this run was blocked.",
+            "heading": "<b>Blocked searches and sources</b> ({count})",
+            "search": "Blocked search",
+            "source": "Blocked source",
+            "more": "… and {count} more; the control panel lists them all.",
+            "reasons": {
+                "bot_block": "bot protection",
+                "captcha": "CAPTCHA",
+                "login_wall": "login wall",
+            },
         },
         "status": {
             "queued": "queued", "running": "running", "awaiting_input": "awaiting input",
@@ -940,7 +972,13 @@ def plan_keyboard(run_id: str, language: str) -> dict:
     }
 
 
-def report_ready_keyboard(run_id: str, revision: Mapping[str, Any], language: str) -> dict:
+def report_ready_keyboard(
+    run_id: str,
+    revision: Mapping[str, Any],
+    language: str,
+    *,
+    access_issue_count: int = 0,
+) -> dict:
     strings = text_for(language)["revision"]
     versions = revision.get("artifacts") or []
     pptx = next((item for item in versions if str(item.get("logical_name", "")).endswith(".pptx")), None)
@@ -971,7 +1009,59 @@ def report_ready_keyboard(run_id: str, revision: Mapping[str, Any], language: st
                 },
             ]
         )
+    if access_issue_count:
+        rows.append(
+            [
+                {
+                    "text": text_for(language)["access"]["inspect"],
+                    "callback_data": f"accesslist:{run_id}",
+                }
+            ]
+        )
     return {"inline_keyboard": rows}
+
+
+def access_notice_keyboard(run_id: str, language: str) -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": text_for(language)["access"]["inspect"],
+                    "callback_data": f"accesslist:{run_id}",
+                }
+            ]
+        ]
+    }
+
+
+#: Telegram rejects a message over 4096 characters; the rest of the list is in the panel.
+ACCESS_LIST_MAX_CHARS = 3800
+
+
+def access_issue_list_text(issues: list[Mapping[str, Any]], language: str) -> str:
+    """One HTML message listing blocked items, for the user to try on their own."""
+    strings = text_for(language)["access"]
+    if not issues:
+        return strings["empty"]
+    text = strings["heading"].format(count=len(issues))
+    for index, issue in enumerate(issues, 1):
+        kind = strings["search" if issue.get("kind") == "search_query" else "source"]
+        reason = strings["reasons"].get(str(issue.get("reason")), str(issue.get("reason") or ""))
+        lines = [f"\n\n{index}. <b>{kind}</b> · {html.escape(reason)}"]
+        if issue.get("title"):
+            lines.append(html.escape(str(issue["title"])[:200]))
+        url = str(issue.get("url") or "")
+        if url.startswith(("http://", "https://")):
+            lines.append(
+                f'<a href="{html.escape(url, quote=True)}">{html.escape(url[:300])}</a>'
+            )
+        else:
+            lines.append(html.escape(str(issue.get("query") or url or "—")[:300]))
+        entry = "\n".join(lines)
+        if len(text) + len(entry) > ACCESS_LIST_MAX_CHARS:
+            return text + "\n\n" + strings["more"].format(count=len(issues) - index + 1)
+        text += entry
+    return text
 
 
 def revision_plan_keyboard(revision_id: str, language: str, *, extension: bool = False) -> dict:
@@ -1443,6 +1533,39 @@ class TelegramResearchBot:
                     pass
             await self._answer_callback(client, callback_id, detail[:180], alert=True)
 
+    async def _handle_access_callback(
+        self,
+        client: httpx.AsyncClient,
+        callback_id: str,
+        run_id: str,
+        chat_id: int,
+        user_id: int,
+        language: str,
+    ) -> None:
+        """List what the run could not reach. Read-only: nothing here starts any work."""
+        strings = text_for(language)
+        actor_id = await self._resolve_actor(user_id)
+        if actor_id is None:
+            await self._answer_callback(
+                client, callback_id, strings["no_permission"], alert=True
+            )
+            return
+        try:
+            issues = await self.gateway.for_actor(actor_id).access_issues(run_id)
+        except httpx.HTTPError as exc:
+            detail = str(exc)
+            if isinstance(exc, httpx.HTTPStatusError):
+                try:
+                    detail = str(exc.response.json().get("detail") or detail)
+                except ValueError:
+                    pass
+            await self._answer_callback(client, callback_id, detail[:180], alert=True)
+            return
+        await self._answer_callback(client, callback_id, "✓")
+        await self._send_message(
+            client, chat_id, access_issue_list_text(issues, language), parse_mode="HTML"
+        )
+
     async def _handle_callback(self, client: httpx.AsyncClient, callback: dict) -> None:
         callback_id = str(callback.get("id") or "")
         message = callback.get("message") or {}
@@ -1458,6 +1581,11 @@ class TelegramResearchBot:
             )
             return
         parts = str(callback.get("data") or "").split(":")
+        if len(parts) == 2 and parts[0] == "accesslist":
+            await self._handle_access_callback(
+                client, callback_id, parts[1], chat_id, user_id, client_language
+            )
+            return
         if parts and parts[0] in {
             "rvfile",
             "delivery",
@@ -2308,7 +2436,8 @@ class TelegramResearchBot:
                 )
                 language = reply_language(run={"protocol": run.protocol or {}})
                 strings = text_for(language)["revision"]
-                sent = 0
+                access_strings = text_for(language)["access"]
+                notified_chats: set[int] = set()
                 if run.owner_id:
                     gateway = self.gateway.for_actor(run.owner_id)
                     try:
@@ -2324,6 +2453,17 @@ class TelegramResearchBot:
                     except (httpx.HTTPError, ValueError):
                         logger.exception("tamamlanan kosunun artifact surumu alinamadi: %s", run.id)
                         continue
+                    # Separate from the report lookup on purpose: failing to list blocked
+                    # items may cost their notice, never the report's.
+                    actionable_issues: list[dict[str, Any]] = []
+                    try:
+                        actionable_issues = await gateway.access_issues(run.id)
+                    except (httpx.HTTPError, ValueError):
+                        logger.warning(
+                            "tamamlanan kosunun erisim sorunlari alinamadi: %s",
+                            run.id,
+                            exc_info=True,
+                        )
                     if accepted:
                         for chat_id in chat_ids:
                             await self._send_message(
@@ -2333,12 +2473,32 @@ class TelegramResearchBot:
                                     number=accepted["revision_number"]
                                 ),
                                 reply_markup=report_ready_keyboard(
-                                    run.id, accepted, language
+                                    run.id,
+                                    accepted,
+                                    language,
+                                    access_issue_count=len(actionable_issues),
                                 ),
                             )
-                            sent += 1
+                            notified_chats.add(chat_id)
+                    if actionable_issues:
+                        for chat_id in chat_ids:
+                            await self._send_message(
+                                client,
+                                chat_id,
+                                access_strings["notice"].format(
+                                    count=len(actionable_issues)
+                                ),
+                                reply_markup=(
+                                    None
+                                    if accepted
+                                    else access_notice_keyboard(run.id, language)
+                                ),
+                            )
+                            notified_chats.add(chat_id)
                 await repo.event(
-                    run.id, COMPLETION_NOTICE_EVENT, {"chat_count": sent}
+                    run.id,
+                    COMPLETION_NOTICE_EVENT,
+                    {"chat_count": len(notified_chats)},
                 )
 
     async def _notify_document_revisions(self, client: httpx.AsyncClient) -> None:

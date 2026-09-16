@@ -90,6 +90,7 @@ EVENT_LABELS = {
     "stage": "Aşama başladı",
     "connector_metrics": "Arama çağrıları",
     "connector_error": "Connector hatası",
+    "access_issues_queued": "Erişim engeline takılanlar kullanıcıya listelendi",
     "connector_call": "Connector çağrısı",
     "acquisition_call": "Kaynak edinimi ve ayrıştırma",
     "source_rejected": "Kaynak eleme kararı",

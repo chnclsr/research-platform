@@ -126,6 +126,14 @@ class ResearchGatewayClient:
             response.raise_for_status()
             return response.json()
 
+    async def access_issues(self, run_id: str) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
+            response = await client.get(
+                f"{self.base_url}/v1/research-runs/{run_id}/access-issues"
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def revisions(self, run_id: str) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=self.timeout_s, headers=self.headers) as client:
             response = await client.get(

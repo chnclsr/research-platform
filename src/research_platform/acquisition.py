@@ -10,6 +10,7 @@ from urllib.parse import urljoin, urlparse, urlsplit
 
 import httpx
 
+from .access_escalation import classify_blocked_response
 from .config import Settings
 from .github_repository import (
     GitHubRepositoryError,
@@ -66,6 +67,34 @@ BLOCKED_MARKERS = (
     "we've detected unusual activity", "performing security verification",
     "enable javascript and cookies to continue",
 )
+
+#: These two only *name* a block that BLOCKED_MARKERS or a login redirect already found.
+#: They must not decide one: a Wikipedia article on CAPTCHAs or an API reference saying
+#: "authentication required" opens with them and is a perfectly good source.
+CAPTCHA_MARKERS = ("captcha", "recaptcha", "hcaptcha")
+LOGIN_WALL_MARKERS = (
+    "login required", "log in to continue", "sign in to access", "authentication required",
+)
+
+_ACCESS_WALL_ERRORS = {
+    "bot_block": "Bot check interstitial",
+    "captcha": "CAPTCHA challenge",
+    "login_wall": "Login required",
+}
+
+#: Whole path segments, not substrings: "/auth" inside "/authors/..." is not a login page.
+LOGIN_PATH_SEGMENTS = frozenset({"login", "log-in", "signin", "sign-in", "auth"})
+
+
+def _redirected_to_login(original_url: str, final_url: str) -> bool:
+    original = [part for part in urlparse(original_url).path.lower().split("/") if part]
+    final = [part for part in urlparse(final_url).path.lower().split("/") if part]
+    return (
+        final != original
+        and not LOGIN_PATH_SEGMENTS.intersection(original)
+        and bool(LOGIN_PATH_SEGMENTS.intersection(final))
+    )
+
 
 #: What an interstitial never has and a paper always does. A marker alone cannot decide:
 #: a paper *about* bot detection quotes the same phrases, and rejecting it would be
@@ -244,12 +273,26 @@ class AcquisitionService:
         if scrapling and scrapling.success:
             return scrapling
 
-        error = (scrapling or jina or crawl or agent or direct or github).error if (
-            scrapling or jina or crawl or agent or direct or github
-        ) else "No strategy succeeded"
+        failures = [github, open_access, direct, agent, crawl, jina, scrapling]
+        access_failure = next(
+            (
+                item for item in failures
+                if item is not None
+                and item.failure_reason in {"bot_block", "captcha", "login_wall"}
+            ),
+            None,
+        )
+        last_failure = next((item for item in reversed(failures) if item is not None), None)
+        error = (
+            access_failure.error
+            if access_failure is not None
+            else last_failure.error if last_failure is not None
+            else "No strategy succeeded"
+        )
         return AcquiredDocument(
             candidate=candidate, success=False, access_status="unavailable",
             strategies_tried=tried, error=error,
+            failure_reason=access_failure.failure_reason if access_failure else None,
         )
 
     def _scholarly_metadata_document(
@@ -321,12 +364,34 @@ class AcquisitionService:
         # of article text, which is what separates a real block from a paper that merely
         # discusses one. Measured: interstitials satisfy both, papers about bot detection
         # satisfy only the first.
+        head = lowered[:1500]
+        interstitial = any(marker in head for marker in BLOCKED_MARKERS)
+        # Being sent to a sign-in page is a block whatever that page says; the article
+        # text check below still keeps a real document that happens to live there.
+        login_redirect = _redirected_to_login(str(candidate.url), final_url or str(candidate.url))
         blocked = (
             not restricted
-            and any(marker in lowered[:1500] for marker in BLOCKED_MARKERS)
+            and (interstitial or login_redirect)
             and not any(marker in lowered for marker in ARTICLE_TEXT_MARKERS)
         )
+        failure_reason = None
+        if restricted:
+            failure_reason = "paywall"
+        elif blocked and login_redirect:
+            failure_reason = "login_wall"
+        elif blocked and any(marker in head for marker in CAPTCHA_MARKERS):
+            failure_reason = "captcha"
+        elif blocked and any(marker in head for marker in LOGIN_WALL_MARKERS):
+            failure_reason = "login_wall"
+        elif blocked:
+            failure_reason = "bot_block"
         withheld = restricted or blocked
+        error = (
+            "Paywall detected" if restricted
+            else "Bot check interstitial" if interstitial and blocked
+            else "Redirected to a login page" if blocked
+            else None
+        )
         return AcquiredDocument(
             candidate=candidate, success=bool(normalized) and not withheld,
             access_status=(
@@ -346,7 +411,8 @@ class AcquisitionService:
             tables=[] if withheld else [t.model_dump(mode="json") for t in parsed.tables] if parsed else [],
             code_blocks=[] if withheld else (parsed.code_blocks if parsed else []),
             content_hash=hashlib.sha256(normalized.encode("utf-8")).hexdigest() if normalized else None,
-            strategies_tried=tried.copy(), error=("Paywall detected" if restricted else "Bot check interstitial" if blocked else None),
+            strategies_tried=tried.copy(), error=error,
+            failure_reason=failure_reason,
         )
 
     async def _github_repository(
@@ -526,6 +592,24 @@ class AcquisitionService:
                     await validate_public_url(current, self.settings.allow_private_networks)
                     redirects.append(current)
                     continue
+                if response.status_code in {401, 403, 503}:
+                    # Named here because raise_for_status() below would turn the wall
+                    # into an anonymous failure. A 401 on a document page is a login
+                    # wall; unlike a search API's 401, it is not a missing key of ours.
+                    reason = (
+                        "login_wall" if response.status_code == 401
+                        else classify_blocked_response(
+                            response.status_code, response.text, response.headers
+                        )
+                    )
+                    if reason is not None:
+                        return AcquiredDocument(
+                            candidate=candidate, success=False, access_status="unavailable",
+                            acquisition_method="direct", final_url=current,
+                            redirect_chain=redirects, strategies_tried=tried.copy(),
+                            error=f"HTTP {response.status_code}: {_ACCESS_WALL_ERRORS[reason]}",
+                            failure_reason=reason,
+                        )
                 response.raise_for_status()
                 content_length = int(response.headers.get("content-length", "0") or 0)
                 if content_length > self.settings.max_download_bytes or len(response.content) > self.settings.max_download_bytes:

@@ -16,6 +16,7 @@ import httpx
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .access_escalation import classify_search_block, safe_issue_detail
 from .acquisition import AcquisitionService
 from .auth import Principal
 from .claim_appraisal import appraise_claims, propose_appraisal, select_appraisal_tier
@@ -82,6 +83,7 @@ from .report_synthesis import source_design_labels
 from .repository import Repository
 from .research_plan import build_research_plan, plan_display_and_strategy, plan_strategy
 from .schemas import (
+    AccessIssueKind,
     AcquiredDocument,
     AuthorityLevel,
     ConnectorCandidate,
@@ -1352,6 +1354,7 @@ class ResearchPipeline:
         )
         citation_seeds_used = 0
         connector_errors: list[dict[str, Any]] = []
+        search_access_issues: list[dict[str, Any]] = []
         connector_metrics: list[dict[str, Any]] = []
         citation_metrics: list[dict[str, Any]] = []
 
@@ -1532,6 +1535,31 @@ class ResearchPipeline:
                     return rows
                 except Exception as exc:
                     sent_query = str(getattr(exc, "query", "") or provider_query)
+                    access_reason = (
+                        classify_search_block(
+                            exc,
+                            observation,
+                            queries=(sent_query, provider_query, mission.query),
+                        )
+                        if self.settings.access_escalation_enabled
+                        else None
+                    )
+                    if access_reason:
+                        search_access_issues.append(
+                            {
+                                "reason": access_reason,
+                                "query": sent_query or mission.query,
+                                "connector_id": connector.id,
+                                "mission_id": mission.id,
+                                "branch_id": mission.branch_id,
+                                "detail": safe_issue_detail(exc),
+                                "context": {
+                                    "original_query": mission.query,
+                                    "compiled_query": provider_query,
+                                    "http_status": observation.get("http_status"),
+                                },
+                            }
+                        )
                     connector_errors.append(
                         {
                             **error_details(exc), "call_id": call_id, "operation": "search",
@@ -1598,6 +1626,9 @@ class ResearchPipeline:
         )
         for error in connector_errors:
             await self.repo.event(state["run_id"], "connector_error", error)
+        await self._record_access_issues(
+            state["run_id"], AccessIssueKind.SEARCH_QUERY, search_access_issues
+        )
         citation_errors = [
             error
             for error in connector_errors
@@ -1931,6 +1962,27 @@ class ResearchPipeline:
             ),
         }
 
+    async def _record_access_issues(
+        self, run_id: str, kind: AccessIssueKind, issues: list[dict[str, Any]]
+    ) -> None:
+        """Keep blocked searches or sources for the user to see when the run finishes.
+
+        Recording only: the run carries on with whatever it could reach, and nothing
+        here is ever retried or read back into a run.
+        """
+        queued: list[str] = []
+        for issue in issues:
+            row = await self.repo.enqueue_access_issue(run_id, kind=kind, **issue)
+            if row is not None:
+                queued.append(row.id)
+        if queued:
+            issue_ids = list(dict.fromkeys(queued))
+            await self.repo.event(
+                run_id,
+                "access_issues_queued",
+                {"kind": kind.value, "count": len(issue_ids), "issue_ids": issue_ids},
+            )
+
     async def acquire(self, state: PipelineState) -> dict:
         await self._boundary(state, "ACQUIRE")
         return await self._interruptible(
@@ -2021,6 +2073,32 @@ class ResearchPipeline:
                     "successful": sum(item.success for item in docs),
                     "action": "continue_postprocessing",
                 },
+            )
+        if self.settings.access_escalation_enabled:
+            # Only what this round fetched: local-corpus documents below were never
+            # requested from the web, so they cannot have been blocked.
+            await self._record_access_issues(
+                state["run_id"],
+                AccessIssueKind.SOURCE_URL,
+                [
+                    {
+                        "reason": document.failure_reason,
+                        "url": str(document.candidate.url),
+                        "connector_id": document.candidate.connector_id,
+                        "mission_id": document.candidate.metadata.get("search_mission_id"),
+                        "branch_id": document.candidate.metadata.get("query_branch"),
+                        "detail": safe_issue_detail(document.error or "Access blocked"),
+                        "strategies_tried": document.strategies_tried,
+                        "context": {
+                            "title": document.candidate.title,
+                            "family": document.candidate.family.value,
+                            "persistent_id": document.candidate.persistent_id,
+                        },
+                    }
+                    for document in docs
+                    if not document.success
+                    and document.failure_reason in {"bot_block", "captcha", "login_wall"}
+                ],
             )
         docs = [
             *docs,

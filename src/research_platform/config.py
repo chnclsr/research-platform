@@ -148,6 +148,11 @@ class Settings(BaseSettings):
     jina_reader_url: str = "https://r.jina.ai"
     jina_reader_timeout_s: float = Field(90.0, ge=10.0, le=180.0)
     enable_scrapling_fallback: bool = True
+    # Blocked searches and pages are kept for the user to see once a run finishes, and
+    # only after every automatic acquisition fallback has failed. Behind a rollout flag
+    # because it changes what a completed run retains and what Telegram announces.
+    access_escalation_enabled: bool = False
+    access_escalation_max_items_per_run: int = Field(50, ge=1, le=500)
     openai_compatible_url: str | None = None
     openai_compatible_api_key: str | None = None
     telegram_preparation_llm_enabled: bool = False

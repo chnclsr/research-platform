@@ -10,14 +10,16 @@ from difflib import SequenceMatcher
 from typing import Any
 from urllib.parse import urlparse, urlsplit
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .access_escalation import access_issue_key, safe_issue_detail
 from .auth import Principal
 from .config import get_settings
 from .db import (
+    AccessIssueRow,
     ArtifactRow,
     ArtifactVersionRow,
     CheckpointRow,
@@ -43,6 +45,9 @@ from .normalization import canonicalize_url
 from .queueing import NORMAL, URGENT, normalize_priority
 from .relevance import evidence_entailment
 from .schemas import (
+    AccessIssueKind,
+    AccessIssueReason,
+    AccessIssueView,
     AcquiredDocument,
     ConnectorCandidate,
     CoverageMetrics,
@@ -339,6 +344,114 @@ class Repository(metaclass=_OwnershipEnforced):
         self.session.add(row)
         await self.session.commit()
         return row
+
+    async def enqueue_access_issue(
+        self,
+        run_id: str,
+        *,
+        kind: AccessIssueKind | str,
+        reason: AccessIssueReason | str,
+        query: str | None = None,
+        url: str | None = None,
+        connector_id: str | None = None,
+        mission_id: str | None = None,
+        branch_id: str | None = None,
+        detail: str = "",
+        strategies_tried: list[str] | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> AccessIssueRow | None:
+        """Record one blocked search or source once per run, up to the per-run cap.
+
+        A repeat of the same target only counts another occurrence. Past the cap new
+        targets are dropped rather than queued: the list is for a person to read, and
+        a run blocked hundreds of times has one problem, not hundreds.
+        """
+        run = await self.get_run(run_id)
+        if run is None or run.owner_id is None:
+            return None
+        kind_value = AccessIssueKind(kind).value
+        key = access_issue_key(
+            kind_value, query=query or "", url=url or "", connector_id=connector_id or ""
+        )
+        identity = (
+            AccessIssueRow.run_id == run_id,
+            AccessIssueRow.kind == kind_value,
+            AccessIssueRow.dedupe_key == key,
+        )
+        now = datetime.now(timezone.utc)
+        existing = await self.session.scalar(select(AccessIssueRow).where(*identity))
+        if existing is not None:
+            existing.occurrences += 1
+            existing.updated_at = now
+            await self.session.commit()
+            return existing
+        total = await self.session.scalar(
+            select(func.count()).select_from(AccessIssueRow).where(AccessIssueRow.run_id == run_id)
+        )
+        if int(total or 0) >= get_settings().access_escalation_max_items_per_run:
+            return None
+        values = {
+            "id": new_id(),
+            "run_id": run_id,
+            "owner_id": run.owner_id,
+            "kind": kind_value,
+            "reason": AccessIssueReason(reason).value,
+            "dedupe_key": key,
+            "query": (query or "")[:5000] or None,
+            "url": (url or "")[:4000] or None,
+            "connector_id": (connector_id or "")[:100] or None,
+            "mission_id": (mission_id or "")[:26] or None,
+            "branch_id": (branch_id or "")[:120] or None,
+            "detail": safe_issue_detail(detail),
+            "strategies_tried": list(dict.fromkeys(strategies_tried or []))[:30],
+            "context": safe_diagnostic(context or {}),
+            "occurrences": 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+        # Concurrent acquisitions can hit the same target at once; the unique
+        # constraint decides, and the loser counts an occurrence instead of failing.
+        builder = _PASSAGE_UPSERT_BUILDERS[self.session.bind.dialect.name]
+        result = await self.session.execute(
+            builder(AccessIssueRow).values(**values).on_conflict_do_nothing(
+                index_elements=["run_id", "kind", "dedupe_key"]
+            )
+        )
+        row = await self.session.scalar(select(AccessIssueRow).where(*identity))
+        if row is not None and (result.rowcount or 0) == 0:
+            row.occurrences += 1
+            row.updated_at = now
+        await self.session.commit()
+        return row
+
+    async def list_access_issues(self, run_id: str) -> list[AccessIssueRow]:
+        rows = await self.session.scalars(
+            select(AccessIssueRow)
+            .where(AccessIssueRow.run_id == run_id)
+            .order_by(AccessIssueRow.created_at, AccessIssueRow.id)
+        )
+        return list(rows)
+
+    @staticmethod
+    def access_issue_view(row: AccessIssueRow) -> AccessIssueView:
+        title = (row.context or {}).get("title")
+        return AccessIssueView(
+            id=row.id,
+            run_id=row.run_id,
+            kind=row.kind,
+            reason=row.reason,
+            title=str(title) if title else None,
+            query=row.query,
+            url=row.url,
+            connector_id=row.connector_id,
+            mission_id=row.mission_id,
+            branch_id=row.branch_id,
+            detail=row.detail,
+            strategies_tried=list(row.strategies_tried or []),
+            occurrences=row.occurrences,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     async def get_run(self, run_id: str, *, lock: bool = False) -> ResearchRunRow | None:
         stmt = (
@@ -2169,6 +2282,7 @@ class Repository(metaclass=_OwnershipEnforced):
         # own parent is already gone and which nothing can find any more.
         removed: dict[str, int] = {}
         for name, statement in (
+            ("access_issues", delete(AccessIssueRow).where(AccessIssueRow.run_id == run_id)),
             ("evidence", delete(EvidenceRow).where(EvidenceRow.claim_id.in_(claim_ids))),
             ("passages", delete(PassageRow).where(PassageRow.source_version_id.in_(version_ids))),
             ("source_versions", delete(SourceVersionRow).where(

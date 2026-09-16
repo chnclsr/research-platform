@@ -1470,6 +1470,22 @@ async def run_detail(run_id: str, principal: Principal = Depends(require_user)) 
     return await _run_detail(run_id, principal)
 
 
+@app.get("/api/runs/{run_id}/access-issues")
+async def run_access_issues(
+    run_id: str, principal: Principal = Depends(require_user)
+) -> list[dict[str, Any]]:
+    """Searches and sources the run could not reach, for the user to try themselves."""
+    try:
+        response = await _api_request(
+            "GET", f"/v1/research-runs/{run_id}/access-issues", principal, timeout=30
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Erişim sorunları alınamadı") from exc
+    if not response.is_success:
+        raise HTTPException(status_code=response.status_code, detail=response.text[:500])
+    return response.json()
+
+
 @app.get("/api/runs/{run_id}/sources/{source_id}/trace")
 async def run_source_trace(
     run_id: str,
