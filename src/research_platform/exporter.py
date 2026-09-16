@@ -985,6 +985,15 @@ async def build_exports(
             language=protocol.report_language,
             settings=settings,
         )
+        if pptx_document != presentation_report.document:
+            await repo.event(
+                run_id,
+                "presentation_polished",
+                {
+                    "original_bytes": len(presentation_report.document),
+                    "polished_bytes": len(pptx_document),
+                },
+            )
     files[presentation_report_name(protocol.label)] = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         pptx_document,
