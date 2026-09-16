@@ -37,3 +37,9 @@ Otomatik üretimden kalan bilinen kusurları da düzelt:
   birimleri, yüzdeleri, model ve veri kümesi adlarını birebir koru.
 - Kaynak kataloğundaki makale başlıklarını ve "Kaynak:" satırlarını çevirme; okur makaleyi
   bu adla bulur.
+
+Beklenen dönüşüm (izin değil, yapılması gereken iş):
+
+- Paragraf halindeki gövde metinlerini kısa maddelere dönüştür.
+- Aynı başlığın "(devam)" slaytlarını tek slayta ya da mümkün olan en az sayıda slayta indir.
+- Her tema için tek cümlelik bir ana mesaj yaz ve temanın ilk slaytının başına koy.
