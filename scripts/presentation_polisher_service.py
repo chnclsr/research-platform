@@ -251,6 +251,8 @@ class AgentRun:
     turns: int | None = None
     error: str = ""
     summary: str = ""
+    #: agy keeps the transcript under ~/.gemini/antigravity-cli/brain/<conversation_id>.
+    conversation_id: str = ""
 
 
 def _parse_envelope(text: str) -> dict[str, Any]:
@@ -378,7 +380,12 @@ async def run_agent(
     run.turns = turns if isinstance(turns, int) else None
     run.error = str(envelope.get("error") or "")[:300]
     run.summary = str(envelope.get("response") or "")[:500]
-    if not run.stop_reason and run.status in _TIMEOUT_STATUSES:
+    run.conversation_id = str(envelope.get("conversation_id") or "")[:80]
+    # agy can answer SUCCESS when its own --print-timeout ends a turn still in progress
+    # (measured 2026-09-16: "print timeout after 10m0s with turn in progress", status
+    # SUCCESS, 1 turn), so a run that lasted its whole budget counts as timed out.
+    ran_out = run.duration_s >= timeout_s - max(1.0, timeout_s * 0.01)
+    if not run.stop_reason and (run.status in _TIMEOUT_STATUSES or ran_out):
         run.stop_reason = "timeout"
     if not envelope and run.exit_code not in (0, None):
         run.error = run.error or " | ".join(stderr_tail[-3:])[:300]
@@ -599,13 +606,15 @@ async def polish_endpoint(request: Request, language: str = "tr", run_id: str | 
             data, status, reason = await judge_output(workdir, pptx_bytes, run, soffice_bin)
 
     logger.info(
-        "Polish for run %s: %s (%s); agy status=%s exit=%s turns=%s in %.0f s; %d -> %d bytes",
+        "Polish for run %s: %s (%s); agy status=%s exit=%s turns=%s conversation=%s "
+        "in %.0f s; %d -> %d bytes",
         run_id,
         status,
         reason,
         run.status or "-",
         run.exit_code,
         run.turns,
+        run.conversation_id or "-",
         run.duration_s,
         len(pptx_bytes),
         len(data),

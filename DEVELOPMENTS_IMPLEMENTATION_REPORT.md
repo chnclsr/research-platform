@@ -4522,7 +4522,11 @@ Worker'ın Docker Linux ortamında (`python:3.12-slim`) çalışması, ancak `ag
 
 **Açık adım.**
 - 3942 portu Windows Güvenlik Duvarı'nda yerel ağa kapatılacak. Kural, servis günlüğüne düşen istemci adresine göre yazılacak.
-- Oturum 1'de `--sandbox` altında Python çalışıp çalışmadığı ilk canlı denemede görülecek. Çalışmazsa `PRESENTATION_POLISHER_AGY_SANDBOX=false` yapılacak.
+- ~~Oturum 1'de `--sandbox` altında Python çalışıp çalışmadığı ilk canlı denemede görülecek.~~
+  **Ölçüldü (2026-09-16):** Oturum 1'de `--sandbox` altında ajanın ilk komutu (`Get-ChildItem`) onaylandıktan sonra 10 dakika asılı kaldı. `agy` bunun ardından "print timeout after 10m0s with turn in progress" diyerek **`SUCCESS`** durumu ve 1 turla çıktı; dosya yazılmadı.
+  - Windows sunucusunda `PRESENTATION_POLISHER_AGY_SANDBOX=false` kullanılıyor.
+  - Servis artık bütçesinin tamamını kullanan bir çalışmayı `agy` ne derse desin süre dolması sayıyor.
+  - Konuşma kimliği günlüğe yazılıyor; ajanın dökümü `~/.gemini/antigravity-cli/brain/<kimlik>` altında.
 
 **Doğrulama.** `tests/test_presentation_polisher.py` 42 test içeriyor. Konular:
 - istemci durum eşlemesi ve olay kaydı;

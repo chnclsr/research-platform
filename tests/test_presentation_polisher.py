@@ -391,6 +391,19 @@ async def test_agent_envelope_is_read(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_success_at_the_print_timeout_is_a_timeout(tmp_path, monkeypatch):
+    """agy said SUCCESS after "print timeout after 10m0s with turn in progress"."""
+    monkeypatch.setattr(service, "_POLL_S", 0.05)
+    run = await _run_fake_agent(
+        tmp_path,
+        "import json, time; time.sleep(1.5); "
+        "print(json.dumps({'status': 'SUCCESS', 'num_turns': 1, 'conversation_id': 'c-1'}))",
+        timeout_s=2.0,
+    )
+    assert (run.status, run.stop_reason, run.conversation_id) == ("SUCCESS", "timeout", "c-1")
+
+
+@pytest.mark.asyncio
 async def test_login_prompt_stops_the_agent_at_once(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "_POLL_S", 0.05)
     run = await _run_fake_agent(
