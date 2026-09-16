@@ -13,11 +13,13 @@ from typing import Any
 import yaml
 
 from .claim_localization import localize_claim_texts
+from .config import get_settings
 from .evidence_quality import evidence_quality_gate
 from .figure_analysis import FigurePipelineResult, analyze_run_figures
 from .formula_render import load_formula_displays, markdown_formulas
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
+from .presentation_polisher import polish_presentation
 from .presentation_report import PRESENTATION_REPORT_FALLBACK, build_presentation_report
 from .report_synthesis import SynthesisPackage, build_synthesis_package
 from .repository import Repository
@@ -974,9 +976,18 @@ async def build_exports(
         research_figures=figure_result.generated_figures,
         figures=word_report.figures,
     )
+    pptx_document = presentation_report.document
+    settings = get_settings()
+    if settings.presentation_polisher_enabled:
+        pptx_document = await polish_presentation(
+            pptx_bytes=pptx_document,
+            run_id=run_id,
+            language=protocol.report_language,
+            settings=settings,
+        )
     files[presentation_report_name(protocol.label)] = (
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        presentation_report.document,
+        pptx_document,
     )
     # Written before the artifacts, so an export that fails while uploading leaves no
     # citation record describing a document nobody received.

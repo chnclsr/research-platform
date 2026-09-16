@@ -264,6 +264,12 @@ if (-not (Bekle "Ollama" "http://127.0.0.1:11434/api/tags" 15)) { $durum = 1 }
 if (-not $SkipPanel) {
     if (-not (Bekle "Kontrol paneli" "http://127.0.0.1:$panelPort/health" 20)) { $durum = 1 }
 }
+if (Select-String -Path "$root\.env" -Pattern '^PRESENTATION_POLISHER_ENABLED=(true|1)' -Quiet) {
+    try {
+        & powershell -ExecutionPolicy Bypass -File "$root\scripts\start_presentation_polisher.ps1" | Out-Null
+    } catch {}
+    if (-not (Bekle "Presentation Polisher" "http://127.0.0.1:3942/health" 15)) { $durum = 1 }
+}
 
 # MCP gateway kimliksiz istegi 403 ile reddeder; "ayakta" sinyali olarak yanit
 # vermesi yeterli, 2xx beklenmez.

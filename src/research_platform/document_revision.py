@@ -19,10 +19,12 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.util import Cm as PptxCm
 from pptx.util import Pt as PptxPt
 
+from .config import get_settings
 from .figure_analysis import FigureObservation, GeneratedResearchFigure
 from .formula_render import load_formula_displays
 from .language_guard import foreign_sentences, language_matches
 from .llm import LLMProvider
+from .presentation_polisher import polish_presentation
 from .presentation_report import build_presentation_report
 from .report_synthesis import (
     StudyProfile,
@@ -822,6 +824,14 @@ class DocumentRevisionService:
         if render_both or "pptx" in changed_scopes:
             presentation = build_presentation_report(**common)
             pptx_data = presentation.document
+            rev_settings = self.settings or get_settings()
+            if getattr(rev_settings, "presentation_polisher_enabled", False):
+                pptx_data = await polish_presentation(
+                    pptx_bytes=pptx_data,
+                    run_id=revision.run_id,
+                    language=protocol.report_language,
+                    settings=rev_settings,
+                )
         else:
             pptx_data = await self.store.get(pptx_parent.object_key)
         docx_data, pptx_data = _apply_format_overrides(

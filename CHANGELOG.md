@@ -8,6 +8,12 @@ Son güncelleme: `2026-09-15`
 
 ## Yayınlanmamış — 2026-09-15
 
+- PowerPoint sunumları dışa aktarım ve revizyon aşamasında `agy` ve LibreOffice ile
+  otomatik cilalama (polishing) sürecinden geçer. Uzun araştırma soruları net ve vurucu
+  başlıklara; blok paragraflar ise kalın etiketli sunum maddelerine dönüştürülür.
+  Tüm atıf etiketleri eksiksiz korunur; başlık satır sayısına göre kutu dikey yerleşimi
+  otomatik dengelenir. Host üzerinde çalışan hafif bir köprü servisi (`presentation_polisher_service`)
+  ile Docker worker'ı izole olarak haberleşir. Ayrıntılar: `DEVELOPMENTS_IMPLEMENTATION_REPORT.md` 76. bölüm.
 - PowerPoint raporu yeni kurumsal tasarıma geçti. Başlıklar ve metinler artık kesilmiyor
   ya da 8 punto'ya küçülmüyor; sığmayan metin cümle sınırında sonraki slayta geçiyor.
   Kapak başlığı logoyla çakışmıyor.

@@ -258,6 +258,9 @@ class Settings(BaseSettings):
     mcp_transport: str = "stdio"
     mcp_host: str = "127.0.0.1"
     mcp_port: int = Field(8010, ge=1, le=65535)
+    presentation_polisher_enabled: bool = True
+    presentation_polisher_url: str = "http://host.docker.internal:3942"
+    presentation_polisher_timeout_s: float = Field(300.0, ge=1.0, le=900.0)
     # MCP_BEARER_TOKEN was removed in v0.10.1. The gateway authenticates callers with their
     # own API key, so a shared token no longer exists; a leftover line in .env is ignored.
     mcp_allowed_origins: list[str] = Field(default_factory=list)

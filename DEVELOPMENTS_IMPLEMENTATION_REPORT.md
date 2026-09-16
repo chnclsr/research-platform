@@ -80,6 +80,7 @@ yeni bölüm olarak buraya eklenir; ayrı rapor dosyası açılmaz.
 | 63 | Kapsam rolünün determinist hâle getirilmesi | _çalışma ağacı_ |
 | 74 | Rapor kapağı için iki dilli LLM konu başlığı | _çalışma ağacı_ |
 | 75 | PowerPoint raporu: ölçülen yerleşimle yeni şablon | _çalışma ağacı_ |
+| 76 | Sunum cilalama servisi ve pipeline entegrasyonu (AGY & LibreOffice) | _çalışma ağacı_ |
 
 > **Not:** 2. bölümdeki düzeltmenin yetersiz olduğu sonradan anlaşıldı. Gerekçe ve asıl
 > çözüm 5. bölümdedir.
@@ -4446,3 +4447,25 @@ edildi: 52 slayt, yalnız Arial, taşan ya da kesilen metin yok. Tam paket Windo
 `TESTING=true` ile **1194 passed, 5 skipped**; POSIX'e özgü `tests/test_thread_scaling_harness.py`
 (`resource` modülü) Windows'ta toplanamadığı için hariç tutuldu. Değişen Python dosyalarında
 Ruff temiz; `git diff --check` temiz.
+
+---
+
+## 76. Sunum cilalama servisi ve pipeline entegrasyonu (AGY & LibreOffice)
+
+**Sorun ve Gerekçe.** Araştırma koşuları sonucunda üretilen PowerPoint sunumları (`presentation_report.py`), Word raporunun zengin ve uzun sentez paragraflarını içerdiği için slaytlarda yoğun metin bloklarına ve uzun araştırma sorusu başlıklarına sahipti. Slaytların bir yönetici sunumuna uygun şekilde vurucu başlıklarla ve kalın etiketli sunum maddeleriyle (`• Etiket: Açıklama [S...]`) özetlenmesi gerekiyordu.
+
+Worker'ın Docker Linux ortamında (`python:3.12-slim`) çalışması, ancak `agy.exe` ve LibreOffice (`soffice.exe`) araçlarının Windows host üzerinde kurulu olması nedeniyle iki ortam arasında hafif bir köprü servisi kurgulandı:
+
+- **Host Köprü Servisi (`scripts/presentation_polisher_service.py`):**
+  - Port `3942` üzerinden hafif bir FastAPI HTTP servisi olarak host üzerinde çalışır (`GET /health`, `POST /polish`).
+  - `scripts/start_presentation_polisher.ps1` ve `scripts/start_server.ps1` ile host açılışında arka planda denetlenir.
+- **3 Aşamalı Cilalama Akışı:**
+  1. *Semantik Özetleme (AGY):* Python slaytlardaki uzun soru başlıklarını ve gövde metinlerini ayıklar. `agy -p` çağrısıyla başlıklar 5–8 kelimelik net sunum başlıklarına; paragraflar ise 2–4 adet vurucu maddeye dönüştürülür. Tüm atıf etiketleri (`[S1]`, `[S2]`, vb.) istisnasız korunur. `agy`'nin erişilemediği durumlarda deterministik yedekleme çalışır.
+  2. *Deterministik Yerleşim ve Tipografi (Python-pptx):* Başlıklar 22pt/18pt Arial bold; gövde maddeleri ise kalın başlık etiketi ve 14pt/13pt/12pt Arial metin olarak biçimlendirilir. Başlık satır sayısına göre gövde kutusunun dikey konumu (`top`) dinamik olarak kaydırılır ve alt sınır (`FOOTER_TOP = 486.0 pt`) garantiye alınır.
+  3. *Doğrulama (LibreOffice & Geometri Denetimi):* Slayt sınırları ve taşmalar matematiksel olarak kontrol edilir. Mevcutsa `soffice.exe --headless --convert-to pdf` çağrısıyla OpenXML ve sunum geçerliliği doğrulanır.
+- **Pipeline ve Revizyon Entegrasyonu:**
+  - `src/research_platform/presentation_polisher.py`: Worker'dan `http://host.docker.internal:3942/polish` ucuna bağlanan asenkron istemci.
+  - `exporter.py` ve `document_revision.py`: PPTX üretildikten sonra `PRESENTATION_POLISHER_ENABLED=true` ise cilalama servisine iletilir. Servis kapalıysa veya hata dönerse koşuyu asla düşürmez; sessizce özgün PPTX'i korur (fail-safe).
+  - Yapılandırma `.env.example`, `config.py` ve `docker-compose.yml` altında `PRESENTATION_POLISHER_*` değişkenleriyle tanımlandı.
+
+**Doğrulama:** `tests/test_presentation_polisher.py` (6 test) servis sağlık kontrolü, istemci devre dışı / hata durumlarında fail-safe geri dönüşü, slayt ayıklama, `agy` ve deterministik yedek biçimlendirme ile OpenXML geçerliliğini doğruladı. Presentation test paketi (`tests/test_presentation_report.py`, `tests/test_presentation_layout.py`, `tests/test_presentation_polisher.py`) **34 passed** sonucuyla geçti. Tam test paketi Windows'ta `TESTING=true` ile **1199 passed, 5 skipped** (87,01 sn) sonucuyla ve sıfır hatayla geçti. Ruff temiz; `git diff --check` temiz.
