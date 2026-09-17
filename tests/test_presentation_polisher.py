@@ -308,6 +308,67 @@ def test_prompt_is_read_on_every_request_and_carries_the_contract(monkeypatch, t
         service.build_prompt("tr", 600.0)
 
 
+def test_word_preferences_follow_the_report_language(monkeypatch, tmp_path):
+    prompt_file = tmp_path / "istem.md"
+    prompt_file.write_text("Sunumu toparla.", encoding="utf-8")
+    terms_file = tmp_path / "kelimeler.json"
+    terms_file.write_text(
+        json.dumps(
+            {"_açıklama": "not", "tr": {"figür": "şekil"}, "en": {}}, ensure_ascii=False
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(service, "PROMPT_FILE", prompt_file)
+    monkeypatch.setattr(service, "TERMS_FILE", terms_file)
+
+    turkish = service.build_prompt("tr", 600.0)
+    # After the user's prompt and before the fixed rules, as readable UTF-8 JSON.
+    assert turkish.startswith("Sunumu toparla.")
+    rules = turkish.index("KELİME TERCİHLERİ (servis `kelimeler.json`")
+    assert rules < turkish.index("TEKNİK ÇALIŞMA KURALLARI")
+    assert '"figür": "şekil"' in turkish
+    assert "_açıklama" not in turkish
+    assert "KELİME TERCİHLERİ" not in service.build_prompt("en", 600.0)
+
+    # Read on every request, like the prompt.
+    terms_file.write_text(
+        json.dumps({"tr": {"figür": "şekil", "veriseti": "veri kümesi"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    assert '"veriseti": "veri kümesi"' in service.build_prompt("tr", 600.0)
+
+    monkeypatch.setattr(service, "TERMS_FILE", tmp_path / "yok.json")
+    assert "KELİME TERCİHLERİ" not in service.build_prompt("tr", 600.0)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"tr": {"figür": "şekil",}}',
+        '["figür", "şekil"]',
+        '{"tr": ["figür", "şekil"]}',
+        '{"tr": {"figür": ""}}',
+        '{"tr": {" ": "şekil"}}',
+        '{"en": {"figure": 3}}',
+    ],
+    ids=["syntax", "list", "language-list", "empty-use", "empty-avoid", "other-language"],
+)
+def test_a_broken_word_list_is_an_error_not_an_empty_list(monkeypatch, tmp_path, content):
+    """Whoever edited the file must learn that the preference is not being applied."""
+    terms_file = tmp_path / "kelimeler.json"
+    terms_file.write_text(content, encoding="utf-8")
+    monkeypatch.setattr(service, "TERMS_FILE", terms_file)
+    with pytest.raises(service.PromptError, match="terms-invalid"):
+        service.load_terms("tr")
+
+
+def test_shipped_configuration_prefers_sekil_and_does_not_teach_figur():
+    """The agent copies the prompt's own wording, so the prompt must not say "figür"."""
+    assert service.load_terms("tr") == {"figür": "şekil"}
+    assert service.load_terms("en") == {}
+    assert "figür" not in service.PROMPT_FILE.read_text(encoding="utf-8").lower()
+
+
 def test_envelope_survives_a_log_line_before_it():
     text = 'warming up\n{"status": "SUCCESS", "num_turns": 4, "response": "ok"}\n'
     assert service._parse_envelope(text)["num_turns"] == 4
@@ -612,6 +673,22 @@ def test_a_missing_prompt_file_skips_the_agent(endpoint, monkeypatch, tmp_path):
     assert response.headers["X-Presentation-Polisher-Reason"] == "prompt-missing"
 
 
+def test_a_broken_word_list_skips_the_agent_and_shows_in_health(endpoint, monkeypatch, tmp_path):
+    terms_file = tmp_path / "kelimeler.json"
+    terms_file.write_text('{"tr": {"figür": ', encoding="utf-8")
+    monkeypatch.setattr(service, "TERMS_FILE", terms_file)
+    original = _deck()
+    response = _post(endpoint, original)
+    assert response.status_code == 200
+    assert response.content == original
+    assert response.headers["X-Presentation-Polisher-Status"] == "unchanged"
+    assert response.headers["X-Presentation-Polisher-Reason"] == "terms-invalid"
+
+    health = endpoint.get("/health")
+    assert health.status_code == 503
+    assert health.json()["terms"] is False
+
+
 def test_endpoint_rejects_bad_requests(endpoint, monkeypatch):
     unauthorized = endpoint.post(
         "/polish", content=_deck(), headers={"Content-Type": PPTX_MEDIA_TYPE}
@@ -639,6 +716,7 @@ def test_health_reports_readiness(endpoint, monkeypatch):
     body = ready.json()
     assert body["status"] == "ok"
     assert body["prompt"] is True and body["render_helper"] is True
+    assert body["terms"] is True
     assert body["agent_timeout_s"] == 600.0
     assert "agy_path" not in body
 

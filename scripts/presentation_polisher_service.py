@@ -74,6 +74,11 @@ PROMPT_FILE = _project_path(
     os.environ.get("PRESENTATION_POLISHER_PROMPT_FILE", "")
     or "config/presentation_polisher_prompt.md"
 )
+# Words the agent must not use, per report language. Read on every request like the prompt.
+TERMS_FILE = _project_path(
+    os.environ.get("PRESENTATION_POLISHER_TERMS_FILE", "")
+    or "config/presentation_polisher_terms.json"
+)
 RENDER_HELPER = Path(__file__).with_name("presentation_polisher_render.py")
 OUTLINE_HELPER = Path(__file__).with_name("presentation_polisher_outline.py")
 #: Copied into the agent's folder under these names. Not "inspect.py": it would shadow
@@ -135,8 +140,65 @@ TEKNİK ÇALIŞMA KURALLARI (servis ekler; bunlar değişmez)
 """
 
 
+#: Placed between the user's prompt and the contract, and only when the report language
+#: has entries. The inflection rule is the reason this is a prompt and not a find-and-
+#: replace: "figürü" has to become "şekli", which no string substitution produces.
+_TERMS_RULES = """
+
+---
+KELİME TERCİHLERİ (servis `{file_name}` dosyasından ekler)
+
+Aşağıdaki JSON'da her anahtar, sunumda kullanılmayacak bir kelime; değeri, onun yerine
+yazılacak kelimedir.
+
+- Sunumda zaten bulunan metinlerde de değiştir; yeni yazdığın metinlerde hiç kullanma.
+- Kelimenin çekimli ve türemiş biçimlerini de değiştir. Eki yeni kelimeye göre, dilin ses
+  kurallarına (ünlü düşmesi, ünsüz yumuşaması, ünlü uyumu) uyarak yeniden kur.
+- Büyük harfle başlayan kelimeyi büyük harfle, tamamı büyük olanı tamamı büyük yaz.
+- Makale başlıklarında, "Kaynak:" satırlarında ve doğrudan alıntılarda değiştirme.
+
+```json
+{terms}
+```
+"""
+
+
 class PromptError(ValueError):
     """The prompt cannot be built; the message is the outcome reason."""
+
+
+def load_terms(language: str) -> dict[str, str]:
+    """The report language's avoided words and their replacements.
+
+    No file means no preferences. A file that exists but cannot be read as
+    ``{"<language>": {"<avoid>": "<use>"}}`` is an error, not an empty list: the
+    operator who edited it would otherwise never learn the preference is not applied.
+    Top-level keys starting with ``_`` are notes for whoever edits the file.
+    """
+    try:
+        raw = TERMS_FILE.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise PromptError("terms-invalid") from exc
+    try:
+        data = json.loads(raw)
+    except ValueError as exc:
+        raise PromptError("terms-invalid") from exc
+    if not isinstance(data, dict):
+        raise PromptError("terms-invalid")
+    for key, entries in data.items():
+        if str(key).startswith("_"):
+            continue
+        if not isinstance(entries, dict) or not all(
+            isinstance(avoid, str) and avoid.strip() and isinstance(use, str) and use.strip()
+            for avoid, use in entries.items()
+        ):
+            raise PromptError("terms-invalid")
+    return {
+        avoid.strip(): use.strip()
+        for avoid, use in (data.get(language.lower()) or {}).items()
+    }
 
 
 def _service_token() -> str:
@@ -221,13 +283,19 @@ def find_soffice_binary() -> str | None:
 
 
 def build_prompt(language: str, agent_budget_s: float, now: datetime | None = None) -> str:
-    """The user's prompt file followed by the service's fixed working rules."""
+    """The user's prompt file, the language's word preferences, then the fixed rules."""
     try:
         user_prompt = PROMPT_FILE.read_text(encoding="utf-8").strip()
     except OSError as exc:
         raise PromptError("prompt-missing") from exc
     if not user_prompt:
         raise PromptError("prompt-missing")
+    terms = load_terms(language)
+    if terms:
+        user_prompt += _TERMS_RULES.format(
+            file_name=TERMS_FILE.name,
+            terms=json.dumps(terms, ensure_ascii=False, indent=2),
+        )
     # A clock time instead of "about ten minutes": the first live run spent seven minutes
     # inspecting and was stopped while fixing the overlaps it had found.
     # The agent reads the host's local clock, so the times are given in local time.
@@ -538,8 +606,16 @@ async def health():
     soffice_bin = find_soffice_binary()
     token_configured = bool(_service_token())
     prompt_ready = PROMPT_FILE.is_file()
+    try:
+        load_terms("")
+        terms_ready = True
+    except PromptError:
+        terms_ready = False
     helper_ready = all(helper.is_file() for helper in _HELPERS.values())
-    ready = bool(agy_bin and soffice_bin and token_configured and prompt_ready and helper_ready)
+    ready = bool(
+        agy_bin and soffice_bin and token_configured and prompt_ready and terms_ready
+        and helper_ready
+    )
     payload = {
         "status": "ok" if ready else "degraded",
         "service": "presentation-polisher",
@@ -547,6 +623,7 @@ async def health():
         "soffice": bool(soffice_bin),
         "authentication": token_configured,
         "prompt": prompt_ready,
+        "terms": terms_ready,
         "render_helper": helper_ready,
         "sandbox": AGY_SANDBOX,
         "agent_timeout_s": AGY_TIMEOUT_S,
@@ -609,7 +686,9 @@ async def polish_endpoint(request: Request, language: str = "tr", run_id: str | 
         try:
             prompt = build_prompt(language, agent_budget)
         except PromptError as exc:
-            logger.error("Cannot build the agent prompt from %s: %s", PROMPT_FILE, exc)
+            logger.error(
+                "Cannot build the agent prompt from %s and %s: %s", PROMPT_FILE, TERMS_FILE, exc
+            )
             return _outcome(pptx_bytes, "unchanged", str(exc), AgentRun())
 
         with tempfile.TemporaryDirectory(

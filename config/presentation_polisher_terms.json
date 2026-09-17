@@ -1,0 +1,7 @@
+{
+  "_açıklama": "Sunum ajanının kullanmayacağı kelimeler, rapor diline göre: anahtar kullanılmayacak kelime, değer yerine yazılacak kelime. Çekimli biçimleri (figürler, figürü) ajan kendisi uyarlar; ayrıca yazmaya gerek yok. Her istekte okunur; servisi yeniden başlatmak gerekmez.",
+  "tr": {
+    "figür": "şekil"
+  },
+  "en": {}
+}

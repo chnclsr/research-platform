@@ -19,7 +19,7 @@ COPY config ./config
 ENV SMART_ROUTER_CONFIG_PATH=/app/config/smart_router.yaml
 COPY alembic.ini ./
 COPY migrations ./migrations
-RUN pip install --no-cache-dir .
+RUN pip install --default-timeout=120 --retries 5 --no-cache-dir .
 # Create the delivery mount point in the image so a fresh named volume inherits this
 # ownership. Without it Docker creates /data/deliveries as root and the non-root app
 # cannot write the bundles it streams back to MCP clients and Telegram.

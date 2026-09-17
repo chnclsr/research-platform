@@ -2,12 +2,36 @@
 
 Platform sürümü: `v0.24.0`
 
-Belge sürümü: `6.56`
+Belge sürümü: `6.57`
 
-Son güncelleme: `2026-09-16`
+Son güncelleme: `2026-09-17`
+
+## Yayınlanmamış — 2026-09-17
+
+- Telegram botunun yoklama döngüsü geçici Telegram hatalarında ayakta kalıyor. `getUpdates`
+  çağrısı sarılmamıştı: Telegram'ın kendi 502'si ya da bir okuma zaman aşımı süreci
+  öldürüyor, `restart: unless-stopped` botu geri getiriyordu — 17 Eylül gecesi iki dakika
+  içinde yedi kez. Yeniden başlatma `offset`'i sıfırladığı ve Telegram bir güncellemeyi
+  ancak daha yüksek offset istendiğinde teslim edilmiş saydığı için, bir batch'ten alınıp
+  henüz onaylanmamış güncellemeler geri geliyor ve ikinci kez işleniyordu; tekrarlanan bir
+  `/research` altı slotluk kapasitede ikinci bir koşu demekti. Artık üstel geri çekilmeyle
+  yeniden deneniyor (1 sn → 60 sn tavan), güncelleme başına ayrı bir koruma var ve `offset`
+  işlemeden önce ilerliyor. Long-poll marjı 70 sn'den 90 sn'ye çıkarıldı.
+- 409 çakışması ayrıca loglanıyor. İkinci bir tüketici artık container'ı yeniden başlatma
+  döngüsüne sokmadığı için `RestartCount` çakışma sinyali olmaktan çıktı; teşhis
+  `getUpdates 409` log satırından yapılır.
+- Bot token'ı artık günlüğe düşmüyor. httpx hata mesajı başarısız URL'i basıyor ve bu botta
+  token URL'in içinde olduğundan bir traceback kimlik bilgisini `docker logs`'a yazıyordu;
+  kayıt düzeyinde mesaj, argümanlar ve render edilmiş traceback `<token>` ile değiştiriliyor.
 
 ## Yayınlanmamış — 2026-09-16
 
+- Sunum ajanının kullanmayacağı kelimeler `config/presentation_polisher_terms.json` dosyasında,
+  rapor diline göre tutuluyor; ilk kayıt "figür" yerine "şekil". Servis dosyayı her istekte
+  okuyup ilgili dilin listesini isteme JSON olarak ekliyor; ajan çekimli biçimleri de
+  ("figürü" → "şekli") uyarlıyor. Bozuk dosyada sunum cilalanmadan teslim edilir, koşuya
+  `terms-invalid` yazılır ve servis sağlık kontrolü `terms: false` döner. Ajan istemindeki
+  "figür" geçen yönergeler de "şekil" olarak yeniden yazıldı.
 - Bot koruması, CAPTCHA veya oturum açma duvarına takılan aramalar ve kaynak URL'leri koşuyu
   durdurmadan kaydediliyor (`ACCESS_ESCALATION_ENABLED`, varsayılan kapalı). Koşu bitince
   kontrol panelinde listeleniyor; Telegram tamamlanma bildirimi sayısını veriyor ve listeyi

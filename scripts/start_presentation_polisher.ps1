@@ -148,7 +148,7 @@ if (-not $healthy) {
         }
     }
     Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
-    $detay = if ($health) { " [agy=$($health.agy), soffice=$($health.soffice), token=$($health.authentication), istem=$($health.prompt)]" } else { "" }
+    $detay = if ($health) { " [agy=$($health.agy), soffice=$($health.soffice), token=$($health.authentication), istem=$($health.prompt), kelime=$($health.terms)]" } else { "" }
     throw "Presentation Polisher sağlık kontrolü başarısız: $url$detay"
 }
 

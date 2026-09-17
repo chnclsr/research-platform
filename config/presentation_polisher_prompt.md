@@ -21,16 +21,16 @@ Gözetmen gerekenler:
 - Bulguları abartma, kaynaklarda olmayan bir sonuç ekleme; sayıları olduğu gibi aktar.
 - Hiçbir metin kutusu taşmasın ya da başka bir öğenin üstüne binmesin; her slayt tek
   bakışta okunabilsin.
-- Figürleri ve görselleri koru; altyazılarını sadeleştirebilirsin.
+- Şekilleri ve görselleri koru; altyazılarını sadeleştirebilirsin.
 - Bitirmeden önce slaytları çizip tek tek bak ve gördüğün sorunları düzelt.
 
 Otomatik üretimden kalan bilinen kusurları da düzelt:
 
-- Aynı figür birden fazla slaytta yer alıyorsa (aynı altyazı ya da aynı görsel; aynı
+- Aynı şekil birden fazla slaytta yer alıyorsa (aynı altyazı ya da aynı görsel; aynı
   makalenin farklı sürümlerinden gelmiş olabilir), yalnızca birini bırak.
-- Figür başlığı rapor dilinde değilse ya da "Araştırma görseli" gibi genel bir ifadeyse,
+- Şekil başlığı rapor dilinde değilse ya da "Araştırma görseli" gibi genel bir ifadeyse,
   altyazıya ve görseldeki etiketlere dayanarak kısa bir başlık yaz.
-- Altyazısı figürü anlatmayan figürlerde (ör. "Ayrıntılı özgün açıklama kaynak kaydında
+- Altyazısı şekli anlatmayan şekillerde (ör. "Ayrıntılı özgün açıklama kaynak kaydında
   korunmuştur.") slayt başlığına ve görselde okuyabildiğin etiketlere dayanan kısa bir
   altyazı yaz. Görselde görmediğin bir bulgu ya da sayı ekleme.
 - İddia ve bulgu metinlerinde kalan yabancı dildeki cümleleri rapor diline çevir. Sayıları,
