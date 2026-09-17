@@ -39,6 +39,12 @@ PLAN_LIMIT_EVENT = "plan_rejection_limit"
 PLAN_CANCEL_NOTICE_EVENT = "telegram_plan_cancel_notified"
 COMPLETION_NOTICE_EVENT = "telegram_completion_notified"
 
+# Backoff for a getUpdates that will not answer. It starts at a second so a single blip
+# costs nothing, and stops at a minute so a longer Telegram outage does not become a tight
+# retry loop against an API that is already struggling.
+POLL_BACKOFF_START_S = 1.0
+POLL_BACKOFF_MAX_S = 60.0
+
 # Every word the bot says, in both languages. One table rather than several: a new string
 # has exactly one place to go, and the key-parity test catches the half that gets
 # forgotten. The research itself still runs in English -- this is only what the chat reads.
@@ -2634,25 +2640,75 @@ class TelegramResearchBot:
 
     async def serve(self) -> None:
         offset = 0
-        async with httpx.AsyncClient(timeout=70) as client:
+        backoff = POLL_BACKOFF_START_S
+        # 60s long poll, 90s patience. The margin used to be ten seconds, which one slow
+        # answer from Telegram is enough to eat: two of the seven restarts described below
+        # were a read timeout on a poll that would have returned.
+        async with httpx.AsyncClient(timeout=90) as client:
             while True:
-                response = await client.get(
-                    f"{self.bot_url}/getUpdates",
-                    params={
-                        "offset": offset,
-                        "timeout": 60,
-                        "allowed_updates": '["message","callback_query"]',
-                    },
-                )
-                response.raise_for_status()
-                for update in response.json().get("result", []):
+                # The one call whose failure used to end the process. Nothing here was
+                # guarded, so a routine Telegram hiccup escaped to `run()` and only
+                # `restart: unless-stopped` brought the bot back -- measured 2026-09-17,
+                # seven restarts inside two minutes, five 502s and two read timeouts.
+                #
+                # A restart is not free: `offset` lives in this frame, so it comes back as
+                # 0, and Telegram counts an update as delivered only once a later poll asks
+                # for a higher offset. Every update taken from a batch but not yet confirmed
+                # was therefore redelivered and handled a SECOND time -- and a repeated
+                # /research is a second run against a six-slot capacity. That never fired,
+                # because the crashes landed at 04:00 against an empty batch, but it was
+                # luck rather than design.
+                try:
+                    response = await client.get(
+                        f"{self.bot_url}/getUpdates",
+                        params={
+                            "offset": offset,
+                            "timeout": 60,
+                            "allowed_updates": '["message","callback_query"]',
+                        },
+                    )
+                    response.raise_for_status()
+                    updates = response.json().get("result", [])
+                except (httpx.HTTPError, ValueError) as exc:
+                    if (
+                        isinstance(exc, httpx.HTTPStatusError)
+                        and exc.response.status_code == 409
+                    ):
+                        # A second consumer used to crash-loop the container, which made
+                        # RestartCount the conflict signal. It no longer does, so this log
+                        # line is the only place the conflict can be read -- say it plainly.
+                        logger.error(
+                            "getUpdates 409: ayni token'i yoklayan baska bir bot ornegi "
+                            "var, mesajlar iki tuketici arasinda bolunuyor"
+                        )
+                    else:
+                        logger.warning(
+                            "getUpdates basarisiz (%s), %.0f sn sonra yeniden denenecek",
+                            type(exc).__name__,
+                            backoff,
+                        )
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, POLL_BACKOFF_MAX_S)
+                    continue
+                backoff = POLL_BACKOFF_START_S
+                for update in updates:
+                    # Confirmed before it is handled, deliberately: an update this bot
+                    # cannot process must not return on the next poll to be retried for
+                    # ever. One lost reply beats a queue that never drains.
                     offset = max(offset, int(update["update_id"]) + 1)
-                    message = update.get("message")
-                    if message:
-                        await self._handle(client, message)
-                    callback = update.get("callback_query")
-                    if callback:
-                        await self._handle_callback(client, callback)
+                    # The same rule the notices below already follow: one bad update may
+                    # not take the command loop down with it.
+                    try:
+                        message = update.get("message")
+                        if message:
+                            await self._handle(client, message)
+                        callback = update.get("callback_query")
+                        if callback:
+                            await self._handle_callback(client, callback)
+                    except Exception:
+                        logger.exception(
+                            "guncelleme islenemedi: %s", update.get("update_id")
+                        )
                 # Runs on the long-poll cycle: at most a minute late, and a failure here
                 # must never take the command loop down with it.
                 try:
@@ -2681,5 +2737,48 @@ class TelegramResearchBot:
                     logger.exception("iptal edilen kosu bildirimi basarisiz")
 
 
+class TokenRedactingFilter(logging.Filter):
+    """Keeps the bot token out of anything this process logs.
+
+    Every Telegram URL carries the token in its path, and httpx puts the failing URL into
+    its exception message -- so one unlucky traceback writes the credential into
+    `docker logs`, where it then sits for the life of the container (observed
+    2026-09-17). Redacting on the record covers the message, its arguments and the
+    rendered traceback in one place, rather than asking each call site to remember.
+    """
+
+    def __init__(self, token: str) -> None:
+        super().__init__()
+        self._token = token
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not self._token:
+            return True
+        text = record.getMessage()
+        if record.exc_info:
+            # Rendered here on purpose: the traceback is where the URL usually hides, and
+            # it is taken off the record afterwards so the handler cannot print an
+            # unredacted copy underneath.
+            text = "%s\n%s" % (
+                text,
+                logging.Formatter().formatException(record.exc_info),
+            )
+            record.exc_info = None
+            record.exc_text = None
+        record.msg = text.replace(self._token, "<token>")
+        record.args = ()
+        return True
+
+
 def run() -> None:
+    # WARNING rather than INFO: httpx logs a line per request at INFO, and for this bot
+    # that is the long-poll URL every sixty seconds. The filter would redact it, but an
+    # idle bot should stay quiet -- an empty log is the healthy state here.
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    redaction = TokenRedactingFilter(get_settings().telegram_bot_token or "")
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(redaction)
     asyncio.run(TelegramResearchBot().serve())
